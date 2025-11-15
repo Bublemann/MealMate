@@ -253,13 +253,28 @@ async function loadShoppingLists() {
         const lists = await API.ShoppingLists.getAll();
         const selector = document.getElementById('shopping-list-selector');
 
-        selector.innerHTML = '<option value="">Select a shopping list...</option>';
+        selector.innerHTML = '';
         lists.forEach(list => {
             const option = document.createElement('option');
             option.value = list.id;
-            option.textContent = list.name;
+
+            // Format the creation date
+            const date = new Date(list.created_at);
+            const formattedDate = date.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
+            option.textContent = `${list.name} (${formattedDate})`;
             selector.appendChild(option);
         });
+
+        // Automatically select and load the latest shopping list (first in the list)
+        if (lists.length > 0) {
+            selector.value = lists[0].id;
+            await handleShoppingListSelect({ target: { value: lists[0].id } });
+        }
     } catch (error) {
         console.error('Error loading shopping lists:', error);
         ExportUtils.showToast('Error loading shopping lists', 'error');
@@ -293,8 +308,9 @@ async function handleShoppingListSelect(event) {
 
 function showNewListModal() {
     document.getElementById('new-list-modal').classList.remove('hidden');
-    document.getElementById('new-list-name').value = '';
+    document.getElementById('new-list-name').value = 'Weekly Shopping List';
     document.getElementById('new-list-name').focus();
+    document.getElementById('new-list-name').select();
 }
 
 function closeAllModals() {

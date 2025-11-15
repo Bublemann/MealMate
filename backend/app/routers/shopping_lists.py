@@ -414,7 +414,7 @@ def export_shopping_list(
                 lines.append(f"  • {item_text}")
 
     lines.append("")
-    lines.append(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}")
+    lines.append(f"Created: {shopping_list.created_at.strftime('%d-%m-%Y %H:%M')}")
 
     text_output = "\n".join(lines)
     return {"text": text_output}

@@ -656,9 +656,12 @@ body {
 .modal-close {
     background: none;
     border: none;
-    font-size: 1.5rem;
     cursor: pointer;
     color: var(--text-primary);
+}
+
+.modal-header .modal-close {
+    font-size: 1.5rem;
 }
 
 .modal-body {
@@ -685,6 +688,7 @@ body {
 .modal-footer .btn-secondary {
     width: auto;
     min-width: 100px;
+    font-size: 1rem;
 }
 
 /* ========================================
