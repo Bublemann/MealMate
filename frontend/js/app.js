@@ -589,23 +589,711 @@ async function showCuisineManagement() {
     }
 }
 
+// State for Items Management
+let editingItemId = null;
+let allItems = [];
+let itemCategories = [];
+
 async function showItemManagement() {
-    const formContainer = document.getElementById('manage-form-container');
-    formContainer.innerHTML = `
-        <h3>Add Item</h3>
-        <p>Item management UI coming soon. Use the API directly for now.</p>
-    `;
-    document.getElementById('manage-list-container').innerHTML = '';
+    try {
+        // Load categories and items
+        [itemCategories, allItems] = await Promise.all([
+            API.Categories.getAll(),
+            API.Items.getAll()
+        ]);
+
+        renderItemForm();
+        renderItemList(allItems);
+    } catch (error) {
+        console.error('Error loading item management:', error);
+        ExportUtils.showToast('Error loading items', 'error');
+    }
 }
 
-async function showMealManagement() {
+function renderItemForm(editingItem = null) {
     const formContainer = document.getElementById('manage-form-container');
+    const isEditing = editingItem !== null;
+
+    // Build category options
+    const categoryOptions = itemCategories.map(cat =>
+        `<option value="${cat.id}" ${isEditing && editingItem.category_id === cat.id ? 'selected' : ''}>${cat.name}</option>`
+    ).join('');
+
     formContainer.innerHTML = `
-        <h3>Add Meal</h3>
-        <p>Meal management UI coming soon. Use the API directly for now.</p>
+        <h3>${isEditing ? 'Edit' : 'Add'} Item</h3>
+
+        <!-- Search placeholder for future implementation -->
+        <div id="item-search-container" class="search-placeholder hidden">
+            <!-- Future: Search input will go here -->
+        </div>
+
+        <div class="form-row">
+            <label for="item-name">Name *</label>
+            <input type="text" id="item-name" placeholder="Item name" value="${isEditing ? editingItem.name : ''}" required>
+        </div>
+
+        <div class="form-row">
+            <label for="item-category">Category *</label>
+            <select id="item-category" required>
+                <option value="">Select category...</option>
+                ${categoryOptions}
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="item-calories">Calories per 100g/ml</label>
+            <input type="number" id="item-calories" placeholder="Optional" step="0.1" min="0"
+                   value="${isEditing && editingItem.calories_per_100 ? editingItem.calories_per_100 : ''}">
+        </div>
+
+        <div class="form-row">
+            <label for="item-protein">Protein per 100g/ml</label>
+            <input type="number" id="item-protein" placeholder="Optional" step="0.1" min="0"
+                   value="${isEditing && editingItem.protein_per_100 ? editingItem.protein_per_100 : ''}">
+        </div>
+
+        <div class="form-row">
+            <label for="item-sugar">Sugar per 100g/ml</label>
+            <input type="number" id="item-sugar" placeholder="Optional" step="0.1" min="0"
+                   value="${isEditing && editingItem.sugar_per_100 ? editingItem.sugar_per_100 : ''}">
+        </div>
+
+        <div class="form-actions">
+            <button class="btn-primary" onclick="${isEditing ? `updateItem(${editingItem.id})` : 'createItem()'}">${isEditing ? 'Update' : 'Add'} Item</button>
+            ${isEditing ? '<button class="btn-secondary" onclick="cancelEditItem()">Cancel</button>' : ''}
+        </div>
     `;
-    document.getElementById('manage-list-container').innerHTML = '';
 }
+
+function renderItemList(items) {
+    const listContainer = document.getElementById('manage-list-container');
+
+    if (items.length === 0) {
+        listContainer.innerHTML = '<h3>Existing Items</h3><p class="empty-state">No items yet. Add your first item above.</p>';
+        return;
+    }
+
+    listContainer.innerHTML = '<h3>Existing Items</h3>';
+
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'manage-item-card';
+
+        // Build nutritional info display
+        const nutritionalInfo = [];
+        if (item.calories_per_100) nutritionalInfo.push(`${item.calories_per_100}kcal`);
+        if (item.protein_per_100) nutritionalInfo.push(`${item.protein_per_100}g protein`);
+        if (item.sugar_per_100) nutritionalInfo.push(`${item.sugar_per_100}g sugar`);
+        const nutritionalDisplay = nutritionalInfo.length > 0
+            ? `<div class="nutritional-info">${nutritionalInfo.join(' | ')} per 100g/ml</div>`
+            : '';
+
+        card.innerHTML = `
+            <div class="item-info">
+                <strong>${item.name}</strong>
+                <div class="item-category">${item.category.name}</div>
+                ${nutritionalDisplay}
+            </div>
+            <div class="actions">
+                <button class="btn-edit" onclick="editItem(${item.id})">Edit</button>
+                <button class="btn-delete" onclick="deleteItem(${item.id})">Delete</button>
+            </div>
+        `;
+        listContainer.appendChild(card);
+    });
+}
+
+async function loadAndRenderItems() {
+    try {
+        allItems = await API.Items.getAll();
+        renderItemList(allItems);
+    } catch (error) {
+        console.error('Error loading items:', error);
+        ExportUtils.showToast('Error loading items', 'error');
+    }
+}
+
+// Global CRUD functions for Items
+window.createItem = async function() {
+    const name = document.getElementById('item-name').value.trim();
+    const categoryId = document.getElementById('item-category').value;
+    const calories = document.getElementById('item-calories').value;
+    const protein = document.getElementById('item-protein').value;
+    const sugar = document.getElementById('item-sugar').value;
+
+    // Validation
+    if (!name) {
+        ExportUtils.showToast('Please enter an item name', 'error');
+        return;
+    }
+    if (!categoryId) {
+        ExportUtils.showToast('Please select a category', 'error');
+        return;
+    }
+
+    // Check for duplicate name (case-insensitive)
+    const duplicateItem = allItems.find(item =>
+        item.name.toLowerCase() === name.toLowerCase()
+    );
+    if (duplicateItem) {
+        ExportUtils.showToast(`An item named "${duplicateItem.name}" already exists`, 'error');
+        return;
+    }
+
+    // Build item data
+    const itemData = {
+        name: name,
+        category_id: parseInt(categoryId),
+        calories_per_100: calories ? parseFloat(calories) : null,
+        protein_per_100: protein ? parseFloat(protein) : null,
+        sugar_per_100: sugar ? parseFloat(sugar) : null
+    };
+
+    try {
+        console.log('Creating item with data:', itemData);
+        await API.Items.create(itemData);
+
+        // Reset state
+        editingItemId = null;
+
+        // Reload the item list
+        await loadAndRenderItems();
+
+        // Reset form with fresh empty state
+        renderItemForm();
+
+        // Show success message
+        ExportUtils.showToast(`Item "${name}" created successfully!`, 'success', 4000);
+
+        // Scroll to top of form
+        document.getElementById('manage-form-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+        console.error('Error creating item:', error);
+        console.error('Item data that failed:', itemData);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to create item';
+        if (error.message) {
+            errorMessage = error.message;
+        }
+
+        ExportUtils.showToast(errorMessage, 'error');
+    }
+};
+
+window.editItem = async function(id) {
+    try {
+        const item = await API.Items.getById(id);
+        editingItemId = id;
+        renderItemForm(item);
+        // Scroll to top of form
+        document.getElementById('manage-form-container').scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+        console.error('Error loading item:', error);
+        ExportUtils.showToast('Error loading item', 'error');
+    }
+};
+
+window.updateItem = async function(id) {
+    const name = document.getElementById('item-name').value.trim();
+    const categoryId = document.getElementById('item-category').value;
+    const calories = document.getElementById('item-calories').value;
+    const protein = document.getElementById('item-protein').value;
+    const sugar = document.getElementById('item-sugar').value;
+
+    // Validation
+    if (!name) {
+        ExportUtils.showToast('Please enter an item name', 'error');
+        return;
+    }
+    if (!categoryId) {
+        ExportUtils.showToast('Please select a category', 'error');
+        return;
+    }
+
+    // Check for duplicate name (case-insensitive, excluding current item)
+    const duplicateItem = allItems.find(item =>
+        item.id !== id && item.name.toLowerCase() === name.toLowerCase()
+    );
+    if (duplicateItem) {
+        ExportUtils.showToast(`An item named "${duplicateItem.name}" already exists`, 'error');
+        return;
+    }
+
+    // Build item data
+    const itemData = {
+        name: name,
+        category_id: parseInt(categoryId),
+        calories_per_100: calories ? parseFloat(calories) : null,
+        protein_per_100: protein ? parseFloat(protein) : null,
+        sugar_per_100: sugar ? parseFloat(sugar) : null
+    };
+
+    try {
+        console.log('Updating item with data:', itemData);
+        await API.Items.update(id, itemData);
+
+        // Reset state
+        editingItemId = null;
+
+        // Reload the item list
+        await loadAndRenderItems();
+
+        // Reset form with fresh empty state
+        renderItemForm();
+
+        // Show success message
+        ExportUtils.showToast(`Item "${name}" updated successfully!`, 'success', 4000);
+
+        // Scroll to top of form
+        document.getElementById('manage-form-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+        console.error('Error updating item:', error);
+        console.error('Item data that failed:', itemData);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to update item';
+        if (error.message) {
+            errorMessage = error.message;
+        }
+
+        ExportUtils.showToast(errorMessage, 'error');
+    }
+};
+
+window.deleteItem = async function(id) {
+    if (!confirm('Are you sure you want to delete this item? This will fail if the item is used in any meals.')) return;
+
+    try {
+        await API.Items.delete(id);
+        ExportUtils.showToast('Item deleted!', 'success');
+        await loadAndRenderItems();
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        ExportUtils.showToast(error.message || 'Cannot delete item. It may be used in meals.', 'error');
+    }
+};
+
+window.cancelEditItem = function() {
+    editingItemId = null;
+    renderItemForm();
+};
+
+// State for Meals Management
+let editingMealId = null;
+let allMeals = [];
+let mealCuisines = [];
+let availableItems = [];
+let ingredientRowCounter = 0;
+
+async function showMealManagement() {
+    try {
+        // Load cuisines, items, and meals
+        [mealCuisines, availableItems, allMeals] = await Promise.all([
+            API.Cuisines.getAll(),
+            API.Items.getAll(),
+            API.Meals.getAll()
+        ]);
+
+        // Warn if no items exist (can't create meals without items)
+        if (availableItems.length === 0) {
+            ExportUtils.showToast('Please create items first before adding meals', 'error');
+        }
+
+        renderMealForm();
+        renderMealList(allMeals);
+    } catch (error) {
+        console.error('Error loading meal management:', error);
+        ExportUtils.showToast('Error loading meals', 'error');
+    }
+}
+
+function renderMealForm(editingMeal = null) {
+    const formContainer = document.getElementById('manage-form-container');
+    const isEditing = editingMeal !== null;
+
+    // Build cuisine options
+    const cuisineOptions = mealCuisines.map(cuisine =>
+        `<option value="${cuisine.id}" ${isEditing && editingMeal.cuisine_id === cuisine.id ? 'selected' : ''}>${cuisine.name}</option>`
+    ).join('');
+
+    formContainer.innerHTML = `
+        <h3>${isEditing ? 'Edit' : 'Add'} Meal</h3>
+
+        <!-- Search placeholder for future implementation -->
+        <div id="meal-search-container" class="search-placeholder hidden">
+            <!-- Future: Search input will go here -->
+        </div>
+
+        <div class="form-row">
+            <label for="meal-name">Name *</label>
+            <input type="text" id="meal-name" placeholder="Meal name" value="${isEditing ? editingMeal.name : ''}" required>
+        </div>
+
+        <div class="form-row">
+            <label for="meal-cuisine">Cuisine *</label>
+            <select id="meal-cuisine" required>
+                <option value="">Select cuisine...</option>
+                ${cuisineOptions}
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="meal-servings">Servings *</label>
+            <input type="number" id="meal-servings" placeholder="How many servings" min="1" step="1"
+                   value="${isEditing ? editingMeal.servings : '1'}" required>
+        </div>
+
+        <div class="form-row">
+            <label for="meal-recipe">Recipe (optional)</label>
+            <textarea id="meal-recipe" placeholder="Step-by-step instructions..." rows="6">${isEditing && editingMeal.recipe ? editingMeal.recipe : ''}</textarea>
+        </div>
+
+        <div class="form-row">
+            <label for="meal-image-url">Image URL (optional)</label>
+            <input type="text" id="meal-image-url" placeholder="https://..." value="${isEditing && editingMeal.image_url ? editingMeal.image_url : ''}">
+        </div>
+
+        <div class="ingredients-section">
+            <h4>Ingredients *</h4>
+            <div id="ingredients-container"></div>
+            <button type="button" class="btn-add-ingredient" onclick="addIngredientRow()">+ Add Ingredient</button>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn-primary" onclick="${isEditing ? `updateMeal(${editingMeal.id})` : 'createMeal()'}">${isEditing ? 'Update' : 'Add'} Meal</button>
+            ${isEditing ? '<button class="btn-secondary" onclick="cancelEditMeal()">Cancel</button>' : ''}
+        </div>
+    `;
+
+    // Render ingredient rows
+    if (isEditing && editingMeal.ingredients && editingMeal.ingredients.length > 0) {
+        editingMeal.ingredients.forEach(ingredient => {
+            addIngredientRow(ingredient);
+        });
+    } else {
+        // Start with one empty ingredient row
+        addIngredientRow();
+    }
+}
+
+function renderMealList(meals) {
+    const listContainer = document.getElementById('manage-list-container');
+
+    if (meals.length === 0) {
+        listContainer.innerHTML = '<h3>Existing Meals</h3><p class="empty-state">No meals yet. Add your first meal above.</p>';
+        return;
+    }
+
+    listContainer.innerHTML = '<h3>Existing Meals</h3>';
+
+    meals.forEach(meal => {
+        const card = document.createElement('div');
+        card.className = 'manage-item-card';
+
+        card.innerHTML = `
+            <div class="item-info">
+                <strong>${meal.name}</strong>
+                <div class="meal-meta">
+                    <span class="cuisine">${meal.cuisine.name}</span> |
+                    <span class="servings">${meal.servings}x serving${meal.servings > 1 ? 's' : ''}</span>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="btn-edit" onclick="editMeal(${meal.id})">Edit</button>
+                <button class="btn-delete" onclick="deleteMeal(${meal.id})">Delete</button>
+            </div>
+        `;
+        listContainer.appendChild(card);
+    });
+}
+
+async function loadAndRenderMeals() {
+    try {
+        allMeals = await API.Meals.getAll();
+        renderMealList(allMeals);
+    } catch (error) {
+        console.error('Error loading meals:', error);
+        ExportUtils.showToast('Error loading meals', 'error');
+    }
+}
+
+// Ingredient Row Management
+window.addIngredientRow = function(ingredient = null) {
+    const container = document.getElementById('ingredients-container');
+    if (!container) return;
+
+    const rowId = `ingredient-row-${ingredientRowCounter++}`;
+    const row = document.createElement('div');
+    row.className = 'ingredient-row';
+    row.id = rowId;
+
+    // Build item options
+    const itemOptions = availableItems.map(item =>
+        `<option value="${item.id}" ${ingredient && ingredient.item_id === item.id ? 'selected' : ''}>${item.name}</option>`
+    ).join('');
+
+    row.innerHTML = `
+        <div class="ingredient-inputs">
+            <select class="ingredient-item" required>
+                <option value="">Select item...</option>
+                ${itemOptions}
+            </select>
+            <input type="number" class="ingredient-quantity" placeholder="Qty" min="0.1" step="0.1"
+                   value="${ingredient ? ingredient.quantity : ''}" required>
+            <input type="text" class="ingredient-unit" placeholder="g, ml, x, cup..."
+                   value="${ingredient && ingredient.unit ? ingredient.unit : ''}">
+            <button type="button" class="btn-remove-ingredient" onclick="removeIngredientRow('${rowId}')">×</button>
+        </div>
+    `;
+
+    container.appendChild(row);
+    updateIngredientRemoveButtons();
+};
+
+window.removeIngredientRow = function(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) {
+        row.remove();
+        updateIngredientRemoveButtons();
+    }
+};
+
+function updateIngredientRemoveButtons() {
+    const container = document.getElementById('ingredients-container');
+    if (!container) return;
+
+    const rows = container.querySelectorAll('.ingredient-row');
+    // Hide remove button if only one row
+    rows.forEach((row, index) => {
+        const removeBtn = row.querySelector('.btn-remove-ingredient');
+        if (removeBtn) {
+            removeBtn.style.display = rows.length > 1 ? 'inline-block' : 'none';
+        }
+    });
+}
+
+function collectIngredientsFromForm() {
+    const container = document.getElementById('ingredients-container');
+    if (!container) return [];
+
+    const rows = container.querySelectorAll('.ingredient-row');
+    const ingredients = [];
+
+    rows.forEach(row => {
+        const itemId = row.querySelector('.ingredient-item').value;
+        const quantity = row.querySelector('.ingredient-quantity').value;
+        const unit = row.querySelector('.ingredient-unit').value.trim();
+
+        if (itemId && quantity) {
+            ingredients.push({
+                item_id: parseInt(itemId),
+                quantity: parseFloat(quantity),
+                unit: unit || null
+            });
+        }
+    });
+
+    return ingredients;
+}
+
+// Global CRUD functions for Meals
+window.createMeal = async function() {
+    const name = document.getElementById('meal-name').value.trim();
+    const cuisineId = document.getElementById('meal-cuisine').value;
+    const servings = document.getElementById('meal-servings').value;
+    const recipe = document.getElementById('meal-recipe').value.trim();
+    const imageUrl = document.getElementById('meal-image-url').value.trim();
+    const ingredients = collectIngredientsFromForm();
+
+    // Validation
+    if (!name) {
+        ExportUtils.showToast('Please enter a meal name', 'error');
+        return;
+    }
+    if (!cuisineId) {
+        ExportUtils.showToast('Please select a cuisine', 'error');
+        return;
+    }
+    if (!servings || servings < 1) {
+        ExportUtils.showToast('Please enter valid servings (min 1)', 'error');
+        return;
+    }
+    if (ingredients.length === 0) {
+        if (availableItems.length === 0) {
+            ExportUtils.showToast('Please create items first before adding meals', 'error');
+        } else {
+            ExportUtils.showToast('Please add at least one ingredient with item and quantity', 'error');
+        }
+        return;
+    }
+
+    // Check for duplicate name (case-insensitive)
+    const duplicateMeal = allMeals.find(meal =>
+        meal.name.toLowerCase() === name.toLowerCase()
+    );
+    if (duplicateMeal) {
+        ExportUtils.showToast(`A meal named "${duplicateMeal.name}" already exists`, 'error');
+        return;
+    }
+
+    // Build meal data
+    const mealData = {
+        name: name,
+        cuisine_id: parseInt(cuisineId),
+        servings: parseInt(servings),
+        recipe: recipe || null,
+        image_url: imageUrl || null,
+        ingredients: ingredients
+    };
+
+    try {
+        console.log('Creating meal with data:', mealData);
+        await API.Meals.create(mealData);
+
+        // Reset state and form
+        editingMealId = null;
+        ingredientRowCounter = 0;
+
+        // Reload the meal list
+        await loadAndRenderMeals();
+
+        // Reset form with fresh empty state
+        renderMealForm();
+
+        // Show success message
+        ExportUtils.showToast(`Meal "${name}" created successfully!`, 'success', 4000);
+
+        // Scroll to top of form
+        document.getElementById('manage-form-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+        console.error('Error creating meal:', error);
+        console.error('Meal data that failed:', mealData);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to create meal';
+        if (error.message) {
+            errorMessage = error.message;
+        }
+
+        ExportUtils.showToast(errorMessage, 'error');
+    }
+};
+
+window.editMeal = async function(id) {
+    try {
+        const meal = await API.Meals.getById(id);
+        editingMealId = id;
+        ingredientRowCounter = 0;
+        renderMealForm(meal);
+        // Scroll to top of form
+        document.getElementById('manage-form-container').scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+        console.error('Error loading meal:', error);
+        ExportUtils.showToast('Error loading meal', 'error');
+    }
+};
+
+window.updateMeal = async function(id) {
+    const name = document.getElementById('meal-name').value.trim();
+    const cuisineId = document.getElementById('meal-cuisine').value;
+    const servings = document.getElementById('meal-servings').value;
+    const recipe = document.getElementById('meal-recipe').value.trim();
+    const imageUrl = document.getElementById('meal-image-url').value.trim();
+    const ingredients = collectIngredientsFromForm();
+
+    // Validation
+    if (!name) {
+        ExportUtils.showToast('Please enter a meal name', 'error');
+        return;
+    }
+    if (!cuisineId) {
+        ExportUtils.showToast('Please select a cuisine', 'error');
+        return;
+    }
+    if (!servings || servings < 1) {
+        ExportUtils.showToast('Please enter valid servings (min 1)', 'error');
+        return;
+    }
+    if (ingredients.length === 0) {
+        if (availableItems.length === 0) {
+            ExportUtils.showToast('Please create items first before adding meals', 'error');
+        } else {
+            ExportUtils.showToast('Please add at least one ingredient with item and quantity', 'error');
+        }
+        return;
+    }
+
+    // Check for duplicate name (case-insensitive, excluding current meal)
+    const duplicateMeal = allMeals.find(meal =>
+        meal.id !== id && meal.name.toLowerCase() === name.toLowerCase()
+    );
+    if (duplicateMeal) {
+        ExportUtils.showToast(`A meal named "${duplicateMeal.name}" already exists`, 'error');
+        return;
+    }
+
+    // Build meal data
+    const mealData = {
+        name: name,
+        cuisine_id: parseInt(cuisineId),
+        servings: parseInt(servings),
+        recipe: recipe || null,
+        image_url: imageUrl || null,
+        ingredients: ingredients
+    };
+
+    try {
+        console.log('Updating meal with data:', mealData);
+        await API.Meals.update(id, mealData);
+
+        // Reset state
+        editingMealId = null;
+        ingredientRowCounter = 0;
+
+        // Reload the meal list
+        await loadAndRenderMeals();
+
+        // Reset form with fresh empty state
+        renderMealForm();
+
+        // Show success message
+        ExportUtils.showToast(`Meal "${name}" updated successfully!`, 'success', 4000);
+
+        // Scroll to top of form
+        document.getElementById('manage-form-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+        console.error('Error updating meal:', error);
+        console.error('Meal data that failed:', mealData);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to update meal';
+        if (error.message) {
+            errorMessage = error.message;
+        }
+
+        ExportUtils.showToast(errorMessage, 'error');
+    }
+};
+
+window.deleteMeal = async function(id) {
+    if (!confirm('Are you sure you want to delete this meal?')) return;
+
+    try {
+        await API.Meals.delete(id);
+        ExportUtils.showToast('Meal deleted!', 'success');
+        await loadAndRenderMeals();
+    } catch (error) {
+        console.error('Error deleting meal:', error);
+        ExportUtils.showToast(error.message, 'error');
+    }
+};
+
+window.cancelEditMeal = function() {
+    editingMealId = null;
+    ingredientRowCounter = 0;
+    renderMealForm();
+};
 
 // Global functions for manage actions
 window.createCategory = async function() {

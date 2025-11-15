@@ -692,6 +692,224 @@ body {
 }
 
 /* ========================================
+   Items & Meals Management Forms
+   ======================================== */
+.form-row {
+    margin-bottom: 16px;
+}
+
+.form-row label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: inherit;
+    background-color: var(--surface);
+    color: var(--text-primary);
+}
+
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.form-row textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.form-actions .btn-primary,
+.form-actions .btn-secondary {
+    flex: 1;
+}
+
+/* ========================================
+   Ingredient Rows (Meals)
+   ======================================== */
+.ingredients-section {
+    margin: 24px 0;
+    padding: 20px;
+    background-color: var(--background);
+    border-radius: 8px;
+}
+
+.ingredients-section h4 {
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+#ingredients-container {
+    margin-bottom: 12px;
+}
+
+.ingredient-row {
+    margin-bottom: 8px;
+}
+
+.ingredient-inputs {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.ingredient-inputs select,
+.ingredient-inputs input {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    background-color: var(--surface);
+}
+
+.ingredient-inputs select:focus,
+.ingredient-inputs input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.btn-add-ingredient {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-add-ingredient:hover {
+    background-color: #1976D2;
+}
+
+.btn-remove-ingredient {
+    background-color: var(--error-color);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-remove-ingredient:hover {
+    background-color: #D32F2F;
+}
+
+/* ========================================
+   Manage Item Cards Enhancements
+   ======================================== */
+.manage-item-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background-color: var(--surface);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+}
+
+.manage-item-card .item-info {
+    flex: 1;
+}
+
+.manage-item-card .item-info strong {
+    display: block;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.manage-item-card .item-category,
+.manage-item-card .meal-meta {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.nutritional-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    padding: 4px 0;
+}
+
+.meal-meta {
+    display: flex;
+    gap: 8px;
+}
+
+.manage-item-card .actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-edit {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-edit:hover {
+    background-color: #1976D2;
+}
+
+.btn-delete {
+    background-color: var(--error-color);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-delete:hover {
+    background-color: #D32F2F;
+}
+
+/* ========================================
+   Search Placeholder (for future use)
+   ======================================== */
+.search-placeholder {
+    margin-bottom: 16px;
+}
+
+.search-placeholder.hidden {
+    display: none;
+}
+
+/* ========================================
    Toast Notifications
    ======================================== */
 .toast-container {
@@ -786,5 +1004,34 @@ body {
 
     .result-card {
         max-width: 800px;
+    }
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 767px) {
+    .ingredient-inputs {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .ingredient-inputs select,
+    .ingredient-inputs input {
+        width: 100%;
+    }
+
+    .btn-remove-ingredient {
+        width: 100%;
+        margin-top: 4px;
+    }
+
+    .manage-item-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .manage-item-card .actions {
+        width: 100%;
+        margin-top: 12px;
+        justify-content: flex-end;
     }
 }

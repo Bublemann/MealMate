@@ -1,7 +1,7 @@
 """API router for meals."""
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 from app.database import get_db
 from app.models import Meal, MealIngredient, Cuisine, Item
@@ -98,7 +98,7 @@ def get_meals(
     Get all meals for the current user with optional filtering.
     Each user only sees their own meals.
     """
-    query = db.query(Meal).filter(Meal.user_id == current_user.id)
+    query = db.query(Meal).options(joinedload(Meal.cuisine)).filter(Meal.user_id == current_user.id)
 
     # Apply filters
     if cuisine_id is not None:
@@ -118,7 +118,10 @@ def get_meal(
     current_user: User = Depends(get_current_user)
 ):
     """Get a single meal by ID with full details including ingredients."""
-    meal = db.query(Meal).filter(
+    meal = db.query(Meal).options(
+        joinedload(Meal.cuisine),
+        joinedload(Meal.ingredients)
+    ).filter(
         Meal.id == meal_id,
         Meal.user_id == current_user.id
     ).first()
