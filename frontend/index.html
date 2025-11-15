@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>MealMate - Shopping List Manager</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Login/Register Screen -->
+    <div id="auth-screen" class="screen active">
+        <div class="auth-container">
+            <h1>MealMate</h1>
+            <p class="subtitle">Meal Planning & Shopping List Manager</p>
+
+            <div id="login-form" class="auth-form">
+                <h2>Login</h2>
+                <input type="text" id="login-username" placeholder="Username" autocomplete="username">
+                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <button id="login-btn" class="btn-primary">Login</button>
+                <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Register</a></p>
+            </div>
+
+            <div id="register-form" class="auth-form hidden">
+                <h2>Register</h2>
+                <input type="text" id="register-username" placeholder="Username" autocomplete="username">
+                <input type="password" id="register-password" placeholder="Password (min 6 chars)" autocomplete="new-password">
+                <button id="register-btn" class="btn-primary">Register</button>
+                <p class="auth-switch">Already have an account? <a href="#" id="show-login">Login</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Screen -->
+    <div id="app-screen" class="screen">
+        <!-- Header -->
+        <header class="app-header">
+            <button id="menu-toggle" class="menu-btn">☰</button>
+            <h1>MealMate</h1>
+            <button id="logout-btn" class="logout-btn">Logout</button>
+        </header>
+
+        <!-- App Content Wrapper for Desktop Layout -->
+        <div class="app-content-wrapper">
+            <!-- Sidebar Navigation -->
+            <nav id="sidebar" class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Menu</h2>
+                    <button id="sidebar-close" class="close-btn">×</button>
+                </div>
+                <ul class="nav-list">
+                    <li><a href="#" data-tab="shopping-list" class="nav-link active">Shopping List</a></li>
+                    <li><a href="#" data-tab="add-to-list" class="nav-link">Add to List</a></li>
+                    <li><a href="#" data-tab="manage" class="nav-link">Manage</a></li>
+                </ul>
+            </nav>
+
+            <!-- Overlay for closing sidebar -->
+            <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+            <!-- Main Content -->
+            <main class="main-content">
+            <!-- Shopping List Tab -->
+            <div id="shopping-list-tab" class="tab-content active">
+                <div class="tab-header">
+                    <h2>Shopping List Preview</h2>
+                </div>
+
+                <div class="shopping-list-controls">
+                    <select id="shopping-list-selector" class="selector">
+                        <option value="">Select a shopping list...</option>
+                    </select>
+                    <button id="new-shopping-list-btn" class="btn-secondary">+ New List</button>
+                </div>
+
+                <div id="shopping-list-preview" class="preview-container">
+                    <p class="empty-state">No shopping list selected</p>
+                </div>
+
+                <div id="export-buttons" class="export-buttons hidden">
+                    <button id="copy-to-clipboard-btn" class="btn-primary">Copy to Clipboard</button>
+                    <button id="share-to-notes-btn" class="btn-primary">Share to Notes</button>
+                </div>
+            </div>
+
+            <!-- Add to List Tab -->
+            <div id="add-to-list-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2>Add to Shopping List</h2>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="search-container">
+                    <input type="text" id="search-input" class="search-input" placeholder="Search for items or meals...">
+                    <div id="search-suggestions" class="search-suggestions hidden"></div>
+                </div>
+
+                <!-- Filter Panel -->
+                <div class="filter-panel">
+                    <button id="filter-toggle" class="btn-secondary">Filters</button>
+                    <div id="filter-options" class="filter-options hidden">
+                        <label><input type="radio" name="filter-type" value="all" checked> Show All</label>
+                        <label><input type="radio" name="filter-type" value="items"> Items Only</label>
+                        <label><input type="radio" name="filter-type" value="meals"> Meals Only</label>
+                        <div id="cuisine-filters" class="cuisine-filters"></div>
+                    </div>
+                </div>
+
+                <!-- Results View -->
+                <div id="search-results" class="results-container">
+                    <p class="empty-state">Search for items or meals to add to your shopping list</p>
+                </div>
+            </div>
+
+            <!-- Manage Tab -->
+            <div id="manage-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2>Manage</h2>
+                </div>
+
+                <div class="manage-controls">
+                    <label for="manage-type-selector">Add or manage:</label>
+                    <select id="manage-type-selector" class="selector">
+                        <option value="item">Item</option>
+                        <option value="meal">Meal</option>
+                        <option value="category">Category</option>
+                        <option value="cuisine">Cuisine</option>
+                    </select>
+                </div>
+
+                <!-- Dynamic Form Container -->
+                <div id="manage-form-container" class="manage-form-container">
+                    <!-- Forms will be dynamically loaded here -->
+                </div>
+
+                <!-- List of Existing Entities -->
+                <div id="manage-list-container" class="manage-list-container">
+                    <!-- Lists will be dynamically loaded here -->
+                </div>
+            </div>
+            </main>
+        </div><!-- end app-content-wrapper -->
+
+        <!-- Toast Notifications -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Modal for creating new shopping list -->
+    <div id="new-list-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Shopping List</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="new-list-name" placeholder="Shopping list name" class="modal-input">
+            </div>
+            <div class="modal-footer">
+                <button id="create-list-btn" class="btn-primary">Create</button>
+                <button class="modal-close btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
