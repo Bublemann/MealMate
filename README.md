@@ -1,6 +1,6 @@
 # MealMate
 
-A comprehensive meal planning and grocery shopping list management web application. Designed for mobile-first use (optimized for iPhone) but works great on desktop too.
+A comprehensive meal planning and grocery shopping list management web application. Designed for mobile-first use (optimized for iPhone) with HTTPS support for secure Web Share API functionality.
 
 ## Features
 
@@ -8,95 +8,81 @@ A comprehensive meal planning and grocery shopping list management web applicati
 - **Meal planning** with recipes and ingredients
 - **Shopping list management** with smart meal-to-grocery conversion
 - **Search & filter** for items and meals
-- **Export options**: Copy to clipboard or share directly to iOS Notes app
+- **Export options**: Copy to clipboard or share directly to iOS Notes app (via Web Share API)
 - **Database-driven** with SQLite (persistent across updates)
-- **Docker deployment** optimized for Raspberry Pi 3
+- **Docker deployment** with HTTPS support
 - **Mobile-first responsive design**
+- **Secure HTTPS** - Required for iOS Web Share API
 
 ## Tech Stack
 
 - **Backend**: Python + FastAPI
 - **Frontend**: Vanilla JavaScript (no framework)
 - **Database**: SQLite
+- **Security**: HTTPS with self-signed SSL certificate
 - **Deployment**: Docker + Docker Compose
 - **Target Platform**: Raspberry Pi 3 (ARM architecture)
-
-## Project Structure
-
-```
-MealMate/
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI application
-│   │   ├── models.py            # Database models
-│   │   ├── database.py          # DB configuration
-│   │   ├── routers/             # API endpoints
-│   │   │   ├── items.py
-│   │   │   ├── meals.py
-│   │   │   ├── categories.py
-│   │   │   ├── cuisines.py
-│   │   │   ├── shopping_lists.py
-│   │   │   ├── users.py
-│   │   │   └── search.py
-│   │   └── utils/
-│   │       └── auth.py          # Authentication
-│   ├── requirements.txt
-│   └── test_data.py             # Sample data script
-├── frontend/
-│   ├── index.html
-│   ├── css/
-│   │   └── styles.css
-│   └── js/
-│       ├── app.js               # Main application logic
-│       ├── api.js               # API communication
-│       └── export.js            # Export utilities
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
 
 ## Quick Start
 
 ### Prerequisites
 
 - Docker and Docker Compose installed
-- For development: Python 3.11+
+- OpenSSL (for generating SSL certificates)
 
-### Deployment on Raspberry Pi
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd MealMate
-   ```
-
-2. **Build and run with Docker Compose**:
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Access the application**:
-   - From the same device: `http://localhost:8000`
-   - From other devices on your network: `http://<raspberry-pi-ip>:8000`
-   - The frontend is served at the root URL
-
-4. **Create your first user**:
-   - Open the app in your browser
-   - Click "Register" and create an account
-
-### Populate Test Data (Optional)
-
-To add sample data for testing:
+### 1. Clone the Repository
 
 ```bash
-# Enter the running container
-docker exec -it mealmate-app bash
+git clone <repository-url>
+cd MealMate
+```
 
-# Run the test data script
-python test_data.py
+### 2. Generate SSL Certificates
 
-# Exit the container
-exit
+**Important**: Replace `192.168.178.97` with your server's actual IP address.
+
+```bash
+# Create certificates directory
+mkdir -p certs
+
+# Generate self-signed certificate (valid for 365 days)
+cd certs
+openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365 \
+  -subj "/C=DE/ST=State/L=City/O=MealMate/CN=mealmate.local" \
+  -addext "subjectAltName=IP:192.168.178.97,DNS:mealmate.local,DNS:localhost"
+cd ..
+```
+
+### 3. Build and Run with Docker Compose
+
+```bash
+docker-compose up -d --build
+```
+
+### 4. Access the Application
+
+**From Desktop/Mac:**
+- URL: `https://<your-server-ip>:8443`
+- Example: `https://192.168.178.97:8443`
+- You'll need to accept the self-signed certificate warning
+
+**From iPhone/Mobile:**
+1. Open Safari and navigate to `https://<your-server-ip>:8443`
+2. You'll see a security warning - tap **"Show Details"** → **"visit this website"**
+3. Accept the certificate (this is safe - it's your own certificate)
+4. For best experience: Add to Home Screen (Share → Add to Home Screen)
+
+### 5. Create Your First User
+
+- Click "Register" and create an account
+- Or use test data (see below)
+
+## Populate Test Data (Optional)
+
+Add sample data for testing:
+
+```bash
+docker-compose exec mealmate python test_data.py
 ```
 
 This creates:
@@ -126,43 +112,59 @@ This creates:
 
 4. **Export Your List**:
    - View your shopping list in the "Shopping List" tab
-   - Click "Copy to Clipboard" to copy the text
-   - Or click "Share to Notes" to share directly to iOS Notes app
+   - **Copy to Clipboard**: Copy the text to paste anywhere
+   - **Share to Notes** (iOS only): Opens iOS share sheet to select Notes or any other app
 
-### For Developers
+### Web Share API (iOS Share to Notes)
 
-#### Local Development (without Docker)
+The "Share to Notes" button uses the native iOS share sheet, which requires HTTPS to work. This is why MealMate uses SSL certificates.
 
-1. **Set up Python environment**:
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+**On iPhone:**
+- Access via `https://<ip>:8443`
+- Accept the certificate
+- Click "Share to Notes" → Select Notes app (or any other app)
 
-2. **Set database path** (optional):
-   ```bash
-   export DATABASE_PATH=/tmp/mealmate.db
-   ```
+**On Desktop:**
+- The share button may show an error if Web Share API is not available
+- Use "Copy to Clipboard" instead
 
-3. **Run the backend**:
-   ```bash
-   cd backend
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+## Project Structure
 
-4. **Serve the frontend**:
-   Open `frontend/index.html` in a browser, or use a simple HTTP server:
-   ```bash
-   cd frontend
-   python -m http.server 8080
-   ```
-
-5. **Access**:
-   - Backend API: `http://localhost:8000`
-   - API docs: `http://localhost:8000/docs`
-   - Frontend: `http://localhost:8080`
+```
+MealMate/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI application
+│   │   ├── models.py            # Database models
+│   │   ├── database.py          # DB configuration
+│   │   ├── routers/             # API endpoints
+│   │   │   ├── items.py
+│   │   │   ├── meals.py
+│   │   │   ├── categories.py
+│   │   │   ├── cuisines.py
+│   │   │   ├── shopping_lists.py
+│   │   │   ├── users.py
+│   │   │   └── search.py
+│   │   └── utils/
+│   │       └── auth.py          # Authentication
+│   ├── requirements.txt
+│   ├── test_data.py             # Sample data script
+│   └── start.sh                 # HTTPS startup script
+├── frontend/
+│   ├── index.html
+│   ├── css/
+│   │   └── styles.css
+│   └── js/
+│       ├── app.js               # Main application logic
+│       ├── api.js               # API communication
+│       └── export.js            # Export utilities
+├── certs/                       # SSL certificates (generated)
+│   ├── cert.pem
+│   └── key.pem
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
 
 ## Data Persistence
 
@@ -205,21 +207,11 @@ docker run --rm \
   alpine sh -c "cd /data && tar xzf /backup/mealmate-backup-YYYYMMDD.tar.gz"
 ```
 
-### Viewing/Copying the Database
-
-```bash
-# Copy database from volume to current directory
-docker run --rm \
-  -v mealmate_data:/data \
-  -v $(pwd):/backup \
-  alpine cp /data/mealmate.db /backup/mealmate.db
-```
-
 ## API Documentation
 
 Once the application is running, access the interactive API documentation:
-- Swagger UI: `http://<your-ip>:8000/docs`
-- ReDoc: `http://<your-ip>:8000/redoc`
+- Swagger UI: `https://<your-ip>:8443/docs`
+- ReDoc: `https://<your-ip>:8443/redoc`
 
 ### Key Endpoints
 
@@ -252,6 +244,33 @@ Once the application is running, access the interactive API documentation:
 - **Search**:
   - `GET /api/search?q=chicken&type=all` - Unified search
 
+## SSL Certificate Management
+
+### Regenerating Certificates
+
+If your IP address changes or the certificate expires (365 days):
+
+```bash
+cd certs
+rm cert.pem key.pem
+
+# Replace with your new IP address
+openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365 \
+  -subj "/C=DE/ST=State/L=City/O=MealMate/CN=mealmate.local" \
+  -addext "subjectAltName=IP:YOUR_NEW_IP,DNS:mealmate.local,DNS:localhost"
+
+cd ..
+docker-compose restart
+```
+
+### Certificate Details
+
+- **Type**: Self-signed SSL certificate
+- **Key size**: 4096-bit RSA
+- **Validity**: 365 days
+- **Location**: `./certs/` directory
+- **Mounted in container**: Read-only at `/app/certs/`
+
 ## Architecture Notes
 
 ### Multi-User Isolation
@@ -269,20 +288,13 @@ Once the application is running, access the interactive API documentation:
 
 ### Security
 
-- Passwords are hashed using bcrypt
-- JWT tokens for authentication
-- Token-based API access
-- Configurable secret key (set `SECRET_KEY` environment variable)
+- **HTTPS**: All traffic encrypted with SSL/TLS
+- **Passwords**: Hashed using bcrypt
+- **JWT tokens**: For authentication
+- **CORS**: Configured to allow local network access
+- **Secret key**: Configurable via environment variable
 
 ## Customization
-
-### Change Port
-
-Edit `docker-compose.yml`:
-```yaml
-ports:
-  - "8080:8000"  # Change 8080 to your preferred port
-```
 
 ### Set Secret Key
 
@@ -306,11 +318,36 @@ Check logs:
 docker-compose logs -f
 ```
 
-### Can't access from other devices
+### SSL certificate errors
 
-1. Check Raspberry Pi firewall
-2. Verify the Pi's IP address: `hostname -I`
-3. Make sure you're on the same network
+Make sure certificates exist:
+```bash
+ls -la certs/
+# Should show cert.pem and key.pem
+```
+
+If missing, regenerate them (see SSL Certificate Management section).
+
+### Can't access from iPhone
+
+1. Make sure you're using HTTPS: `https://<ip>:8443`
+2. Accept the certificate warning in Safari
+3. Check that iPhone is on the same WiFi network
+4. Try adding to Home Screen for better experience
+
+### Share to Notes not working
+
+1. Verify you're using HTTPS (not HTTP)
+2. Check browser console for errors (see debugging below)
+3. Make sure you accepted the certificate
+4. Try accessing from Home Screen app
+
+### Debugging on iPhone
+
+1. On iPhone: Settings → Safari → Advanced → Web Inspector (enable)
+2. Connect iPhone to Mac via USB or WiFi
+3. On Mac: Safari → Develop → [Your iPhone] → [MealMate page]
+4. Check Console for debug messages
 
 ### Database errors
 
@@ -320,12 +357,6 @@ docker-compose down
 docker volume rm mealmate_data
 docker-compose up -d
 ```
-
-### Frontend can't connect to backend
-
-1. Check browser console for errors
-2. Verify API_BASE_URL in `frontend/js/api.js`
-3. Check CORS settings in `backend/app/main.py`
 
 ## Future Enhancements
 
@@ -337,11 +368,8 @@ Potential features to add:
 - [ ] Barcode scanning for items
 - [ ] Shopping list sharing between users
 - [ ] Dark mode
+- [ ] Let's Encrypt SSL certificate support
 
 ## License
 
 See LICENSE file.
-
-## Support
-
-For issues or questions, please check the [PROJECT_STATUS.md](PROJECT_STATUS.md) file for development status and implementation details.

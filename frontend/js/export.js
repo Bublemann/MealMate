@@ -45,26 +45,15 @@ async function copyToClipboard(text) {
  */
 async function shareText(text, title = 'MealMate Shopping List') {
     try {
-        // Debug logging
-        console.log('Share button clicked');
-        console.log('navigator.share exists:', !!navigator.share);
-        console.log('Current URL:', window.location.href);
-        console.log('Protocol:', window.location.protocol);
-        console.log('Is secure context:', window.isSecureContext);
-
         if (navigator.share) {
             // Web Share API is available - open native share sheet
-            console.log('Attempting to share...');
             await navigator.share({
                 title: title,
                 text: text,
             });
-            console.log('Share successful');
             return true;
         } else {
             // Web Share API not available
-            console.warn('Web Share API not available on this browser/device');
-            console.warn('User agent:', navigator.userAgent);
             showToast('Share feature not available on this browser. Please use "Copy to Clipboard" instead.', 'error');
             return false;
         }
@@ -72,7 +61,6 @@ async function shareText(text, title = 'MealMate Shopping List') {
         // User cancelled the share dialog or other error
         if (error.name === 'AbortError') {
             // User cancelled - this is not really an error
-            console.log('User cancelled share dialog');
             return false;
         }
         console.error('Failed to share:', error);

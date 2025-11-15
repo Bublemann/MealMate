@@ -36,12 +36,12 @@ RUN mkdir -p /data
 ENV DATABASE_PATH=/data/mealmate.db
 ENV PYTHONUNBUFFERED=1
 
-# Expose ports (HTTP and HTTPS)
-EXPOSE 8000 8443
+# Expose HTTPS port
+EXPOSE 8443
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import urllib.request, ssl; urllib.request.urlopen('https://localhost:8443/health', context=ssl._create_unverified_context())" || exit 1
 
 # Run the application using startup script
 CMD ["/app/start.sh"]
