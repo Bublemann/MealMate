@@ -4,9 +4,19 @@
  */
 
 // Configuration
-const API_BASE_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:8000/api'
-    : `http://${window.location.hostname}:8000/api`;
+// Automatically use the same protocol (http/https) as the current page
+const API_BASE_URL = (() => {
+    const protocol = window.location.protocol; // 'http:' or 'https:'
+    const hostname = window.location.hostname;
+
+    // If we're on HTTPS (port 8443), use HTTPS for API
+    // Otherwise use HTTP (port 8000)
+    if (protocol === 'https:') {
+        return `https://${hostname}:8443/api`;
+    } else {
+        return `http://${hostname}:8000/api`;
+    }
+})();
 
 // Storage keys
 const TOKEN_KEY = 'mealmate_token';

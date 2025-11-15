@@ -38,35 +38,45 @@ async function copyToClipboard(text) {
 
 /**
  * Share text using Web Share API (for mobile devices, especially iOS)
+ * Opens the native share sheet to let users choose an app (Notes, Messages, etc.)
  * @param {string} text - The text to share
  * @param {string} title - The title for the share dialog
  * @returns {Promise<boolean>} - True if successful or share dialog was shown, false otherwise
  */
 async function shareText(text, title = 'MealMate Shopping List') {
     try {
+        // Debug logging
+        console.log('Share button clicked');
+        console.log('navigator.share exists:', !!navigator.share);
+        console.log('Current URL:', window.location.href);
+        console.log('Protocol:', window.location.protocol);
+        console.log('Is secure context:', window.isSecureContext);
+
         if (navigator.share) {
-            // Web Share API is available
+            // Web Share API is available - open native share sheet
+            console.log('Attempting to share...');
             await navigator.share({
                 title: title,
                 text: text,
             });
+            console.log('Share successful');
             return true;
         } else {
-            // Web Share API not available, fall back to clipboard
-            console.warn('Web Share API not available, falling back to clipboard');
-            const success = await copyToClipboard(text);
-            if (success) {
-                showToast('Copied to clipboard! You can paste it into Notes app', 'success');
-            }
-            return success;
+            // Web Share API not available
+            console.warn('Web Share API not available on this browser/device');
+            console.warn('User agent:', navigator.userAgent);
+            showToast('Share feature not available on this browser. Please use "Copy to Clipboard" instead.', 'error');
+            return false;
         }
     } catch (error) {
         // User cancelled the share dialog or other error
         if (error.name === 'AbortError') {
             // User cancelled - this is not really an error
+            console.log('User cancelled share dialog');
             return false;
         }
         console.error('Failed to share:', error);
+        showToast('Failed to open share dialog', 'error');
         return false;
     }
 }

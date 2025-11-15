@@ -21,6 +21,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/app /app/app
 COPY backend/test_data.py /app/test_data.py
+COPY backend/start.sh /app/start.sh
+
+# Make startup script executable
+RUN chmod +x /app/start.sh
 
 # Copy frontend files
 COPY frontend /app/frontend
@@ -32,12 +36,12 @@ RUN mkdir -p /data
 ENV DATABASE_PATH=/data/mealmate.db
 ENV PYTHONUNBUFFERED=1
 
-# Expose port
-EXPOSE 8000
+# Expose ports (HTTP and HTTPS)
+EXPOSE 8000 8443
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application using startup script
+CMD ["/app/start.sh"]
