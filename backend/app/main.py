@@ -56,6 +56,12 @@ if os.path.exists(frontend_path):
     app.mount("/css", StaticFiles(directory=os.path.join(frontend_path, "css")), name="css")
     app.mount("/js", StaticFiles(directory=os.path.join(frontend_path, "js")), name="js")
 
+# Mount meal images directory
+meal_images_path = os.getenv("MEAL_IMAGES_PATH", "/data/meal_images")
+if not os.path.exists(meal_images_path):
+    os.makedirs(meal_images_path, exist_ok=True)
+app.mount("/meal-images", StaticFiles(directory=meal_images_path), name="meal-images")
+
 
 # Serve index.html at root
 @app.get("/")

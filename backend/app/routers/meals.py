@@ -1,11 +1,16 @@
 """API router for meals."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 from app.database import get_db
 from app.models import Meal, MealIngredient, Cuisine, Item
 from app.utils.auth import get_current_user, User
+import os
+import uuid
+from datetime import datetime
+from PIL import Image
+import io
 
 router = APIRouter()
 
@@ -295,3 +300,89 @@ def delete_meal(
 
     db.delete(meal)
     db.commit()
+
+
+@router.post("/upload-image")
+async def upload_meal_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload and optimize a meal image.
+
+    Accepts: PNG, JPG, JPEG, WEBP
+    Returns: Path to the optimized image
+
+    The image will be:
+    - Resized to max 800x800 pixels (maintaining aspect ratio)
+    - Converted to JPEG format
+    - Compressed with quality 85
+    - Saved with a unique filename
+    """
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+        )
+
+    # Validate file size (max 10MB)
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:  # 10MB
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds 10MB limit"
+        )
+
+    try:
+        # Open image with Pillow
+        image = Image.open(io.BytesIO(contents))
+
+        # Convert to RGB if necessary (removes alpha channel)
+        if image.mode in ("RGBA", "LA", "P"):
+            # Create white background
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            if image.mode == "P":
+                image = image.convert("RGBA")
+            background.paste(image, mask=image.split()[-1] if image.mode in ("RGBA", "LA") else None)
+            image = background
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+        # Resize image maintaining aspect ratio (max 800x800)
+        max_size = (800, 800)
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # Generate unique filename
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        unique_id = str(uuid.uuid4())[:8]
+        filename = f"user{current_user.id}_{timestamp}_{unique_id}.jpg"
+
+        # Get images directory
+        images_dir = os.getenv("MEAL_IMAGES_PATH", "/data/meal_images")
+        if not os.path.exists(images_dir):
+            os.makedirs(images_dir, exist_ok=True)
+
+        # Save optimized image
+        filepath = os.path.join(images_dir, filename)
+        image.save(filepath, "JPEG", quality=85, optimize=True)
+
+        # Calculate file size for info
+        file_size_kb = os.path.getsize(filepath) / 1024
+
+        # Return the URL path
+        image_url = f"/meal-images/{filename}"
+
+        return {
+            "image_url": image_url,
+            "filename": filename,
+            "size_kb": round(file_size_kb, 2),
+            "dimensions": f"{image.width}x{image.height}"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process image: {str(e)}"
+        )

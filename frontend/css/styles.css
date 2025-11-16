@@ -1001,6 +1001,128 @@ body {
 }
 
 /* ========================================
+   Image Upload Interface
+   ======================================== */
+.image-upload-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.image-drop-zone {
+    position: relative;
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: var(--surface);
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-drop-zone:hover {
+    border-color: var(--primary-color);
+    background-color: rgba(76, 175, 80, 0.02);
+}
+
+.image-drop-zone.drag-over {
+    border-color: var(--primary-color);
+    background-color: rgba(76, 175, 80, 0.05);
+    border-width: 3px;
+}
+
+.image-upload-prompt {
+    color: var(--text-secondary);
+}
+
+.image-upload-prompt svg {
+    margin: 0 auto 16px;
+    color: var(--text-secondary);
+}
+
+.image-upload-prompt p {
+    margin: 8px 0;
+}
+
+.image-upload-prompt .hint {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.image-preview-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-preview-container.hidden {
+    display: none;
+}
+
+.image-preview-container img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.btn-remove-image {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--error-color);
+    color: white;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.btn-remove-image:hover {
+    transform: scale(1.1);
+    background-color: #d32f2f;
+}
+
+.or-divider {
+    text-align: center;
+    position: relative;
+    margin: 8px 0;
+}
+
+.or-divider span {
+    background-color: var(--surface);
+    padding: 0 12px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    position: relative;
+    z-index: 1;
+}
+
+.or-divider::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: var(--border-color);
+}
+
+/* ========================================
    Responsive Design
    ======================================== */
 @media (min-width: 768px) {

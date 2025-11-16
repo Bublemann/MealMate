@@ -1153,8 +1153,30 @@ function renderMealForm(editingMeal = null) {
         </div>
 
         <div class="form-row">
-            <label for="meal-image-url">Image URL (optional)</label>
-            <input type="text" id="meal-image-url" placeholder="https://..." value="${isEditing && editingMeal.image_url ? editingMeal.image_url : ''}">
+            <label>Image (optional)</label>
+            <div class="image-upload-container">
+                <div id="image-drop-zone" class="image-drop-zone">
+                    <div id="image-preview-container" class="image-preview-container hidden">
+                        <img id="image-preview" src="" alt="Preview">
+                        <button type="button" class="btn-remove-image" onclick="removeImage()">×</button>
+                    </div>
+                    <div id="image-upload-prompt" class="image-upload-prompt">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <p><strong>Drop image here</strong> or click to browse</p>
+                        <p class="hint">You can also paste (Ctrl/Cmd+V)</p>
+                        <p class="hint">Supports: PNG, JPG, WEBP (max 10MB)</p>
+                    </div>
+                    <input type="file" id="image-file-input" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;">
+                </div>
+                <div class="or-divider">
+                    <span>OR</span>
+                </div>
+                <input type="text" id="meal-image-url" placeholder="Enter image URL (https://...)" value="${isEditing && editingMeal.image_url ? editingMeal.image_url : ''}">
+            </div>
         </div>
 
         <div class="ingredients-section">
@@ -1178,6 +1200,148 @@ function renderMealForm(editingMeal = null) {
         // Start with one empty ingredient row
         addIngredientRow();
     }
+
+    // Initialize image upload handlers
+    initImageUpload();
+
+    // Show existing image if editing
+    if (isEditing && editingMeal.image_url) {
+        showImagePreview(editingMeal.image_url);
+    }
+}
+
+// Image Upload Functions
+let uploadedImageFile = null;
+let currentImageUrl = null;
+
+function initImageUpload() {
+    const dropZone = document.getElementById('image-drop-zone');
+    const fileInput = document.getElementById('image-file-input');
+    const urlInput = document.getElementById('meal-image-url');
+
+    if (!dropZone || !fileInput) return;
+
+    // Click to browse
+    dropZone.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-remove-image')) return;
+        fileInput.click();
+    });
+
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handleImageFile(file);
+        }
+    });
+
+    // Drag and drop
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            handleImageFile(file);
+        } else {
+            ExportUtils.showToast('Please drop an image file', 'error');
+        }
+    });
+
+    // Paste from clipboard (on the whole form)
+    document.addEventListener('paste', (e) => {
+        // Only handle paste when the meal form is visible
+        if (!document.getElementById('image-drop-zone')) return;
+
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (let item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                if (file) {
+                    handleImageFile(file);
+                }
+                break;
+            }
+        }
+    });
+
+    // Clear uploaded file when URL is entered
+    if (urlInput) {
+        urlInput.addEventListener('input', () => {
+            if (urlInput.value.trim()) {
+                uploadedImageFile = null;
+            }
+        });
+    }
+}
+
+function handleImageFile(file) {
+    // Validate file type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+        ExportUtils.showToast('Invalid file type. Please use PNG, JPG, or WEBP', 'error');
+        return;
+    }
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        ExportUtils.showToast('File size exceeds 10MB limit', 'error');
+        return;
+    }
+
+    // Store the file for upload
+    uploadedImageFile = file;
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        showImagePreview(e.target.result);
+        // Clear URL input
+        document.getElementById('meal-image-url').value = '';
+    };
+    reader.readAsDataURL(file);
+}
+
+function showImagePreview(imageSrc) {
+    const previewContainer = document.getElementById('image-preview-container');
+    const preview = document.getElementById('image-preview');
+    const prompt = document.getElementById('image-upload-prompt');
+
+    if (!previewContainer || !preview || !prompt) return;
+
+    preview.src = imageSrc;
+    currentImageUrl = imageSrc;
+    previewContainer.classList.remove('hidden');
+    prompt.classList.add('hidden');
+}
+
+window.removeImage = function() {
+    const previewContainer = document.getElementById('image-preview-container');
+    const preview = document.getElementById('image-preview');
+    const prompt = document.getElementById('image-upload-prompt');
+    const fileInput = document.getElementById('image-file-input');
+    const urlInput = document.getElementById('meal-image-url');
+
+    if (previewContainer) previewContainer.classList.add('hidden');
+    if (prompt) prompt.classList.remove('hidden');
+    if (preview) preview.src = '';
+    if (fileInput) fileInput.value = '';
+    if (urlInput) urlInput.value = '';
+
+    uploadedImageFile = null;
+    currentImageUrl = null;
 }
 
 function renderMealList(meals) {
@@ -1340,19 +1504,32 @@ window.createMeal = async function() {
         return;
     }
 
-    // Build meal data
-    const mealData = {
-        name: name,
-        cuisine_id: parseInt(cuisineId),
-        servings: parseInt(servings),
-        recipe: recipe || null,
-        image_url: imageUrl || null,
-        ingredients: ingredients
-    };
-
     try {
+        // Upload image first if a file was selected
+        let finalImageUrl = imageUrl || null;
+        if (uploadedImageFile) {
+            ExportUtils.showToast('Uploading image...', 'info', 2000);
+            const uploadResult = await API.Meals.uploadImage(uploadedImageFile);
+            finalImageUrl = uploadResult.image_url;
+            console.log('Image uploaded:', uploadResult);
+        }
+
+        // Build meal data
+        const mealData = {
+            name: name,
+            cuisine_id: parseInt(cuisineId),
+            servings: parseInt(servings),
+            recipe: recipe || null,
+            image_url: finalImageUrl,
+            ingredients: ingredients
+        };
+
         console.log('Creating meal with data:', mealData);
         await API.Meals.create(mealData);
+
+        // Clear uploaded image state
+        uploadedImageFile = null;
+        currentImageUrl = null;
 
         // Reset state and form
         editingMealId = null;
@@ -1436,19 +1613,35 @@ window.updateMeal = async function(id) {
         return;
     }
 
-    // Build meal data
-    const mealData = {
-        name: name,
-        cuisine_id: parseInt(cuisineId),
-        servings: parseInt(servings),
-        recipe: recipe || null,
-        image_url: imageUrl || null,
-        ingredients: ingredients
-    };
-
     try {
+        // Upload image first if a new file was selected
+        let finalImageUrl = imageUrl || null;
+        if (uploadedImageFile) {
+            ExportUtils.showToast('Uploading image...', 'info', 2000);
+            const uploadResult = await API.Meals.uploadImage(uploadedImageFile);
+            finalImageUrl = uploadResult.image_url;
+            console.log('Image uploaded:', uploadResult);
+        } else if (currentImageUrl && !imageUrl) {
+            // User removed URL but kept uploaded image
+            finalImageUrl = currentImageUrl;
+        }
+
+        // Build meal data
+        const mealData = {
+            name: name,
+            cuisine_id: parseInt(cuisineId),
+            servings: parseInt(servings),
+            recipe: recipe || null,
+            image_url: finalImageUrl,
+            ingredients: ingredients
+        };
+
         console.log('Updating meal with data:', mealData);
         await API.Meals.update(id, mealData);
+
+        // Clear uploaded image state
+        uploadedImageFile = null;
+        currentImageUrl = null;
 
         // Reset state
         editingMealId = null;

@@ -267,6 +267,33 @@ const MealsAPI = {
             method: 'DELETE',
         });
     },
+
+    async uploadImage(file) {
+        const token = getToken();
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE_URL}/meals/upload-image`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        if (response.status === 401) {
+            clearToken();
+            window.location.reload();
+            throw new Error('Session expired. Please log in again.');
+        }
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+
+        return response.json();
+    },
 };
 
 // ========================================

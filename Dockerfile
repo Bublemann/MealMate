@@ -29,8 +29,8 @@ RUN chmod +x /app/start.sh
 # Copy frontend files
 COPY frontend /app/frontend
 
-# Create data directory for SQLite database
-RUN mkdir -p /data
+# Create data directory for SQLite database and meal images
+RUN mkdir -p /data /data/meal_images
 
 # Set environment variables
 ENV DATABASE_PATH=/data/mealmate.db
