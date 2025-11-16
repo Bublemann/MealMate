@@ -417,6 +417,9 @@ body {
     cursor: pointer;
     border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .suggestion-item:last-child {
@@ -425,6 +428,34 @@ body {
 
 .suggestion-item:hover {
     background-color: var(--background);
+}
+
+/* Static options (search in items, meals, etc.) */
+.suggestion-item.static-option {
+    background-color: rgba(74, 144, 226, 0.05);
+    border-bottom: 1px solid rgba(74, 144, 226, 0.2);
+}
+
+.suggestion-item.static-option:hover {
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+.suggestion-item.static-option:last-of-type {
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+/* Suggestion name and type layout */
+.suggestion-name {
+    flex: 1;
+}
+
+.suggestion-type {
+    font-size: 0.85em;
+    color: #999;
+    font-style: italic;
+    margin-left: 12px;
+    align-self: flex-end;
 }
 
 .filter-panel {
@@ -508,7 +539,8 @@ body {
     margin-top: 12px;
 }
 
-.quantity-controls button {
+/* Circular +/- buttons (exclude .btn-secondary which is the "Add to List" button) */
+.quantity-controls button:not(.btn-secondary) {
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -520,8 +552,14 @@ body {
     transition: background-color 0.3s ease;
 }
 
-.quantity-controls button:hover {
+.quantity-controls button:not(.btn-secondary):hover {
     background-color: var(--primary-dark);
+}
+
+/* "Add to List" button - ensure it keeps its normal rectangular styling */
+.quantity-controls .btn-secondary {
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .quantity-controls input {
@@ -689,6 +727,12 @@ body {
     width: auto;
     min-width: 100px;
     font-size: 1rem;
+}
+
+/* Quantity controls in modal */
+.modal-body .quantity-controls {
+    justify-content: center;
+    margin-top: 0;
 }
 
 /* ========================================

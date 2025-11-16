@@ -149,6 +149,9 @@ async function loadInitialData() {
 
         // Setup cuisine filters
         setupCuisineFilters();
+
+        // Load all items and meals for the "Add to List" tab by default
+        await performSearch('');
     } catch (error) {
         console.error('Error loading initial data:', error);
         ExportUtils.showToast('Error loading data', 'error');
@@ -192,6 +195,22 @@ function setupEventListeners() {
     // Search
     document.getElementById('search-input').addEventListener('input', handleSearchInput);
 
+    // Enter key on search input - trigger "search as keyword"
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const query = e.target.value.trim();
+            if (query.length >= 2) {
+                // Hide suggestions
+                document.getElementById('search-suggestions').classList.add('hidden');
+                // Set filter to "all" (search as keyword)
+                document.querySelector('input[name="filter-type"][value="all"]').checked = true;
+                // Perform search
+                performSearch(query);
+            }
+        }
+    });
+
     // Filter toggle
     document.getElementById('filter-toggle').addEventListener('click', toggleFilters);
 
@@ -206,6 +225,20 @@ function setupEventListeners() {
     // Modal close buttons
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', closeAllModals);
+    });
+
+    // Add custom item button in modal
+    document.getElementById('add-custom-btn').addEventListener('click', confirmAddCustomItem);
+
+    // Click outside to close search suggestions
+    document.addEventListener('click', (e) => {
+        const searchContainer = document.querySelector('.search-container');
+        const suggestionsContainer = document.getElementById('search-suggestions');
+
+        // If click is outside search container, hide suggestions
+        if (searchContainer && !searchContainer.contains(e.target)) {
+            suggestionsContainer.classList.add('hidden');
+        }
     });
 
     // Initial manage tab setup
@@ -242,6 +275,11 @@ function switchTab(tabName) {
         tab.classList.remove('active');
     });
     document.getElementById(`${tabName}-tab`).classList.add('active');
+
+    // Load all items/meals when switching to "Add to List" tab
+    if (tabName === 'add') {
+        performSearch('');
+    }
 }
 
 // ========================================
@@ -375,17 +413,180 @@ function handleSearchInput(event) {
         clearTimeout(AppState.searchTimeout);
     }
 
-    if (query.length < 2) {
+    // Hide suggestions when empty
+    if (query.length === 0) {
         document.getElementById('search-suggestions').classList.add('hidden');
-        document.getElementById('search-results').innerHTML = '<p class="empty-state">Search for items or meals to add to your shopping list</p>';
+        // Perform search with empty query to show all results
+        performSearch('');
         return;
     }
 
-    // Debounce search
-    AppState.searchTimeout = setTimeout(async () => {
-        await performSearch(query);
-    }, 300);
+    // Show suggestions if query has 2+ characters
+    if (query.length >= 2) {
+        showSuggestions(query);
+    } else {
+        // Hide suggestions for single character
+        document.getElementById('search-suggestions').classList.add('hidden');
+    }
 }
+
+async function showSuggestions(query) {
+    const suggestionsContainer = document.getElementById('search-suggestions');
+    suggestionsContainer.innerHTML = '';
+    suggestionsContainer.classList.remove('hidden');
+
+    // 1. Static options at the top (always visible)
+    const staticOptions = [
+        { type: 'static', action: 'search-items', label: `Search in items: ${query}` },
+        { type: 'static', action: 'search-meals', label: `Search in meals: ${query}` },
+        { type: 'static', action: 'search-all', label: `Search as keyword: ${query}` },
+        { type: 'static', action: 'add-to-list', label: `Add to shopping list: ${query}` }
+    ];
+
+    staticOptions.forEach(option => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item static-option';
+        item.innerHTML = `<strong>${option.label}</strong>`;
+        item.addEventListener('click', () => handleSuggestionClick(option, query));
+        suggestionsContainer.appendChild(item);
+    });
+
+    // 2. Fetch and display dynamic suggestions (items and meals from database)
+    try {
+        const suggestions = await API.Search.getSuggestions(query, 10);
+
+        if (suggestions && suggestions.length > 0) {
+            // Sort suggestions alphabetically by name (items and meals mixed)
+            suggestions.sort((a, b) => a.name.localeCompare(b.name));
+
+            suggestions.forEach(suggestion => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                item.innerHTML = `
+                    <span class="suggestion-name">${suggestion.name}</span>
+                    <span class="suggestion-type">${suggestion.type}</span>
+                `;
+                item.addEventListener('click', () => handleSuggestionClick(suggestion, query));
+                suggestionsContainer.appendChild(item);
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching suggestions:', error);
+        // Don't show error toast for suggestions, just log it
+    }
+}
+
+async function handleSuggestionClick(suggestion, query) {
+    const suggestionsContainer = document.getElementById('search-suggestions');
+    const searchInput = document.getElementById('search-input');
+
+    // Hide suggestions
+    suggestionsContainer.classList.add('hidden');
+
+    if (suggestion.type === 'static') {
+        // Handle static options
+        switch (suggestion.action) {
+            case 'search-items':
+                // Set filter to items only
+                document.querySelector('input[name="filter-type"][value="items"]').checked = true;
+                await performSearch(query);
+                break;
+
+            case 'search-meals':
+                // Set filter to meals only
+                document.querySelector('input[name="filter-type"][value="meals"]').checked = true;
+                await performSearch(query);
+                break;
+
+            case 'search-all':
+                // Set filter to all
+                document.querySelector('input[name="filter-type"][value="all"]').checked = true;
+                await performSearch(query);
+                break;
+
+            case 'add-to-list':
+                // Show modal for quantity selection
+                showAddCustomModal(query);
+                break;
+        }
+    } else {
+        // Handle dynamic suggestions (specific item or meal)
+        // Search for that specific item/meal by name
+        searchInput.value = suggestion.name;
+
+        // Set filter based on type
+        if (suggestion.type === 'item') {
+            document.querySelector('input[name="filter-type"][value="items"]').checked = true;
+        } else if (suggestion.type === 'meal') {
+            document.querySelector('input[name="filter-type"][value="meals"]').checked = true;
+        }
+
+        await performSearch(suggestion.name);
+    }
+}
+
+function showAddCustomModal(text) {
+    // Store the text in a global variable for later use
+    AppState.customItemText = text;
+
+    // Update modal content
+    document.getElementById('custom-item-text').textContent = `"${text}"`;
+    document.getElementById('custom-item-quantity').value = 1;
+
+    // Show the modal
+    document.getElementById('add-custom-modal').classList.remove('hidden');
+}
+
+async function confirmAddCustomItem() {
+    const text = AppState.customItemText;
+    const quantity = parseInt(document.getElementById('custom-item-quantity').value) || 1;
+
+    // Close the modal
+    closeAllModals();
+
+    // Add to list with quantity
+    await addCustomTextToList(text, quantity);
+
+    // Don't clear search input - keep it for user convenience
+}
+
+async function addCustomTextToList(text, quantity = 1) {
+    try {
+        // Get the latest shopping list (first in the list since they're ordered by updated_at desc)
+        const lists = await API.ShoppingLists.getAll();
+
+        if (lists.length === 0) {
+            ExportUtils.showToast('Please create a shopping list first', 'error');
+            return;
+        }
+
+        const latestList = lists[0];
+
+        // Add custom text to the latest list with quantity
+        await API.ShoppingLists.addCustom(latestList.id, text, quantity);
+
+        ExportUtils.showToast(`Added "${text}" to shopping list`, 'success');
+
+        // Refresh the shopping list if it's currently selected
+        if (AppState.currentShoppingList && AppState.currentShoppingList.id == latestList.id) {
+            await handleShoppingListSelect({ target: { value: latestList.id } });
+        }
+    } catch (error) {
+        console.error('Error adding custom text to list:', error);
+        ExportUtils.showToast('Error adding to shopping list', 'error');
+    }
+}
+
+// Quantity control functions for custom item modal
+window.incrementCustomQuantity = function() {
+    const input = document.getElementById('custom-item-quantity');
+    input.value = Math.min(99, parseInt(input.value) + 1);
+};
+
+window.decrementCustomQuantity = function() {
+    const input = document.getElementById('custom-item-quantity');
+    input.value = Math.max(1, parseInt(input.value) - 1);
+};
 
 async function performSearch(query) {
     try {
@@ -412,6 +613,9 @@ function displaySearchResults(results) {
         container.innerHTML = '<p class="empty-state">No results found</p>';
         return;
     }
+
+    // Sort alphabetically by name (case-insensitive)
+    allResults.sort((a, b) => a.name.localeCompare(b.name));
 
     allResults.forEach(result => {
         const card = createResultCard(result);
@@ -503,9 +707,8 @@ function setupCuisineFilters() {
 
 function handleFilterChange() {
     const query = document.getElementById('search-input').value.trim();
-    if (query.length >= 2) {
-        performSearch(query);
-    }
+    // Perform search regardless of query length (empty query shows all)
+    performSearch(query);
 }
 
 // ========================================

@@ -316,10 +316,10 @@ const ShoppingListsAPI = {
         });
     },
 
-    async addCustom(listId, customText) {
+    async addCustom(listId, customText, quantity = 1) {
         return apiRequest(`/shopping-lists/${listId}/add-custom`, {
             method: 'POST',
-            body: JSON.stringify({ custom_text: customText }),
+            body: JSON.stringify({ custom_text: customText, quantity: quantity }),
         });
     },
 

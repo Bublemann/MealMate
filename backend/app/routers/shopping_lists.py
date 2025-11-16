@@ -42,6 +42,7 @@ class AddItemRequest(BaseModel):
 class AddCustomRequest(BaseModel):
     """Schema for adding custom text to shopping list."""
     custom_text: str
+    quantity: float = 1.0
 
 
 class ShoppingListResponse(BaseModel):
@@ -256,8 +257,8 @@ def add_meal_to_list(
     ).first()
 
     if existing:
-        # Update quantity
-        existing.quantity = meal_data.quantity
+        # Add to existing quantity instead of replacing
+        existing.quantity += meal_data.quantity
     else:
         # Add new
         list_meal = ShoppingListMeal(
@@ -299,14 +300,25 @@ def add_item_to_list(
             detail=f"Item with id {item_data.item_id} not found"
         )
 
-    # Add item to list
-    list_item = ShoppingListItem(
-        shopping_list_id=list_id,
-        item_id=item_data.item_id,
-        quantity=item_data.quantity,
-        unit=item_data.unit
-    )
-    db.add(list_item)
+    # Check if item already in list (with same unit)
+    existing = db.query(ShoppingListItem).filter(
+        ShoppingListItem.shopping_list_id == list_id,
+        ShoppingListItem.item_id == item_data.item_id,
+        ShoppingListItem.unit == item_data.unit
+    ).first()
+
+    if existing:
+        # Add to existing quantity instead of creating duplicate
+        existing.quantity += item_data.quantity
+    else:
+        # Add new item to list
+        list_item = ShoppingListItem(
+            shopping_list_id=list_id,
+            item_id=item_data.item_id,
+            quantity=item_data.quantity,
+            unit=item_data.unit
+        )
+        db.add(list_item)
 
     shopping_list.updated_at = datetime.utcnow()
     db.commit()
@@ -332,12 +344,27 @@ def add_custom_to_list(
             detail=f"Shopping list with id {list_id} not found"
         )
 
-    # Add custom text to list
-    list_item = ShoppingListItem(
-        shopping_list_id=list_id,
-        custom_text=custom_data.custom_text
-    )
-    db.add(list_item)
+    # Check if custom text already exists (case-insensitive)
+    existing = None
+    for item in shopping_list.items:
+        if item.custom_text and item.custom_text.lower() == custom_data.custom_text.lower():
+            existing = item
+            break
+
+    if existing:
+        # Add to existing quantity (handle None case properly)
+        if existing.quantity is not None:
+            existing.quantity += custom_data.quantity
+        else:
+            existing.quantity = custom_data.quantity
+    else:
+        # Add new custom text entry
+        list_item = ShoppingListItem(
+            shopping_list_id=list_id,
+            custom_text=custom_data.custom_text,
+            quantity=custom_data.quantity
+        )
+        db.add(list_item)
 
     shopping_list.updated_at = datetime.utcnow()
     db.commit()
@@ -402,8 +429,15 @@ def export_shopping_list(
             item_text = f"{quantity_text}{list_item.item.name}"
             items_by_category[category_name].append(item_text)
         else:
-            # Custom text
-            items_by_category["Other"].append(list_item.custom_text)
+            # Custom text (with optional quantity)
+            if list_item.quantity and list_item.quantity > 0:
+                # Format as integer if it's a whole number, otherwise as float
+                qty = int(list_item.quantity) if list_item.quantity == int(list_item.quantity) else list_item.quantity
+                quantity_text = f"{qty}x "
+            else:
+                quantity_text = ""
+            item_text = f"{quantity_text}{list_item.custom_text}"
+            items_by_category["Other"].append(item_text)
 
     # Output items grouped by category
     if items_by_category:

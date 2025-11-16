@@ -45,9 +45,9 @@ class SearchResponse(BaseModel):
 
 @router.get("", response_model=SearchResponse)
 def search(
-    q: str = Query(..., description="Search query", min_length=1),
+    q: str = Query("", description="Search query (empty shows all)"),
     type: Literal["items", "meals", "all"] = Query("all", description="What to search"),
-    limit: int = Query(10, description="Max results per type", ge=1, le=50),
+    limit: int = Query(50, description="Max results per type", ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -55,7 +55,7 @@ def search(
     Unified search across items and meals.
 
     Args:
-        q: Search query string
+        q: Search query string (empty string returns all results)
         type: What to search - "items", "meals", or "all"
         limit: Maximum number of results per type
 
@@ -67,9 +67,13 @@ def search(
 
     # Search items (if requested)
     if type in ["items", "all"]:
-        items = db.query(Item).filter(
-            Item.name.ilike(f"%{q}%")
-        ).limit(limit).all()
+        # If query is empty, get all items; otherwise filter by name
+        if q:
+            items = db.query(Item).filter(
+                Item.name.ilike(f"%{q}%")
+            ).limit(limit).all()
+        else:
+            items = db.query(Item).limit(limit).all()
 
         items_results = [
             {
@@ -84,10 +88,16 @@ def search(
 
     # Search meals (if requested)
     if type in ["meals", "all"]:
-        meals = db.query(Meal).filter(
-            Meal.user_id == current_user.id,
-            Meal.name.ilike(f"%{q}%")
-        ).limit(limit).all()
+        # If query is empty, get all user's meals; otherwise filter by name
+        if q:
+            meals = db.query(Meal).filter(
+                Meal.user_id == current_user.id,
+                Meal.name.ilike(f"%{q}%")
+            ).limit(limit).all()
+        else:
+            meals = db.query(Meal).filter(
+                Meal.user_id == current_user.id
+            ).limit(limit).all()
 
         meals_results = [
             {
