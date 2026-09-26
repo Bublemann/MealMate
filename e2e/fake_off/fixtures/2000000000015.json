@@ -1,0 +1,32 @@
+{
+  "code": "2000000000015",
+  "errors": [],
+  "product": {
+    "brands": "MealMate Test Kitchen",
+    "code": "2000000000015",
+    "generic_name": "Rolled oats",
+    "lang": "en",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 58.7,
+      "energy-kcal_100g": 372,
+      "fat_100g": 7,
+      "proteins_100g": 13.5,
+      "sugars_100g": 0.7
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Rolled Oats",
+    "product_name_de": "Haferflocken",
+    "product_name_en": "Rolled Oats",
+    "product_quantity": 500,
+    "product_quantity_unit": "g",
+    "quantity": "500 g"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

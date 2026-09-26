@@ -1,0 +1,42 @@
+# Local development: `make dev`, then open http://localhost:5173 (MNT-03).
+# The backend reloads on changes under backend/, the Vite dev server hot-reloads the frontend and
+# proxies /api to the backend. Nothing here is fit for production (see deploy/compose.yml).
+name: mealmate-dev
+
+services:
+  backend:
+    build:
+      context: .
+      target: backend-dev
+    environment:
+      # Dev-only key, public in this repository; never use it anywhere else (SEC-02).
+      MEALMATE_SECRET_KEY: dev-only-insecure-key-change-me-0000000000
+      MEALMATE_PUBLIC_URL: http://localhost:5173
+      MEALMATE_COOKIE_SECURE: "false"
+      MEALMATE_API_DOCS_ENABLED: "true"
+      MEALMATE_DIAGNOSTICS_ENABLED: "true"
+      MEALMATE_DATA_DIR: /data
+      UVICORN_HOST: 0.0.0.0
+    volumes:
+      - ./backend:/src/backend
+      - backend-data:/data
+    ports:
+      - 127.0.0.1:8080:8080
+
+  frontend:
+    image: node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+    working_dir: /src/frontend
+    command: sh -c 'npm ci && npm run dev -- --host 0.0.0.0'
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8080
+    volumes:
+      - ./frontend:/src/frontend
+      # Linux node_modules stay inside the container, apart from the host's.
+      - /src/frontend/node_modules
+    ports:
+      - 127.0.0.1:5173:5173
+    depends_on:
+      - backend
+
+volumes:
+  backend-data:

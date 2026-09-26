@@ -1,0 +1,56 @@
+# Creates the release branch release/X.Y from main (plan § 10.1). Pushes go through the release
+# GitHub App, so CI runs on the new branch (events caused by GITHUB_TOKEN start no workflows).
+name: Release cut
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version line X.Y (e.g. 2.0); creates release/X.Y from main
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-cut
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Create release/${{ inputs.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the version line
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like X.Y (e.g. 2.0), got '$VERSION'"
+            exit 1
+          fi
+
+      - name: Mint a token of the release App
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Create the branch from main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          branch="release/${VERSION}"
+          if gh api "repos/${REPO}/git/ref/heads/${branch}" --silent 2>/dev/null; then
+            echo "::error::${branch} already exists"
+            exit 1
+          fi
+          sha=$(gh api "repos/${REPO}/git/ref/heads/main" --jq .object.sha)
+          gh api "repos/${REPO}/git/refs" -f "ref=refs/heads/${branch}" -f "sha=${sha}" --silent
+          echo "Created \`${branch}\` from main at \`${sha}\`." >> "$GITHUB_STEP_SUMMARY"

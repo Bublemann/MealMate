@@ -1,0 +1,205 @@
+# Weekly scan of what is deployed (SEC-11): the published image of every version line (X.Y and
+# X.Y-pre, from the release/* branches) with Trivy, and the runtime dependencies of every release
+# branch with pip-audit and npm audit. Findings open or update one issue per target. The run ends
+# with a ping to healthchecks.io (secret HC_SCAN_URL), which alerts if the scan stops running.
+name: Image scan
+
+on:
+  schedule:
+    - cron: "23 4 * * 1" # Mondays 04:23 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: image-scan
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/bublemann/mealmate
+  UV_VERSION: "0.12.19"
+
+jobs:
+  targets:
+    name: Find version lines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read # list the release branches
+      packages: read # look up the published images
+    outputs:
+      branches: ${{ steps.find.outputs.branches }}
+      images: ${{ steps.find.outputs.images }}
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release branches and their published images
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mapfile -t branches < <(gh api "repos/${REPO}/branches" --paginate \
+            --jq '.[].name | select(test("^release/[0-9]+\\.[0-9]+$"))')
+          images=()
+          for branch in "${branches[@]}"; do
+            for tag in "${branch#release/}" "${branch#release/}-pre"; do
+              if docker buildx imagetools inspect "${IMAGE}:${tag}" > /dev/null 2>&1; then
+                images+=("$tag")
+              fi
+            done
+          done
+          echo "branches=$(jq --compact-output --null-input '$ARGS.positional' --args "${branches[@]}")" >> "$GITHUB_OUTPUT"
+          echo "images=$(jq --compact-output --null-input '$ARGS.positional' --args "${images[@]}")" >> "$GITHUB_OUTPUT"
+          echo "Branches: ${branches[*]:-none} · images: ${images[*]:-none}"
+
+  image:
+    name: Image ${{ matrix.tag }}
+    needs: targets
+    if: needs.targets.outputs.images != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read # check out the issue script
+      packages: read # pull the image while it is private
+      issues: write # report findings
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJSON(needs.targets.outputs.images) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy (fixable high and critical)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: ${{ env.IMAGE }}:${{ matrix.tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy.json
+          exit-code: "0"
+        env:
+          # The tag is a multi-arch index and Trivy would pick amd64; the Pi runs arm64 (PLT-03).
+          TRIVY_PLATFORM: linux/arm64
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ github.token }}
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ matrix.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Image scan: vulnerabilities in mealmate:${TAG}"
+          count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy.json)
+          if [ "$count" -eq 0 ]; then
+            .github/scripts/upsert-issue.sh "$title"
+            exit 0
+          fi
+          {
+            echo "Trivy found ${count} fixable high or critical vulnerabilities in \`${IMAGE}:${TAG}\` (linux/arm64, ${RUN_URL})."
+            echo
+            echo "| Vulnerability | Severity | Package | Installed | Fixed in |"
+            echo "|---|---|---|---|---|"
+            jq -r '.Results[]?.Vulnerabilities[]?
+              | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion) |"' \
+              trivy.json | sort -u
+            echo
+            echo "Fix it with the security-patch procedure in docs/plan.md § 10.2."
+          } > "$RUNNER_TEMP/issue.md"
+          .github/scripts/upsert-issue.sh "$title" "$RUNNER_TEMP/issue.md"
+
+  dependencies:
+    name: Dependencies of ${{ matrix.branch }}
+    needs: targets
+    if: needs.targets.outputs.branches != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read # check out the release branch
+      issues: write # report findings
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJSON(needs.targets.outputs.branches) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out ${{ matrix.branch }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.branch }}
+          path: target
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: pip-audit and npm audit (runtime dependencies)
+        id: audit
+        working-directory: target
+        run: |
+          report="$RUNNER_TEMP/audit.md"
+          : > "$report"
+          (cd backend && uv export --locked --no-dev --no-emit-project --output-file "$RUNNER_TEMP/requirements.txt")
+          if ! uvx pip-audit@2.10.1 --requirement "$RUNNER_TEMP/requirements.txt" --require-hashes \
+            --disable-pip --progress-spinner off --format markdown > "$RUNNER_TEMP/pip-audit.md"; then
+            { echo "### Python (pip-audit)"; echo; cat "$RUNNER_TEMP/pip-audit.md"; echo; } >> "$report"
+          fi
+          if ! (cd frontend && npm audit --omit=dev --audit-level=high > "$RUNNER_TEMP/npm-audit.txt"); then
+            { echo "### npm (npm audit, high and critical)"; echo; echo '```'; cat "$RUNNER_TEMP/npm-audit.txt"; echo '```'; } >> "$report"
+          fi
+          echo "report=${report}" >> "$GITHUB_OUTPUT"
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ matrix.branch }}
+          REPORT: ${{ steps.audit.outputs.report }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Dependency audit: vulnerabilities on ${BRANCH}"
+          if [ ! -s "$REPORT" ]; then
+            .github/scripts/upsert-issue.sh "$title"
+            exit 0
+          fi
+          {
+            echo "Known vulnerabilities in the runtime dependencies of \`${BRANCH}\` (${RUN_URL}):"
+            echo
+            cat "$REPORT"
+            echo "Fix them with the security-patch procedure in docs/plan.md § 10.2."
+          } > "$RUNNER_TEMP/issue.md"
+          .github/scripts/upsert-issue.sh "$title" "$RUNNER_TEMP/issue.md"
+
+  heartbeat:
+    name: Ping healthchecks.io
+    needs: [targets, image, dependencies]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Report that the scan ran
+        env:
+          HC_SCAN_URL: ${{ secrets.HC_SCAN_URL }}
+          RESULTS: ${{ needs.targets.result }} ${{ needs.image.result }} ${{ needs.dependencies.result }}
+        run: |
+          if [ -z "$HC_SCAN_URL" ]; then
+            echo "HC_SCAN_URL is not set; skipping the ping."
+            exit 0
+          fi
+          url=$HC_SCAN_URL
+          for result in $RESULTS; do
+            case $result in
+              success | skipped) ;;
+              *) url="${HC_SCAN_URL%/}/fail" ;;
+            esac
+          done
+          curl --fail --silent --show-error --max-time 10 --retry 3 --output /dev/null "$url"

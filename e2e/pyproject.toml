@@ -1,0 +1,41 @@
+[project]
+name = "mealmate-e2e"
+version = "0.0.0"
+description = "MealMate end-to-end tests: pytest-playwright against the production image"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+dependencies = [
+    "pytest==9.1.1",
+    "pytest-playwright==0.9.0",
+    "playwright==1.63.0",
+    "axe-playwright-python==0.1.8",
+    "httpx==0.28.1",
+    # fake_off/: the Open Food Facts stand-in (plan § 9)
+    "fastapi==0.141.1",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = ["ruff==0.16.9"]
+
+# Not a package: the suite runs from this directory with `uv run pytest`.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Artifacts of failed tests land in test-results/ (uploaded by CI), next to app-container.log.
+addopts = ["--tracing=retain-on-failure", "--screenshot=only-on-failure"]
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "RUF", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+# Starts `docker` from PATH with arguments built by the suite; /tmp is the container's tmpfs.
+"support/container.py" = ["S108", "S603", "S607"]

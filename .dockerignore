@@ -1,0 +1,46 @@
+# Keep the build context to what the Dockerfile copies: backend/, frontend/, deploy/ and LICENSE.
+.git
+.github
+docs
+e2e
+compose.dev.yml
+
+# Secrets and local data
+**/.env
+**/.env.*
+!**/env.example
+**/*.pem
+**/*.key
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite3
+data
+backend/data
+deploy/data
+deploy/state
+
+# Dependencies, build output and caches (rebuilt inside the image)
+**/node_modules
+**/.venv
+frontend/dist
+frontend/dev-dist
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.hypothesis
+**/.coverage
+**/.coverage.*
+**/coverage
+**/coverage.xml
+**/htmlcov
+**/*.tsbuildinfo
+**/test-results
+**/playwright-report
+
+# Editors / OS
+**/.idea
+**/.vscode
+**/.DS_Store

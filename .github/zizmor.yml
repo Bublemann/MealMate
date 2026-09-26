@@ -1,0 +1,7 @@
+# zizmor configuration; zizmor runs in the workflow-lint job of ci.yml.
+rules:
+  cache-poisoning:
+    ignore:
+      # ci.yml only tests and publishes nothing. Release images are built by build-image.yml
+      # without any cache, and caches written by pull requests are scoped to their own ref.
+      - ci.yml
