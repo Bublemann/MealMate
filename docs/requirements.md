@@ -118,7 +118,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1โ
   - start and finish shopping.
 - **CPL-04** The privacy settings (VIS-02) **never hide anything from the user's own partner**: the partner always sees the user's meals, and always sees the lists shared with them. The per-list switch (CPL-02) is a separate, explicit choice.
 - **CPL-05** Either partner can end the couple at any time.
-  - Every list stays with its **creator**, including history, and the other person loses access.
+  - Every list stays with its **creator**, including history. The other person can no longer edit it, and sees it read-only only if the creator's lists are public (VIS-02).
   - The share switch is turned off on all lists of both users, so a later new couple shares nothing automatically.
   - Meals of the ex-partner that are now invisible to the other user are detached from that user's lists (LIST-15).
 - **CPL-06** Meals always stay separate per user, also within a couple.
@@ -130,13 +130,13 @@ MealMate is a self-hosted web app for a small group of people (one household, 1โ
   - Ingredients and products are always shared.
   - Meals and lists belong to their owner.
 - **VIS-02** Each user has two privacy switches, **meals public** and **lists public**. Both default to on (public). When a switch is off:
-  - other users (except the partner, CPL-04) cannot see those meals or lists;
+  - other users cannot see those meals or lists. The partner still sees all of the user's meals and the lists shared with them (CPL-02, CPL-04);
   - the user's name disappears from the matching **user filter chips**: the meal chips (MEAL-10) for the meals switch, the list chips on *Others' lists* (UI-02) for the lists switch.
 - **VIS-03** Other people's public lists are **read-only**. They offer **"Copy to my lists"**, which creates a new draft with the same servings and extra items, and the same meals **as far as the copier can see them** (VIS-06).
 - **VIS-04** Other people's visible meals can be viewed, added to one's own lists (LIST-03) and copied (MEAL-08). Only the owner can edit or delete a meal.
 - **VIS-05** Photos are only served to users who are allowed to see the meal.
   - Photo URLs are unguessable and signed.
-  - They expire after about 1 hour.
+  - They expire after 1โ€“2 hours.
   - A URL without a valid signature does not work.
 - **VIS-06** When someone views a list that contains a meal **they cannot see** (e.g. a partner's private meal on a public list):
   - the meal appears only as "Private meal (*N* servings)", with no name, photo, link or source details;
@@ -397,8 +397,9 @@ MealMate is a self-hosted web app for a small group of people (one household, 1โ
   - keeps their data and their couple (CPL-07), and their name is shown with "(deactivated)";
   - can be undone.
 - **ADM-03** **Deleting** a user:
-  1. First, their meals are detached from other users' lists (LIST-15), and the lists they share with a partner **move to the partner**.
-  2. Then their meals, photos, remaining lists (including history), pending couple requests, and any unused invites or reset links issued for them are removed.
+  1. First, the lists they share with a partner **move to the partner**.
+  2. Then their meals are detached from all lists of other users, including the ones that just moved (LIST-15).
+  3. Finally their meals, photos, remaining lists (including history), pending couple requests, and any unused invites or reset links issued for them are removed.
 
   Ingredients and products they created stay ("deleted user"). Copies other people made of their meals stay. The last active admin can't be deleted.
 - **ADM-04** Admins have **no screen or endpoint** to view other users' private meals or lists, and cannot silently log in as another user.
@@ -538,6 +539,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1โ
   | `mac-pull` | Mac, after each successful pull | a failure (e.g. abnormal pull), or silent for 3 days |
   | `update` | Pi, after each nightly update run | a failure, a rollback or an unverifiable image, or silent for 2 days |
   | `disk` | Pi, every hour | free space below 20 % |
+  | `image-scan` | GitHub Actions, after each weekly scan of the published image (SEC-11) | silent for 9 days, e.g. because GitHub disabled scheduled workflows in a quiet repo |
 
   Only the scripts' own short status output is sent to healthchecks.io, never app logs.
 - **OPS-05** **Updates:**
@@ -547,7 +549,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1โ
   - A manual `update.sh` exists too.
 - **OPS-06** Database migrations run automatically at container start. The entrypoint first saves a pre-migration snapshot whenever migrations are pending.
 - **OPS-07** **Restore:**
-  - `setup.sh --restore <backup>` runs on a freshly flashed card. It restores the Tailscale identity **before** Tailscale starts, then `.env`, SSH host keys, database and photos.
+  - `setup.sh --restore <backup>` runs on a freshly flashed card. It swaps in the saved Tailscale identity **before the Pi first logs in to the tailnet**, then restores `.env`, SSH host keys, the backup access key, database and photos.
   - The full procedure is rehearsed on a spare SD card before go-live.
   - A monthly automatic test restore of the latest backup is integrity-checked (OPS-04 `backup`).
 - **OPS-08** A manual backup can be started with one command (and from the admin page) before planned maintenance, such as an SD card swap.
@@ -679,8 +681,8 @@ These are not in v2.0. The data model should not make them hard.
 | D-15 | AGPL v3 | hosted modified copies must share their source |
 | D-16 | Open Food Facts API v3, โค 10 requests/min | v2 was deprecated in June 2026; OFF allows 15 product reads/min per IP |
 | D-17 | When a user is deleted, the lists they share with a partner move to the partner | accepted default D15 in the planning conversation; the partner keeps their shopping history |
-| D-18 | A meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
-| D-19 | "Shared with partner" switch: on = partner sees and edits; off = partner is treated like any other user for that list | privacy settings never hide from the partner, but an explicit per-list choice does |
+| D-18 | *Proposed, pending Q-3:* a meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
+| D-19 | *Proposed, pending Q-2:* "Shared with partner" switch: on = partner sees and edits; off = partner is treated like any other user for that list | privacy settings never hide from the partner, but an explicit per-list choice does |
 | D-20 | Retention 7 daily / 4 weekly / 6 monthly (โ 17), on Pi and Mac alike | as agreed by the owner; 6-hourly backups only reduce data loss on the current day |
 
 ## 8. Open decisions for the owner
@@ -688,6 +690,8 @@ These are not in v2.0. The data model should not make them hard.
 | # | Question | Proposed default |
 |---|---|---|
 | Q-1 | Licence variant: **AGPL-3.0-or-later** (the standard GNU wording, which allows future AGPL versions) or **AGPL-3.0-only**? | AGPL-3.0-or-later |
+| Q-2 | "Shared with partner" switched **off**: should the partner lose access to that list, like any other user (D-19), or keep read-only access, with the switch only controlling editing? | D-19 as written |
+| Q-3 | A meal that is deleted or becomes invisible: should it be *detached* from other people's lists (frozen copy + "no longer available" notice, D-18), or simply removed from their drafts? | D-18 as written |
 
 Items that can only be settled on the real hardware are tracked as open points in [plan ยง 15](plan.md#15-open-points-to-verify-during-implementation).
 
