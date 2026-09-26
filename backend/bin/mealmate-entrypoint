@@ -1,0 +1,15 @@
+#!/bin/sh
+# Container entrypoint: migrate the database (snapshotting it first if migrations are pending),
+# then serve. uvicorn takes its host from UVICORN_HOST; it trusts X-Forwarded-* only from
+# 127.0.0.1, where `tailscale serve` connects from (plan § 2).
+set -eu
+
+mealmate db upgrade
+
+exec uvicorn app.main:create_app --factory \
+  --port "${UVICORN_PORT:-8080}" \
+  --workers 1 \
+  --proxy-headers \
+  --forwarded-allow-ips 127.0.0.1 \
+  --no-access-log \
+  "$@"
