@@ -1,0 +1,58 @@
+/*
+ * Design tokens (UI-05): every colour, radius and motion setting is defined here once and mapped
+ * into Tailwind in index.css. Dark mode follows the device setting only (UI-04). Text/background
+ * pairs meet WCAG AA (4.5:1) in both themes; input borders meet 3:1.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #17201a;
+  --card: #ffffff;
+  --card-foreground: #17201a;
+  --muted: #f1f4f1;
+  --muted-foreground: #56615a;
+  --border: #d9dfda;
+  --input: #8a968d;
+  --primary: #2e7d32;
+  --primary-foreground: #ffffff;
+  --accent: #e6f2e6;
+  --accent-foreground: #1b5e20;
+  --destructive: #c62828;
+  --destructive-foreground: #ffffff;
+  --ring: #2e7d32;
+
+  --radius: 0.75rem;
+  --duration-fast: 150ms;
+
+  /*
+   * Sizes grow with the iPhone text size (rem) but never fall below what touch needs: 44 pt tap
+   * targets (A11Y-01), and 16 px text in form controls, below which iOS zooms in on focus.
+   */
+  --tap-target: max(2.75rem, 44px);
+  --control-font-size: max(1rem, 16px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f1411;
+    --foreground: #e6ebe7;
+    --card: #161d18;
+    --card-foreground: #e6ebe7;
+    --muted: #1d2520;
+    --muted-foreground: #a2ada5;
+    --border: #2b352e;
+    --input: #6b776e;
+    --primary: #66bb6a;
+    --primary-foreground: #0b1f0d;
+    --accent: #1f3322;
+    --accent-foreground: #c8e6c9;
+    --destructive: #ef5350;
+    --destructive-foreground: #1f0707;
+    --ring: #66bb6a;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+  }
+}
