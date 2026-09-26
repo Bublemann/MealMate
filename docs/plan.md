@@ -235,7 +235,7 @@ All permission checks live in one module, `services/access.py`:
 | Object | View | Edit |
 |---|---|---|
 | Meal | owner · partner · everyone if owner.meals_public | owner only |
-| List | owner · partner if `shared_with_partner` · everyone (read-only) if owner.lists_public | owner · partner if shared (not delete/share switch) |
+| List | owner · partner (while in a couple; read-only if not `shared_with_partner`) · everyone (read-only) if owner.lists_public | owner · partner if `shared_with_partner` (not delete/share switch) |
 | Meal *embedded in a list* (VIS-06) | if the viewer may view the meal itself (rule above): full details; otherwise "Private meal (N servings)" without name, photo, link or sources | n/a |
 | Ingredient / product | everyone | everyone; delete/merge: admin |
 | Photo | same as its meal (checked when the signed URL is issued) | owner |
@@ -786,7 +786,7 @@ The size is relative (S < M < L < XL).
 *LIC-01, SEC-01/02/06/09/10/12, MNT-01/03/04/05, QA-01/02/03/05/07, I18N-03/06, UI-01/04/05*
 - **v1 archive:** tag the current `main` as `v1-legacy`. v2 work lands through PRs into `main`, which from then on is v2 (v1 stays in history and in the tag).
 - **Hygiene:**
-  - `LICENSE` → AGPL-3.0 (variant per Q-1);
+  - `LICENSE` → AGPL-3.0-or-later (Q-1);
   - delete `certs/` and add it to `.gitignore`;
   - README (v2 intro, links to docs), `SECURITY.md`, `CONTRIBUTING.md`, `frontend/README.md` (conventions from the start), PR template;
   - `dependabot.yml`, gitleaks config, `Makefile` (`dev`, `test`, `e2e`, `openapi`, `lint`).

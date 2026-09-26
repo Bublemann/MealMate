@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; open owner decisions in [§ 8](#8-open-decisions-for-the-owner)) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -109,14 +109,14 @@ MealMate is a self-hosted web app for a small group of people (one household, 1�
   - Accepting cancels all other pending requests that involve either user.
 - **CPL-02** Each shopping list has a **"shared with partner"** switch. It defaults to **on** for new lists while the owner is in a couple, and only the owner can change it.
   - **On:** the partner sees the list in their Lists home and history and can edit it (CPL-03).
-  - **Off:** the partner is treated like any other user for this list: they see it read-only only if the owner's lists are public (VIS-02).
+  - **Off:** the partner still **sees** the list, read-only, for as long as the couple exists (regardless of VIS-02), but cannot edit it and does not get it in their Lists home or history.
 - **CPL-03** On a shared list, the partner can do everything the owner can except delete it and change the share switch:
   - rename it;
   - add or remove meals and change servings;
   - add extra items;
   - check items off;
   - start and finish shopping.
-- **CPL-04** The privacy settings (VIS-02) **never hide anything from the user's own partner**: the partner always sees the user's meals, and always sees the lists shared with them. The per-list switch (CPL-02) is a separate, explicit choice.
+- **CPL-04** The privacy settings (VIS-02) **never hide anything from the user's own partner**: while the couple exists, the partner always sees the user's meals and all of the user's lists (unshared ones read-only, CPL-02).
 - **CPL-05** Either partner can end the couple at any time.
   - Every list stays with its **creator**, including history. The other person can no longer edit it, and sees it read-only only if the creator's lists are public (VIS-02).
   - The share switch is turned off on all lists of both users, so a later new couple shares nothing automatically.
@@ -130,7 +130,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1�
   - Ingredients and products are always shared.
   - Meals and lists belong to their owner.
 - **VIS-02** Each user has two privacy switches, **meals public** and **lists public**. Both default to on (public). When a switch is off:
-  - other users cannot see those meals or lists. The partner still sees all of the user's meals and the lists shared with them (CPL-02, CPL-04);
+  - other users cannot see those meals or lists. The partner still sees all of the user's meals and lists (CPL-02, CPL-04);
   - the user's name disappears from the matching **user filter chips**: the meal chips (MEAL-10) for the meals switch, the list chips on *Others' lists* (UI-02) for the lists switch.
 - **VIS-03** Other people's public lists are **read-only**. They offer **"Copy to my lists"**, which creates a new draft with the same servings and extra items, and the same meals **as far as the copier can see them** (VIS-06).
 - **VIS-04** Other people's visible meals can be viewed, added to one's own lists (LIST-03) and copied (MEAL-08). Only the owner can edit or delete a meal.
@@ -633,7 +633,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1�
 
 ### 5.8 Licensing and repository (LIC)
 
-- **LIC-01** The project is licensed under the **GNU AGPL v3** (changed from GPL-3.0); the exact variant is an open decision, see § 8. All code so far is by the owner, so no consent from others is needed.
+- **LIC-01** The project is licensed under **AGPL-3.0-or-later** (changed from GPL-3.0; owner decision Q-1). All code so far is by the owner, so no consent from others is needed.
 - **LIC-02** The running app shows its version and links to the exact source commit (AGPL § 13). Images are only built by CI from the public repository.
 - **LIC-03** Third-party licences are respected:
   - OFF data is ODbL (attribution shown; a derived database may only be shared under ODbL);
@@ -678,20 +678,20 @@ These are not in v2.0. The data model should not make them hard.
 | D-12 | Mac pulls backups; healthchecks.io dead-man's switch for alerts | no cloud storage needed; a dead Pi can't send its own alert |
 | D-13 | Pi follows the version line (`2.0`) with automatic rollback | hotfixes arrive automatically; migrations of feature versions are applied deliberately |
 | D-14 | E2E tests in Python | owner's language; the frontend developer only has to keep the test IDs stable |
-| D-15 | AGPL v3 | hosted modified copies must share their source |
+| D-15 | AGPL-3.0-or-later (Q-1) | hosted modified copies must share their source; standard GNU wording |
 | D-16 | Open Food Facts API v3, ≤ 10 requests/min | v2 was deprecated in June 2026; OFF allows 15 product reads/min per IP |
 | D-17 | When a user is deleted, the lists they share with a partner move to the partner | accepted default D15 in the planning conversation; the partner keeps their shopping history |
-| D-18 | *Proposed, pending Q-3:* a meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
-| D-19 | *Proposed, pending Q-2:* "Shared with partner" switch: on = partner sees and edits; off = partner is treated like any other user for that list | privacy settings never hide from the partner, but an explicit per-list choice does |
+| D-18 | A meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed (owner decision Q-3) | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
+| D-19 | "Shared with partner" switch: on = partner sees and edits; off = partner keeps read-only access while the couple exists (owner decision Q-2) | privacy never hides anything from the partner; the switch only controls editing and the partner's Lists home |
 | D-20 | Retention 7 daily / 4 weekly / 6 monthly (≈ 17), on Pi and Mac alike | as agreed by the owner; 6-hourly backups only reduce data loss on the current day |
 
-## 8. Open decisions for the owner
+## 8. Owner decisions
 
-| # | Question | Proposed default |
+| # | Question | Answer (2026-09-26) |
 |---|---|---|
-| Q-1 | Licence variant: **AGPL-3.0-or-later** (the standard GNU wording, which allows future AGPL versions) or **AGPL-3.0-only**? | AGPL-3.0-or-later |
-| Q-2 | "Shared with partner" switched **off**: should the partner lose access to that list, like any other user (D-19), or keep read-only access, with the switch only controlling editing? | D-19 as written |
-| Q-3 | A meal that is deleted or becomes invisible: should it be *detached* from other people's lists (frozen copy + "no longer available" notice, D-18), or simply removed from their drafts? | D-18 as written |
+| Q-1 | Licence variant: **AGPL-3.0-or-later** (the standard GNU wording, which allows future AGPL versions) or **AGPL-3.0-only**? | **AGPL-3.0-or-later** |
+| Q-2 | "Shared with partner" switched **off**: should the partner lose access to that list, like any other user (D-19), or keep read-only access, with the switch only controlling editing? | **Keep read-only access while the couple exists** |
+| Q-3 | A meal that is deleted or becomes invisible: should it be *detached* from other people's lists (frozen copy + "no longer available" notice, D-18), or simply removed from their drafts? | **Keep the frozen copy** |
 
 Items that can only be settled on the real hardware are tracked as open points in [plan § 15](plan.md#15-open-points-to-verify-during-implementation).
 

@@ -1,0 +1,39 @@
+# Contributing to MealMate
+
+What to build is defined in [`docs/requirements.md`](docs/requirements.md); how and in which order is in [`docs/plan.md`](docs/plan.md). Reference requirement IDs (e.g. `LIST-04`) in pull requests and tests.
+
+## Workflow
+
+- `main` is the integration branch. Work on a short-lived branch and open a pull request. CI must be green.
+- PR titles use [Conventional Commits](https://www.conventionalcommits.org/): `feat: …`, `fix: …`, `docs: …`, `chore: …`, `test: …`, `refactor: …`. Feature PRs are **squash-merged**, so the PR title becomes the changelog entry.
+- Releases are cut from `release/X.Y` branches. Sync PRs (`main → release/X.Y`) and back-merge PRs (`release/X.Y → main`) use **merge commits**, never squash. Details: plan § 10.
+- Never commit secrets, keys, certificates, databases or `.env` files. CI runs a secret scanner.
+
+## Architecture rules
+
+1. **The backend owns the logic.** Amounts, conversions, aggregation, rounding, nutrition and permissions live in `backend/app/domain` and `backend/app/services`. The frontend only formats and displays.
+2. **The API contract is generated.** Every endpoint has a `response_model`, and the frontend's TypeScript types are generated from OpenAPI (`make openapi`). CI fails if they are stale.
+3. **No user-facing text from the backend.** Errors are codes (`ErrorCode`) that the frontend translates (`error.<code>` in `de.json`/`en.json`).
+4. **Layers in the backend:** `api/` (HTTP only) → `services/` (rules, permissions, transactions) → `repositories/` (queries) → `models/`. `domain/` is pure Python without I/O.
+5. **Frontend conventions:** see [`frontend/README.md`](frontend/README.md): i18n keys for every string, API calls only through `src/api/`, test IDs from `src/testIds.ts`, UI building blocks in `src/components/ui/`.
+
+## Checklists for common extensions
+
+| Adding… | Steps |
+|---|---|
+| a translation string | add the key to **both** `frontend/src/i18n/de.json` and `en.json` (the completeness test enforces this) |
+| an error code | add it to `ErrorCode` in `backend/app/core/errors.py`, run `make openapi`, then add `error.<code>` to both language files |
+| a language | add `frontend/src/i18n/<lang>.json`, register it in `frontend/src/i18n/index.ts`, extend the completeness test and the backend's `language` enum |
+| a nutrient | add it to the nutrients registry (`backend/app/domain/nutrients.py`), `alembic revision --autogenerate`, add translation keys and OFF mapping tests |
+| a category / cuisine / unit conversion | add a migration that seeds it, then translation keys `category.<key>` / `cuisine.<key>` / `unit.<unit>` |
+| a database change | edit the models, run `alembic revision --autogenerate -m "…"`, review the migration, and make sure the migration tests pass (they also run against a populated database) |
+
+## Local commands
+
+```bash
+make dev          # full stack with hot reload
+make test         # backend (pytest, coverage ≥ 85 %) + frontend (vitest)
+make lint         # ruff, mypy, eslint, prettier, tsc
+make openapi      # regenerate frontend/src/api/generated/*
+make e2e          # production image + end-to-end tests
+```
