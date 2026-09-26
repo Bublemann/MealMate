@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 |
+| Status | Agreed baseline, 2026-09-26 (reviewed; open owner decisions in [Â§ 8](#8-open-decisions-for-the-owner)) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -37,8 +37,10 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 - **Devices:** mainly iPhones (Safari, used as a Home Screen web app). Desktop browsers must also work.
 - **Where it's used:**
   - at home, when planning meals and building lists;
-  - in the supermarket, with poor or no mobile signal, for checking items off.
-- **Effort principle:** the least possible effort for users. Setup happens once (Tailscale app, one invite link, "Add to Home Screen"). Everyday use must not require toggles, logins or manual syncing.
+  - in the supermarket, with poor, unreliable or no mobile signal, for checking items off.
+- **Effort principle:** the least possible effort for users.
+  - **One-time setup:** install the Tailscale app and accept the Pi share, tap one invite link and register, then "Add to Home Screen". The Home Screen app may need **one** login. It keeps storage separate from Safari; see ACC-07.
+  - **Everyday use** must not require toggles, logins or manual syncing.
 
 ## 3. Glossary
 
@@ -51,6 +53,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 | **Shopping list** | A list owned by one user, built from meals (each with a chosen number of servings) plus extra items. |
 | **Line** | One row on a shopping list after aggregation, e.g. "Onions 500 g". It merges the same ingredient from all meals and extra items. |
 | **Extra item** | Something added to a list by hand. It is either linked to an ingredient ("1 l milk") or free text ("Birthday candles"). |
+| **Frozen / detached meal** | A meal on a list whose ingredients were copied into the list, so later changes to the meal no longer affect that list (LIST-11, LIST-15). |
 | **Couple / partner** | Two users who have agreed to share shopping lists. Each user can be in at most one couple. |
 | **Admin** | A user with the admin role: manages accounts, invites and shared reference data. |
 | **OFF** | Open Food Facts, the open product database (openfoodfacts.org). |
@@ -64,9 +67,13 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - is single-use and valid for 7 days (configurable);
   - can be revoked;
   - always creates a normal *user* (an admin can promote the user later).
-- **ACC-03** An invite is a link (`https://<app>/join/<code>`). The admin can share it with one tap through the **native share sheet** (WhatsApp, Messages, Mail, â€¦). Where no share sheet exists, a copy button is offered.
-  - The prepared message, in the admin's language, has two steps: (1) accept the Tailscale share, (2) tap the link to register.
-- **ACC-04** The invite code is consumed only when the registration form is **submitted**. Opening the link, or a chat app generating a link preview, must not use it up.
+- **ACC-03** Creating and sharing an invite takes two taps:
+  1. **"Create invite"** shows the link (`https://<app>/join#<code>`).
+  2. **"Share"** opens the **native share sheet** (WhatsApp, Messages, Mail, â€¦) with a prepared message in the admin's language.
+
+  Where no share sheet exists, a copy button is offered. The prepared message has two steps: (1) accept the Tailscale share, (2) tap the link to register.
+  - The invite form has an optional field for the **Tailscale share link**. The owner creates that link in the Tailscale admin console, and if it is filled in, the message includes it as step 1.
+- **ACC-04** The code is in the URL **fragment** (`#â€¦`), so it is never sent to the server by a link preview and never appears in server logs. It is consumed only when the registration form is **submitted**.
 - **ACC-05** Registration asks for:
   - a **username**: used for login, 3â€“30 characters from `aâ€“z 0â€“9 . _ -`, unique ignoring case;
   - a **display name**: shown to others, 1â€“40 characters, unique ignoring case;
@@ -79,46 +86,63 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - rejected if it equals the username or is on a common-password list.
 
   iOS password autofill and strong-password suggestions must work (correct `autocomplete` attributes).
-- **ACC-07** After registering, or after using a reset link, the user is logged in immediately.
-- **ACC-08** Users stay logged in as long as they use the app at least once every **90 days** (sliding expiry).
+- **ACC-07** After registering or using a reset link, the user is logged in immediately **in the browser where the link was opened** (usually Safari). iOS keeps the Home Screen app's storage separate from Safari, so the Home Screen app may need one login. M1 checks on a real iPhone whether the login carries over. The join guide says "log in once if asked".
+- **ACC-08** Users stay logged in as long as they use the app at least once every **90 days** (sliding expiry). This must survive closing the app and restarting the phone, which M1 verifies on an iPhone.
 - **ACC-09** Users can:
   - see their active sessions;
   - log out the current device;
   - log out **all devices**;
   - change their password (which logs out all other devices).
-- **ACC-10** Forgotten password: an admin creates a single-use **reset link**, valid 24 h, and shares it the same way as an invite. Using it sets a new password and ends all of that user's sessions.
+- **ACC-10** Forgotten password: an admin creates a single-use **reset link** (`/reset#<code>`), valid 24 h, and shares it the same way as an invite.
+  - Using it sets a new password and ends all of that user's sessions.
+  - Afterwards the user sees "Password reset by *<admin>* on *<date>*" in *Me â†’ Security*.
 - **ACC-11** Wrong login attempts slow down further attempts for that username and client (increasing delay). No account is ever permanently locked.
-- **ACC-12** The **first admin** is created with a command on the Pi (`mealmate create-admin`), which asks for the username and password interactively. If the last admin is locked out, `mealmate reset-link <username>` prints a reset link.
+- **ACC-12** The **first admin** is created with a command on the Pi (`mealmate create-admin`), interactively. A non-interactive form exists for automation and tests. If the last admin is locked out, `mealmate reset-link <username>` prints a reset link and also reactivates the account.
 - **ACC-13** Users can change their display name, language and privacy settings.
 
 ### 4.2 Couples (CPL)
 
 - **CPL-01** A user can send another user a **couple request**. The other user can accept or decline it, and the sender can cancel it.
+  - The picker lists all active users by display name.
   - A user can be in at most one couple.
   - A user can have at most one outgoing pending request.
   - Accepting cancels all other pending requests that involve either user.
 - **CPL-02** Each shopping list has a **"shared with partner"** switch. It defaults to **on** for new lists while the owner is in a couple, and only the owner can change it.
+  - **On:** the partner sees the list in their Lists home and history and can edit it (CPL-03).
+  - **Off:** the partner is treated like any other user for this list: they see it read-only only if the owner's lists are public (VIS-02).
 - **CPL-03** On a shared list, the partner can do everything the owner can except delete it and change the share switch:
   - rename it;
   - add or remove meals and change servings;
   - add extra items;
   - check items off;
   - start and finish shopping.
-- **CPL-04** Privacy settings (VIS-02) **never** hide anything from the user's own partner. Partners always see each other's meals and shared lists.
-- **CPL-05** Either partner can end the couple at any time. Afterwards, every list stays with its **creator** (including history), and the other person loses access.
+- **CPL-04** The privacy settings (VIS-02) **never hide anything from the user's own partner**: the partner always sees the user's meals, and always sees the lists shared with them. The per-list switch (CPL-02) is a separate, explicit choice.
+- **CPL-05** Either partner can end the couple at any time.
+  - Every list stays with its **creator**, including history, and the other person loses access.
+  - The share switch is turned off on all lists of both users, so a later new couple shares nothing automatically.
+  - Meals of the ex-partner that are now invisible to the other user are detached from that user's lists (LIST-15).
 - **CPL-06** Meals always stay separate per user, also within a couple.
+- **CPL-07** If a partner is **deactivated** (ADM-02), the couple and all shared lists stay, and the other partner can end the couple. Pending couple requests of the deactivated user are cancelled.
 
 ### 4.3 Privacy and visibility (VIS)
 
 - **VIS-01** By default everything a user creates is visible to all users of the instance.
   - Ingredients and products are always shared.
   - Meals and lists belong to their owner.
-- **VIS-02** Each user has two privacy switches, **meals public** and **lists public**. Both default to on (public).
-  - When a switch is off, other users (except the partner, CPL-04) cannot see those meals or lists.
-  - While the meals switch is off, the user's name disappears from other users' **user filter chips** (MEAL-10).
-- **VIS-03** Other people's public lists are **read-only**. They offer **"Copy to my lists"**, which creates a new draft with the same meals, servings and extra items.
+- **VIS-02** Each user has two privacy switches, **meals public** and **lists public**. Both default to on (public). When a switch is off:
+  - other users (except the partner, CPL-04) cannot see those meals or lists;
+  - the user's name disappears from the matching **user filter chips**: the meal chips (MEAL-10) for the meals switch, the list chips on *Others' lists* (UI-02) for the lists switch.
+- **VIS-03** Other people's public lists are **read-only**. They offer **"Copy to my lists"**, which creates a new draft with the same servings and extra items, and the same meals **as far as the copier can see them** (VIS-06).
 - **VIS-04** Other people's visible meals can be viewed, added to one's own lists (LIST-03) and copied (MEAL-08). Only the owner can edit or delete a meal.
-- **VIS-05** Photos are only served to users who are allowed to see the meal. URLs must not be guessable, and a URL without authorization must not work.
+- **VIS-05** Photos are only served to users who are allowed to see the meal.
+  - Photo URLs are unguessable and signed.
+  - They expire after about 1 hour.
+  - A URL without a valid signature does not work.
+- **VIS-06** When someone views a list that contains a meal **they cannot see** (e.g. a partner's private meal on a public list):
+  - the meal appears only as "Private meal (*N* servings)", with no name, photo, link or source details;
+  - the aggregated lines are still shown, because ingredients are shared data.
+
+  "Copy to my lists" and "Shop again" leave out meals the acting user can't see or that no longer exist, and say how many were left out.
 
 ### 4.4 Reference data: categories, units, cuisines, tags (REF)
 
@@ -141,8 +165,10 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - an optional **weight of one piece** in g (e.g. egg = 60 g);
   - an optional **density** in g per ml;
   - optional manual nutrition values (NUT-02).
+
+  The base unit can only be changed while no products are linked.
 - **ING-03** Search ignores case, umlauts and accents: `apfel`, `Ã„pfel` and `aepfel` all find "Ã„pfel". When a user creates an ingredient, a "similar ingredient already exists" hint is shown.
-- **ING-04** An ingredient has 0 or more linked **products** (barcodes). Each product is linked to exactly one ingredient, and its nutrition basis (per 100 g or per 100 ml) must match the ingredient's base unit.
+- **ING-04** An ingredient has 0 or more linked **products** (barcodes). Each product is linked to exactly one ingredient. Each product records its nutrition basis (per 100 g or per 100 ml), which must match the ingredient's base unit.
 - **ING-05** Only admins can **delete** an ingredient, and only while nothing references it. Otherwise admins can **merge** duplicate ingredients ("merge A into B"): every meal, list and product reference is moved to B, and A is deleted.
 - **ING-06** Ingredients created by a user who is later deleted stay, shown as created by "deleted user".
 
@@ -181,6 +207,12 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - at most 10 product requests per minute from the server (OFF allows 15);
   - no search-as-you-type against OFF.
 - **BAR-09** Attribution "Nutrition data: Open Food Facts (ODbL)" with a link is shown wherever OFF data is displayed and on the About page. Product images from OFF are not stored or shown in v2.0.
+- **BAR-10** OFF data is **untrusted input**. It is validated and sanitised on the server:
+  - text lengths are capped;
+  - control and bidi characters are removed;
+  - nutrient values must be finite and plausible, otherwise they are dropped.
+
+  It is only ever rendered as text.
 
 ### 4.8 Meals (MEAL)
 
@@ -198,11 +230,11 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 - **MEAL-04** **Photo:**
   - taken with the camera or picked from the library;
   - shrunk on the phone before upload (about 1600 px);
-  - on the server it is re-encoded, so all metadata including **GPS** is removed, and stored with a thumbnail under a random name;
+  - on the server it is rotated upright, re-encoded (so all metadata including **GPS** is removed), and stored with a thumbnail under a random name;
   - JPEG, PNG and WebP up to 10 MB are accepted.
 - **MEAL-05** **Source link:** any `http(s)` URL (other schemes are rejected). It is shown as a prominent button that opens the link in Safari / a new tab. There is no link preview.
 - **MEAL-06** Meal detail shows the photo, nutrition per meal and per serving (NUT-03/04), ingredients, instructions, source button, owner, and "based on *X* by *Y*" for copies.
-- **MEAL-07** Only the **owner** can edit or delete a meal. Deleting removes it from all **draft** lists. Lists in *shopping* or *done* keep their frozen copy (LIST-11).
+- **MEAL-07** Only the **owner** can edit or delete a meal. Deleting a meal never silently changes other lists: wherever it is used on a list that isn't frozen yet, it is **detached** (LIST-15).
 - **MEAL-08** **Copy** (one tap, on any meal visible to the user) creates an independent meal owned by the copier. It includes ingredients, amounts, instructions, cuisine, tags, source link and its own copy of the photo, and it remembers the original ("based on X by Y"). The reference disappears when the original is deleted or becomes invisible.
 - **MEAL-09** The meal list supports search (name, tag, cuisine), filters by cuisine and tag, and sorts Aâ€“Z. The list-building picker shows "recently used" meals first.
 - **MEAL-10** **User filter chips** show one chip per user whose meals are visible, including oneself. Each chip toggles that user's meals on or off. The chip selection is saved per user, on the server, so it follows them across devices.
@@ -224,26 +256,36 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - picking an ingredient adds a linked extra item (optional amount and unit) that merges with the same ingredient from meals;
   - anything else becomes a **free-text** item with an optional free-text amount. It goes into *Other* unless the user picks a category.
 - **LIST-07** In a draft, a calculated line can be **removed for this list only** (swipe), e.g. "still have rice". It moves to a collapsed "Removed" section and can be restored. Nothing is remembered for future lists (there is no pantry logic).
-- **LIST-08** Tapping a line shows which meals and extra items it comes from.
+- **LIST-08** Tapping a line shows which meals and extra items it comes from. Meals the viewer can't see show as "Private meal" (VIS-06).
 - **LIST-09** Every change is saved to the server immediately. A draft can be continued on another device, even after closing the app or restarting the phone. Offline behaviour is covered in SYNC.
 - **LIST-10** **List states:**
 
   | State | Meaning |
   |---|---|
-  | `draft` | Being planned. Lines are computed live from the current meals. |
+  | `draft` | Being planned. Lines are computed live from the current meals (except detached ones, LIST-15). |
   | `shopping` | "Start shopping" pressed. Meal ingredients are frozen (LIST-11) and items are checked off. |
   | `done` | "Finish shopping" pressed. Read-only. Appears in history. |
 
-- **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list. From then on, edits to or deletion of the meal no longer change this list or its history. A meal added while shopping is frozen at the moment it's added.
+- **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the ingredient data needed to calculate them (unit conversions, category).
+  - From then on, edits to the meal, deletion of the meal, or wiki edits of the ingredients no longer change this list or its history.
+  - A meal or linked extra item added while shopping is frozen at the moment it's added.
 - **LIST-12** **Editing while shopping** (online only): add or remove meals, change servings, add or remove extra items. This lets a partner at home change the list while the other person is in the store.
   - A new line appears unchecked and marked "new".
-  - If a **checked** line needs more afterwards, it becomes **unchecked** and shows the difference (e.g. "+300 g").
+  - A **checked** line becomes **unchecked** again when it later needs more:
+    - any of its amounts grows, and the difference is shown per unit (e.g. "+300 g", "+2 Stk.");
+    - a new unit or a part without an amount is added;
+    - a free-text item's text or amount is edited (shown as "changed").
   - A checked line that needs less stays checked.
 - **LIST-13** **Delete:** the owner can delete a list in any state, after a confirmation.
 - **LIST-14** **Reminder:** the last row of every list is a random, friendly reminder, e.g. "Nichts vergessen? Klopapier? Salz?" / "Didn't forget anything? Toilet paper? Salt?".
   - It comes from a pool of about 10 per language, kept in the translation files.
   - It stays the same for a given list.
   - The same reminder appears in the finish dialog (SHOP-04).
+- **LIST-15** **Detached meals:** when a meal on a not-yet-frozen list is **deleted** by its owner, or **stops being visible** to the list's owner (privacy switched off, couple ended, owner's account deleted), it is detached from that list:
+  - its current ingredients are frozen into the list (as in LIST-11), so the list keeps working;
+  - it is marked "no longer available", and the list owner can remove it.
+
+  It is never removed silently. Lists that are already frozen are unaffected.
 
 ### 4.10 Aggregation, units and rounding (AGG)
 
@@ -271,11 +313,15 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 - **SHOP-05** **History:** done lists, grouped by the week they were **finished**, with the subtitle "bought on 26.09.".
   - Checked lines count as bought; unchecked lines are shown greyed.
   - Shared lists appear in both partners' history while the couple exists (see CPL-05 for what happens after).
-- **SHOP-06** A done list offers **"Shop again"**, which creates a new draft with the same meals (current versions), servings and extra items, all unchecked. It also offers **"Reopen"**, which moves it back to *shopping*, in case *Finish* was tapped by mistake.
+- **SHOP-06** A done list offers two actions:
+  - **"Shop again"** creates a new draft with the same meals (current versions), servings and extra items, all unchecked. Meals that are deleted or not visible are left out with a notice (VIS-06).
+  - **"Reopen"** moves it back to *shopping*, in case *Finish* was tapped by mistake.
 
 ### 4.12 Offline use and sync (SYNC)
 
-- **SYNC-01** MealMate is installable as a **Home Screen web app** (PWA). After the first login a one-time hint shows how to "Add to Home Screen". Reliable offline use is only guaranteed in the Home Screen app.
+- **SYNC-01** MealMate is installable as a **Home Screen web app** (PWA).
+  - After the first login, a one-time hint shows how to "Add to Home Screen".
+  - The Safari tab and the Home Screen app are separate on iOS, each with its own storage and offline data. Reliable offline use is only guaranteed in the Home Screen app.
 - **SYNC-02** **Local copy on the phone:** every time the app is opened (or comes to the foreground) with a connection, it stores a text-only copy on the phone of all lists the user can edit, in *draft* or *shopping* state (own and partner's shared ones).
 - **SYNC-03** **Offline actions** in shopping mode:
   - check and uncheck lines;
@@ -289,6 +335,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - For check state, the **most recent tap wins**, compared by the time the tap happened, not the time it synced.
   - If one phone edits a free-text item and the other deletes it, the delete wins.
   - Items added on two phones are not merged automatically.
+  - Check-offs made **before** a partner finished the list still count after it was finished.
 - **SYNC-07** **Sync status indicator**, one of:
   - "Saved";
   - "Offline â€“ *N* changes waiting";
@@ -296,7 +343,16 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 
   Actions not yet delivered look slightly faded. A banner appears if changes have been waiting for more than one hour.
 - **SYNC-08** **Live updates:** while a list is on screen, the app checks for changes about every **5 seconds** and immediately when it returns to the foreground. Pull-to-refresh is available. There are no push notifications in v2.0.
-- **SYNC-09** **App loads offline:** the app shell (HTML, JS, CSS, icons, translations) is cached so the app opens without a connection. Screens other than cached lists show a friendly offline message.
+- **SYNC-09** **Poor signal:**
+  - The app shell (HTML, JS, CSS, icons, translations) is cached, and the app opens from it **immediately**, also on a connection that is up but carries nothing ("lie-fi").
+  - Cached lists are shown first and refreshed in the background.
+  - Server requests give up after a few seconds and are treated as "can't reach MealMate". The app never hangs on a blank screen.
+  - Screens other than cached lists show a friendly offline message.
+- **SYNC-10** **Local data lifecycle:**
+  - Logging out deletes the local list copy and cached profile; the outbox is deleted too, after the SYNC-05 confirmation.
+  - When the server reports the session as revoked or the user as deactivated, the local copy and profile are deleted, and only that user's outbox is kept.
+  - Queued actions are only ever sent with a session of the **same** user.
+  - Lists the user lost access to disappear at the next sync.
 
 ### 4.13 Export (EXP)
 
@@ -328,20 +384,26 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - creating and revoking invites, and seeing their status (open / used by X / expired / revoked);
   - creating reset links;
   - listing users;
-  - promoting and demoting admins (at least one admin must always remain);
+  - promoting and demoting admins;
   - deactivating, reactivating and deleting users;
   - reordering categories;
   - merging and deleting ingredients;
-  - system info: app version, last successful backup, free disk space.
-- **ADM-02** **Deactivating** a user blocks login immediately and ends all their sessions. Their data stays, and their name is shown with "(deactivated)". Deactivation can be undone.
-- **ADM-03** **Deleting** a user removes:
-  - their meals and photos;
-  - their lists that are not shared with a partner, including history;
-  - their pending couple requests;
-  - any unused invites or reset links issued for them.
+  - system info: app version, last successful backup, free disk space;
+  - an **admin activity log** showing invites, reset links, role changes, deactivations, deletions and merges, each with who and when.
 
-  It also ends their couple. Their shared lists move to the partner. Ingredients and products they created stay ("deleted user"). Copies other people made of their meals stay. The last admin can't be deleted.
-- **ADM-04** Admins **cannot** see other users' private meals or lists, and cannot log in as another user.
+  At least one **active** admin must always remain, and admins cannot deactivate or delete themselves.
+- **ADM-02** **Deactivating** a user:
+  - blocks login immediately and ends all their sessions;
+  - keeps their data and their couple (CPL-07), and their name is shown with "(deactivated)";
+  - can be undone.
+- **ADM-03** **Deleting** a user:
+  1. First, their meals are detached from other users' lists (LIST-15), and the lists they share with a partner **move to the partner**.
+  2. Then their meals, photos, remaining lists (including history), pending couple requests, and any unused invites or reset links issued for them are removed.
+
+  Ingredients and products they created stay ("deleted user"). Copies other people made of their meals stay. The last active admin can't be deleted.
+- **ADM-04** Admins have **no screen or endpoint** to view other users' private meals or lists, and cannot silently log in as another user.
+  - The only way to take over an account is a reset link. That ends the user's sessions and is visible to them (ACC-10) and in the activity log.
+  - Whoever runs the Pi can technically read the database and backups. The user guide says so.
 
 ### 4.16 App shell and navigation (UI)
 
@@ -350,7 +412,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - a list in *shopping* state appears at the top as a large "Continue shopping" card;
   - then drafts, most recently edited first, including the partner's shared lists;
   - then an entry to **History**;
-  - then **Others' lists**: other users' public lists, read-only, with the user filter chips.
+  - then **Others' lists**: other users' public lists, read-only, with their own user filter chips (saved separately from the meal chips).
 - **UI-03** Every empty screen shows one friendly sentence and one main action, e.g. "No meals yet â€“ create your first meal".
 - **UI-04** Dark mode follows the iPhone setting automatically.
 - **UI-05** Branding: name **MealMate**, a green accent colour (from the v1 `#4CAF50` family), and a simple basket icon for the Home Screen and favicon. All colours are defined once as design tokens so the design can be re-skinned easily.
@@ -361,18 +423,24 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 ### 5.1 Platform and deployment (PLT)
 
 - **PLT-01** **Target hardware:** Raspberry Pi 3 Model B v1.2 (4 Ã— Cortex-A53, 1 GB RAM, 100 Mbit Ethernet), microSD card of **16 GB or more** (32 GB preferred), official 2.5 A power supply.
-- **PLT-02** **OS:** Raspberry Pi OS Lite **64-bit**, headless, hostname `mealmate`, SSH with key only (no password login), automatic security updates. It is set up to write as little as possible to the SD card (logs in RAM, capped Docker logs, `noatime`).
-- **PLT-03** **Delivery:** the app runs as **one Docker container** from a prebuilt `linux/arm64` image on `ghcr.io`, started with Docker Compose. Nothing is built on the Pi.
+- **PLT-02** **OS:** Raspberry Pi OS Lite **64-bit**, headless, hostname `mealmate`, SSH with key only (no password login). The setup script also:
+  - turns on **automatic updates** for Debian security, Raspberry Pi, Docker and Tailscale packages, with an automatic reboot at night when needed;
+  - sets the system up to write as little as possible to the SD card: logs in RAM, capped Docker logs, `noatime`, compressed swap in RAM (zram) only;
+  - enables the memory cgroup, so container memory limits work.
+- **PLT-03** **Delivery:** the app runs as **one Docker container** from a prebuilt `linux/arm64` image on `ghcr.io`, started with Docker Compose. Nothing is built on the Pi. The Pi only installs images whose **signed build provenance** proves they were built by this repository's release workflow (SEC-12).
 - **PLT-04** **Remote access** only via **Tailscale**:
   - Tailscale runs on the Pi's operating system, not in Docker.
   - Every user installs the Tailscale app and leaves it on (VPN On Demand keeps it connected).
-  - The Pi is **shared** with each user (node sharing), so users can reach only the Pi, and a tailnet policy limits them to HTTPS.
+  - The Pi is **shared** with each user (node sharing), so users can reach only the Pi.
   - No router ports are opened.
+  - The Pi is **tagged** (`tag:mealmate`), so it acts as a server, not as the owner's device, and its key does not expire.
+  - A tailnet policy allows shared users to reach only HTTPS on the Pi, allows the owner's devices to reach SSH and HTTPS on the Pi, and gives the Pi no access to any other device.
 - **PLT-05** **HTTPS:**
   - HTTPS is provided by `tailscale serve`, with a browser-trusted certificate for `https://mealmate.<tailnet>.ts.net`.
   - This is the **only** address; there is no second LAN address, because each address would mean a separate login and separate offline data.
-  - The app container listens on `127.0.0.1` only.
-- **PLT-06** Setting up a new SD card (initial install, card swap, disaster recovery) is **one documented, scripted procedure**: flash with Raspberry Pi Imager â†’ run the setup script â†’ optionally restore a backup. It takes about 30 minutes and is tested before go-live (OPS-07).
+  - The app listens on `127.0.0.1` only.
+- **PLT-06** Setting up a new SD card (initial install, card swap, disaster recovery) is **one documented, scripted procedure**: flash with Raspberry Pi Imager â†’ download and run `setup.sh`, or `setup.sh --restore <backup>`. It takes about 30 minutes and is tested before go-live (OPS-07).
+- **PLT-07** Host-side files (compose file, scripts, systemd units) are **versioned with the app**. Every successful update installs the matching version of them, so fixes to scripts reach the Pi automatically.
 
 ### 5.2 Security and privacy (SEC)
 
@@ -381,17 +449,19 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - CI runs a secret scanner.
   - GitHub push protection is enabled.
   - The v1 self-signed key (`certs/key.pem`, public in git history) is considered compromised and is never reused.
-- **SEC-02** Secrets live only in `/srv/mealmate/.env` on the Pi, readable only by the owner:
-  - `SECRET_KEY`, generated randomly by the setup script;
+- **SEC-02** Secrets live only in `/srv/mealmate/.env` on the Pi, readable only by root:
+  - `MEALMATE_SECRET_KEY`, generated randomly by the setup script;
   - the healthchecks.io ping URLs.
 
-  **No secret has a default value in code.** The app refuses to start without a `SECRET_KEY`.
+  **No secret has a default value in code.** The app refuses to start without a secret key. Only the variables the app needs are passed into the container. The secret key can be **rotated** with one command (which logs everyone out).
 - **SEC-03** **Authentication:**
   - short-lived access tokens (15 min, held in memory);
   - a rotating refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie, stored hashed on the server;
   - sessions can be revoked on the server;
   - passwords hashed with bcrypt.
-- **SEC-04** **Authorization** is checked in the backend for every request and every object (owner / partner / public / admin). It is covered by API tests, including "user A can't read or change user B's private data".
+
+  Rotation tolerates lost responses and parallel refreshes (a short grace period), so poor signal never logs a user out. Role and active status are read from the database on every request, never trusted from the token.
+- **SEC-04** **Authorization** is checked in the backend for every request and every object (owner / partner / public / admin), including meals embedded in lists (VIS-06). It is covered by API tests, including "user A can't read or change user B's private data".
 - **SEC-05** **Rate limiting:**
   - login (per username + client);
   - registration and reset (per client);
@@ -399,19 +469,42 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - barcode lookups (per user);
   - a general per-user request limit.
 
-  The client address is taken from `X-Forwarded-For`, and that header is trusted only from `127.0.0.1` (tailscale serve).
-- **SEC-06** **Security headers:**
-  - a strict Content-Security-Policy (no inline scripts; `wasm-unsafe-eval` only if the barcode decoder needs it);
+  The client address comes from `X-Forwarded-For`, which is set by `tailscale serve` and trusted only from the local address `tailscale serve` connects from.
+- **SEC-06** **Security headers** on every response:
+  - an explicit Content-Security-Policy, see plan Â§ 5.3: no inline scripts, no `eval`, `wasm-unsafe-eval` only for the barcode decoder, same-origin connections only;
   - `X-Content-Type-Options`;
   - `Referrer-Policy: no-referrer`;
-  - `frame-ancestors 'none'`.
+  - `frame-ancestors 'none'`;
+  - `Cache-Control: no-store` on all API responses.
 
   Outgoing source links use `rel="noopener noreferrer"`.
-- **SEC-07** **Uploads:** the real file type is checked, pixel count and file size are limited, the image is always re-encoded (which strips metadata) and stored under a random name outside any web root.
-- **SEC-08** **No personal data beyond what's needed:** no email addresses, and no tracking or analytics. No third-party requests from the browser. OFF is contacted only by the server.
-- **SEC-09** The container runs as a **non-root** user with a read-only root filesystem, except for the data volume. It contains no dev tools.
-- **SEC-10** Invite codes, reset codes and refresh tokens are long random values (â‰¥ 128 bit) and are stored **hashed**.
-- **SEC-11** Dependencies are kept current (Dependabot weekly, grouped). CI fails on known high or critical vulnerabilities in runtime dependencies.
+- **SEC-07** **Uploads:**
+  - only the JPEG, PNG and WebP decoders are allowed;
+  - the real file type is checked, and size (â‰¤ 10 MB) and pixel count (â‰¤ 24 MP) are limited;
+  - the image is always re-encoded, which strips metadata;
+  - it is stored under a random name outside any web root.
+- **SEC-08** **No personal data beyond what's needed:** no email addresses, and no tracking or analytics. **No third-party requests from the browser**, including the barcode decoder, which is served by the app itself. OFF is contacted only by the server.
+- **SEC-09** The container runs as a **non-root** user with a read-only root filesystem (except the data volume), no Linux capabilities and no privilege escalation. It contains no dev tools. Host scripts running as root never follow symlinks in container-writable directories.
+- **SEC-10** Invite codes, reset codes and refresh tokens:
+  - are long random values (â‰¥ 128 bit);
+  - are stored as keyed hashes (HMAC);
+  - are never written to logs.
+
+  The server does not log request paths with codes, or query strings.
+- **SEC-11** **Dependencies are kept current:**
+  - Dependabot weekly, grouped;
+  - CI fails on known high or critical vulnerabilities in runtime dependencies;
+  - a weekly scheduled scan of the **published** image opens an issue when fixable vulnerabilities appear.
+
+  There is a documented **security-patch procedure** (fix on the release branch â†’ patch release â†’ the Pi installs it the same night).
+- **SEC-12** **Supply chain:**
+  - all GitHub Actions are pinned to commit SHAs;
+  - no workflow runs untrusted fork code with secrets;
+  - release images get **signed build provenance**;
+  - the Pi's updater verifies it before installing (PLT-03).
+
+  The owner's GitHub account uses 2FA.
+- **SEC-13** Everything from outside the household is **validated as untrusted**: OFF responses (BAR-10), uploads (SEC-07), source URLs (MEAL-05). User-supplied text is only ever rendered as text, never as HTML.
 
 ### 5.3 Backups, monitoring and updates (OPS)
 
@@ -419,48 +512,60 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - a consistent SQLite snapshot (made with SQLite's backup API, never by copying the raw file), integrity-checked;
   - the photos (stored incrementally: unchanged photos are hard-linked, not copied again);
   - `.env`;
-  - the Pi's Tailscale identity (node state), so a restore keeps the same address and shares;
+  - the Pi's Tailscale identity and SSH host keys, so a restore keeps the same address, shares and host fingerprint;
   - a manifest with app version, time and checksums.
-- **OPS-02** **Retention** on the Pi, at most about 21 backups:
-  - the 4 most recent (last 24 h);
-  - plus the newest per day for 7 days;
+
+  A backup only becomes visible once it is complete.
+- **OPS-02** **Retention** (on the Pi and on the Mac, about 17 regular backups):
+  - the newest backup per day for 7 days;
   - plus the newest per week for 4 weeks;
   - plus the newest per month for 6 months.
+
+  Backups made before an update, and manual ones, are kept for 7 days in addition.
 - **OPS-03** **Off-Pi copy:** the owner's **Mac pulls** new backups automatically over Tailscale.
   - It runs every hour while the Mac is awake, via `launchd`, and catches up after sleep.
   - It uses a dedicated SSH key that is restricted on the Pi to **read-only** access to the backup folder.
-  - The Mac applies its own retention and **never mirrors deletions** from the Pi, so a compromised Pi cannot delete the Mac's copies.
+  - It only fetches backups it has never fetched before, and never overwrites what it already has.
+  - It applies the retention by its own receive times. It never deletes anything younger than 7 days, and stops and alerts if a pull looks abnormal (too many or too large new backups).
+  - So a compromised Pi can neither delete nor overwrite the Mac's copies.
   - One command installs it on the Mac.
 - **OPS-04** **Alerts** come from a free external dead-man's-switch service (healthchecks.io), by email; push via ntfy or Telegram is optional. Checks:
 
   | Check | Pinged by | Alert when |
   |---|---|---|
-  | `heartbeat` | Pi, every 5 min, only if the app's health endpoint answers OK | silent for 15 min: Pi, Docker, app or internet down |
-  | `backup` | Pi, after each successful backup | silent for 8 h |
-  | `mac-pull` | Mac, after each successful pull | silent for 3 days |
-  | `update` | Pi, after each nightly update run | a failure or rollback, or silent for 2 days |
+  | `heartbeat` | Pi, every 5 min, only if Tailscale is running **and** the app answers OK through its own HTTPS address | silent for 15 min: Pi, Docker, app, Tailscale/HTTPS or internet down |
+  | `backup` | Pi, after each successful backup and each monthly test restore | a failure, or silent for 8 h |
+  | `mac-pull` | Mac, after each successful pull | a failure (e.g. abnormal pull), or silent for 3 days |
+  | `update` | Pi, after each nightly update run | a failure, a rollback or an unverifiable image, or silent for 2 days |
   | `disk` | Pi, every hour | free space below 20 % |
 
+  Only the scripts' own short status output is sent to healthchecks.io, never app logs.
 - **OPS-05** **Updates:**
-  - The Pi follows the **version line** of its release, e.g. image tag `2.0`: bug-fix releases (`2.0.1`, `2.0.2`) are installed automatically at night.
+  - The Pi follows the **version line** of its release, e.g. image tag `2.0`: bug-fix releases (`2.0.1`, `2.0.2`) are installed automatically at night, after their provenance is verified (SEC-12).
   - Moving to a new feature version (`2.1`) is a deliberate one-line change.
-  - Before an update: a backup. After it: a health check. If that fails: **automatic rollback** (previous image plus pre-update database) and an alert.
+  - Before an update: a backup. After it: a health check. If that fails: **automatic rollback** (previous image plus pre-update database) and an alert. The Pi then waits for the next newer release.
   - A manual `update.sh` exists too.
 - **OPS-06** Database migrations run automatically at container start. The entrypoint first saves a pre-migration snapshot whenever migrations are pending.
 - **OPS-07** **Restore:**
-  - `restore.sh` restores a chosen backup onto a freshly set-up card: database, photos, `.env` and Tailscale identity.
+  - `setup.sh --restore <backup>` runs on a freshly flashed card. It restores the Tailscale identity **before** Tailscale starts, then `.env`, SSH host keys, database and photos.
   - The full procedure is rehearsed on a spare SD card before go-live.
-  - A monthly automatic test restore of the latest backup into a temporary file is integrity-checked.
+  - A monthly automatic test restore of the latest backup is integrity-checked (OPS-04 `backup`).
 - **OPS-08** A manual backup can be started with one command (and from the admin page) before planned maintenance, such as an SD card swap.
 - **OPS-09** The old and the new SD card must never run at the same time. Both would claim the same Tailscale identity, so the runbook warns about this.
+- **OPS-10** **Backups contain credentials** (secret key, Tailscale identity).
+  - The Mac copy lives outside iCloud-synced folders, the Mac uses FileVault, and a Time Machine disk must be encrypted.
+  - The runbook covers "Mac or backup lost": remove and re-add the Pi in Tailscale, rotate the secret key, replace the backup SSH key, regenerate the healthchecks.io URLs.
 
 ### 5.4 Performance and resources (PERF)
 
 - **PERF-01** The container uses **< 200 MB RAM** when idle and < 300 MB under normal use on the Pi 3. It runs one app process, and background jobs run as short-lived commands.
-- **PERF-02** On the Pi 3, API responses for a list with 20 meals and 150 lines take < 300 ms (p95). Opening a cached list works instantly, even offline.
+- **PERF-02** On the Pi 3:
+  - API responses for a list with 20 meals and 150 lines take < 300 ms (p95), also with 3 phones polling;
+  - opening a cached list works instantly, even offline or on lie-fi.
 - **PERF-03** Initial JavaScript is < 300 KB gzipped. The barcode decoder and other heavy parts are loaded only when needed.
 - **PERF-04** The container is healthy within 60 s after start on the Pi 3, including migrations.
-- **PERF-05** Password hashing takes about 250â€“500 ms on the Pi 3 (the bcrypt cost factor is tuned for this).
+- **PERF-05** Password hashing takes about 250â€“500 ms on the Pi 3 (the bcrypt cost factor is tuned for this). CPU-heavy work (password hashing, image processing) never blocks other users' requests.
+- **PERF-06** PERF-01/02/04 are measured on the real Pi **early**: skeleton in M1, lists at the end of the shopping milestone. They are not only checked at release time.
 
 ### 5.5 Accessibility (A11Y)
 
@@ -476,11 +581,13 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 
 - **MNT-01** The **frontend and backend are strictly separated**. The frontend talks to the backend only through the documented HTTP API (OpenAPI). The frontend's TypeScript API types are **generated** from the OpenAPI description, and CI fails if they are out of date.
 - **MNT-02** The frontend does **no domain calculations** (AGG-01). It formats data and handles UI state, the offline queue and export text.
-- **MNT-03** A frontend developer can run the full stack on a laptop with one command, with hot reload and demo data (`seed-demo`), without the Pi.
-- **MNT-04** Conventions are documented in `CONTRIBUTING.md` and `frontend/README.md`:
+- **MNT-03** A frontend developer can do the following on a laptop with one command each, without the Pi:
+  - run the full stack with hot reload and demo data (`make dev` with `seed-demo`);
+  - run the end-to-end suite (`make e2e`).
+- **MNT-04** Conventions are documented from the start (M0) in `CONTRIBUTING.md` and `frontend/README.md`:
   - all strings go through i18n keys;
   - API calls only through `src/api/`;
-  - interactive elements get accessible names and `data-testid`;
+  - interactive elements get accessible names and test IDs, kept in one file;
   - UI building blocks live in `src/components/ui/`.
 - **MNT-05** UI building blocks (dialogs, sheets, dropdowns, toasts, chips) come from **shadcn/ui**, whose source is copied into the repo, so it can be restyled freely without lock-in. Styling uses Tailwind design tokens.
 - **MNT-06** Adding a nutrient, a unit conversion, a category, a cuisine or a language follows a documented checklist.
@@ -490,13 +597,17 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 - **QA-01** **Backend:**
   - `pytest` unit and API tests;
   - **â‰¥ 85 % line coverage** enforced in CI;
-  - unit conversion, aggregation, servings scaling, rounding and nutrition aim for ~100 %, using table-driven tests plus property-based tests (Hypothesis).
-- **QA-02** **Migrations:** every Alembic migration upgrades and downgrades cleanly from an empty database, and the models match the latest migration (no pending autogenerate diff).
-- **QA-03** **Frontend:** Vitest for logic (API client, number parsing and formatting, offline queue, export text, i18n completeness).
+  - unit conversion, aggregation, servings scaling, rounding and nutrition aim for ~100 %, using table-driven tests plus property-based tests (Hypothesis);
+  - concurrency tests for list operations (many parallel writes, none lost).
+- **QA-02** **Migrations:**
+  - every Alembic migration upgrades and downgrades cleanly from an empty database;
+  - migrations are also run against a **database filled with demo data**, and no rows may be lost;
+  - the models match the latest migration (no pending autogenerate diff).
+- **QA-03** **Frontend:** Vitest for logic (API client, number parsing and formatting, offline queue, export text, i18n completeness) and for decoding sample barcode images.
 - **QA-04** **End-to-end** tests in **Python (pytest-playwright)** against the built container, in **Chromium and WebKit** with an iPhone viewport, on every pull request. Covered flows:
   1. register via invite;
   2. login, refresh and logout;
-  3. create an ingredient from an injected barcode, with OFF mocked;
+  3. create an ingredient from a typed barcode, with OFF replaced by a fake server;
   4. create a meal and check its nutrition;
   5. copy another user's meal;
   6. build a list from meals with servings plus extra items, and check aggregation and category order;
@@ -505,15 +616,22 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   9. the privacy toggle hides a user;
   10. switch language between German and English;
   11. couple sharing: the partner sees and checks off a shared list.
-- **QA-05** E2E tests find elements by role, accessible name or `data-testid`, never by CSS classes, so the frontend can be restyled without breaking tests.
-- **QA-06** Before every release tag, a **manual checklist on a real iPhone** (about 10 minutes): camera scan, share to Notes, offline check-off and sync, Home Screen install, dark mode.
+
+  The tests also assert that no request leaves the app's origin (SEC-08). Browser limitations of the test setup (e.g. Secure cookies over plain HTTP in WebKit) are handled as described in plan Â§ 9 and covered by the manual check (QA-06).
+- **QA-05** E2E tests find elements by role, accessible name or test ID, never by CSS classes, so the frontend can be restyled without breaking tests.
+- **QA-06** Before every release tag, a **manual checklist on a real iPhone** (about 10 minutes):
+  - camera scan;
+  - share to Notes and invite sharing;
+  - offline and lie-fi check-off and sync;
+  - Home Screen install and staying logged in after a restart;
+  - dark mode.
 - **QA-07** **Linting and formatting** are enforced in CI:
   - backend: ruff (lint and format) and mypy;
   - frontend: eslint, prettier and `tsc`.
 
 ### 5.8 Licensing and repository (LIC)
 
-- **LIC-01** The project is licensed under **AGPL-3.0-only** (changed from GPL-3.0). All code so far is by the owner, so no consent from others is needed.
+- **LIC-01** The project is licensed under the **GNU AGPL v3** (changed from GPL-3.0); the exact variant is an open decision, see Â§ 8. All code so far is by the owner, so no consent from others is needed.
 - **LIC-02** The running app shows its version and links to the exact source commit (AGPL Â§ 13). Images are only built by CI from the public repository.
 - **LIC-03** Third-party licences are respected:
   - OFF data is ODbL (attribution shown; a derived database may only be shared under ODbL);
@@ -558,8 +676,20 @@ These are not in v2.0. The data model should not make them hard.
 | D-12 | Mac pulls backups; healthchecks.io dead-man's switch for alerts | no cloud storage needed; a dead Pi can't send its own alert |
 | D-13 | Pi follows the version line (`2.0`) with automatic rollback | hotfixes arrive automatically; migrations of feature versions are applied deliberately |
 | D-14 | E2E tests in Python | owner's language; the frontend developer only has to keep the test IDs stable |
-| D-15 | AGPL-3.0 | hosted modified copies must share their source |
+| D-15 | AGPL v3 | hosted modified copies must share their source |
 | D-16 | Open Food Facts API v3, â‰¤ 10 requests/min | v2 was deprecated in June 2026; OFF allows 15 product reads/min per IP |
+| D-17 | When a user is deleted, the lists they share with a partner move to the partner | accepted default D15 in the planning conversation; the partner keeps their shopping history |
+| D-18 | A meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
+| D-19 | "Shared with partner" switch: on = partner sees and edits; off = partner is treated like any other user for that list | privacy settings never hide from the partner, but an explicit per-list choice does |
+| D-20 | Retention 7 daily / 4 weekly / 6 monthly (â‰ˆ 17), on Pi and Mac alike | as agreed by the owner; 6-hourly backups only reduce data loss on the current day |
+
+## 8. Open decisions for the owner
+
+| # | Question | Proposed default |
+|---|---|---|
+| Q-1 | Licence variant: **AGPL-3.0-or-later** (the standard GNU wording, which allows future AGPL versions) or **AGPL-3.0-only**? | AGPL-3.0-or-later |
+
+Items that can only be settled on the real hardware are tracked as open points in [plan Â§ 15](plan.md#15-open-points-to-verify-during-implementation).
 
 ## Appendix A â€” Seed data
 

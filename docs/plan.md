@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 |
+| Status | Agreed baseline, 2026-09-26 (reviewed) |
 | Requirements | [`requirements.md`](requirements.md) (IDs such as `LIST-04` refer to it) |
 
 This document describes the architecture, the data model, how the code is organised, tested, released and operated, and the milestones in which v2.0 is built.
@@ -11,12 +11,12 @@ This document describes the architecture, the data model, how the code is organi
 
 ## 1. Principles
 
-1. **Risk first.** The iPhone-specific parts are tested on a real iPhone over Tailscale early (milestone M1), before features are built on top: HTTPS, Home Screen app, offline, camera and share sheet.
+1. **Risk first.** The iPhone-specific parts are tested on a real iPhone over Tailscale early (milestone M1), before features are built on top: HTTPS, Home Screen app, login persistence, offline, camera and share sheet.
 2. **Backend owns the logic.** Amounts, conversions, aggregation, rounding, nutrition and permissions live in Python and are tested there. The frontend displays and formats (AGG-01, MNT-02).
 3. **One contract between frontend and backend.** The contract is the OpenAPI description, and TypeScript types are generated from it (MNT-01).
 4. **Small, boring runtime.** The Pi runs one container (Python app plus the built frontend) and a few systemd timers. There are no extra services.
 5. **Everything scripted and tested.** This covers setting up a Pi, backup, restore, update and rollback. Nothing depends on remembering manual steps.
-6. **Public repo, no secrets.** No secrets are committed, and defaults are safe.
+6. **Public repo, no secrets.** Defaults are safe, and the Pi only runs verified images (SEC-12).
 
 ## 2. Architecture
 
@@ -26,8 +26,8 @@ flowchart LR
     UI["React app + service worker<br/>IndexedDB: list cache + offline outbox"]
   end
   subgraph Pi["Raspberry Pi 3 (Raspberry Pi OS Lite 64-bit)"]
-    TS["tailscaled + tailscale serve<br/>HTTPS :443 for mealmate.&lt;tailnet&gt;.ts.net"]
-    subgraph C["Docker: mealmate (non-root, 127.0.0.1:8080)"]
+    TS["tailscaled (tag:mealmate) + tailscale serve<br/>HTTPS :443 for mealmate.&lt;tailnet&gt;.ts.net"]
+    subgraph C["Docker: mealmate (host network, 127.0.0.1:8080, non-root)"]
       API["FastAPI (uvicorn, 1 worker)<br/>/api/* + static frontend"]
       DB[("SQLite (WAL)<br/>/data/mealmate.db")]
       MEDIA[("/data/media<br/>photos + thumbnails")]
@@ -35,10 +35,10 @@ flowchart LR
     TIMERS["systemd timers<br/>backup · update · heartbeat · disk · OFF refresh · cleanup"]
     BK[("/srv/mealmate/backups")]
   end
-  MAC["Owner's Mac<br/>launchd hourly pull"]
+  MAC["Owner's Mac<br/>launchd hourly pull (shields-up)"]
   HC["healthchecks.io<br/>email / push"]
   OFF["Open Food Facts API"]
-  GH["GitHub Actions → ghcr.io"]
+  GH["GitHub Actions → ghcr.io<br/>(signed provenance)"]
 
   UI -- "Tailscale (WireGuard)" --> TS --> API
   API --> DB & MEDIA
@@ -47,13 +47,21 @@ flowchart LR
   TIMERS -- pings --> HC
   MAC -- "rsync over SSH (read-only key)" --> BK
   MAC -- ping --> HC
-  GH -- "docker pull (version line)" --> Pi
+  GH -- "verified docker pull (version line)" --> Pi
 ```
 
-**Request path:** iPhone → Tailscale tunnel → `tailscale serve` (TLS) → `127.0.0.1:8080` → FastAPI.
-- FastAPI serves `/api/*`.
-- For every other path it serves the built frontend (`index.html` as the fallback for client-side routes).
-- It sends strong cache headers for hashed assets and no-cache for `index.html` and the service worker.
+**Request path:**
+- iPhone → Tailscale tunnel → `tailscale serve` (TLS) → `127.0.0.1:8080` → FastAPI.
+- `tailscale serve` always sets `X-Forwarded-For` (the client's tailnet IP) and `X-Forwarded-Proto: https`.
+- The container uses **host networking** and binds to `127.0.0.1`, so the peer really is `127.0.0.1`, and uvicorn is configured to trust forwarded headers only from there (SEC-05, PLT-05).
+- FastAPI serves `/api/*`, and for every other path the built frontend (`index.html` as the fallback for client-side routes).
+- Cache headers:
+
+  | Response | `Cache-Control` |
+  |---|---|
+  | `/api` JSON | `no-store` |
+  | Hashed assets | `immutable` |
+  | `index.html` and the service worker | `no-cache` |
 
 **Why one container:**
 - The frontend is a static build, so a separate web server on the Pi would only cost RAM.
@@ -67,19 +75,20 @@ flowchart LR
 MealMate/
 ├── backend/
 │   ├── pyproject.toml, uv.lock
-│   ├── alembic.ini, alembic/versions/
+│   ├── alembic.ini, alembic/ (env.py with FK-safe SQLite setup, versions/)
 │   ├── app/
 │   │   ├── main.py            # app factory, middleware, static frontend
-│   │   ├── core/              # config, security (JWT, hashing), errors (ErrorCode enum,
-│   │   │                      # envelope, handlers), rate limiting, logging, headers
-│   │   ├── db/                # engine (SQLite pragmas), session, base, ids (UUIDv7)
+│   │   ├── core/              # config, keys (HKDF), security (JWT, hashing), errors
+│   │   │                      # (ErrorCode enum, envelope, handlers), rate limiting,
+│   │   │                      # logging, security headers
+│   │   ├── db/                # engines (write: BEGIN IMMEDIATE, read), session, base, ids
 │   │   ├── models/            # SQLAlchemy models, one module per aggregate
 │   │   ├── schemas/           # Pydantic request/response models (= the API contract)
 │   │   ├── repositories/      # queries only, no business rules
-│   │   ├── services/          # business rules + permission checks
-│   │   ├── domain/            # pure logic, no DB: units, nutrients registry, nutrition,
-│   │   │                      # aggregation, rounding, text normalisation
-│   │   ├── integrations/      # Open Food Facts client
+│   │   ├── services/          # business rules + permission checks (access.py)
+│   │   ├── domain/            # pure logic, no I/O: units, nutrients registry, nutrition,
+│   │   │                      # aggregation, rounding, needs-more, text normalisation
+│   │   ├── integrations/      # Open Food Facts client + validation
 │   │   ├── media/             # image processing, signed URLs
 │   │   ├── api/               # routers (thin: parse → service → schema)
 │   │   ├── cli.py             # `mealmate …` commands (Typer)
@@ -87,9 +96,10 @@ MealMate/
 │   └── tests/
 │       ├── unit/              # domain/, services with fakes
 │       ├── api/               # HTTP-level tests against a temp SQLite DB
-│       └── migrations/        # upgrade/downgrade chain, no pending autogenerate diff
+│       └── migrations/        # empty and populated upgrade/downgrade, no autogenerate diff
 ├── frontend/
 │   ├── package.json, vite.config.ts, tsconfig*.json, eslint/prettier config
+│   ├── README.md              # handoff: structure, conventions, test IDs, type generation
 │   ├── index.html, public/ (icons, manifest assets)
 │   └── src/
 │       ├── api/               # generated/schema.ts (generated), client.ts, errors.ts
@@ -99,18 +109,20 @@ MealMate/
 │       ├── components/ui/     # shadcn/ui components (copied source)
 │       ├── components/        # shared app components
 │       ├── i18n/              # de.json, en.json, index.ts, format.ts
+│       ├── testIds.ts         # all data-testid values in one place
 │       ├── lib/               # small helpers
 │       ├── sw/                # service worker (Workbox, injectManifest)
 │       └── styles/            # Tailwind entry + design tokens (light/dark)
-├── e2e/                       # pytest-playwright suite (Python)
+├── e2e/                       # pytest-playwright suite (Python) + fake_off/ (sidecar)
 ├── deploy/
 │   ├── compose.yml            # production compose for the Pi
 │   ├── pi/                    # setup.sh, restore.sh, backup.sh, update.sh, heartbeat.sh,
-│   │                          # disk-check.sh, systemd/*.service|*.timer, env.example
-│   └── mac/                   # install-backup-pull.sh, pull.sh, launchd plist template
+│   │                          # disk-check.sh, mm-compose, systemd/*, env.example
+│   └── mac/                   # install-backup-pull.sh, pull.sh, prune.py, launchd template
 ├── compose.dev.yml            # dev: backend (reload) + Vite dev server
+├── Makefile                   # make dev | test | e2e | openapi | lint
 ├── Dockerfile                 # multi-stage production image
-├── docs/                      # requirements, plan, operations runbook, user guides
+├── docs/                      # requirements, plan, operations runbook, guides, checklists
 ├── .github/                   # workflows, dependabot.yml, PR template
 ├── LICENSE (AGPL-3.0), README.md, CONTRIBUTING.md, SECURITY.md
 ```
@@ -119,13 +131,13 @@ MealMate/
 
 | Area | Choice | Notes |
 |---|---|---|
-| Runtime | Python **3.13** | Verify arm64 wheels in M0 and pick the newest version with full wheel coverage (O-8) |
+| Runtime | Python **3.14** (`python:3.14-slim`, pinned by digest) | `uuid.uuid7()` in the stdlib; aarch64 wheels available for all main dependencies (confirmed in M0, O-8) |
 | Web | FastAPI, uvicorn (1 worker) | Single process, as needed for SQLite and in-memory rate limiting |
-| DB | SQLite (WAL), SQLAlchemy 2 (async, aiosqlite), Alembic (`render_as_batch`) | Pragmas: `foreign_keys=ON`, `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` |
+| DB | SQLite (WAL), SQLAlchemy 2 (`sqlalchemy[asyncio]`, aiosqlite), Alembic (`render_as_batch`) | Pragmas: `foreign_keys=ON` (app only, see § 5.1), `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` |
 | Validation / config | Pydantic v2, pydantic-settings (`MEALMATE_` prefix) | |
 | Auth | PyJWT (access), opaque refresh tokens, bcrypt | |
 | HTTP client | httpx | OFF client; mocked with respx in tests |
-| Images | Pillow | Re-encode, strip metadata, 1600 px + 400 px thumbnail |
+| Images | Pillow | Orientation fix, re-encode, strip metadata, 1600 px + 400 px thumbnail |
 | CLI | Typer | `mealmate …` inside the container |
 | Tooling | uv, ruff, mypy, pytest, pytest-asyncio, Hypothesis, coverage | |
 | Frontend | React 19, TypeScript, Vite, react-router | |
@@ -133,29 +145,40 @@ MealMate/
 | Server state | TanStack Query | |
 | API client | openapi-typescript + openapi-fetch | Types generated from `openapi.json` |
 | i18n | i18next + react-i18next, `Intl` for formats | |
-| PWA / offline | vite-plugin-pwa (Workbox, injectManifest), idb (IndexedDB) | |
-| Barcode | zxing-wasm (lazy-loaded) | EAN-13/8, UPC-A/E; typed-in barcode as fallback |
-| Frontend tests | Vitest, Testing Library, eslint, prettier, `tsc` | |
-| E2E | pytest-playwright (Chromium + WebKit, iPhone device profiles), axe-core | |
+| PWA / offline | vite-plugin-pwa (Workbox, injectManifest), idb (IndexedDB), `uuid` (v7 for client IDs) | |
+| Barcode | zxing-wasm, lazy-loaded, **wasm served by the app** | EAN-13/8, UPC-A/E; typed-in barcode as fallback |
+| Frontend tests | Vitest, Testing Library, fake-indexeddb, eslint, prettier, `tsc` | |
+| E2E | pytest-playwright (pinned; Chromium + WebKit, iPhone device profiles), axe-core | |
 | Node | 24 LTS | |
-| CI/CD | GitHub Actions, ghcr.io, native arm64 runners (`ubuntu-24.04-arm`) | |
+| CI/CD | GitHub Actions (SHA-pinned), ghcr.io, native arm64 runners (`ubuntu-24.04-arm`), Sigstore attestations | |
 
 ## 5. Backend design
 
-### 5.1 Layers
+### 5.1 Layers, transactions and CPU work
 
-`api/` (HTTP only) → `services/` (rules, permissions, transactions) → `repositories/` (queries) → `models/`.
-- `domain/` is pure Python without I/O and holds all calculations, so it can be tested exhaustively.
-- Routers never touch the ORM directly.
-- Every endpoint declares a `response_model` and a stable `operation_id`, both needed for type generation.
+- **Layering:** `api/` (HTTP only) → `services/` (rules, permissions, transactions) → `repositories/` (queries) → `models/`.
+  - `domain/` is pure Python without I/O and holds all calculations, so it can be tested exhaustively.
+  - Routers never touch the ORM directly.
+  - Every endpoint declares a `response_model` and a stable `operation_id`, both needed for type generation.
+- **Write transactions use `BEGIN IMMEDIATE`.** The write engine disables the driver's own transaction handling (`isolation_level = None` in a `connect` event) and emits `BEGIN IMMEDIATE` in a `begin` event. The write lock is then held from the first read to `COMMIT`, which makes read-then-write rules atomic: one couple per user, last-write-wins on check state, version increments. `busy_timeout` covers waiting for the lock.
+  - Read-only requests use a separate session in the default deferred mode.
+  - Write transactions stay short, with no network I/O inside (e.g. OFF calls happen before the transaction).
+  - `shopping_lists.version` is incremented atomically (`SET version = version + 1`).
+  - A test sends 20 parallel op batches: all succeed and none are lost (QA-01).
+- **CPU-heavy work** (bcrypt, the Pillow pipeline) runs via `anyio.to_thread.run_sync`. Image processing runs behind a semaphore of 1, so it never blocks the event loop (PERF-05).
+- **Alembic on SQLite:** batch migrations rebuild tables (create a copy → drop the original → rename). With `foreign_keys=ON`, the drop would fire `ON DELETE CASCADE` / `SET NULL` or fail on `RESTRICT`. Therefore:
+  - the app's FK pragma listener is attached to the **app engine instance only**;
+  - `alembic/env.py` uses its own engine that sets `PRAGMA foreign_keys=OFF` in its `connect` event, outside any transaction;
+  - after migrating it runs `PRAGMA foreign_key_check` and exits non-zero (the entrypoint then keeps the pre-migration snapshot, OPS-06) if any rows come back;
+  - migrations are tested against a DB filled with demo data (QA-02).
 
 ### 5.2 IDs, time and text normalisation
 
-- **Primary keys:** UUIDv7 strings for all entities. Being sortable helps; being client-generatable is needed for offline extra items (SYNC-03).
+- **Primary keys:** UUIDv7 strings (`uuid.uuid7()`). The server accepts any valid UUID for client-supplied IDs (offline extra items, op IDs) and never relies on their embedded timestamp.
 - **Timestamps:** UTC in the database.
 - **`*_norm` columns:** lowercase, `ä→ae ö→oe ü→ue ß→ss`, accents stripped, whitespace collapsed. They are used for uniqueness and search (ING-03, REF-04, ACC-05).
 
-### 5.3 Errors (I18N-03)
+### 5.3 Errors and headers (I18N-03, SEC-06)
 
 - **Envelope:**
 
@@ -166,18 +189,40 @@ MealMate/
 - Custom handlers make `HTTPException`, `RequestValidationError` (422), rate-limit (429) and unexpected (500) responses all use this envelope.
 - `ErrorCode` is one `StrEnum`, exported in OpenAPI.
 - A frontend test checks that every code has `de` and `en` translations.
+- **CSP**, sent as a header on every response:
 
-### 5.4 Authentication and sessions (ACC, SEC-03)
+  ```
+  default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';
+  img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; manifest-src 'self';
+  object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
+  ```
 
-- **Login:** `POST /api/auth/login` returns `{access_token, expires_in, user}` and sets the refresh cookie `mm_refresh`: `HttpOnly; Secure; SameSite=Strict; Path=/api/auth`, 90 days.
-- **Refresh:** `POST /api/auth/refresh` requires the cookie and the header `X-MealMate-Client: web`, a simple CSRF guard.
-  - The refresh token **rotates** on each use.
-  - Reusing an old refresh token revokes the whole session ("token family").
-- **Access tokens:** JWT with HS256, valid 15 min, containing `sub`, `sid`, `role` and `iat`, and held only in memory.
-- **Revocation:** the server checks for every request that the session still exists and is not revoked. This is one indexed lookup, cheap at this scale, and it makes "log out all devices" and deactivation take effect immediately.
-- **Passwords:** bcrypt with a cost factor tuned in M2 to about 250–500 ms on the Pi 3 (O-7). There is a length check of ≤ 72 bytes and a common-password list (top 10k, bundled).
-- **Invite and reset codes:** 32 random bytes, base64url, stored as SHA-256. A link opens the form; only `POST /api/auth/join` or `/api/auth/reset` consumes the code (ACC-04).
-- **Login throttling** (ACC-11): an in-memory sliding window per `username_norm` and per client IP, with an exponential delay after 5 failures (cap 60 s) and no lockout. The client IP comes from `X-Forwarded-For`, trusted only when the peer is `127.0.0.1` (O-3).
+  - `'wasm-unsafe-eval'` is required for the barcode decoder.
+  - `style-src 'unsafe-inline'` is needed because Radix and the toast library inject `<style>` elements at runtime; scripts stay strict.
+  - There are no inline scripts; this also rules out an inline theme script and inline PWA registration.
+- **Other headers:** `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` (when served via HTTPS).
+- **Logging:** uvicorn runs with `--no-access-log`. App middleware logs the method, the **route template** (not the concrete path), status and duration, so codes and signed-URL parameters never reach the logs (SEC-10).
+
+### 5.4 Authentication and sessions (ACC, SEC-03, SEC-10)
+
+- **Keys:** `SECRET_KEY` is expanded with HKDF into separate keys for JWT signing, media URL signing and token/code hashing.
+- **Rotation:** `setup.sh --rotate-secret` writes a new key. All sessions, open codes and media URLs become invalid, so everyone logs in once.
+- **Login:** `POST /api/auth/login` returns `{access_token, expires_in, user}` and sets the refresh cookie `mm_refresh`: `HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=90d`.
+- **Refresh:** `POST /api/auth/refresh` requires the cookie and the header `X-MealMate-Client: web` (CSRF guard). Refresh tokens are rows in `session_tokens` (stored as HMAC):
+  - An **active** token yields a new token, and the presented one is marked `superseded_at`.
+  - A token superseded **less than 60 s ago** (lost response, parallel refresh) also yields a new token. Nothing is revoked, and its sibling tokens stay valid.
+  - A token superseded **longer ago** means reuse: the whole session is revoked.
+  - Tokens of a session that go unused past the idle limit (90 days) expire.
+- **Home Screen fork:** a Home Screen app that starts for the first time (empty IndexedDB) and carries a valid cookie, because iOS may have copied it from Safari (O-10), calls `POST /api/auth/refresh` with `{"fork": true}`. This creates a **new, independent session** for the same user instead of rotating the shared token, so Safari and the Home Screen app can't revoke each other.
+- **Access tokens:** JWT with HS256, valid 15 min, containing `sub`, `sid` and `iat`, and held only in memory.
+- **Per-request check:** one indexed lookup loads the session and user and checks that the session is not revoked, the user is active, and the role. The role is **never** taken from the token, so demoting, deactivating or "log out all devices" take effect immediately.
+- **Passwords:** bcrypt with a cost factor tuned in M2 to about 250–500 ms on the Pi 3 (O-7), run in a thread. There is a length check of ≤ 72 bytes and a common-password list (top 10k, bundled).
+- **Invite and reset codes:** 32 random bytes, base64url, stored as HMAC.
+  - Links carry the code in the **fragment** (`/join#code`, `/reset#code`).
+  - The frontend checks it with `POST /api/auth/codes/check` (doesn't consume).
+  - Only `POST /api/auth/join` or `/api/auth/reset` consumes it (ACC-04).
+- **Login throttling** (ACC-11): an in-memory sliding window per `username_norm` and per `request.client.host` (the real tailnet IP, § 2), with an exponential delay after 5 failures (cap 60 s) and no lockout.
+- **Admin activity:** every admin action writes an `admin_events` row (ADM-01, ADM-04). A reset writes a notice the affected user sees (ACC-10).
 
 ### 5.5 Authorization (SEC-04)
 
@@ -187,20 +232,21 @@ All permission checks live in one module, `services/access.py`:
 |---|---|---|
 | Meal | owner · partner · everyone if owner.meals_public | owner only |
 | List | owner · partner if `shared_with_partner` · everyone (read-only) if owner.lists_public | owner · partner if shared (not delete/share switch) |
+| Meal *embedded in a list* (VIS-06) | if the viewer may view the meal itself (rule above): full details; otherwise "Private meal (N servings)" without name, photo, link or sources | n/a |
 | Ingredient / product | everyone | everyone; delete/merge: admin |
 | Photo | same as its meal (checked when the signed URL is issued) | owner |
-| Admin endpoints | admin | admin (never private meals/lists) |
+| Admin endpoints | admin (active) | admin; never private meals/lists; no self-deactivation/deletion; ≥ 1 active admin |
 
-Each rule has API tests, including negative cases.
+Each rule has API tests, including negative cases and the switch combinations in CPL-02/CPL-04.
 
 ### 5.6 Units, nutrition and aggregation (`domain/`)
 
 - **Units:**
   - `Unit` enum with its kind: `g`/`kg` are mass; `ml`/`l`/`tbsp`/`tsp` are volume; `piece` is count.
   - Factors to the base unit of each kind: g, ml, piece.
-  - `convert(amount, unit, to_base, ingredient)` uses `piece_weight_g` and `density_g_per_ml`. It returns the value plus an `estimate` flag (spoons of g-based ingredients without density, NUT-05), or "not convertible".
+  - `convert(amount, unit, to_base, attrs)` uses the ingredient attributes (`base_unit`, `piece_weight_g`, `density_g_per_ml`), which are either live or from a frozen snapshot. It returns the value plus an `estimate` flag (NUT-05), or "not convertible".
 - **Nutrients registry:**
-  - `NUTRIENTS = [kcal, protein, carbs, sugar, fat]`, each with its OFF field names (`energy-kcal_100g`, `proteins_100g`, `carbohydrates_100g`, `sugars_100g`, `fat_100g`) and a display unit.
+  - `NUTRIENTS = [kcal, protein, carbs, sugar, fat]`, each with its OFF field names (`energy-kcal_100g`, `proteins_100g`, `carbohydrates_100g`, `sugars_100g`, `fat_100g`), a plausible range and a display unit.
   - Nullable columns on `ingredients` (manual values) and `products` are generated from it, and so are the schema fields.
   - Adding a nutrient: add it to the registry, run `alembic revision --autogenerate`, add translation keys, and add OFF mapping tests (MNT-06).
 - **Ingredient nutrition** (NUT-02), per field:
@@ -211,12 +257,12 @@ Each rule has API tests, including negative cases.
   - it collects `missing` entries (ingredient + field or "no amount"/"not convertible") and `estimate` flags;
   - it returns the totals per meal and per serving.
 - **Aggregation** (AGG), `aggregate(list_state) -> [Line]`:
-  1. **Sources.** In `draft`, each list meal takes its rows from the live meal. In `shopping`/`done`, it uses its frozen `list_meal_ingredients`.
-  2. Each row gets factor = `list_servings / meal_servings`, and becomes a part `(ingredient, amount × factor, unit, source)`.
-  3. Linked extra items become parts of their ingredient. Free-text extra items become their own lines.
+  1. **Sources.** Each list meal contributes rows. If it is live (draft and not detached), the rows come from the current meal with the ingredients' live attributes. If it is frozen (shopping/done, or detached, LIST-15), they come from `list_meal_ingredients` with the attributes and category captured at freezing time.
+  2. Each row gets factor = `list_servings / meal_servings`, and becomes a part `(ingredient, amount × factor, unit, attrs, source)`.
+  3. Linked extra items become parts of their ingredient (frozen attributes if added while shopping). Free-text extra items become their own lines.
   4. **Grouping.** Parts are grouped by line key: `i:<ingredient_id>` for ingredients, `x:<extra_item_id>` for free text.
-  5. **Totals.** If all parts with an amount can be converted to the ingredient's base unit, there is one total. Otherwise there is one segment per unit kind ("500 g + 2 Stk."). Parts without an amount set `has_unspecified`.
-  6. **Display rounding** (AGG-04) produces `display: [{value, unit}]`, while the exact `total_base` is kept.
+  5. **Totals.** If all parts with an amount can be converted to the base unit, there is one total. Otherwise there is one **segment** per unit kind (`mass_g`, `volume_ml`, `count`), e.g. "500 g + 2 Stk.". Parts without an amount set `has_unspecified`.
+  6. **Display rounding** (AGG-04) produces `display: [{value, unit}]`, while the exact segment totals are kept.
   7. **Check state** is applied from `list_line_states` (§ 5.7). Lines hidden in the draft (LIST-07) are returned with `hidden: true`.
   8. **Sort** by category `sort_order`, then name (normalised). The output is deterministic (AGG-05).
 - **Tests:** table-driven tests for every rule, plus Hypothesis properties:
@@ -225,60 +271,89 @@ Each rule has API tests, including negative cases.
   - rounding never shows 0 for a positive amount;
   - pieces never round down.
 
-### 5.7 Check state, freezing and editing while shopping
+### 5.7 Freezing, detaching and check state
 
-- **Start shopping** (LIST-11) runs in one transaction:
-  1. copy each list meal's current rows into `list_meal_ingredients`;
-  2. store `meal_servings_snapshot` and the meal name;
-  3. create a `list_line_states` row for every current line key;
-  4. set `status=shopping`.
-- **A meal added while shopping** is frozen immediately.
-- **Checking a line** stores `checked`, `checked_at` (client time), `checked_by` and `checked_total_base` (the line's total at that moment, if it can be converted).
-- **"Needs more" (LIST-12)** is computed when the list is read: if a checked line's current total is greater than `checked_total_base`, the line is reported as unchecked with `delta = current − checked_total_base`. Checking it again updates `checked_total_base`. Nothing needs to be rewritten when the partner adds meals.
+- **Freeze a list meal:** copy the meal's current rows into `list_meal_ingredients`, each with `ingredient_name_snapshot`, `base_unit_snapshot`, `piece_weight_g_snapshot`, `density_snapshot` and `category_id_snapshot`, and set `frozen_at`. The meal's name and servings are stored on `list_meals` as soon as it is added.
+- **Start shopping** (LIST-11), in one transaction:
+  1. freeze every live list meal;
+  2. create a `list_line_states` row for every current line key;
+  3. set `status=shopping` and `shopping_started_at`.
+
+  A meal or linked extra item added while shopping is frozen or snapshotted immediately.
+- **Detach** (LIST-15) = freeze the list meal, set `meal_id = NULL` and `detached_reason` (`deleted` | `unavailable`).
+  - **Triggers:**
+    - meal deletion;
+    - the owner's `meals_public` switched off: for lists of users who are neither the owner nor the partner;
+    - couple ended: for the ex-partner's meals on each other's lists;
+    - user deletion (before the cascade).
+  - It runs in the same write transaction as the trigger, over all not-yet-frozen list meals affected.
+- **Checking a line** stores:
+  - `checked`, `checked_at` (client time) and `checked_by`;
+  - `checked_snapshot`: a JSON object with the segment totals (`mass_g`, `volume_ml`, `count`), `has_unspecified`, and for free-text lines the `text` and `amount_text` at that moment.
+- **"Needs more" (LIST-12)** is computed when the list is read. A checked line is reported as unchecked if any of these holds against `checked_snapshot`:
+  - a segment total grew; the difference is returned per grown segment ("+300 g", "+2 Stk.");
+  - a new segment or an amount-less part appeared;
+  - a free-text item's text or amount changed; this is returned as `changed`.
+
+  Checking it again replaces the snapshot. Nothing needs to be rewritten when the partner adds meals.
 - **"New" lines** are lines in `shopping` state that have no `list_line_states` row yet.
-- Every change to a list increments `shopping_lists.version` (SYNC-08).
+- Every change to a list increments `shopping_lists.version`. The version orders ops; polling uses the ETag (§ 5.8).
 
-### 5.8 Offline operations protocol (SYNC)
+### 5.8 Offline operations protocol and polling (SYNC)
 
-- **Endpoint:** `POST /api/lists/{id}/ops`, body `{"ops": [{op_id, type, at, payload}]}`. Ops are processed in order in one transaction.
+- **Endpoint:** `POST /api/lists/{id}/ops`, body `{"ops": [{op_id, type, at, payload}]}`. Ops are processed in order in one `BEGIN IMMEDIATE` transaction.
 
   | `type` | Payload | Rule |
   |---|---|---|
-  | `line.check` | `{line_key, checked}` | Last write wins by `at` (ties: higher `op_id`). `at` is clamped to at most server time + 5 min. |
-  | `extra.add` | `{extra_id, text, amount_text?, category_key?}` | `extra_id` is created by the client; a duplicate id means already applied |
+  | `line.check` | `{line_key, checked}` | Last write wins by `at` (ties: higher `op_id`). `at` is clamped to at most server time + 5 min. On a `done` list: applied if `at ≤ finished_at` (SYNC-06), otherwise rejected with `list.done` |
+  | `extra.add` | `{extra_id, text, amount_text?, category_key?}` | `extra_id` is created by the client (UUIDv7); a duplicate id means already applied |
   | `extra.update` | `{extra_id, text, amount_text?}` | Ignored if the item was deleted (delete wins) |
   | `extra.delete` | `{extra_id}` | Soft delete (tombstone) |
   | `list.finish` | `{}` | No-op if already `done` |
 
-- **Idempotency:** `processed_ops(op_id)` makes every op idempotent. The response lists `applied | duplicate | rejected(code)` per op, plus the new list detail with its `version`.
+- **Idempotency:** `processed_ops(op_id)` makes every op idempotent. The response lists `applied | duplicate | rejected(code)` per op, plus the new list detail.
 - **Rejected ops** (list deleted, access lost) come back with a code. The client shows them once and drops them.
 - **The online UI uses the same endpoint** for these actions, so there is one code path to test.
-- **Polling:** `GET /api/lists/{id}` returns an `ETag: "v<version>"`, and `If-None-Match` gives `304`.
+- **Polling:** `GET /api/lists/{id}` returns a weak ETag. It is a SHA-256 over the serialized response, which is specific to the viewer, and `If-None-Match` gives `304`.
+  - Hashing the response, rather than using `version`, also catches changes that don't touch the list row: meal edits on drafts, ingredient wiki edits, category order, display names, visibility changes.
+  - Aggregating ≤ 150 lines per poll is cheap; this is verified by the perf gate in M5b.
 
 ### 5.9 Open Food Facts integration (BAR)
 
-- **Client:** `integrations/off.py`, using API **v3** with a pinned minor version (O-4) and `fields=` limited to what we store. It sends `User-Agent: MealMate/<version> (https://github.com/Bublemann/MealMate)` (configurable).
+- **Client:** `integrations/off.py`, using API **v3** with a pinned minor version (O-4) and `fields=` limited to what we store.
+  - The base URL comes from `MEALMATE_OFF_BASE_URL`; in E2E it points to a fake server.
+  - It sends `User-Agent: MealMate/<version> (https://github.com/Bublemann/MealMate)` (configurable).
+  - httpx uses a timeout of 10 s and a response cap of 1 MB.
+- **Validation** (BAR-10) with a Pydantic model:
+  - strings are trimmed to name ≤ 200, brand ≤ 100 and quantity ≤ 50 characters;
+  - control and bidi characters are removed;
+  - nutrients must be finite and within the registry range (e.g. 0–100 g per 100 g, kcal ≤ 900), otherwise they are dropped.
 - **Rate limit:** a global token bucket of 10 requests/min. Excess lookups wait up to 10 s, then return `off.busy`, and the user can retry or enter the values by hand.
 - **Lookup flow:** `GET /api/products/lookup?barcode=`:
   1. validate the check digit;
   2. look in the own database;
   3. if not found, ask OFF;
-  4. return a *proposal* (not saved) with name (in the user's language, else the generic name), brand, quantity, `product_quantity` and nutrients.
+  4. return a *proposal* (not saved) with name (in the user's language, else the generic name), brand, quantity, `product_quantity`, nutrition basis and nutrients.
 
-  Saving happens in `POST /api/products` with `ingredient_id`.
+  Saving happens in `POST /api/products` with `ingredient_id`, and requires that the nutrition basis matches the ingredient's base unit (ING-04).
 - **Refresh:**
-  - `mealmate jobs off-refresh` runs nightly and refreshes products with `fetched_at` older than `MEALMATE_OFF_REFRESH_DAYS`, spread out under the rate limit.
+  - `mealmate jobs off-refresh` runs nightly and refreshes products with `fetched_at` older than `MEALMATE_OFF_REFRESH_DAYS`, spread out under the rate limit, with each write in its own short transaction.
   - Opening or scanning such a product triggers a background refresh.
   - Fields that were not user-edited update silently. User-edited fields with different values are stored in `pending_update` (BAR-06).
   - Apply and Ignore endpoints clear it. Ignore also remembers the ignored OFF `last_modified`, so the same values aren't suggested again.
 
 ### 5.10 Media (MEAL-04, SEC-07, VIS-05)
 
-- **Upload:** `PUT /api/meals/{id}/photo`, multipart.
-  - The type is checked with Pillow (JPEG/PNG/WebP), with a maximum of 10 MB and 40 megapixels.
-  - The image is re-encoded to WebP: 1600 px on the long edge (q≈80) plus a 400 px thumbnail. Re-encoding drops EXIF including GPS.
-  - Files are stored as `/data/media/<random-uuid>.webp`.
-- **Delivery:** the meal response contains **signed URLs** (`/api/media/<key>?exp=…&sig=…`, HMAC with a key derived from `SECRET_KEY`, 24 h). They work in `<img>` tags without an `Authorization` header, and are only issued after the view check.
+- **Upload:** `PUT /api/meals/{id}/photo`, multipart, rate-limited per user. Processing happens in a thread behind a semaphore of 1:
+  1. `Image.open(f, formats=["JPEG","PNG","WEBP"])`, at most 10 MB and `MAX_IMAGE_PIXELS` = 24 MP;
+  2. `draft()` for JPEG to cut decode memory;
+  3. `ImageOps.exif_transpose()` to rotate the image upright;
+  4. re-encode to WebP (1600 px on the long edge, q≈80, plus a 400 px thumbnail), which drops all metadata including GPS;
+  5. store as `/data/media/<random-uuid>.webp`.
+- **Delivery:** meal responses contain **signed URLs**: `/api/media/<key>?exp=…&sig=…`, HMAC-signed.
+  - The expiry is rounded to the next full hour, so URLs are cacheable, with a lifetime of up to 1 h.
+  - They work in `<img>` tags without an `Authorization` header, and are only issued after the view check.
+  - The response header is `Cache-Control: private, max-age=3600`.
 - **Copies:** copying a meal duplicates its files.
 - **Cleanup:** `mealmate jobs cleanup` removes orphaned files.
 
@@ -286,23 +361,23 @@ Each rule has API tests, including negative cases.
 
 | Command | Purpose |
 |---|---|
-| `create-admin` | Interactive first admin (ACC-12) |
-| `reset-link <username>` | Print a reset link (last-admin recovery) |
-| `db upgrade` | Snapshot the DB if migrations are pending (keep last 3), then `alembic upgrade head` (OPS-06). Used by the entrypoint |
+| `create-admin [--username U --password-stdin]` | First admin, interactive or non-interactive (ACC-12; tests) |
+| `reset-link <username>` | Print a reset link and reactivate the account (last-admin recovery) |
+| `db upgrade` | Snapshot the DB to `pre-migrate/` if migrations are pending (keep last 3), then run the migrations (§ 5.1). Used by the entrypoint |
 | `backup-db <path>` | Consistent snapshot via the SQLite backup API plus `PRAGMA integrity_check` (OPS-01) |
-| `verify-backup <path>` | Integrity check of a snapshot (monthly test restore, OPS-07) |
-| `jobs off-refresh` · `jobs cleanup` | Background jobs, called by systemd timers. Cleanup removes expired codes, ops older than 30 days, orphaned media and expired sessions |
+| `jobs off-refresh` · `jobs cleanup` | Background jobs, called by systemd timers. Cleanup removes expired codes, ops older than 30 days, expired session tokens and orphaned media |
 | `export-openapi <path>` | Writes `openapi.json` without starting a server (for type generation) |
-| `seed-demo` | Demo users, a couple, ingredients, meals and lists for development (refuses to run if real users exist) |
+| `seed-demo` | Demo users (admin, a couple, a single user), ingredients with products, meals with photos, drafts, a shopping list and history. Refuses to run if real users exist |
 
 ### 5.12 Configuration (`MEALMATE_` environment variables)
 
 | Variable | Default | Notes |
 |---|---|---|
-| `SECRET_KEY` | **none (required)** | Used for JWT signing, media URL signing and code hashing (pepper) |
-| `DATA_DIR` | `/data` | Holds `mealmate.db`, `media/`, `pre-migrate/`, `status/` |
+| `SECRET_KEY` | **none (required)** | Expanded with HKDF (§ 5.4) |
 | `PUBLIC_URL` | none (required in prod) | e.g. `https://mealmate.tail1234.ts.net`, used to build invite/reset links |
-| `TRUSTED_PROXIES` | `127.0.0.1` | Only these may set `X-Forwarded-For` |
+| `DATA_DIR` | `/data` | Holds `mealmate.db`, `media/`, `pre-migrate/`, `status/` |
+| `COOKIE_SECURE` | `true` | May only be `false` when `PUBLIC_URL` is a loopback address (E2E, § 9) |
+| `OFF_BASE_URL` | `https://world.openfoodfacts.org` | |
 | `OFF_REFRESH_DAYS` | `30` | |
 | `OFF_USER_AGENT_CONTACT` | repo URL | |
 | `INVITE_TTL_DAYS` / `RESET_TTL_HOURS` | `7` / `24` | |
@@ -310,7 +385,10 @@ Each rule has API tests, including negative cases.
 | `API_DOCS_ENABLED` | `false` | `true` in dev |
 | `LOG_LEVEL` | `INFO` | JSON logs to stdout |
 
-Host-level scripts read `/srv/mealmate/.env` as well: `IMAGE_TAG` (e.g. `2.0`) and `HC_HEARTBEAT_URL`, `HC_BACKUP_URL`, `HC_UPDATE_URL`, `HC_DISK_URL`.
+- **Uvicorn** is configured through `UVICORN_*` variables. The image default is `UVICORN_HOST=0.0.0.0`, which CI and E2E need with a port mapping. The Pi's compose file sets `UVICORN_HOST=127.0.0.1`, and host networking must never bind `0.0.0.0` (§ 11.1). `--forwarded-allow-ips 127.0.0.1` is fixed.
+- **Host-only variables** in `/srv/mealmate/.env` (never passed into the container):
+  - `IMAGE_TAG` (e.g. `2.0-pre`, later `2.0`);
+  - `HC_HEARTBEAT_URL`, `HC_BACKUP_URL`, `HC_UPDATE_URL`, `HC_DISK_URL`.
 
 ## 6. Data model
 
@@ -318,31 +396,43 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `users` | `username`, `username_norm` (unique), `display_name`, `display_name_norm` (unique), `password_hash`, `role` (`user`/`admin`), `language` (`de`/`en`), `is_active`, `meals_public`, `lists_public`, `meal_filter_hidden` (JSON list of user ids), `last_seen_at`, `password_changed_at` | |
-| `sessions` | `user_id` FK cascade, `family_id`, `token_hash` (unique), `last_used_at`, `expires_at`, `revoked_at`, `user_agent` | Refresh-token rotation |
-| `one_time_codes` | `kind` (`invite`/`reset`), `code_hash` (unique), `created_by` FK set null, `target_user_id` FK cascade (reset), `expires_at`, `used_at`, `used_by` FK set null, `revoked_at` | |
-| `couples` | `requester_id` FK cascade, `addressee_id` FK cascade, `status` (`pending`/`accepted`), `accepted_at` | The "one couple per user" rule is enforced in the service inside the write transaction |
+| `users` | `username`, `username_norm` (unique), `display_name`, `display_name_norm` (unique), `password_hash`, `role` (`user`/`admin`), `language` (`de`/`en`), `is_active`, `meals_public`, `lists_public`, `filter_hidden` (JSON `{meals: [ids], lists: [ids]}`), `last_seen_at`, `password_changed_at`, `password_reset_by`, `password_reset_at` | |
+| `sessions` | `user_id` FK cascade, `revoked_at`, `last_used_at`, `user_agent` | One per device/login |
+| `session_tokens` | `session_id` FK cascade, `token_hmac` (unique), `issued_at`, `superseded_at`, `expires_at` | Refresh-token rotation with grace (§ 5.4) |
+| `one_time_codes` | `kind` (`invite`/`reset`), `code_hmac` (unique), `created_by` FK set null, `target_user_id` FK cascade (reset), `expires_at`, `used_at`, `used_by` FK set null, `revoked_at`, `tailscale_share_url` (invite, optional) | |
+| `couples` | `requester_id` FK cascade, `addressee_id` FK cascade, `status` (`pending`/`accepted`), `accepted_at` | |
+| `couple_members` | `user_id` PK FK cascade, `couple_id` FK cascade | Filled on accept; the primary key enforces "one couple per user" |
 | `categories` | `key` (unique), `sort_order` | Seeded by migration |
 | `cuisines` | `key` (unique, nullable), `name` (nullable), `name_norm` (unique), `created_by` FK set null | Seeded entries have a `key`; user-added ones have a `name` |
 | `tags`, `meal_tags` | `name`, `name_norm` (unique) · (`meal_id`, `tag_id`) | |
 | `ingredients` | `name`, `name_norm` (unique), `category_id` FK, `base_unit` (`g`/`ml`), `piece_weight_g`, `density_g_per_ml`, nutrient columns (manual, nullable), `created_by`/`updated_by` FK set null | |
-| `products` | `barcode` (unique), `ingredient_id` FK restrict, `name`, `brand`, `quantity_text`, `pack_quantity`, `pack_unit`, nutrient columns, `source` (`off`/`manual`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` | The pack size is stored for the postponed pack-rounding feature |
+| `products` | `barcode` (unique), `ingredient_id` FK restrict, `nutrition_basis` (`g`/`ml`), `name`, `brand`, `quantity_text`, `pack_quantity`, `pack_unit`, nutrient columns, `source` (`off`/`manual`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` | The pack size is stored for the postponed pack-rounding feature |
 | `meals` | `owner_id` FK cascade, `name`, `name_norm`, `instructions`, `source_url`, `servings`, `cuisine_id` FK set null, `photo_key`, `copied_from_meal_id` FK set null | |
 | `meal_ingredients` | `meal_id` FK cascade, `position`, `ingredient_id` FK restrict, `amount`, `unit`, `note` | |
 | `shopping_lists` | `owner_id` FK cascade, `name` (nullable → translated default), `status`, `shared_with_partner`, `version`, `reminder_seed`, `shopping_started_at`, `finished_at` | |
-| `list_meals` | `list_id` FK cascade, `meal_id` FK set null, `servings`, `meal_servings_snapshot`, `meal_name_snapshot`, `meal_owner_name_snapshot`, `added_by` FK set null, `frozen_at` | Unique (`list_id`, `meal_id`) while `meal_id` is not null |
-| `list_meal_ingredients` | `list_meal_id` FK cascade, `ingredient_id` FK restrict, `ingredient_name_snapshot`, `amount`, `unit`, `note` | Frozen copy of the meal's ingredients (LIST-11) |
-| `list_extra_items` | `list_id` FK cascade, `ingredient_id` FK restrict (nullable), `text`, `amount`, `unit`, `amount_text`, `category_id` FK, `added_by` FK set null, `deleted_at` | `id` may be generated by the client |
-| `list_line_states` | PK (`list_id`, `line_key`), `checked`, `checked_at`, `checked_by` FK set null, `checked_total_base`, `hidden` | |
+| `list_meals` | `list_id` FK cascade, `meal_id` FK set null, `servings`, `meal_servings_snapshot`, `meal_name_snapshot`, `meal_owner_id_snapshot`, `added_by` FK set null, `frozen_at`, `detached_reason` | Unique (`list_id`, `meal_id`) while `meal_id` is not null |
+| `list_meal_ingredients` | `list_meal_id` FK cascade, `ingredient_id` FK restrict, `ingredient_name_snapshot`, `base_unit_snapshot`, `piece_weight_g_snapshot`, `density_snapshot`, `category_id_snapshot`, `amount`, `unit`, `note` | Frozen copy (LIST-11/15) |
+| `list_extra_items` | `list_id` FK cascade, `ingredient_id` FK restrict (nullable), `attrs_snapshot` (JSON, set when added outside `draft`), `text`, `amount`, `unit`, `amount_text`, `category_id` FK, `added_by` FK set null, `deleted_at` | `id` may be generated by the client |
+| `list_line_states` | PK (`list_id`, `line_key`), `checked`, `checked_at`, `checked_by` FK set null, `checked_snapshot` (JSON), `hidden` | |
 | `processed_ops` | `op_id` PK, `user_id`, `list_id`, `applied_at` | Pruned after 30 days |
+| `admin_events` | `actor_id` FK set null, `action`, `target_user_id` FK set null, `details` (JSON), `created_at` | Admin activity log (ADM-01) |
 
-**Deletion rules:**
-- **Meal deleted** (MEAL-07): in the same transaction, its `list_meals` rows in **draft** lists are removed. Frozen rows keep `meal_id = NULL` and their snapshots.
-- **User deleted** (ADM-03):
-  - lists they share with a partner are transferred to the partner (`owner_id` changes and `shared_with_partner` becomes false);
-  - then the cascade removes their meals, other lists, sessions and codes;
-  - media files are removed by the cleanup job.
-- **Ingredient merge** (ING-05) repoints `meal_ingredients`, `list_meal_ingredients`, `list_extra_items` and `products`, rewrites `list_line_states.line_key` (`i:A` → `i:B`, merging check states), then deletes A.
+**Deletion and lifecycle rules** (all in one write transaction each):
+- **Meal deleted** (MEAL-07): detach it from every not-yet-frozen list (§ 5.7), then delete it.
+- **Meals switched to private:** detach the owner's meals from not-yet-frozen lists owned by users who are neither the owner nor the partner.
+- **Couple ended** (CPL-05):
+  - set `shared_with_partner = false` on all lists of both users;
+  - detach each ex-partner's meals from the other's lists, where they are no longer visible;
+  - delete the `couple_members` rows.
+- **User deactivated** (ADM-02): revoke their sessions and cancel their pending couple requests.
+- **User deleted** (ADM-03), in this order:
+  1. detach their meals from other users' lists;
+  2. transfer their shared lists to the partner (`owner_id` changes and `shared_with_partner` becomes false);
+  3. end the couple;
+  4. cascade: meals, other lists, sessions, codes;
+  5. media files are removed by the cleanup job.
+- **Ingredient merge** (ING-05) repoints `meal_ingredients`, `list_meal_ingredients`, `list_extra_items` and `products`, rewrites `list_line_states.line_key` (`i:A` → `i:B`, merging check states: checked only if both were checked), then deletes A.
+- **Base unit change** (ING-02) is rejected while products are linked.
 
 ## 7. API outline
 
@@ -351,94 +441,135 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 | Group | Endpoints |
 |---|---|
 | System | `GET /health` (DB + disk writable) · `GET /version` (version, commit, source URL) |
-| Auth | `POST /auth/login` · `/auth/refresh` · `/auth/logout` · `/auth/logout-all` · `GET /auth/codes/{code}` (check, doesn't consume) · `POST /auth/join` · `POST /auth/reset` |
-| Me | `GET/PATCH /me` (display name, language, privacy, meal filter) · `POST /me/password` · `GET /me/sessions` · `DELETE /me/sessions/{id}` |
+| Auth | `POST /auth/login` · `/auth/refresh` (`{fork?}`) · `/auth/logout` · `/auth/logout-all` · `/auth/codes/check` · `/auth/join` · `/auth/reset` |
+| Me | `GET/PATCH /me` (display name, language, privacy, filter chips) · `POST /me/password` · `GET /me/sessions` · `DELETE /me/sessions/{id}` · `GET /me/security` (reset notices) |
 | Couple | `GET /couple` · `POST /couple/requests` · `POST /couple/requests/{id}/accept\|decline\|cancel` · `DELETE /couple` |
-| Users | `GET /users/visible` (for filter chips) |
+| Users | `GET /users` (active users: id + display name, for the couple picker) · `GET /users/visible?for=meals\|lists` (filter chips) |
 | Reference | `GET /categories` · `GET /units` · `GET/POST /cuisines` · `GET /tags?q=` |
 | Ingredients | `GET /ingredients?q=&category=` · `POST` · `GET/PATCH /ingredients/{id}` · `GET /ingredients/{id}/products` |
 | Products | `GET /products/lookup?barcode=` · `POST /products` · `PATCH /products/{id}` · `POST /products/{id}/pending-update/apply\|ignore` |
 | Meals | `GET /meals?q=&users=&cuisine=&tag=&sort=` · `POST` · `GET/PATCH/DELETE /meals/{id}` · `POST /meals/{id}/copy` · `PUT/DELETE /meals/{id}/photo` · `GET /media/{key}` |
 | Lists | `GET /lists?scope=mine\|others&status=` · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` · `GET /lists/history` · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
-| Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/system` · `POST /admin/backup` (writes a request file picked up by the backup timer) |
+| Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/events` · `GET /admin/system` · `POST /admin/backup` (creates `/data/status/backup-request`, picked up by a systemd path unit) |
+| Diagnostics (M1 only, removed in M9) | `POST /auth/diag/set\|check` (cookie carry-over test, under `/api/auth` so the cookie path matches) |
 
 ## 8. Frontend design
 
 - **Routing** (react-router):
   - tabs `/lists`, `/meals`, `/ingredients`, `/me`;
   - `/lists/:id` (draft view / shopping view), `/lists/history`, `/meals/:id`, `/meals/:id/edit`, `/ingredients/:id`;
-  - `/join/:code`, `/reset/:code`, `/login`, `/me/admin/*`.
-- **Server state:** TanStack Query per feature (`features/*/api.ts`), all calls through `src/api/client.ts` (openapi-fetch plus an auth middleware that refreshes a token once on 401).
-- **Auth:** the access token lives in memory. On app start, `POST /auth/refresh` is called silently. When offline, the app starts in offline mode with the cached profile and lists.
+  - `/join`, `/reset`, `/login`, `/me/admin/*`. The code is read from `location.hash` and removed from the URL immediately.
+- **Server state:** TanStack Query per feature (`features/*/api.ts`), all calls through `src/api/client.ts` (openapi-fetch).
+  - The client gives every request an `AbortController` timeout: 8 s for reads, 15 s for ops and uploads. A timeout counts as "can't reach MealMate" (SYNC-09).
+  - The auth middleware refreshes **single-flight**: one shared promise, plus `navigator.locks.request('mm-refresh')` across tabs, then retries once on 401. No API call is sent before the startup refresh has settled.
+- **Auth:**
+  - The access token lives in memory.
+  - On start: render the cached profile and lists from IndexedDB **first**, then refresh in the background.
+  - A first standalone start with empty storage uses the Home Screen fork (§ 5.4).
+  - The server tells "session revoked / user deactivated" apart from "expired" with distinct error codes, which drive SYNC-10.
 - **Sync module** (`features/sync/`):
   - an IndexedDB store `lists` for the offline copy (SYNC-02), refreshed from `GET /lists/sync` on start, `visibilitychange`, `online` and after each mutation;
-  - an `outbox` store for ops (SYNC-03/04);
-  - a flush loop that runs on start, `visibilitychange→visible` and `online`, in order, stopping at the first network error;
+  - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id;
+  - a flush loop that runs on start, `visibilitychange→visible` and `online`, in order, stopping at the first network error or timeout;
   - a status store feeding the indicator (SYNC-07);
   - `navigator.storage.persist()` requested after login;
-  - the outbox is tagged with the user id, so a different user logging in on the same device gets a prompt to discard or keep it.
-- **Service worker:** precaches the app shell and translations. Network-first for `index.html`. `/api/*` is never cached by the service worker; the data lives in IndexedDB instead.
+  - the lifecycle rules of SYNC-10 (wipe on logout/revocation, keep only the same user's outbox).
+- **Service worker:**
+  - precaches the app shell, including `index.html` and translations;
+  - navigations are served **from the precache** (`NavigationRoute(createHandlerBoundToURL('/index.html'))`), so the app opens instantly even on lie-fi;
+  - new versions arrive through the normal service-worker update flow (a toast offers "reload");
+  - `/api/*` is never cached by the service worker.
 - **Shopping view:**
   - rendered from the list detail (online) or the IndexedDB copy (offline);
   - optimistic updates for queued ops;
   - checked lines go into the "In the cart" section;
-  - there is a "+300 g" badge for lines that need more (LIST-12);
+  - there are badges "+300 g" / "changed" for lines that need more (LIST-12);
   - polling every 5 s while visible, with `If-None-Match`.
-- **Scanner:** a lazy-loaded route chunk (zxing-wasm plus camera `getUserMedia({video:{facingMode:"environment"}})`). It shows a manual barcode input when the camera is unavailable or denied.
-- **Share and export:** `navigator.share({text})` is called directly in the click handler (a user gesture is required), with a clipboard fallback. The export text is built by `features/lists/exportText.ts` (unit-tested) from the display values the backend already rounded.
+- **Scanner:** a lazy-loaded route chunk.
+  - The wasm binary is bundled and served by the app (`import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'` plus `prepareZXingModule({overrides: {locateFile}})`), never loaded from a CDN (SEC-08).
+  - It uses the camera through `getUserMedia({video: {facingMode: "environment"}})`.
+  - It shows a manual barcode input when the camera is unavailable or denied.
+- **Share:**
+  - `navigator.share({text})` must run within the browser's user-activation window (about 5 s after the tap), so share buttons only share data that is already loaded:
+    - export text is built synchronously;
+    - invite and reset links are created first ("Create invite") and shared with a second tap ("Share"), ACC-03.
+  - Clipboard fallback.
+  - The export text is built by `features/lists/exportText.ts` (unit-tested) from the display values the backend already rounded.
 - **i18n:**
   - `de.json` / `en.json` with flat keys: `feature.screen.element`, errors as `error.<code>`, categories as `category.<key>`, units as `unit.<unit>`, reminders as `reminder.<n>`;
   - `format.ts` wraps `Intl.NumberFormat`/`DateTimeFormat` (`de-DE`, `en-GB`);
   - `parseAmount()` accepts `,` and `.`.
-- **Design tokens:** CSS variables (green accent, neutral grays, light and dark) in `styles/tokens.css`, mapped into the Tailwind theme. shadcn components use only tokens.
-- **Testability:** every interactive element has an accessible name. Key elements get `data-testid` (documented list in `frontend/README.md`).
+- **Design tokens:** CSS variables (green accent, neutral grays, light and dark) in `styles/tokens.css`, mapped into the Tailwind theme. Dark mode uses only `prefers-color-scheme` (no inline script). shadcn components use only tokens.
+- **Testability:**
+  - every interactive element has an accessible name;
+  - key elements get a `data-testid` from `src/testIds.ts`, and the README list is generated from it;
+  - ESLint bans `dangerouslySetInnerHTML` (SEC-13).
 
 ## 9. Testing strategy
 
 | Layer | What | Where / when |
 |---|---|---|
-| Domain unit | Units, conversion, nutrition, aggregation, rounding, normalisation (table-driven + Hypothesis) | `backend/tests/unit`, every PR |
-| Services / API | Every endpoint, permissions (positive and negative), deletion rules, ops idempotency and conflict rules, rate limits, OFF client (respx), image pipeline | `backend/tests/api`, every PR, coverage gate ≥ 85 % |
-| Migrations | Upgrade from empty → head → base → head; no autogenerate diff | `backend/tests/migrations`, every PR |
-| Frontend | API client and auth refresh, `parseAmount`/format, outbox and flush logic (fake-indexeddb), export text, i18n completeness (keys, placeholders, error codes) | Vitest, every PR |
-| E2E | The 11 journeys in QA-04 against the built production image; Chromium + WebKit with iPhone 15 profiles; `set_offline()` for SYNC; stubbed `navigator.share`; barcode injected through a test hook; OFF mocked by an in-container fake (setting `MEALMATE_OFF_BASE_URL`); axe checks | `e2e/`, every PR |
+| Domain unit | Units, conversion, nutrition, aggregation, rounding, needs-more, normalisation, retention pruning (table-driven + Hypothesis) | `backend/tests/unit`, every PR |
+| Services / API | Every endpoint; permissions (positive and negative, incl. VIS-06 and CPL-02/04 combinations); detach and deletion rules; refresh grace and fork; ops idempotency and conflict rules; 20 parallel ops (no lost updates); rate limits; OFF client and validation (respx); image pipeline; production cookie attributes | `backend/tests/api`, every PR, coverage gate ≥ 85 % |
+| Migrations | Empty → head → base → head; **seed-demo DB at the previous head → head with unchanged row counts**, `foreign_key_check` empty, no `_alembic_tmp_*`; no autogenerate diff | `backend/tests/migrations`, every PR |
+| Frontend | API client (timeouts, single-flight refresh), `parseAmount`/format, outbox, flush and lifecycle (fake-indexeddb), export text, i18n completeness (keys, placeholders, error codes), barcode decoding of sample EAN images | Vitest, every PR |
+| E2E | The 11 journeys in QA-04 plus a lie-fi case (`page.route` never answers) and a "no request leaves the origin" assertion; axe checks | `e2e/`, every PR |
+| Deploy | `docker compose config` of `deploy/compose.yml` with the example env; backup → restore round trip (including a stale `-wal` file); update rollback with a deliberately unhealthy image, then recovery with the next good digest | CI (in containers) |
+| Performance | `e2e/perf/list_p95.py`: 20 meals / 150 lines, 3 clients polling every 5 s, p95 for 200 and 304 | On the Pi pre-release: M1 (skeleton), M5b (gate), M9 |
 | Manual | QA-06 checklist on a real iPhone (`docs/release-checklist.md`) | Before each release tag |
-| Ops | `backup.sh` → `restore.sh` round trip in CI (in a container); restore drill on a spare SD card | CI + once before go-live |
+
+**E2E setup details:**
+- The built image runs with `MEALMATE_PUBLIC_URL=http://127.0.0.1:<port>` and `MEALMATE_COOKIE_SECURE=false`. The reason: WebKit (and libsoup on Linux) never stores or sends `Secure` cookies over plain HTTP, even on localhost. The production cookie attributes are verified by an API test, and the real HTTPS behaviour by M1 and QA-06.
+- **Fake OFF:** a tiny FastAPI sidecar in `e2e/fake_off/` that serves recorded v3 fixtures. It is never part of the production image. Journey 3 types the barcode into the manual input (BAR-01).
+- **Fixtures** (M0): `admin` (via `create-admin --password-stdin`), `invite_user()` and `make_couple()` through the API.
+- **Offline reload:** reloading while offline with a service worker currently fails in Playwright WebKit (upstream issue, O-11). That step runs in Chromium; WebKit covers offline check-off without a reload. The skip is documented in code and rechecked on every Playwright upgrade.
 
 ## 10. Branching, CI/CD and releases
 
 ### 10.1 Branches (D-03)
 
-- **`main`:** integration branch. All changes arrive through pull requests with green CI (squash merge, Conventional Commit titles: `feat:`, `fix:`, `docs:` …). **No images are built from `main`.**
-- **`release/X.Y`:** created from `main` when a version is ready. Hotfixes go into `release/X.Y` through pull requests and are merged back into `main` automatically.
-- **Before 2.0.0:** pre-releases (`v2.0.0-alpha.N`, `-beta.N`, `-rc.N`) are tagged on `release/2.0`, which is updated from `main` through a PR for each pre-release. After `v2.0.0`, `release/2.0` only receives fixes.
-- **Tags:** `vX.Y.Z` exist only on commits of `release/*` branches, and CI enforces this.
+- **`main`:** integration branch. **Feature and fix PRs are squash-merged** (Conventional Commit titles: `feat:`, `fix:`, `docs:` …). No images are built from `main`.
+- **`release/X.Y`:** created from `main` when a version is ready. Hotfixes go into `release/X.Y` through pull requests.
+- **Sync PRs** (`main → release/X.Y` before a pre-release) and **back-merge PRs** (`release/X.Y → main` after a hotfix) always use **"Create a merge commit"**, never squash, so the branches keep a shared history. The rulesets allow both merge methods.
+- After each release on `release/X.Y`, a back-merge PR into `main` is **opened automatically and merged by the owner**.
+- **Before 2.0.0:** pre-releases (`v2.0.0-alpha.N`, `-beta.N`, `-rc.N`) are tagged on `release/2.0`, which is updated from `main` through a sync PR for each pre-release. After `v2.0.0`, `release/2.0` only receives fixes.
+- **Tags:** `vX.Y.Z[-pre]` exist only on commits of `release/*` branches. The build workflow enforces this.
 
 ### 10.2 Workflows
 
+**Release credentials:** a small **GitHub App** ("MealMate Release Bot", permissions: contents + pull requests write), installed only on this repo. Its token comes from `actions/create-github-app-token` and is used to push tags and open back-merge PRs. Tags and PRs created with this token trigger workflows normally; ones created with `GITHUB_TOKEN` don't. The App is the bypass actor of the `v*` tag ruleset. Personal-account repos can't use the built-in GitHub Actions integration as a bypass actor.
+
 | Workflow | Trigger | Does |
 |---|---|---|
-| `ci.yml` | PR, push to `main` and `release/**` (also `workflow_call`) | backend: ruff, mypy, pytest + coverage, migration tests · frontend: eslint, prettier, tsc, vitest, build, **OpenAPI type drift check** · e2e: build image (amd64), run Chromium + WebKit suites · security: gitleaks, pip-audit / npm audit (runtime deps, high+), licence check |
-| `release-cut.yml` | manual (`version: X.Y`) | Creates `release/X.Y` from `main` |
-| `release-publish.yml` | manual on `release/X.Y` (`kind: patch \| alpha \| beta \| rc`) | Calls `ci.yml`, computes the next version, creates tag `vX.Y.Z[-pre]`, **calls `build-image.yml`** (a reusable workflow, because tags pushed with `GITHUB_TOKEN` don't trigger other workflows), creates the GitHub Release with notes generated from PR titles (git-cliff), opens a back-merge PR `release/X.Y → main` if needed |
-| `build-image.yml` | `workflow_call`, or push of a `v*` tag by a human | Verifies the tag is on `release/*`; builds natively on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` (arm64); pushes by digest, then a multi-arch manifest to `ghcr.io/bublemann/mealmate` |
-| Dependabot | weekly | pip (uv), npm, Docker base images, GitHub Actions; grouped minor/patch updates; target `main` |
+| `ci.yml` | PR, push to `main` and `release/**` | backend: ruff, mypy, pytest + coverage, migration tests · frontend: eslint, prettier, tsc, vitest, build, **OpenAPI type drift check** · e2e: build image (amd64), fake OFF sidecar, Chromium + WebKit suites · deploy checks (§ 9) · security: gitleaks, pip-audit / npm audit (runtime deps, high+), licence check |
+| `release-cut.yml` | manual (`version: X.Y`) | Creates `release/X.Y` from `main` (App token) |
+| `release-publish.yml` | manual on `release/X.Y` (`kind: final \| patch \| alpha \| beta \| rc`) | Requires green CI on the branch head. Computes the version (`final` produces `X.Y.0`, or strips the pre-release suffix; `patch` produces `X.Y.(n+1)`). Pushes the tag with the App token, which triggers `build-image.yml`. Creates the GitHub Release: notes from the merged PR titles (git-cliff) plus the **deploy bundle** and `setup.sh` as assets, with SHA-256 sums in the notes. Opens the back-merge PR if needed |
+| `build-image.yml` | push of a `v*` tag (App or human) | Verifies the tag is on `release/*`. Builds natively on `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` (arm64), pushes by digest, then a multi-arch manifest to `ghcr.io/bublemann/mealmate`. Signs the provenance with `actions/attest` (Sigstore; `id-token`/`attestations: write` only in that job) |
+| `image-scan.yml` | weekly (schedule) | Scans the currently published `X.Y` images (Trivy, fixable high/critical) and runs pip-audit/npm audit on each `release/*` branch. Opens an issue on findings (SEC-11) |
+| Dependabot | weekly | pip (uv), npm, Docker base images (digest), GitHub Actions (SHA pins); grouped minor/patch updates; target `main` |
 
 - **Image tags:**
   - final releases get `X.Y.Z`, `X.Y` and, only if it is the highest version overall, `latest`;
-  - pre-releases get only their exact tag.
-- **Labels:** OCI labels `org.opencontainers.image.source|version|revision|licenses=AGPL-3.0-only`.
-- **Attestations:** build provenance and an SBOM are attached by `docker/build-push-action`.
-- **Permissions:** workflows default to `contents: read`. Only publish jobs get `packages: write` and `contents: write`.
+  - pre-releases get their exact tag plus a moving `X.Y-pre` (never `X.Y` or `latest`), so the Pi can follow pre-releases from M1 on.
+- **Labels:** OCI labels `org.opencontainers.image.source|version|revision|licenses`.
+- **Hardening:**
+  - all actions are pinned to full commit SHAs with a version comment;
+  - no workflow uses `pull_request_target` or `workflow_run`;
+  - workflows default to `contents: read`, and each job gets only the permissions it needs.
+- **Security-patch procedure** (SEC-11):
+  1. fix, or bump the dependency or base image, via a PR into `release/X.Y`;
+  2. `release-publish kind=patch`;
+  3. the Pi installs it the same night;
+  4. the back-merge PR brings it to `main`.
 
 ### 10.3 Production image (`Dockerfile`)
 
 1. `frontend-build` (node:24-slim): `npm ci`, `npm run build` → `/frontend/dist`.
-2. `backend-build` (python:3.13-slim): `uv sync --frozen --no-dev` into `/opt/venv`.
-3. `runtime` (python:3.13-slim):
-   - copies the venv, the app, the Alembic files and the frontend `dist`;
+2. `backend-build` (python:3.14-slim@digest): `uv sync --frozen --no-dev` into `/opt/venv`.
+3. `runtime` (python:3.14-slim@digest):
+   - copies the venv, the app, the Alembic files, the frontend `dist` and `deploy/` (to `/opt/mealmate/deploy`, the verified source of host files, § 11.5);
    - runs as user `mealmate` (uid 10001), with no compilers or git;
-   - `ENTRYPOINT ["mealmate-entrypoint"]` runs `mealmate db upgrade`, then execs `uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1`;
+   - `ENTRYPOINT ["mealmate-entrypoint"]` runs `mealmate db upgrade`, then execs `uvicorn app.main:app --port 8080 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log`, with the host taken from `UVICORN_HOST`;
    - a `HEALTHCHECK` calls `/api/health`.
 
 The version and commit are passed as build args and exposed by `/api/version` (LIC-02).
@@ -451,298 +582,412 @@ The full step-by-step runbook will live in `docs/operations.md` (milestone M8). 
 
 ```
 /srv/mealmate/
-├── compose.yml         # from deploy/compose.yml of the running release
-├── .env                # 0600, SECRET_KEY, PUBLIC_URL, IMAGE_TAG, HC_* URLs
-├── data/               # container volume: mealmate.db, media/, pre-migrate/, status/
-├── backups/            # snapshots (group-readable by the mmbackup user)
-├── state/              # previous-image digest, bad-digest marker, backup-request flag
-└── bin/                # backup.sh, update.sh, restore.sh, heartbeat.sh, disk-check.sh
+├── compose.yml         # from the running image's /opt/mealmate/deploy
+├── .env                # 0600 root: MEALMATE_SECRET_KEY, MEALMATE_PUBLIC_URL, IMAGE_TAG, HC_* URLs
+├── data/               # container volume (uid 10001): mealmate.db, media/, pre-migrate/,
+│                       # status/ (backup.json, disk.json, backup-request)
+├── backups/            # finished snapshots (group-readable by mmbackup); .partial-* while writing
+├── state/              # host-only: override.env (IMAGE_REF pin), previous-digest, bad-digest
+└── bin/                # mm-compose, backup.sh, update.sh, restore.sh, heartbeat.sh, disk-check.sh
 ```
 
 `compose.yml` (single service `app`):
-- `image: ghcr.io/bublemann/mealmate:${IMAGE_TAG}`, `ports: ["127.0.0.1:8080:8080"]`, `volumes: ["./data:/data"]`;
-- `read_only: true` with a `tmpfs` for `/tmp`, `user: "10001"`;
-- `restart: unless-stopped`, `mem_limit: 400m`;
-- `json-file` logging capped at 3 × 10 MB.
 
-### 11.2 `deploy/pi/setup.sh` (PLT-06)
+```yaml
+services:
+  app:
+    image: ${IMAGE_REF:-ghcr.io/bublemann/mealmate:${IMAGE_TAG}}
+    network_mode: host
+    environment:
+      MEALMATE_SECRET_KEY: ${MEALMATE_SECRET_KEY:?}
+      MEALMATE_PUBLIC_URL: ${MEALMATE_PUBLIC_URL:?}
+      UVICORN_HOST: 127.0.0.1
+    volumes: ["./data:/data"]
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 200
+    mem_limit: 400m
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+```
 
-The script is idempotent and runs as `sudo ./setup.sh [--restore <backup-dir>]` after flashing the card with Raspberry Pi Imager (64-bit Lite, hostname `mealmate`, user, SSH key `id_ed25519_mealmate`). It:
-1. **Updates** the system (`full-upgrade`) and installs `unattended-upgrades`, `rsync`, `sqlite3`, `curl`, `jq` and `zram-tools` (compressed swap for the 1 GB of RAM).
-2. **Reduces SD writes:** journald `Storage=volatile`, `noatime`, Docker log caps.
+- Every script and unit calls **`bin/mm-compose`**, which runs `docker compose --project-directory /srv/mealmate --env-file .env [--env-file state/override.env]`.
+- The HC URLs are never passed into the container.
+
+### 11.2 `setup.sh` (PLT-06)
+
+**Bootstrap on a freshly flashed card** (64-bit Lite, hostname `mealmate`, user, SSH key `id_ed25519_mealmate`, all set in Raspberry Pi Imager):
+
+```bash
+curl -fsSLO https://github.com/Bublemann/MealMate/releases/download/v<ver>/setup.sh
+sha256sum setup.sh   # compare with the release notes
+sudo bash setup.sh --version <ver> [--restore <snapshot-dir>]
+```
+
+The script is idempotent. It:
+1. **Updates** the system (`full-upgrade`) and installs `unattended-upgrades`, `rsync`, `sqlite3`, `curl` and `jq`.
+   - Unattended-upgrades is configured to also cover the Raspberry Pi, Docker and Tailscale repositories, with `Automatic-Reboot "true"` at 03:45 (O-9).
+2. **Configures the system:**
+   - memory cgroup: adds `cgroup_enable=memory` to `/boot/firmware/cmdline.txt`, which needs a reboot, and verifies it afterwards;
+   - swap: zram only (on Trixie via `rpi-swap` without the file writeback; on Bookworm via zram-tools, with `dphys-swapfile` removed);
+   - fewer SD writes: journald `Storage=volatile`, `noatime`, Docker log caps.
 3. **Hardens SSH:** no passwords, no root login.
-4. **Installs Docker Engine** (apt repository, arm64) and **Tailscale** (apt repository).
+4. **Installs Docker Engine** (apt repository, arm64) and **Tailscale** (apt repository; `tailscale set --auto-update`).
 5. **Sets up Tailscale:**
-   - fresh install: `tailscale up` (prints a login URL);
-   - with `--restore`: restores the node state first (O-1);
+   - with `--restore`: restores `tailscaled.state` **before** starting tailscaled (O-1), and restores the SSH host keys;
+   - fresh install: `tailscale up --advertise-tags=tag:mealmate` (prints a login URL). The tag disables key expiry, and every re-run keeps the tag;
    - then `tailscale serve --bg --https=443 http://127.0.0.1:8080`.
 6. **Creates the directories and users:**
-   - `/srv/mealmate`;
+   - `/srv/mealmate`, with `data/` owned by 10001;
    - the `mmbackup` user with the Mac's public key in `authorized_keys`, restricted to `restrict,command="rrsync -ro /srv/mealmate/backups"`.
 7. **Prepares the app files:**
-   - downloads `compose.yml` and `bin/*` from the release tag;
-   - writes `.env` (random `SECRET_KEY` via `openssl rand`, `PUBLIC_URL` from `tailscale status`, prompts for the `HC_*` URLs), unless restoring.
+   - writes `.env`, unless restoring: random `MEALMATE_SECRET_KEY` via `openssl rand`, `MEALMATE_PUBLIC_URL` from `tailscale status`, `IMAGE_TAG`, prompts for the `HC_*` URLs;
+   - pulls and **verifies** the image (§ 11.5);
+   - copies compose, scripts and units from the image's `/opt/mealmate/deploy`.
 8. **Installs systemd units:**
 
-   | Timer | Schedule | Runs |
+   | Unit | Schedule | Runs |
    |---|---|---|
-   | `mealmate-backup` | 00:15, 06:15, 12:15, 18:15 | `backup.sh` |
-   | `mealmate-update` | daily 04:30 | `update.sh` |
-   | `mealmate-heartbeat` | every 5 min | `heartbeat.sh` |
-   | `mealmate-disk` | hourly | `disk-check.sh` |
-   | `mealmate-off-refresh` | daily 03:00 | `docker compose exec app mealmate jobs off-refresh` |
-   | `mealmate-cleanup` | daily 03:30 | `… jobs cleanup` |
-   | `mealmate-restore-test` | monthly | `backup.sh --verify-latest` |
+   | `mealmate-backup.timer` | 00:15, 06:15, 12:15, 18:15 | `backup.sh` |
+   | `mealmate-backup.path` | when `data/status/backup-request` exists | `backup.sh --label manual` (OPS-08) |
+   | `mealmate-update.timer` | daily 04:30 | `update.sh` |
+   | `mealmate-heartbeat.timer` | every 5 min | `heartbeat.sh` |
+   | `mealmate-disk.timer` | hourly | `disk-check.sh` |
+   | `mealmate-off-refresh.timer` | daily 03:00 | `mm-compose exec -T app mealmate jobs off-refresh` |
+   | `mealmate-cleanup.timer` | daily 03:30 | `… jobs cleanup` |
+   | `mealmate-restore-test.timer` | monthly | `backup.sh --verify-latest` |
 
-   A path unit also triggers `backup.sh` when the admin page requests a backup (OPS-08).
-9. **Starts the app:** `docker compose up -d`, waits for health; on a fresh install it runs `mealmate create-admin`, or with `--restore` it restores the data (§ 11.5).
+9. **Starts the app:** `mm-compose up -d`, waits for health.
+   - fresh install: runs `mealmate create-admin`;
+   - with `--restore`: restores the data first (§ 11.6).
 
-### 11.3 Backups (OPS-01..03)
+**Other modes:**
+- `--update-host-files`: used by `update.sh`; only refreshes compose, scripts and units.
+- `--rotate-secret`: new secret key, restart (OPS-10).
 
-**`backup.sh`** writes each snapshot to `backups/<UTC timestamp>/`:
-1. `docker compose exec -T app mealmate backup-db /data/status/backup.sqlite3`, then move it into the snapshot as `db.sqlite3`.
-2. `rsync -a --link-dest=<previous snapshot>/media data/media/ <snapshot>/media/`, so unchanged photos are hard-linked.
-3. `secrets/`: copies of `.env` and `/var/lib/tailscale/tailscaled.state`, mode `0640`, group `mmbackup`.
-4. `manifest.json`: app version, image digest, timestamp and SHA-256 of `db.sqlite3`.
-5. Retention (OPS-02); the pruning code is shared with the Mac script.
-6. Writes `data/status/backup.json` (shown on the admin page) and pings `HC_BACKUP_URL`, or its `/fail` endpoint with the log.
+### 11.3 Backups (OPS-01..03, OPS-10)
+
+**`backup.sh`** writes each snapshot to `backups/.partial-<UTC ts>/` and renames it to `backups/<UTC ts>/` only when it is complete:
+1. `mm-compose exec -T app mealmate backup-db /data/status/backup.sqlite3`. Then check it is a regular file and not a symlink (`[ -f ] && [ ! -L ]`), and move it into the snapshot as `db.sqlite3`.
+2. `rsync -a --no-links --link-dest=<previous snapshot>/media data/media/ <snapshot>/media/`, so unchanged photos are hard-linked.
+3. `secrets/`: copies of `.env`, `/var/lib/tailscale/tailscaled.state` and `/etc/ssh/ssh_host_*`, mode `0640`, group `mmbackup`.
+4. `manifest.json`: app version, image digest, timestamp, SHA-256 of `db.sqlite3`, and the label (`regular` / `pre-update` / `manual`).
+5. **Retention** (OPS-02): shared `prune.py` (a unit-tested Python script, also used on the Mac). Only `regular` snapshots count toward the 7/4/6 buckets; labelled ones are kept for 7 days.
+6. Writes `data/status/backup.json` (shown on the admin page) and pings `HC_BACKUP_URL`, or its `/fail` endpoint with the script's own last lines.
+
+**`--verify-latest`** (monthly, OPS-07): runs `sqlite3 -readonly <latest>/db.sqlite3 'PRAGMA integrity_check'` on the host and compares the checksum with the manifest. The result goes to the `backup` check.
 
 **The Mac side** (`deploy/mac/install-backup-pull.sh`) sets everything up:
-- a key `~/.ssh/id_ed25519_mealmate_backup` (no passphrase; restricted on the Pi);
-- `~/MealMateBackups/`;
-- `~/Library/LaunchAgents/de.mealmate.backup-pull.plist` (`StartInterval` 3600, `RunAtLoad`);
-- `pull.sh`, which runs `rsync -a -H mmbackup@<pi>:/ ~/MealMateBackups/` (**no `--delete`**), prunes with its own retention, verifies the newest manifest's checksum, and pings `HC_MACPULL_URL`.
+- installs Homebrew `rsync` (≥ 3.4; the macOS default `openrsync` is not used, O-5);
+- creates the key `~/.ssh/id_ed25519_mealmate_backup` (no passphrase; restricted on the Pi);
+- pins the Pi's SSH host key; it survives restores because the host keys are part of the backup;
+- creates `~/MealMateBackups/`, outside iCloud Drive;
+- runs `tailscale set --shields-up` on the Mac;
+- installs `~/Library/LaunchAgents/de.mealmate.backup-pull.plist` (`StartInterval` 3600, `RunAtLoad`).
 
-The installer prints the public key to add on the Pi (or adds it over SSH).
+**`pull.sh`:**
+1. List the remote snapshot directories (`rsync --list-only`), ignoring `.partial-*`.
+2. Fetch each ID **not yet in the local ledger** `pulled.txt`: into `staging/` with `rsync -rtH --no-links --max-size=50M --link-dest=<newest local>`, then check the manifest checksum, move it into place under the Mac's **receive time**, and append the ID to the ledger. IDs in the ledger are never fetched again, so nothing already on the Mac is overwritten or pruned-then-redownloaded.
+3. **Abnormal pull** (more than 8 new snapshots, or more than 2 GB): stop, don't prune, ping `/fail`.
+4. Prune with the same 7/4/6 policy by receive time, never deleting anything younger than 7 days.
+5. Ping `HC_MACPULL_URL`.
 
 ### 11.4 Monitoring (OPS-04)
 
-- **`heartbeat.sh`:** `curl -fsS http://127.0.0.1:8080/api/health` (DB query + writable data dir). If it succeeds, ping `HC_HEARTBEAT_URL`; otherwise ping `/fail` with the output.
-- **`disk-check.sh`:** if free space on `/` is below 20 %, ping `/fail`; otherwise success. Free space is also written to `data/status/disk.json` for the admin page.
-- **healthchecks.io:** five checks (`heartbeat` 5 min / grace 10 min, `backup` 6 h / grace 2 h, `mac-pull` 1 day / grace 2 days, `update` 1 day / grace 1 day, `disk` 1 h / grace 1 h), with an email integration and an optional ntfy integration.
+- **`heartbeat.sh`:**
+  1. `tailscale status --json | jq -e '.BackendState=="Running"'`;
+  2. `curl -fsS "$MEALMATE_PUBLIC_URL/api/health"`, which goes through `tailscale serve` and checks the certificate, the DB query and that the data dir is writable.
 
-### 11.5 Updates and rollback (OPS-05/06)
+  If both succeed, ping `HC_HEARTBEAT_URL`; otherwise ping `/fail` with the name of the failed step.
+- **`disk-check.sh`:** if free space on `/` is below 20 %, ping `/fail`; otherwise success. Free space is also written to `data/status/disk.json` for the admin page.
+- **healthchecks.io:** five checks (`heartbeat` 5 min / grace 10 min, `backup` 6 h / grace 2 h, `mac-pull` 1 day / grace 2 days, `update` 1 day / grace 1 day, `disk` 1 h / grace 1 h), with an email integration and an optional ntfy integration. Only the scripts' own short status lines are sent, never app logs.
+
+### 11.5 Updates and rollback (OPS-05/06, PLT-03, PLT-07)
 
 **`update.sh`:**
-1. `docker compose pull`. If the image digest is unchanged, or equals the recorded *bad digest*, ping success and exit.
-2. Record the current digest in `state/previous-image` and run `backup.sh --label pre-update`.
-3. `docker compose up -d`; the entrypoint snapshots the DB and runs migrations.
-4. Wait up to 180 s for health.
-5. **Healthy:** ping success, and `docker image prune` keeping the current and previous image.
-6. **Not healthy:**
-   - stop the container;
-   - restore `db.sqlite3` from the pre-update snapshot;
-   - pin `IMAGE_REF=<previous digest>` in `state/override.env`;
-   - start again;
-   - record the bad digest;
-   - ping `/fail` with the logs.
+1. **Resolve** the remote digest of `ghcr.io/bublemann/mealmate:${IMAGE_TAG}` (`docker buildx imagetools inspect`). This checks the **tag**, never the pinned `IMAGE_REF`. If it equals the running digest or the recorded bad digest, ping success and exit.
+2. **Verify** the signed provenance of that digest (`cosign verify-attestation` against `…/.github/workflows/build-image.yml@refs/tags/v*` of this repository). If it fails, record the digest as bad, ping `/fail` and exit.
+3. **Prepare:** pull `…@<digest>`. Record the running repo digest in `state/previous-digest`. Run `backup.sh --label pre-update`.
+4. **Deploy:** write `IMAGE_REF=…@<digest>` into `state/override.env` and run `mm-compose up -d`. The entrypoint snapshots the DB and runs the migrations.
+5. **Wait** up to 180 s for health (the local health endpoint plus the heartbeat's HTTPS check).
+6. **Healthy:**
+   - copy the new host files from the image (`docker create` + `docker cp /opt/mealmate/deploy`) and run `setup.sh --update-host-files` (PLT-07);
+   - remove mealmate images other than the current and previous digest with `docker image rm`, never `prune`;
+   - ping success.
+7. **Not healthy:**
+   1. `mm-compose stop`;
+   2. `rm -f data/mealmate.db-wal data/mealmate.db-shm`;
+   3. copy the pre-update `db.sqlite3` to `data/mealmate.db.tmp`, then `mv` it over `data/mealmate.db`;
+   4. `chown 10001:10001`;
+   5. `sqlite3 'PRAGMA integrity_check'`;
+   6. set `IMAGE_REF=<previous digest>` and `mm-compose up -d`;
+   7. record the bad digest;
+   8. ping `/fail`.
 
-   The Pi stays on the old version until a newer digest appears or the owner intervenes.
+   The Pi stays on the old version until a **newer** digest appears on the tag.
 
-Switching the version line (`IMAGE_TAG=2.0` → `2.1`) is a manual edit of `.env` followed by `update.sh`.
+- **Switching the version line** (`IMAGE_TAG=2.0-pre` → `2.0` → `2.1`) is a manual edit of `.env` followed by `update.sh`.
+- Pre-release lines (`X.Y-pre`) use the same mechanism.
 
-### 11.6 Restore and SD card swap (OPS-07/09, PLT-06)
+### 11.6 Restore and SD card swap (OPS-07/09/10, PLT-06)
 
 1. **Planned swap only:**
-   - run `backup.sh` (or use the admin-page button);
+   - start a backup (`backup.sh --label manual` or the admin-page button);
    - wait for the Mac to pull it (`pull.sh` can also be run by hand);
    - shut down the Pi.
 2. Flash the new card with Imager (same hostname, user and SSH key).
-3. Copy the chosen snapshot from the Mac to the Pi (`scp -r`), then run `sudo ./setup.sh --restore <snapshot>`, which restores:
-   - the Tailscale node state, so the Pi keeps the same machine, address and shares;
-   - `.env`;
-   - `db.sqlite3` after an integrity check;
-   - `media/`;
+3. Copy the chosen snapshot from the Mac to the Pi (`scp -r`).
+4. Bootstrap `setup.sh` (§ 11.2) with `--version <manifest version> --restore <snapshot>`. The script:
+   1. restores the Tailscale state **before** tailscaled starts, so the Pi keeps the same machine, address and shares;
+   2. restores the SSH host keys and `.env`;
+   3. removes any `-wal`/`-shm`, then restores `db.sqlite3` (integrity-checked) and `media/`, owned by 10001;
+   4. starts the app.
+5. Verify: open the app on an iPhone. Unsent offline ticks sync on their own because the address is unchanged.
 
-   and then starts the app.
-4. Verify: open the app on an iPhone. Unsent offline ticks sync on their own because the address is unchanged.
+**Never run the old and the new card at the same time.** If restoring the node state ever fails, a fallback is documented: log in as a new machine with `--advertise-tags`, rename it to `mealmate` and re-share the Pi.
 
-**Never run the old and the new card at the same time.** If restoring the node state ever fails, a fallback is documented: log in as a new machine, rename it to `mealmate` and re-share the Pi.
+**Mac or backup lost** (OPS-10), runbook:
+1. Remove the Pi in the Tailscale console, then re-add and re-share it (fallback above).
+2. `setup.sh --rotate-secret`.
+3. Replace the `mmbackup` key.
+4. Regenerate the healthchecks.io ping URLs.
 
 ## 12. Milestones
 
-Every milestone ends with green CI and a short demo. The IDs show which requirements each milestone implements. The size is relative (S < M < L < XL).
+**Definition of done for every milestone:**
+- the requirement IDs listed are covered by API or unit tests;
+- the listed E2E journeys are green in Chromium and WebKit (with the documented WebKit limits);
+- the screens are complete in German and English;
+- `seed-demo` is extended to the new features;
+- from M1 on: an `alpha` pre-release is published, running on the Pi (`IMAGE_TAG=2.0-pre`) and tried on an iPhone.
+
+The size is relative (S < M < L < XL).
 
 ### M0 — Repository reset and foundation (L)
-- **v1 archive:** tag the current `main` as `v1-legacy`. v1 code is removed on the v2 branch (it stays in history).
+*LIC-01, SEC-01/02/06/09/10/12, MNT-01/03/04/05, QA-01/02/03/05/07, I18N-03/06, UI-01/04/05*
+- **v1 archive:** tag the current `main` as `v1-legacy`. v2 work lands through PRs into `main`, which from then on is v2 (v1 stays in history and in the tag).
 - **Hygiene:**
-  - `LICENSE` → AGPL-3.0-only (LIC-01);
-  - delete `certs/` and add it to `.gitignore` (SEC-01);
-  - README (v2 intro, links to docs), `SECURITY.md`, `CONTRIBUTING.md`, PR template;
-  - `dependabot.yml`, gitleaks config.
+  - `LICENSE` → AGPL-3.0 (variant per Q-1);
+  - delete `certs/` and add it to `.gitignore`;
+  - README (v2 intro, links to docs), `SECURITY.md`, `CONTRIBUTING.md`, `frontend/README.md` (conventions from the start), PR template;
+  - `dependabot.yml`, gitleaks config, `Makefile` (`dev`, `test`, `e2e`, `openapi`, `lint`).
 - **Backend skeleton:**
-  - app factory, settings (fails without `SECRET_KEY`), JSON logging, security headers, error envelope + `ErrorCode`;
+  - app factory, settings (fails without a secret key), key derivation (HKDF), JSON logging (route templates, no access log), security headers and CSP, error envelope + `ErrorCode`;
   - `/api/health`, `/api/version`;
-  - SQLite engine + pragmas, UUIDv7 IDs, Alembic baseline;
+  - SQLite engines (`BEGIN IMMEDIATE` writes, FK pragma on the app engine only), UUIDv7 IDs, Alembic baseline with the FK-safe `env.py`;
   - CLI skeleton, `export-openapi`, SPA static serving;
   - test harness (async client, temp DB).
 - **Frontend skeleton:**
-  - Vite + React + TS, Tailwind v4 tokens (light/dark), shadcn/ui init;
+  - Vite + React + TS, Tailwind v4 tokens (light/dark via media query), shadcn/ui init;
   - router with the bottom tab bar and empty screens;
   - i18n (de/en) + completeness test + `format.ts`;
-  - TanStack Query, generated API client;
-  - PWA manifest, icons, service worker (shell precache).
-- **E2E skeleton:** pytest-playwright fixture that starts the built image; Chromium + WebKit iPhone profiles; axe helper.
+  - TanStack Query, generated API client with timeouts;
+  - PWA manifest, icons, service worker (shell precache, navigation from the precache);
+  - `testIds.ts`.
+- **E2E skeleton:** pytest-playwright fixture that starts the built image (HTTP + `COOKIE_SECURE=false`); fake OFF sidecar; `admin`/`invite_user`/`make_couple` fixtures (as far as the API exists); axe helper; the "no third-party requests" assertion.
 - **Build and CI:**
-  - `Dockerfile` (multi-stage, non-root), `compose.dev.yml` (backend reload + Vite proxy), `deploy/compose.yml`;
-  - `ci.yml`, `release-cut.yml`, `release-publish.yml`, `build-image.yml`.
+  - `Dockerfile` (multi-stage, non-root, digest-pinned base), `compose.dev.yml` (backend reload + Vite proxy), `deploy/compose.yml` (§ 11.1);
+  - all workflows (§ 10.2), SHA-pinned; the GitHub App (owner step).
 - **Done when:**
   - CI is green;
-  - `docker compose -f compose.dev.yml up` shows the empty app with a working language switch;
-  - an image builds natively for arm64 and amd64 in CI (dry run, not pushed).
+  - `make dev` shows the empty app with a working language switch;
+  - the E2E skeleton proves, in both browsers, that a cookie survives a reload, and in Chromium that the service worker serves the shell offline;
+  - **release rehearsal:** `release-cut 0.0` → `release-publish alpha` on it → multi-arch image pushed and attested → package made public → anonymous `docker pull` and `cosign verify-attestation` succeed → back-merge PR gets CI. Then the rehearsal tag, release, branch and package version are deleted.
 
 ### M1 — Pi and iPhone platform spike (M)
-- Owner steps (§ 13): Tailscale account, MagicDNS + HTTPS, flash the SD card.
-- `deploy/pi/setup.sh` (fresh-install path), `heartbeat.sh`; cut `release/2.0` and publish `v2.0.0-alpha.1`; the Pi runs it.
-- A temporary **diagnostics screen**, removed again by M9. It tests:
-  - `navigator.share` (text);
-  - camera + zxing decoding of a real EAN;
-  - service-worker offline start;
-  - IndexedDB write/read after an app restart;
+*PLT-01..05, SYNC-01 (spike), PERF-06 (baseline); resolves O-2, O-3, O-6 (part), O-9, O-10*
+- Owner steps "before M1" and "during M1" (§ 13).
+- `setup.sh` fresh-install path (steps 1–8 without the backup, update and restore units; heartbeat and disk only), `heartbeat.sh`, `disk-check.sh`, `mm-compose`.
+- Cut `release/2.0`, publish `v2.0.0-alpha.1`; the Pi runs `IMAGE_TAG=2.0-pre` (updated manually with `update.sh` steps 1–6 until M8).
+- A temporary **diagnostics screen** (removed in M9). It tests:
+  - `navigator.share` (text) directly, and after a slow fetch;
+  - camera + zxing decoding of a real EAN (including the iOS 26 rotation issue);
+  - service-worker start offline and on lie-fi;
+  - **cookie carry-over and persistence** via `/api/auth/diag/set|check`:
+    - set in Safari → does the Home Screen app have it?
+    - set in the Home Screen app → still there after force-quit and after a phone restart?
+  - IndexedDB after a phone restart;
   - `storage.persist()`;
-  - Home Screen install;
   - dark mode.
-- Verify node sharing with a second Tailscale account and the tailnet policy that restricts shared users to port 443 (O-2), and whether `X-Forwarded-For` arrives (O-3).
-- **Done when:** on a real iPhone over the shared Tailscale node, all diagnostics pass, and O-2 and O-3 are resolved and documented.
+- **Tailscale verification:**
+  - the Pi is tagged;
+  - policy grants (shared users → 443 only; no access from the Pi to other devices; owner → 22/443);
+  - node sharing with a second account;
+  - inside the container, `request.client.host` equals the phone's tailnet IP and the scheme is `https`.
+- Idle RAM and cold-start time of the skeleton on the Pi.
+- **Done when:** all diagnostics are recorded in `docs/platform-notes.md` with the iOS version, and the requirements (ACC-07, SYNC-01) and guides are adjusted to the cookie result.
 
-### M2 — Accounts, couples, admin (L) · ACC, CPL-01/04/05, VIS-02, ADM, SEC-03/05/10, I18N-01/02
+### M2 — Accounts, couples, admin (L)
+*ACC, CPL-01/04/05/07, VIS-02 (settings), ADM-01 (users, invites, roles, activity log), ADM-02, ADM-04, SEC-03/05/10, I18N-01/02*
 - **Backend:**
-  - users, sessions (rotation, reuse detection), login/refresh/logout(-all);
-  - invites and reset codes, join/reset;
+  - users, sessions and session tokens (rotation with grace, Home Screen fork), login/refresh/logout(-all);
+  - codes (fragment links, check/join/reset);
   - throttling, common-password list, bcrypt cost tuning (O-7);
-  - `create-admin` / `reset-link`;
-  - `me` settings (language, privacy, display name, password, sessions);
-  - couple requests;
-  - admin users/invites/roles/deactivate/delete (deletion rules for the data that exists so far).
+  - `create-admin` (both modes) / `reset-link`;
+  - `me` settings (language, privacy, filter chips, display name, password, sessions, security notices);
+  - couple requests and `couple_members`;
+  - admin users, invites (with optional Tailscale share link), roles, deactivation, activity log;
+  - user **deletion** for the data that exists so far; completed in M4/M5b.
+- **seed-demo:** users, an admin, a couple, invites.
 - **Frontend:**
-  - login, join (`/join/:code`), reset;
+  - login, join, reset;
   - Me/settings incl. language switch and sessions;
-  - couple UI;
-  - admin users and invites with the **share sheet**;
-  - first-login hints (Add to Home Screen, Tailscale).
-- **Tests:** API permission tests; E2E journeys 1, 2 and the couple-request part of 11.
+  - couple UI (user picker);
+  - admin users/invites with the two-step **share**, activity log;
+  - first-login hints (Add to Home Screen, Tailscale);
+  - SYNC-10 wipe on logout/revocation (basic).
+- **Tests:** API permission tests; E2E journeys 1, 2, 10 and the couple-request part of 11.
 
-### M3 — Reference data, ingredients, nutrition engine (L) · REF, ING, NUT, AGG-01
+### M3 — Reference data, ingredients, domain engine (L)
+*REF, ING, NUT, AGG (domain functions), MNT-06*
 - **Seeds:** categories and cuisines (migration); tags.
-- **`domain/`:** units, conversion, nutrients registry, nutrition, normalisation. This is the most heavily tested part, with Hypothesis.
-- **Ingredients:** CRUD, search, "similar exists" hint, admin merge/delete, category reorder.
-- **Products:** manual entry without OFF, per-field user-edited tracking.
+- **`domain/`:** units, conversion, nutrients registry, nutrition, normalisation, **aggregation, rounding and needs-more** as pure functions over dataclasses. This is the most heavily tested part, with Hypothesis.
+- **Ingredients:** CRUD, search, "similar exists" hint, base-unit guard, admin merge/delete (for existing references), category reorder.
+- **Products:** manual entry without OFF, nutrition basis, per-field user-edited tracking.
 - **Frontend:** Ingredients tab (search, grouped by category, detail with products and the average hint), the ingredient picker component (search, inline create) reused by meals and lists, admin category ordering.
+- **seed-demo:** ingredients and products.
 
-### M4 — Meals (L) · MEAL, VIS-04/05, NUT-03/04
+### M4 — Meals (L)
+*MEAL, VIS-04/05, NUT-03/04, CPL-06*
 - **Meals:** CRUD, ingredient rows, cuisine, tags, servings, source URL validation.
-- **Photo pipeline and signed media URLs;** client-side resize before upload.
+- **Photo pipeline** (thread + semaphore, orientation, limits) and signed media URLs; client-side resize before upload.
 - **Copy** with its own photo copy and "based on".
 - **Nutrition** per meal/serving with incomplete/estimate markers.
-- **Filtering:** user filter chips (saved on the server), search and filters.
+- **Filtering:** meal filter chips (saved on the server), search and filters.
+- **Follow-ups:** user deletion also removes meals and photos; ingredient merge and delete guard also cover `meal_ingredients`.
+- **seed-demo:** meals with photos.
 - **Tests:** E2E journeys 4, 5, 9.
 
-### M5 — Shopping lists, online (XL) · LIST, AGG, SHOP, EXP, CPL-02/03, VIS-03, UI-02
+### M5a — Draft lists (L)
+*LIST-01..10, LIST-13..15, AGG (service), EXP, CPL-02/03, VIS-03/06, UI-02/03*
 - **Backend:**
-  - lists CRUD, list meals (servings), extra items, hide/unhide lines;
-  - the aggregation service;
-  - start shopping (freezing) and the "needs more" logic;
-  - finish/reopen/shop-again/copy;
-  - history, "others' lists", sharing with the partner;
-  - the ops endpoint (also used online), `version` + ETag.
+  - lists CRUD, list meals (servings, snapshots of name and servings), extra items, hide/unhide lines;
+  - the aggregation service on top of `domain/`;
+  - share switch, others' lists (read-only, with embedded-meal filtering) and copy;
+  - **detach** for all triggers (§ 5.7);
+  - viewer-specific ETag polling;
+  - follow-ups: user deletion detaches meals and transfers shared lists; ingredient merge covers list tables.
 - **Frontend:**
-  - Lists home (continue card, drafts, history, others);
+  - Lists home (drafts, others with list chips);
   - list builder (meal picker with recently used + servings, create meal on the spot, extra-item input with autocomplete);
-  - draft view (grouped lines, sources popover, swipe to hide);
-  - shopping view (big checkboxes, "In the cart", who-checked initials, "+300 g", finish dialog with reminder);
-  - 5 s polling;
+  - draft view (grouped lines, sources popover, swipe to hide, "no longer available" meals);
   - export through the share sheet.
-- **Tests:** E2E journeys 6, 8, 11.
+- **seed-demo:** drafts.
+- **Tests:** E2E journeys 6, 8.
 
-### M6 — Offline and PWA hardening (L) · SYNC, SYNC-09, EXP-03
-- IndexedDB list copy + outbox, flush loop, user tagging, logout guard, sync indicator, waiting-too-long banner, `storage.persist()`.
-- Offline start of the app shell, offline banner and disabled controls, conflict rules (server tests for last-write-wins, delete-wins, duplicates).
-- **Tests:** E2E journey 7 (offline check-off, "reload" while offline, reconnect, verify on a second browser context as the partner).
+### M5b — Shopping (L)
+*LIST-11/12, SHOP, SYNC-06/08 (online), PERF-02*
+- **Backend:**
+  - start shopping (freezing with attribute snapshots), line states and needs-more;
+  - the ops endpoint (also used online) with conflict rules;
+  - finish/reopen/shop-again, history;
+  - concurrency test.
+- **Frontend:**
+  - "Continue shopping" card;
+  - shopping view (big checkboxes, "In the cart", who-checked initials, "+300 g"/"changed", finish dialog with reminder);
+  - 5 s polling;
+  - history.
+- **seed-demo:** a shopping list and history.
+- **Tests:** E2E journey 11.
+- **Gate:** `list_p95.py` on the Pi meets PERF-02 before M6 starts.
 
-### M7 — Barcode scanning and Open Food Facts (M) · BAR
-- **Backend:** OFF v3 client (O-4), token bucket, lookup proposal, save and link, refresh job + background refresh, pending-update apply/ignore, attribution data.
-- **Frontend:** scanner route (lazy wasm, torch toggle if available, manual input fallback), "Which ingredient is this?" flow, pending-update hint, attribution.
-- **Tests:** OFF contract tests on recorded fixtures (a CI job checks one real known barcode weekly, non-blocking); E2E journey 3 with an injected barcode. The iOS 26 camera-rotation issue is checked on a real device (O-6).
+### M6 — Offline and PWA hardening (L)
+*SYNC-01..10, EXP-03*
+- IndexedDB list copy + outbox, flush loop, user tagging, logout guard, full SYNC-10 lifecycle, sync indicator, waiting-too-long banner, `storage.persist()`.
+- Lie-fi handling end-to-end, offline banner and disabled controls, conflict rules (server tests for last-write-wins, delete-wins, checks on done lists, duplicates).
+- **Tests:** E2E journey 7 (offline check-off, reconnect, verify on a second browser context as the partner), plus the lie-fi case.
 
-### M8 — Operations (L) · OPS, PLT-06, ADM-01 (system info)
-- `backup.sh` (+ retention, request trigger, `--verify-latest`), `restore.sh` / `setup.sh --restore`, `update.sh` with rollback, `disk-check.sh`, all systemd units.
-- The Mac installer, `pull.sh` and launchd (O-5); healthchecks.io setup guide.
+### M7 — Barcode scanning and Open Food Facts (M)
+*BAR, SEC-13*
+- **Backend:** OFF v3 client (O-4) with validation, token bucket, lookup proposal, save and link (basis check), refresh job + background refresh, pending-update apply/ignore, attribution data.
+- **Frontend:** scanner route (lazy, self-hosted wasm, torch toggle if available, manual input fallback), "Which ingredient is this?" flow, pending-update hint, attribution.
+- **Tests:** OFF contract tests on recorded fixtures (a weekly non-blocking CI job checks one real known barcode); E2E journey 3; Vitest decoding of sample EAN images; a real-device check of the iOS 26 camera-rotation issue (O-6).
+
+### M8 — Operations (L)
+*OPS, PLT-06/07, SEC-11 (procedure), ADM-01 (system info)*
+- `backup.sh` (partial dirs, retention, labels, path-unit trigger, `--verify-latest`), `prune.py`, `restore.sh` / `setup.sh --restore`, `update.sh` with provenance verification and rollback, `--update-host-files`, `--rotate-secret`, all systemd units. Re-run `setup.sh` on the running Pi to install them.
+- The Mac installer, `pull.sh` (ledger, staging, guards) and launchd (O-5).
 - Admin page system info (version, last backup, disk).
-- A CI test for backup → restore round trip and for update rollback (simulated unhealthy image).
-- **`docs/operations.md`** covering: setup, restore / SD swap, update and version-line switch, alerts, troubleshooting.
-- **Restore drill** on a spare SD card (verifies O-1).
+- CI deploy tests (§ 9).
+- **`docs/operations.md`** covering: setup, restore / SD swap, update and version-line switch, alerts, "Mac or backup lost", troubleshooting.
+- **Done when:**
+  - the Pi has applied at least one pre-release, including a migration, through the nightly `update.sh`;
+  - a deliberately broken pre-release was rolled back automatically, with the alert received;
+  - the **restore drill** on a spare SD card succeeded, including the same Tailscale node and shares (O-1);
+  - the Mac has pulled for several days.
 
-### M9 — Release 2.0.0 (M) · QA-06, A11Y, PERF, LIC-02
-- Polish pass on all screens (empty states, loading, errors in both languages); the diagnostics screen is removed.
+### M9 — Release 2.0.0 (M)
+*QA-06, A11Y, PERF (regression), LIC-02/03, UI-06, SEC (review)*
+- Polish pass on all screens (empty states, loading, errors in both languages); the diagnostics screen and endpoints are removed.
 - An accessibility pass (axe clean, VoiceOver smoke test on iPhone).
-- A **performance check on the Pi 3** (RAM, p95 of the list API, start time, bcrypt timing).
+- A **performance regression** on the Pi (RAM, `list_p95.py`, start time, bcrypt timing).
 - A security review (a `/security-review` of the whole codebase plus a manual check against SEC-*).
 - **Documentation:**
-  - `docs/guide-de.md` / `guide-en.md`: "How to join" (install Tailscale → accept share → tap invite → Add to Home Screen) and a short user guide;
+  - `docs/guide-de.md` / `guide-en.md`: "How to join" (install Tailscale → accept share → tap invite → register → Add to Home Screen → log in once if asked) and a short user guide, including what admins and the Pi operator can see;
   - an admin guide;
-  - `frontend/README.md` (handoff: structure, conventions, test IDs, how to regenerate API types);
+  - a final review of `frontend/README.md`;
   - `docs/release-checklist.md`.
-- Run the manual iPhone checklist → publish **v2.0.0** → the Pi switches `IMAGE_TAG=2.0` → onboard the household.
+- Run the manual iPhone checklist → `release-publish kind=final` → **v2.0.0** → the Pi switches `IMAGE_TAG=2.0` → share the Pi with each household member → invites.
 
 ### Order and parallelism
 
-`M0 → M1 → M2 → M3 → M4 → M5 → M6 → M9`. M7 can come after M4 or after M6. M8 can start right after M1 and must be finished before M9, and before real data is entered.
+`M0 → M1 → M2 → M3 → M4 → M5a → M5b → M6 → M9`. M7 can come after M4 or after M6. M8 can start right after M1 and must be finished before M9, and before real data is entered.
 
 ## 13. Owner checklist (steps only you can do)
 
-**GitHub (repo settings)**
-- [ ] Rulesets for `main` and `release/**`:
-  - require a PR and the CI checks;
-  - block force-push and deletion;
-  - no required approvals (you can't approve your own PRs).
-- [ ] A ruleset for tags `v*`: creation only by GitHub Actions / admins.
-- [ ] Settings → Actions → General:
-  - workflow permissions *read-only*;
-  - enable "Allow GitHub Actions to create and approve pull requests" (for back-merge PRs).
-- [ ] Code security: Dependabot alerts and security updates, secret scanning + push protection, CodeQL default setup, private vulnerability reporting.
-- [ ] After the first published image: Packages → mealmate → Change visibility → **Public**. This cannot be undone and is required for pulling without a login.
-- [ ] Settings → Emails: "Keep my email addresses private" + block pushes that expose it; set your local `git config user.email` to the noreply address.
-
-**Tailscale**
-- [ ] Create an account; enable **MagicDNS** and **HTTPS certificates**. Your tailnet name becomes public in certificate transparency logs, which is harmless.
-- [ ] After the Pi joins: **disable key expiry** for the Pi (or tag it). Otherwise it drops off after 180 days.
-- [ ] Tailnet policy: shared users may reach only the Pi on port 443 (exact policy from M1).
-- [ ] Share the Pi with each household member (Machine → Share). Put your Mac in the tailnet.
-
-**healthchecks.io**
-- [ ] Create an account; create 5 checks (§ 11.4); add the email (and optionally ntfy) integration. The ping URLs go into the Pi's `.env` and the Mac config. They are secrets.
-
-**Hardware / Mac / iPhone**
-- [ ] Flash the SD card with Raspberry Pi Imager (64-bit Lite, hostname `mealmate`, your user, key `id_ed25519_mealmate`, SSH key-only). Run `setup.sh`, then `create-admin`.
-- [ ] Run the Mac backup-pull installer.
-- [ ] Keep a spare SD card for the restore drill.
-- [ ] Before each release: the manual iPhone checklist.
+| When | Step |
+|---|---|
+| **During M0** | GitHub App "MealMate Release Bot": create it (contents + pull requests write), install it only on this repo, and store its client ID and private key as Actions secrets |
+| During M0 | Settings → Actions → General: workflow permissions *read-only*; "Require actions to be pinned to a full-length commit SHA"; fork PR workflows: "Require approval for all external contributors" |
+| During M0 | Code security: Dependabot alerts and security updates, secret scanning + push protection, CodeQL default setup, private vulnerability reporting |
+| During M0 | Account: 2FA with an authenticator app (plus a passkey for sign-in), recovery codes stored offline. Settings → Emails: "Keep my email addresses private" + block pushes that expose it; set your local `git config user.email` to the noreply address |
+| End of M0 (after CI ran once) | Rulesets: `main` and `release/**`: require a PR and the CI checks, block force-push and deletion, allow squash **and** merge commits, no required approvals. Tags `v*`: restrict creation, update and deletion, with bypass for the GitHub App and the repository admin role |
+| End of M0 (rehearsal) | Packages → mealmate: **Change visibility → Public** (cannot be undone); check under "Manage Actions access" that only this repo is listed |
+| **Before M1** | Tailscale: create an account, enable **MagicDNS** and **HTTPS certificates** (your tailnet name becomes public in certificate transparency logs, which is harmless) |
+| Before M1 | Tailscale policy: add `tagOwners` for `tag:mealmate` and replace the default allow-all with the grants from M1 (owner devices → Pi 22/443; `autogroup:shared` → Pi 443; nothing from the Pi) |
+| Before M1 | healthchecks.io: create an account and at least the `heartbeat` and `disk` checks, with the email integration |
+| Before M1 | A second Tailscale account (test person) and the Tailscale app on your iPhone. Flash the SD card with Raspberry Pi Imager (64-bit Lite, hostname `mealmate`, your user, key `id_ed25519_mealmate`, SSH key-only) |
+| During M1 | Run `setup.sh`; approve the Pi in Tailscale (check that it shows `tag:mealmate` and key expiry disabled); share the Pi with the test account |
+| **Before M8** | Your Mac in the tailnet; enable FileVault; the remaining healthchecks (`backup`, `mac-pull`, `update`); Homebrew installed; a spare SD card for the restore drill |
+| During M8 | Run the Mac backup-pull installer; carry out the restore drill |
+| **M9** | Manual iPhone checklist; share the Pi with each household member (paste each share link into their MealMate invite); create invites |
+| Every release | Manual iPhone checklist (QA-06); merge the back-merge PR |
 
 ## 14. Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| iOS web-app quirks (camera, offline storage, share sheet) break core features | M1 spike on a real iPhone before building features; manual checklist per release; typed barcode fallback; the server stays the source of truth |
+| iOS web-app quirks (login carry-over, cookie loss in the Home Screen app, camera, share sheet, offline storage) break core features | M1 spike on a real iPhone before building features; Home Screen fork session; manual checklist per release; typed barcode fallback; the server stays the source of truth |
+| Lie-fi in the supermarket makes the app hang | Precached navigation; request timeouts; render from IndexedDB first; lie-fi E2E case |
 | SD card corruption / Pi failure | 6-hourly backups + hourly Mac pull; tested restore of the whole system in about 30 min; low-write OS settings; quality power supply |
 | Tailscale identity restore doesn't behave as expected | Verified in the M8 drill; documented fallback (re-share); users only need to re-accept the share |
-| Offline sync bugs lose ticks | Small op set; idempotent ops; outbox kept until the server confirms; E2E offline tests; "waiting" banner |
-| Pi 3 too slow (bcrypt, images, aggregation) | Resize on the client; pixel limits; tuned bcrypt; a single worker; performance check in M9 |
-| OFF API changes, limits or outages | Pinned API version; cache; 10 req/min; manual entry always possible; weekly non-blocking contract check |
-| `GITHUB_TOKEN`-created tags don't trigger workflows | The publish workflow calls the build workflow directly (`workflow_call`) |
-| Free-tier changes (Tailscale, healthchecks.io) | Node-share recipients don't use your seats; both are replaceable (Headscale; any dead-man's-switch service / self-hosted Uptime Kuma on the Mac) |
-| Frontend developer restyles and breaks tests | E2E tests use roles, names and test IDs; generated API types; conventions documented |
+| A broken or malicious image reaches the Pi | Provenance verification before every update; SHA-pinned actions; 2FA; automatic rollback; bad-digest marker |
+| Security fixes don't reach the Pi | Weekly scan of published images; patch procedure on the release branch; nightly install of patch releases |
+| A compromised Pi attacks the owner's other devices or backups | Tagged Pi without outgoing grants; Mac shields-up; pull-only with ledger, no overwrite, anomaly guard |
+| Offline sync bugs lose ticks | Small op set; idempotent ops; `BEGIN IMMEDIATE`; outbox kept until the server confirms; concurrency and E2E offline tests; "waiting" banner |
+| A migration destroys data | FK-safe Alembic setup; populated-DB migration tests; pre-migration snapshot; pre-update backup + rollback |
+| Pi 3 too slow (bcrypt, images, aggregation, polling) | Thread offloading; client-side resize; pixel limits; tuned bcrypt; a single worker; perf gate at M5b |
+| OFF API changes, limits, bad data or outages | Pinned API version; validation; cache; 10 req/min; manual entry always possible; weekly non-blocking contract check |
+| Release automation fails on first real use | Full release rehearsal in M0; the GitHub App token avoids the `GITHUB_TOKEN` trigger limits |
+| Free-tier changes (Tailscale, healthchecks.io) | Node-share recipients don't use your seats; both are replaceable (Headscale; any dead-man's-switch service) |
+| Frontend developer restyles and breaks tests | E2E tests use roles, names and test IDs from one file; generated API types; conventions documented from M0 |
 | Scope creep | Postponed list (requirements § 6); every PR references requirement IDs |
 
 ## 15. Open points to verify during implementation
 
 | # | Question | Resolved in |
 |---|---|---|
-| O-1 | Does restoring `tailscaled.state` on a new card bring the Pi back as the same node with the same shares? | M8 restore drill |
-| O-2 | Exact tailnet-policy syntax to restrict *shared-in* users to the Pi on port 443 | M1 |
-| O-3 | Does `tailscale serve` pass `X-Forwarded-For` with the real tailnet IP? If not, throttle per username only | M1 |
+| O-1 | Does restoring `tailscaled.state` on a new card bring the Pi back as the same node with the same shares and serve certificate? | M8 restore drill |
+| O-2 | Do the tailnet grants work as intended? That covers `autogroup:shared` → `tag:mealmate:443` (upstream reports suggest a host-IP alias may be needed), shared users blocked from port 22, the Pi unable to reach other devices, and shares, MagicDNS name and certificate surviving the tagging | M1 |
+| O-3 | Inside the container, is `request.client.host` the phone's tailnet IP and the scheme `https`, as expected with host networking? | M1 |
 | O-4 | OFF API v3: which minor version to pin, and the nutriment schema (v3.5 introduced a new nutrition structure) | M7 |
-| O-5 | macOS rsync (`openrsync`) with `-H` against `rrsync`; fall back to Homebrew rsync | M8 |
-| O-6 | zxing-wasm: CSP needs (`wasm-unsafe-eval`) and the iOS 26 camera-rotation regression in Home Screen apps | M1, M7 |
+| O-5 | Homebrew rsync ≥ 3.4 against `rrsync` on the Pi (`--list-only`, `-H`, `--link-dest`) | M8 |
+| O-6 | zxing-wasm with the self-hosted wasm under the CSP; the iOS 26 camera-rotation regression in Home Screen apps | M1, M7 |
 | O-7 | bcrypt cost factor giving about 250–500 ms on the Pi 3 | M2 |
-| O-8 | Python 3.13 vs 3.14: arm64 wheel availability for all dependencies | M0 |
-| O-9 | Docker Engine installation on the current Raspberry Pi OS 64-bit release | M1 |
+| O-8 | Python 3.14: `uv sync --frozen` on linux/arm64 installs only wheels (no source builds) | M0 |
+| O-9 | Current Raspberry Pi OS 64-bit (Trixie): Docker Engine installation, unattended-upgrades origin labels for the Raspberry Pi, Docker and Tailscale repos, memory cgroup parameter, `rpi-swap` zram-only configuration | M1 |
+| O-10 | iOS: does "Add to Home Screen" carry the Safari login into the Home Screen app, and does the refresh cookie survive force-quit and a phone restart in the Home Screen app? | M1 |
+| O-11 | Playwright WebKit: offline reload with a service worker (upstream issue); recheck on every Playwright upgrade | M0, M6 |
