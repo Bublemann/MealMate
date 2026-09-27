@@ -5,7 +5,7 @@ import ean13Rotated from './fixtures/ean13-rotated.png?inline';
 import ean13 from './fixtures/ean13.png?inline';
 import ean8 from './fixtures/ean8.png?inline';
 import upca from './fixtures/upca.png?inline';
-import { decodeBarcode } from './decoder';
+import { decodeBarcode, readBarcode } from './decoder';
 
 // The real zxing-wasm decoder on sample images (made by scripts/generate-barcode-fixtures.mjs).
 // The files come in as data URLs; the test environment can't fetch the wasm from the app's URL
@@ -34,6 +34,17 @@ describe('decodeBarcode', () => {
 
     expect(await decodeBarcode(image)).toBeNull();
     expect(await decodeBarcode(image, { rotate: true })).toBe('4006381333931');
+  });
+
+  it('tells the format and the orientation of a code (diagnostics screen)', async () => {
+    expect(await readBarcode(await bytes(ean8))).toEqual({
+      text: '96385074',
+      format: 'EAN8',
+      orientation: 0,
+    });
+    const rotated = await readBarcode(await bytes(ean13Rotated), { rotate: true });
+    expect(rotated).toMatchObject({ text: '4006381333931', format: 'EAN13' });
+    expect(Math.abs(rotated?.orientation ?? 0)).toBe(90);
   });
 
   it('finds nothing in pixels without a barcode', async () => {

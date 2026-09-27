@@ -17,6 +17,15 @@ export interface DecodeOptions {
   rotate?: boolean;
 }
 
+/** A barcode found in a camera frame. */
+export interface DecodedBarcode {
+  text: string;
+  /** zxing's format name, e.g. `EAN13` or `UPCE`. */
+  format: string;
+  /** How far the barcode was turned in the frame, in degrees (O-6: iOS 26 rotation issue). */
+  orientation: number;
+}
+
 let prepared: Promise<unknown> | null = null;
 
 /**
@@ -43,8 +52,16 @@ export function loadDecoder(): Promise<unknown> {
  */
 export async function decodeBarcode(
   image: Pick<ImageData, 'data' | 'width' | 'height'> | Uint8Array,
-  { rotate = false }: DecodeOptions = {},
+  options: DecodeOptions = {},
 ): Promise<string | null> {
+  return (await readBarcode(image, options))?.text ?? null;
+}
+
+/** Like decodeBarcode, with the format and orientation (shown by the diagnostics screen). */
+export async function readBarcode(
+  image: Pick<ImageData, 'data' | 'width' | 'height'> | Uint8Array,
+  { rotate = false }: DecodeOptions = {},
+): Promise<DecodedBarcode | null> {
   const results = await readBarcodes(image as ImageData | Uint8Array, {
     formats: FORMATS,
     tryHarder: true,
@@ -52,7 +69,8 @@ export async function decodeBarcode(
     tryInvert: false,
     maxNumberOfSymbols: 1,
   });
-  return results.find((result) => result.isValid)?.text ?? null;
+  const found = results.find((result) => result.isValid);
+  return found ? { text: found.text, format: found.format, orientation: found.orientation } : null;
 }
 
 /**
@@ -63,7 +81,7 @@ export async function decodeVideoFrame(
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
   options: DecodeOptions = {},
-): Promise<string | null> {
+): Promise<DecodedBarcode | null> {
   const { videoWidth, videoHeight } = video;
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !videoWidth || !videoHeight) {
     return null;
@@ -76,5 +94,5 @@ export async function decodeVideoFrame(
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) return null;
   context.drawImage(video, 0, 0, width, height);
-  return decodeBarcode(context.getImageData(0, 0, width, height), options);
+  return readBarcode(context.getImageData(0, 0, width, height), options);
 }

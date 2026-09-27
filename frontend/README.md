@@ -428,5 +428,9 @@ order.
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |
 | `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint           |
+| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Me, admins only (M1–M9)  |
+| `screenDiagnostics`      | `screen-diagnostics`       | Diagnostics screen `/diag` (M1–M9)          |
+| `diagResult`             | `diag-result`              | One result line on the diagnostics screen   |
+| `diagReport`             | `diag-report`              | Plain-text report on the diagnostics screen |
 
 <!-- test-ids:end -->
