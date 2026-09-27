@@ -124,6 +124,8 @@ jobs:
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # The release App credentials live in the protected `release` environment (plan § 13).
+    environment: release
     # Everything that writes uses the App token below.
     permissions: {}
     steps:
