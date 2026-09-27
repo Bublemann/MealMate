@@ -72,6 +72,23 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "admin_create_invite",
         "admin_revoke_invite",
         "admin_list_events",
+        "list_categories",
+        "list_units",
+        "list_cuisines",
+        "create_cuisine",
+        "list_tags",
+        "list_ingredients",
+        "list_similar_ingredients",
+        "create_ingredient",
+        "get_ingredient",
+        "update_ingredient",
+        "list_ingredient_products",
+        "create_product",
+        "get_product",
+        "update_product",
+        "admin_reorder_categories",
+        "admin_merge_ingredient",
+        "admin_delete_ingredient",
     }
     error_ref = {"$ref": "#/components/schemas/ErrorResponse"}
     for operation in operations.values():

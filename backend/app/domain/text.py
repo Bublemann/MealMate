@@ -17,3 +17,14 @@ def normalize(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", folded)
     stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
     return " ".join(stripped.split())
+
+
+UMLAUT_SPELLINGS = (("ae", "a"), ("oe", "o"), ("ue", "u"))
+
+
+def fold_umlauts(text_norm: str) -> str:
+    """A normalised text with `ae oe ue` reduced to `a o u`, for search only: "apfel" then
+    finds "Äpfel" (`aepfel`) as well as "aepfel" does (ING-03)."""
+    for spelled, plain in UMLAUT_SPELLINGS:
+        text_norm = text_norm.replace(spelled, plain)
+    return text_norm

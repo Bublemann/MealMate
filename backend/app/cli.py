@@ -34,7 +34,7 @@ from app.main import create_app
 from app.repositories import users as users_repo
 from app.services import accounts, codes
 from app.services.context import AuthConfig
-from app.services.demo import DemoRefusedError, seed_demo
+from app.services.demo import DEMO_INGREDIENTS, DEMO_PRODUCTS, DemoRefusedError, seed_demo
 
 main = typer.Typer(
     name="mealmate", help="MealMate command-line tools.", no_args_is_help=True, add_completion=False
@@ -185,8 +185,8 @@ def reset_link(
 
 @main.command("seed-demo")
 def seed_demo_command() -> None:
-    """Fill an empty installation with demo users (admin, anna + ben as a couple, carl) and an
-    open invite. Refuses to run if any user exists."""
+    """Fill an empty installation with demo users (admin, anna + ben as a couple, carl), an
+    open invite, ingredients and products. Refuses to run if any user exists."""
     settings = _load_settings()
     _require_current_database(settings)
     _require_public_url(settings)
@@ -199,6 +199,7 @@ def seed_demo_command() -> None:
     typer.echo("Demo users: admin (admin), anna + ben (a couple), carl")
     typer.echo(f"Demo password (all users): {seed.password}")
     typer.echo(f"Open invite: {seed.invite_url}")
+    typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)}, products: {len(DEMO_PRODUCTS)}")
 
 
 @main.command("export-openapi")

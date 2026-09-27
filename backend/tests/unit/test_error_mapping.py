@@ -21,6 +21,7 @@ from app.core.errors import ApiError, ErrorCode, FieldErrorCode
         ("less_than", FieldErrorCode.OUT_OF_RANGE),
         ("less_than_equal", FieldErrorCode.OUT_OF_RANGE),
         ("multiple_of", FieldErrorCode.OUT_OF_RANGE),
+        ("finite_number", FieldErrorCode.OUT_OF_RANGE),
         ("url_parsing", FieldErrorCode.INVALID_FORMAT),
         ("url_scheme", FieldErrorCode.INVALID_FORMAT),
         ("string_pattern_mismatch", FieldErrorCode.INVALID_FORMAT),
