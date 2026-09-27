@@ -98,10 +98,10 @@ async def test_privacy_switches_call_the_hooks_when_turned_off(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    async def meals_hook(_session: object, user_id: str) -> None:
+    async def meals_hook(_session: object, user_id: str, **_: object) -> None:
         calls.append(("meals", user_id))
 
-    async def lists_hook(_session: object, user_id: str) -> None:
+    async def lists_hook(_session: object, user_id: str, **_: object) -> None:
         calls.append(("lists", user_id))
 
     monkeypatch.setattr(hooks, "on_meals_made_private", meals_hook)

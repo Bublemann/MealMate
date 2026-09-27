@@ -110,7 +110,7 @@ async def test_other_methods_are_not_allowed(client: AsyncClient) -> None:
 
 @pytest.mark.parametrize(
     ("method", "path"),
-    [("GET", "/api"), ("GET", "/api/"), ("GET", "/api/lists"), ("POST", "/api/lists")],
+    [("GET", "/api"), ("GET", "/api/"), ("GET", "/api/unknown"), ("POST", "/api/unknown")],
 )
 async def test_api_paths_never_fall_back(client: AsyncClient, method: str, path: str) -> None:
     response = await client.request(method, path, headers={"accept": "text/html"})

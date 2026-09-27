@@ -39,6 +39,7 @@ from app.services import accounts, codes, jobs
 from app.services.context import AuthConfig
 from app.services.demo import (
     DEMO_INGREDIENTS,
+    DEMO_LISTS,
     DEMO_MEALS,
     DEMO_PRODUCTS,
     DemoRefusedError,
@@ -203,8 +204,8 @@ def reset_link(
 @main.command("seed-demo")
 def seed_demo_command() -> None:
     """Fill an empty installation with demo users (admin, anna + ben as a couple, carl with
-    private meals), an open invite, ingredients, products and meals with photos. Refuses to run
-    if any user exists."""
+    private meals), an open invite, ingredients, products, meals with photos and draft lists.
+    Refuses to run if any user exists."""
     settings = _load_settings()
     _require_current_database(settings)
     _require_public_url(settings)
@@ -220,6 +221,7 @@ def seed_demo_command() -> None:
     typer.echo(f"Open invite: {seed.invite_url}")
     typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)}, products: {len(DEMO_PRODUCTS)}")
     typer.echo(f"Demo meals: {len(DEMO_MEALS)}")
+    typer.echo(f"Demo lists: {len(DEMO_LISTS)}")
 
 
 @main.command("export-openapi")

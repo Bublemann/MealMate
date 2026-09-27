@@ -251,6 +251,30 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     units = {unit for (unit,) in query(database, "SELECT DISTINCT unit FROM meal_ingredients")}
     assert units == {"g", "kg", "ml", "piece", "tbsp", None}
 
+    assert "Demo lists: 3" in result.output
+    lists = query(
+        database,
+        "SELECT u.username, l.name, l.shared_with_partner, l.status, l.reminder_seed, "
+        "(SELECT count(*) FROM list_meals m WHERE m.list_id = l.id), "
+        "(SELECT count(*) FROM list_extra_items e WHERE e.list_id = l.id), "
+        "(SELECT count(*) FROM list_line_states s WHERE s.list_id = l.id AND s.hidden) "
+        "FROM shopping_lists l JOIN users u ON u.id = l.owner_id ORDER BY 1",
+    )
+    assert lists == [
+        ("anna", "Wochenende", 1, "draft", 3, 2, 3, 1),
+        ("ben", None, 0, "draft", 7, 2, 0, 0),
+        ("carl", "Grillabend", 0, "draft", 12, 2, 1, 0),
+    ]
+    # The meal ben deleted stays on his draft, detached with its frozen rows (LIST-15).
+    detached = query(
+        database,
+        "SELECT meal_id, meal_name_snapshot, detached_reason, "
+        "(SELECT count(*) FROM list_meal_ingredients r WHERE r.list_meal_id = m.id) "
+        "FROM list_meals m WHERE frozen_at IS NOT NULL",
+    )
+    assert detached == [(None, "Kartoffelsuppe", "deleted", 4)]
+    assert query(database, "SELECT count(*) FROM meals WHERE name = 'Kartoffelsuppe'") == [(0,)]
+
     again = runner.invoke(main, ["seed-demo"])
     assert again.exit_code == 1
     assert "Refusing to seed demo data" in again.output
@@ -268,7 +292,8 @@ def test_seed_demo_leaves_nothing_behind_when_it_fails(
     assert result.exit_code == 1
     assert isinstance(result.exception, IntegrityError)
     tables = ("users", "couples", "couple_members", "one_time_codes", "admin_events")
-    for table in (*tables, "ingredients", "products", "tags", "meals", "meal_ingredients"):
+    catalog = ("ingredients", "products", "tags", "meals", "meal_ingredients", "shopping_lists")
+    for table in (*tables, *catalog):
         assert query(database, f"SELECT count(*) FROM {table}") == [(0,)], table  # noqa: S608
 
     again = runner.invoke(main, ["seed-demo"])

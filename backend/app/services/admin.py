@@ -106,15 +106,16 @@ async def update_user(
 async def delete_user(
     session: AsyncSession, actor: Principal, user_id: str, *, now: datetime
 ) -> None:
-    """Delete another user (ADM-03) in one transaction: the hook for their lists and meals
-    (M4/M5a), then their couple ends, then everything of theirs goes by `ON DELETE CASCADE`
-    (sessions, reset links, couple requests). What others refer to (log entries, invites they
-    created or used) keeps its row with the reference set to NULL ("deleted user")."""
+    """Delete another user (ADM-03) in one transaction: the hook moves their shared lists to
+    the partner and detaches their meals from others' lists, then their couple ends, then
+    everything of theirs goes by `ON DELETE CASCADE` (meals, other lists, sessions, reset
+    links, couple requests). What others refer to (log entries, invites they created or used)
+    keeps its row with the reference set to NULL ("deleted user")."""
     async with session.begin():
         user = await _target(session, actor, user_id)
-        await hooks.before_user_deleted(session, user.id)
+        await hooks.before_user_deleted(session, user.id, now=now)
         if (couple := await couples_repo.accepted_for(session, user.id)) is not None:
-            await couples.end_couple(session, couple)
+            await couples.end_couple(session, couple, now=now)
         events.record(
             session,
             actor_id=actor.user_id,

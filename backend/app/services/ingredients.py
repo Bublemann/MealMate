@@ -255,7 +255,7 @@ async def merge(
         ):
             raise ApiError(ErrorCode.INGREDIENT_MERGE_BASE_UNIT_MISMATCH, status_code=409)
         await products_repo.move(session, source.id, target.id, actor_id=actor.user_id, now=now)
-        await hooks.on_ingredients_merged(session, source.id, target.id)
+        await hooks.on_ingredients_merged(session, source.id, target.id, now=now)
         target.updated_by = actor.user_id
         target.updated_at = now
         events.record(
@@ -294,4 +294,5 @@ async def delete(
             now=now,
             details={"name": row.name},
         )
+        await hooks.before_ingredient_deleted(session, row.id)
         await session.delete(row)

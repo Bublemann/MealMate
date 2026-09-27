@@ -9,8 +9,13 @@
   butter that makes an estimate, bread in pieces without a piece weight that cannot be
   counted); three have photos drawn with Pillow and sent through the real pipeline, and carl
   copied anna's Bolognese ("based on"). carl's meals are private (VIS-02).
+- M5a: drafts (`seed_lists`): anna's "Wochenende", shared with ben, with her meal and one of
+  ben's at other servings, a linked and a free-text extra item and a hidden line; ben's
+  unshared draft without a name, with a meal he deleted afterwards (detached, "no longer
+  available", through the real hook); carl's public "Grillabend" with one of his private
+  meals, which others see as "Private meal (N servings)" (VIS-06).
 
-Later milestones add lists and history. The content is fixed; only ids, the password, the
+Later milestones add shopping and history. The content is fixed; only ids, the password, the
 invite code and the photo keys differ between runs.
 """
 
@@ -24,16 +29,31 @@ from PIL import Image, ImageDraw
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passwords import hash_password
+from app.domain.lists import ingredient_key
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
 from app.domain.units import Unit
 from app.media.store import MediaStore
-from app.models import Couple, CoupleMember, Ingredient, Meal, MealIngredient, MealTag, Product, Tag
+from app.models import (
+    Couple,
+    CoupleMember,
+    Ingredient,
+    ListExtraItem,
+    ListLineState,
+    ListMeal,
+    Meal,
+    MealIngredient,
+    MealTag,
+    Product,
+    ShoppingList,
+    Tag,
+)
 from app.repositories import ingredients as ingredients_repo
+from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
-from app.services import accounts, codes
+from app.services import accounts, codes, hooks
 from app.services.context import AuthConfig
 from app.services.products import DATA_FIELDS
 
@@ -265,6 +285,80 @@ DEMO_MEALS: tuple[DemoMeal, ...] = (
 )  # fmt: skip
 
 
+# Put on ben's draft and then deleted by him, so the list shows it as "no longer available".
+DEMO_DELETED_MEAL = DemoMeal(
+    "Kartoffelsuppe", "ben", servings=4, cuisine="german",
+    rows=(
+        DemoRow("Kartoffeln", 800, Unit.G),
+        DemoRow("Karotten", 2, Unit.PIECE),
+        DemoRow("Zwiebeln", 1, Unit.PIECE),
+        DemoRow("Salz", note=_TO_TASTE),
+    ),
+)  # fmt: skip
+
+
+@dataclass(frozen=True)
+class DemoListMeal:
+    owner: str
+    meal: str
+    servings: int
+
+
+@dataclass(frozen=True)
+class DemoExtra:
+    """A linked extra item (`ingredient`) or a free-text one (`text`, category *Other*)."""
+
+    ingredient: str | None = None
+    amount: float | None = None
+    unit: Unit | None = None
+    text: str | None = None
+    amount_text: str | None = None
+
+
+@dataclass(frozen=True)
+class DemoList:
+    owner: str
+    name: str | None
+    reminder_seed: int
+    shared: bool = False
+    meals: tuple[DemoListMeal, ...] = ()
+    extras: tuple[DemoExtra, ...] = ()
+    # Ingredient lines removed for this list (LIST-07).
+    hidden: tuple[str, ...] = ()
+
+
+DEMO_LISTS: tuple[DemoList, ...] = (
+    DemoList(
+        "anna", "Wochenende", reminder_seed=3, shared=True,
+        meals=(
+            DemoListMeal("anna", "Pfannkuchen", 4),
+            DemoListMeal("ben", "Tomatensalat", 3),
+        ),
+        extras=(
+            DemoExtra(ingredient="Äpfel", amount=6, unit=Unit.PIECE),
+            DemoExtra(ingredient="Zwiebeln"),
+            DemoExtra(text="Geburtstagskerzen", amount_text="1 Packung"),
+        ),
+        hidden=("Salz",),
+    ),
+    DemoList(
+        "ben", None, reminder_seed=7,
+        meals=(
+            DemoListMeal("ben", "Hähnchen-Reis-Pfanne", 2),
+            DemoListMeal("ben", DEMO_DELETED_MEAL.name, 4),
+        ),
+    ),
+    DemoList(
+        "carl", "Grillabend", reminder_seed=12,
+        meals=(
+            DemoListMeal("carl", "Tofu-Gemüse-Curry", 4),
+            DemoListMeal("anna", "Spaghetti Bolognese", 2),
+        ),
+        extras=(DemoExtra(text="Grillkohle", amount_text="2 Säcke"),),
+    ),
+)  # fmt: skip
+
+
 class DemoRefusedError(RuntimeError):
     """The database already has users; demo data is only for empty installations."""
 
@@ -412,6 +506,34 @@ async def _write_photos(media: MediaStore) -> list[str | None]:
     return keys
 
 
+async def _ingredient_ids(session: AsyncSession) -> dict[str, str]:
+    """Ingredient ids by normalised name."""
+    return {name_norm: row_id for row_id, name_norm in await ingredients_repo.names(session)}
+
+
+def _add_rows(
+    session: AsyncSession,
+    meal_id: str,
+    rows: tuple[DemoRow, ...],
+    ingredient_ids: Mapping[str, str],
+    *,
+    now: datetime,
+) -> None:
+    session.add_all(
+        MealIngredient(
+            meal_id=meal_id,
+            position=position,
+            ingredient_id=ingredient_ids[normalize(row.ingredient)],
+            amount=row.amount,
+            unit=None if row.unit is None else row.unit.value,
+            note=row.note,
+            created_at=now,
+            updated_at=now,
+        )
+        for position, row in enumerate(rows)
+    )
+
+
 async def _insert_meals(
     session: AsyncSession,
     user_ids: Mapping[str, str],
@@ -419,9 +541,7 @@ async def _insert_meals(
     *,
     now: datetime,
 ) -> None:
-    ingredient_ids = {
-        name_norm: row_id for row_id, name_norm in await ingredients_repo.names(session)
-    }
+    ingredient_ids = await _ingredient_ids(session)
     cuisine_ids = {row.key: row.id for row in await reference_repo.all_cuisines(session)}
     tag_ids: dict[str, str] = {}
     meal_ids: dict[tuple[str, str], str] = {}
@@ -452,19 +572,105 @@ async def _insert_meals(
                 await session.flush()
                 tag_ids[name_norm] = tag.id
             session.add(MealTag(meal_id=meal.id, tag_id=tag_ids[name_norm]))
-        session.add_all(
-            MealIngredient(
-                meal_id=meal.id,
-                position=position,
-                ingredient_id=ingredient_ids[normalize(row.ingredient)],
-                amount=row.amount,
-                unit=None if row.unit is None else row.unit.value,
-                note=row.note,
-                created_at=now,
-                updated_at=now,
-            )
-            for position, row in enumerate(source.rows)
+        _add_rows(session, meal.id, source.rows, ingredient_ids, now=now)
+    await session.flush()
+
+
+async def _insert_deleted_meal(
+    session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime
+) -> Meal:
+    """`DEMO_DELETED_MEAL`, to be put on a list and deleted there."""
+    demo = DEMO_DELETED_MEAL
+    meal = Meal(
+        owner_id=user_ids[demo.owner],
+        name=demo.name,
+        name_norm=normalize(demo.name),
+        servings=demo.servings,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(meal)
+    await session.flush()
+    _add_rows(session, meal.id, demo.rows, await _ingredient_ids(session), now=now)
+    await session.flush()
+    return meal
+
+
+async def _insert_lists(
+    session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime
+) -> None:
+    """The demo drafts; the meal that gets deleted goes through the real hook (LIST-15)."""
+    ingredient_ids = await _ingredient_ids(session)
+    categories = {row.key: row.id for row in await reference_repo.categories_in_order(session)}
+    deleted = await _insert_deleted_meal(session, user_ids, now=now)
+    every_meal = await meals_repo.search(
+        session, owner_ids=list(user_ids.values()), query="", cuisine_id=None, tag_id=None
+    )
+    meals = {
+        (meal.owner_id, meal.name): meal for meal in every_meal if meal.copied_from_meal_id is None
+    }
+    for demo in DEMO_LISTS:
+        owner_id = user_ids[demo.owner]
+        shopping_list = ShoppingList(
+            owner_id=owner_id,
+            name=demo.name,
+            status="draft",
+            shared_with_partner=demo.shared,
+            version=0,
+            reminder_seed=demo.reminder_seed,
+            created_at=now,
+            updated_at=now,
         )
+        session.add(shopping_list)
+        await session.flush()
+        for position, item in enumerate(demo.meals):
+            meal = meals[(user_ids[item.owner], item.meal)]
+            session.add(
+                ListMeal(
+                    list_id=shopping_list.id,
+                    meal_id=meal.id,
+                    servings=item.servings,
+                    meal_servings_snapshot=meal.servings,
+                    meal_name_snapshot=meal.name,
+                    meal_owner_id_snapshot=meal.owner_id,
+                    added_by=owner_id,
+                    last_added_at=now,
+                    position=position,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        for extra in demo.extras:
+            session.add(
+                ListExtraItem(
+                    list_id=shopping_list.id,
+                    ingredient_id=(
+                        None
+                        if extra.ingredient is None
+                        else ingredient_ids[normalize(extra.ingredient)]
+                    ),
+                    text=extra.text,
+                    amount=extra.amount,
+                    unit=None if extra.unit is None else extra.unit.value,
+                    amount_text=extra.amount_text,
+                    category_id=None if extra.text is None else categories["other"],
+                    added_by=owner_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        session.add_all(
+            ListLineState(
+                list_id=shopping_list.id,
+                line_key=ingredient_key(ingredient_ids[normalize(name)]),
+                checked=False,
+                hidden=True,
+            )
+            for name in demo.hidden
+        )
+    await session.flush()
+    await hooks.on_meal_deleted(session, deleted.id, now=now)
+    await session.delete(deleted)
     await session.flush()
 
 
@@ -492,10 +698,16 @@ async def seed_meals(
         await _insert_meals(session, user_ids, photo_keys, now=now)
 
 
+async def seed_lists(session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime) -> None:
+    """The demo drafts (needs the demo meals)."""
+    async with session.begin():
+        await _insert_lists(session, user_ids, now=now)
+
+
 async def seed_demo(
     session: AsyncSession, config: AuthConfig, media: MediaStore, *, now: datetime
 ) -> DemoSeed:
-    """Accounts, catalog and meals in one transaction: if anything fails, nothing is left
+    """Accounts, catalog, meals and lists in one transaction: if anything fails, nothing is left
     behind (but photo files, which `mealmate jobs cleanup` removes) and `seed-demo` can simply
     run again."""
     password, password_hash = await _demo_password(config)
@@ -505,4 +717,5 @@ async def seed_demo(
         await _insert_catalog(session, seed.user_ids, now=now)
         await session.flush()
         await _insert_meals(session, seed.user_ids, photo_keys, now=now)
+        await _insert_lists(session, seed.user_ids, now=now)
     return seed

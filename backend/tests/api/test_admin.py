@@ -191,10 +191,10 @@ async def test_delete_user(
 ) -> None:
     calls: list[tuple[str, ...]] = []
 
-    async def before_user_deleted(_session: object, user_id: str) -> None:
+    async def before_user_deleted(_session: object, user_id: str, **_: object) -> None:
         calls.append(("before_user_deleted", user_id))
 
-    async def on_couple_ended(_session: object, user_a: str, user_b: str) -> None:
+    async def on_couple_ended(_session: object, user_a: str, user_b: str, **_: object) -> None:
         calls.append(("on_couple_ended", user_a, user_b))
 
     monkeypatch.setattr(hooks, "before_user_deleted", before_user_deleted)

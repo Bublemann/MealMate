@@ -49,6 +49,15 @@ async def list_meal_tags(principal: CurrentUser, session: ReadSession) -> list[T
     return await meals.list_meal_tags(session, principal)
 
 
+@router.get("/recent")
+async def list_recent_meals(
+    principal: CurrentUser, session: ReadSession, media: Media, now: Now
+) -> list[MealSummary]:
+    """Up to 10 meals you recently added to lists, most recent first, as far as you can still
+    see them (the "recently used" meals of the meal picker)."""
+    return await meals.recent_meals(session, media, principal, now=now)
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_meal(
     body: MealCreate, principal: CurrentUser, session: WriteSession, media: Media, now: Now
@@ -80,10 +89,11 @@ async def update_meal(
 
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_meal(
-    meal_id: str, principal: CurrentUser, session: WriteSession, media: Media
+    meal_id: str, principal: CurrentUser, session: WriteSession, media: Media, now: Now
 ) -> None:
-    """Delete your meal."""
-    await meals.delete_meal(session, media, principal, meal_id)
+    """Delete your meal; on lists it becomes "no longer available" (it keeps its ingredients
+    there until it is removed)."""
+    await meals.delete_meal(session, media, principal, meal_id, now=now)
 
 
 @router.post("/{meal_id}/copy", status_code=status.HTTP_201_CREATED)

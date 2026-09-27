@@ -1,5 +1,5 @@
-"""Meals: CRUD with ingredient rows, cuisine and tags; copy; photo; nutrition (MEAL-01..10,
-VIS-01/02/04/05, NUT-03..05, CPL-06).
+"""Meals: CRUD with ingredient rows, cuisine and tags; copy; photo; nutrition; the "recently
+used" meals of the list builder (MEAL-01..10, VIS-01/02/04/05, NUT-03..05, CPL-06).
 
 Who may see or change a meal is decided by `services.access` (`require_meal_view`,
 `require_meal_owner`); signed photo URLs are only put into responses after that check (VIS-05).
@@ -17,6 +17,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import FieldErrorCode, FieldProblem, validation_error
+from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
 from app.domain.nutrition import ingredient_nutrition, meal_nutrition
 from app.domain.text import normalize
@@ -27,6 +28,7 @@ from app.models import Meal as MealRow
 from app.models import MealIngredient
 from app.models import Tag as TagRow
 from app.repositories import ingredients as ingredients_repo
+from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import products as products_repo
 from app.repositories import reference as reference_repo
@@ -266,6 +268,27 @@ async def _set_rows(
         await session.delete(row)
 
 
+async def _summaries(
+    session: AsyncSession, media: MediaStore, rows: Sequence[MealRow], *, now: datetime
+) -> list[MealSummary]:
+    refs = await user_refs(session, {row.owner_id for row in rows})
+    cuisines = await reference_repo.cuisines_by_ids(session, (row.cuisine_id for row in rows))
+    tags = await meals_repo.tags_for(session, (row.id for row in rows))
+    return [
+        MealSummary(
+            id=row.id,
+            name=row.name,
+            owner=refs[row.owner_id],
+            cuisine=None if row.cuisine_id is None else cuisine(cuisines[row.cuisine_id]),
+            tags=[_tag(tag) for tag in tags.get(row.id, [])],
+            servings=row.servings,
+            thumb_url=None if row.photo_key is None else media.thumb_url(row.photo_key, now=now),
+            updated_at=row.updated_at,
+        )
+        for row in rows
+    ]
+
+
 async def list_meals(
     session: AsyncSession,
     media: MediaStore,
@@ -298,22 +321,22 @@ async def list_meals(
             cuisine_id=cuisine_id,
             tag_id=tag_id,
         )
-        refs = await user_refs(session, {row.owner_id for row in rows})
-        cuisines = await reference_repo.cuisines_by_ids(session, (row.cuisine_id for row in rows))
-        tags = await meals_repo.tags_for(session, (row.id for row in rows))
-    return [
-        MealSummary(
-            id=row.id,
-            name=row.name,
-            owner=refs[row.owner_id],
-            cuisine=None if row.cuisine_id is None else cuisine(cuisines[row.cuisine_id]),
-            tags=[_tag(tag) for tag in tags.get(row.id, [])],
-            servings=row.servings,
-            thumb_url=None if row.photo_key is None else media.thumb_url(row.photo_key, now=now),
-            updated_at=row.updated_at,
+        return await _summaries(session, media, rows, now=now)
+
+
+async def recent_meals(
+    session: AsyncSession, media: MediaStore, principal: Principal, *, now: datetime
+) -> list[MealSummary]:
+    """The meals the principal added to lists, most recently added first and each once, as
+    far as they still exist and are visible to them (MEAL-09: "recently used" in the meal
+    picker); at most 10. Filter chips do not apply."""
+    async with session.begin():
+        visible = await access.visible_owner_ids(session, principal.user_id, "meals")
+        meal_ids = await lists_repo.recent_meal_ids(
+            session, principal.user_id, visible, RECENT_MEALS_LIMIT
         )
-        for row in rows
-    ]
+        meals = await meals_repo.by_ids(session, meal_ids)
+        return await _summaries(session, media, [meals[meal_id] for meal_id in meal_ids], now=now)
 
 
 async def list_meal_tags(session: AsyncSession, principal: Principal) -> list[Tag]:
@@ -407,13 +430,14 @@ async def update_meal(
 
 
 async def delete_meal(
-    session: AsyncSession, media: MediaStore, principal: Principal, meal_id: str
+    session: AsyncSession, media: MediaStore, principal: Principal, meal_id: str, *, now: datetime
 ) -> None:
-    """Delete a meal (owner only, MEAL-07); its photo files go after the commit."""
+    """Delete a meal (owner only, MEAL-07); it is detached from the lists it is on (LIST-15)
+    and its photo files go after the commit."""
     async with session.begin():
         meal = await access.require_meal_owner(session, principal, meal_id)
         photo_key = meal.photo_key
-        await hooks.on_meal_deleted(session, meal.id)
+        await hooks.on_meal_deleted(session, meal.id, now=now)
         await session.delete(meal)
     if photo_key is not None:
         await media.delete_in_thread(photo_key)

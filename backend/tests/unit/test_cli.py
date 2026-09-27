@@ -89,6 +89,7 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "update_product",
         "list_meals",
         "list_meal_tags",
+        "list_recent_meals",
         "create_meal",
         "get_meal",
         "update_meal",
@@ -97,6 +98,20 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "upload_meal_photo",
         "delete_meal_photo",
         "get_media",
+        "list_lists",
+        "create_list",
+        "get_list",
+        "update_list",
+        "delete_list",
+        "copy_list",
+        "add_list_meal",
+        "update_list_meal",
+        "remove_list_meal",
+        "add_extra_item",
+        "update_extra_item",
+        "delete_extra_item",
+        "hide_list_line",
+        "unhide_list_line",
         "admin_reorder_categories",
         "admin_merge_ingredient",
         "admin_delete_ingredient",
@@ -114,6 +129,12 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
     media = operations[("/api/media/{name}", "get")]
     assert "security" not in media
     assert set(media["responses"]["200"]["content"]) == {"image/webp"}
+    # The list detail is described as JSON although the route builds its response itself.
+    detail = operations[("/api/lists/{list_id}", "get")]["responses"]
+    assert detail["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ListDetail"
+    }
+    assert "304" in detail
 
 
 def schemas_of(document: dict[str, Any]) -> dict[str, Any]:
