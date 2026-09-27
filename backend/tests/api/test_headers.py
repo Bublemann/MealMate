@@ -3,6 +3,7 @@ import pytest
 from fastapi import APIRouter, FastAPI, Response
 from httpx import AsyncClient
 
+from app.core.headers import DOCS_CONTENT_SECURITY_POLICY
 from app.main import create_app
 from tests.support import ClientFactory, SettingsFactory
 
@@ -77,7 +78,7 @@ async def test_docs_when_enabled(make_settings: SettingsFactory, client_for: Cli
         schema = await client.get("/api/openapi.json")
         oauth_redirect = await client.get("/docs/oauth2-redirect")
     assert docs.status_code == 200
-    assert "https://cdn.jsdelivr.net" in docs.headers["content-security-policy"]
+    assert docs.headers["content-security-policy"] == DOCS_CONTENT_SECURITY_POLICY
     assert schema.status_code == 200
     assert schema.headers["content-security-policy"] == CSP
     assert "/api/health" in schema.json()["paths"]
