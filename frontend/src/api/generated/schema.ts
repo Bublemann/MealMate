@@ -737,6 +737,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Meals
+         * @description The meals you can see, A-Z. `q` searches names, tags and cuisines ignoring case and
+         *     umlauts. Without `owner_ids`, owners you switched off in your filter chips
+         *     (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those owners'
+         *     meals are listed.
+         */
+        get: operations["list_meals"];
+        put?: never;
+        /**
+         * Create Meal
+         * @description Add a meal of your own; only the name is required.
+         */
+        post: operations["create_meal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meals/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Meal Tags
+         * @description The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no
+         *     limit and ignores your filter chips.
+         */
+        get: operations["list_meal_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meals/{meal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Meal
+         * @description A meal you can see (404 otherwise), with nutrition and signed photo URLs.
+         */
+        get: operations["get_meal"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Meal
+         * @description Delete your meal.
+         */
+        delete: operations["delete_meal"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Meal
+         * @description Change your meal; `tags` and `ingredients` replace the whole list.
+         */
+        patch: operations["update_meal"];
+        trace?: never;
+    };
+    "/api/meals/{meal_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Meal
+         * @description Copy a meal you can see to your meals, with its own copy of the photo ("based on").
+         */
+        post: operations["copy_meal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meals/{meal_id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload Meal Photo
+         * @description Set the photo of your meal (at most 20 uploads per 10 minutes). It is rotated upright,
+         *     re-encoded without metadata and stored with a thumbnail; errors: 413 `media.too_large`,
+         *     415 `media.unsupported_type`, 422 `media.too_many_pixels`.
+         */
+        put: operations["upload_meal_photo"];
+        post?: never;
+        /**
+         * Delete Meal Photo
+         * @description Remove the photo of your meal.
+         */
+        delete: operations["delete_meal_photo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Media
+         * @description A photo or thumbnail from a signed URL of a meal response. 404 `common.not_found` for
+         *     an unknown name, a wrong or expired signature, or a deleted photo.
+         */
+        get: operations["get_media"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/products": {
         parameters: {
             query?: never;
@@ -945,6 +1088,14 @@ export interface components {
             /** Role */
             role?: ("user" | "admin") | null;
         };
+        /** Body_upload_meal_photo */
+        Body_upload_meal_photo: {
+            /**
+             * File
+             * @description A JPEG, PNG or WebP image of at most 10 MB.
+             */
+            file: string;
+        };
         /**
          * Category
          * @description Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).
@@ -1044,7 +1195,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -1346,6 +1497,207 @@ export interface components {
             lists_public?: boolean | null;
             /** Meals Public */
             meals_public?: boolean | null;
+        };
+        /**
+         * Meal
+         * @description A meal as its viewer sees it; `is_owner` tells whether they may edit it (VIS-04).
+         */
+        Meal: {
+            based_on: components["schemas"]["MealBasedOn"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            cuisine: components["schemas"]["Cuisine"] | null;
+            /** Id */
+            id: string;
+            /** Ingredients */
+            ingredients: components["schemas"]["MealIngredientRow"][];
+            /** Instructions */
+            instructions: string | null;
+            /** Is Owner */
+            is_owner: boolean;
+            /** Name */
+            name: string;
+            nutrition: components["schemas"]["MealNutrition"];
+            owner: components["schemas"]["UserRef"];
+            photo: components["schemas"]["MealPhoto"] | null;
+            /** Servings */
+            servings: number;
+            /** Source Url */
+            source_url: string | null;
+            /** Tags */
+            tags: components["schemas"]["Tag"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * MealBasedOn
+         * @description The original of a copy, shown as "based on X by Y" (MEAL-08) while the original exists
+         *     and the viewer may see it.
+         */
+        MealBasedOn: {
+            /** Meal Id */
+            meal_id: string;
+            /** Name */
+            name: string;
+            owner: components["schemas"]["UserRef"];
+        };
+        /**
+         * MealCreate
+         * @description Only the name is required (MEAL-01).
+         *
+         *     - `instructions`: plain text with line breaks, at most 10000 characters;
+         *     - `source_url`: an `http(s)` URL with a host and without user info (MEAL-05);
+         *     - `servings`: 1 to 99;
+         *     - `tags`: at most 10 names of 1 to 30 characters; existing tags are reused ignoring case and
+         *       umlauts, missing ones are created;
+         *     - `ingredients`: at most 100 rows, in order.
+         *
+         *     Empty texts are stored as null.
+         */
+        MealCreate: {
+            /** Cuisine Id */
+            cuisine_id?: string | null;
+            /** Ingredients */
+            ingredients?: components["schemas"]["MealIngredientInput"][];
+            /** Instructions */
+            instructions?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Servings
+             * @default 1
+             */
+            servings: number;
+            /** Source Url */
+            source_url?: string | null;
+            /** Tags */
+            tags?: string[];
+        };
+        /**
+         * MealIngredientInput
+         * @description `amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an
+         *     amount is refused (`ingredients.<i>.amount` `required`). An empty note is stored as null.
+         */
+        MealIngredientInput: {
+            /** Amount */
+            amount?: number | null;
+            /** Ingredient Id */
+            ingredient_id: string;
+            /** Note */
+            note?: string | null;
+            unit?: components["schemas"]["Unit"] | null;
+        };
+        /**
+         * MealIngredientRow
+         * @description An ingredient row; `amount` and `unit` are both null for e.g. "salt, to taste".
+         */
+        MealIngredientRow: {
+            /** Amount */
+            amount: number | null;
+            /** Id */
+            id: string;
+            ingredient: components["schemas"]["IngredientSummary"];
+            /** Note */
+            note: string | null;
+            /** Position */
+            position: number;
+            unit: components["schemas"]["Unit"] | null;
+        };
+        /**
+         * MealNutrition
+         * @description Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing
+         *     contributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of
+         *     a g-based ingredient without density were counted as 1 g/ml (NUT-05). The totals are not
+         *     bounded by the per-100 maximums of `NutrientValues`.
+         */
+        MealNutrition: {
+            /** Estimate */
+            estimate: boolean;
+            /** Incomplete */
+            incomplete: boolean;
+            /** Missing */
+            missing: components["schemas"]["MealNutritionMissing"][];
+            per_meal: components["schemas"]["NutrientValues"];
+            per_serving: components["schemas"]["NutrientValues"];
+        };
+        /**
+         * MealNutritionMissing
+         * @description Why a row does not (fully) count: no amount, an amount that cannot be converted to the
+         *     ingredient's base unit, or an unknown value for `nutrient` (NUT-04).
+         */
+        MealNutritionMissing: {
+            /** Ingredient Id */
+            ingredient_id: string;
+            /** Ingredient Name */
+            ingredient_name: string;
+            /** Nutrient */
+            nutrient: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "no_amount" | "not_convertible" | "unknown_value";
+        };
+        /**
+         * MealPhoto
+         * @description Signed URLs of the photo and its thumbnail; they expire after 1 to 2 hours (VIS-05).
+         */
+        MealPhoto: {
+            /** Thumb Url */
+            thumb_url: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * MealSummary
+         * @description A meal in the meal list; `thumb_url` is a signed URL of the photo's thumbnail.
+         */
+        MealSummary: {
+            cuisine: components["schemas"]["Cuisine"] | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            owner: components["schemas"]["UserRef"];
+            /** Servings */
+            servings: number;
+            /** Tags */
+            tags: components["schemas"]["Tag"][];
+            /** Thumb Url */
+            thumb_url: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * MealUpdate
+         * @description Only the fields that are sent change, with the rules of `MealCreate`. An explicit null
+         *     clears the instructions, source link or cuisine, and is refused for the other fields (422
+         *     `invalid`). `tags` and `ingredients` replace the whole list.
+         */
+        MealUpdate: {
+            /** Cuisine Id */
+            cuisine_id?: string | null;
+            /** Ingredients */
+            ingredients?: components["schemas"]["MealIngredientInput"][] | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Servings */
+            servings?: number | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Tags */
+            tags?: string[] | null;
         };
         /**
          * NutrientInfo
@@ -2906,6 +3258,328 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_meals: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                cuisine_id?: string | null;
+                tag_id?: string | null;
+                owner_ids?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealSummary"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MealCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meal"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_meal_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meal"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MealUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meal"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    copy_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meal"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_meal_photo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_meal_photo"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meal"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_meal_photo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_media: {
+        parameters: {
+            query?: {
+                /** @description Expiry (Unix time), from the signed URL. */
+                exp?: string;
+                /** @description Signature, from the signed URL. */
+                sig?: string;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The WebP image */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
             };
             /** @description Error envelope; `code` names the error */
             default: {

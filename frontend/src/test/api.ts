@@ -103,3 +103,23 @@ export function requestsTo(fetchMock: ReturnType<typeof mockApi>, route: string)
     .map(([request]) => request)
     .filter((request) => `${request.method} ${new URL(request.url).pathname}` === route);
 }
+
+interface NodeProcess {
+  getBuiltinModule(id: 'node:buffer'): { File: typeof File };
+}
+
+/**
+ * Node's own FormData and File. Vitest's bridge from jsdom's FormData and Blobs to Node's Request
+ * fails with jsdom 30, so a test that uploads a file stubs the global FormData with Node's
+ * (`vi.stubGlobal('FormData', FormData)`) and picks a Node File: Request then takes the body as
+ * it is and sets the multipart boundary, as a browser does. Read the sent body with `text()`:
+ * Node's multipart parser also trips over jsdom's global File.
+ */
+export async function nodeFormClasses(): Promise<{ FormData: typeof FormData; File: typeof File }> {
+  const form = await new Response(new URLSearchParams()).formData();
+  const { process } = globalThis as unknown as { process: NodeProcess };
+  return {
+    FormData: form.constructor as typeof FormData,
+    File: process.getBuiltinModule('node:buffer').File,
+  };
+}

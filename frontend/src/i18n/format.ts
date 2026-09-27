@@ -49,3 +49,8 @@ export function parseAmount(input: string): number | null {
   const value = Number(text.replace(',', '.'));
   return Number.isFinite(value) ? value : null;
 }
+
+/** `a, b and c` (en) or `a, b und c` (de). */
+export function formatList(items: readonly string[], language: Language): string {
+  return new Intl.ListFormat(LOCALES[language], { type: 'conjunction' }).format(items);
+}

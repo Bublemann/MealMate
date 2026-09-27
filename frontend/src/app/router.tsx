@@ -6,6 +6,8 @@ import { ResetScreen } from '@/features/auth/ResetScreen';
 import { IngredientDetailScreen } from '@/features/ingredients/IngredientDetailScreen';
 import { IngredientsScreen } from '@/features/ingredients/IngredientsScreen';
 import { ListsScreen } from '@/features/lists/ListsScreen';
+import { MealDetailScreen } from '@/features/meals/MealDetailScreen';
+import { MealFormScreen } from '@/features/meals/MealFormScreen';
 import { MealsScreen } from '@/features/meals/MealsScreen';
 import { MeScreen } from '@/features/me/MeScreen';
 import { Layout } from './Layout';
@@ -28,6 +30,9 @@ export const routes: RouteObject[] = [
           { index: true, element: <Navigate to="/lists" replace /> },
           { path: 'lists', element: <ListsScreen /> },
           { path: 'meals', element: <MealsScreen /> },
+          { path: 'meals/new', element: <MealFormScreen /> },
+          { path: 'meals/:id', element: <MealDetailScreen /> },
+          { path: 'meals/:id/edit', element: <MealFormScreen /> },
           { path: 'ingredients', element: <IngredientsScreen /> },
           { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
           { path: 'me', element: <MeScreen /> },

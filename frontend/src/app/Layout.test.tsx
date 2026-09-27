@@ -55,14 +55,13 @@ describe('Layout', () => {
     expect(router.state.location.pathname).toBe('/lists');
   });
 
-  it.each([
-    ['/lists', 'No shopping lists yet', 'New list'],
-    ['/meals', 'No meals yet', 'Create meal'],
-  ])('shows an empty state with its main action on %s', async (path, title, action) => {
-    renderApp(path);
+  it('shows an empty state with its main action on /lists', async () => {
+    renderApp('/lists');
 
-    expect(await screen.findByRole('heading', { level: 2, name: title })).toBeVisible();
-    // The actions are wired up when their features arrive (M4, M5a); Ingredients has its own test.
-    expect(screen.getByRole('button', { name: action })).toBeDisabled();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'No shopping lists yet' }),
+    ).toBeVisible();
+    // The action is wired up when lists arrive (M5a); Meals and Ingredients have their own tests.
+    expect(screen.getByRole('button', { name: 'New list' })).toBeDisabled();
   });
 });

@@ -61,6 +61,7 @@ frontend/
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
+    │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks
@@ -169,7 +170,9 @@ comes from i18n in the admin's language and has the two steps: Tailscale, then t
 `renderApp(path)` renders the whole app signed in as `TEST_USER`; pass `{ user: TEST_ADMIN }` or
 `{ user: null }` (signed out, runs the start-up refresh). `mockApi({ 'METHOD /path': answer })` from
 `src/test/api.ts` stubs `fetch` with defaults for the signed-in shell; unknown routes answer 404.
-`requestsTo(fetchMock, 'POST /api/…')` returns the requests sent, e.g. to check their JSON body.
+`requestsTo(fetchMock, 'POST /api/…')` returns the requests sent, e.g. to check their JSON body. A test
+that uploads a file uses `nodeFormClasses()` (Node's FormData and File; jsdom's can't be sent
+through Node's `Request`).
 
 ## API types
 
@@ -282,5 +285,26 @@ order.
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
 | `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
 | `saveCategoryOrder`      | `save-category-order`      | Admin: "Save order"                         |
+| `mealSearch`             | `meal-search`              | Search field on Meals                       |
+| `newMeal`                | `new-meal`                 | "New meal" on Meals                         |
+| `mealUserChips`          | `meal-user-chips`          | User filter chips on Meals                  |
+| `mealList`               | `meal-list`                | List of meals on Meals                      |
+| `mealCard`               | `meal-card`                | One meal in the list (link)                 |
+| `screenMealForm`         | `screen-meal-form`         | Create/edit meal screen                     |
+| `mealForm`               | `meal-form`                | Create/edit meal form                       |
+| `mealIngredientRow`      | `meal-ingredient-row`      | One ingredient row in the meal form         |
+| `mealPhotoInput`         | `meal-photo-input`         | Photo file input in the meal form           |
+| `screenMeal`             | `screen-meal`              | Meal detail screen                          |
+| `mealPhoto`              | `meal-photo`               | Photo on the meal detail                    |
+| `mealBasedOn`            | `meal-based-on`            | "Based on X by Y" on the meal detail        |
+| `mealNutrition`          | `meal-nutrition`           | Nutrition table of a meal                   |
+| `mealIncomplete`         | `meal-incomplete`          | "Incomplete" marker with what is missing    |
+| `mealEstimate`           | `meal-estimate`            | "Estimate" marker of the nutrition          |
+| `mealIngredients`        | `meal-ingredients`         | Ingredient list on the meal detail          |
+| `mealInstructions`       | `meal-instructions`        | Instructions on the meal detail             |
+| `mealSourceLink`         | `meal-source-link`         | Source link button on the meal detail       |
+| `editMeal`               | `edit-meal`                | "Edit" on the meal detail (owner)           |
+| `deleteMeal`             | `delete-meal`              | "Delete" on the meal detail (owner)         |
+| `copyMeal`               | `copy-meal`                | "Copy to my meals" on the meal detail       |
 
 <!-- test-ids:end -->

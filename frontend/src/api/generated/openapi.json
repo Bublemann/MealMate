@@ -174,6 +174,21 @@
         "title": "AdminUserUpdate",
         "type": "object"
       },
+      "Body_upload_meal_photo": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "description": "A JPEG, PNG or WebP image of at most 10 MB.",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_meal_photo",
+        "type": "object"
+      },
       "Category": {
         "description": "Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).",
         "properties": {
@@ -439,6 +454,7 @@
           "common.unauthorized",
           "common.forbidden",
           "common.service_unavailable",
+          "common.payload_too_large",
           "auth.invalid_credentials",
           "auth.account_deactivated",
           "auth.token_expired",
@@ -457,7 +473,10 @@
           "ingredient.base_unit_locked",
           "ingredient.in_use",
           "ingredient.merge_base_unit_mismatch",
-          "product.basis_mismatch"
+          "product.basis_mismatch",
+          "media.too_large",
+          "media.unsupported_type",
+          "media.too_many_pixels"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -1278,6 +1297,600 @@
           }
         },
         "title": "MeUpdate",
+        "type": "object"
+      },
+      "Meal": {
+        "description": "A meal as its viewer sees it; `is_owner` tells whether they may edit it (VIS-04).",
+        "properties": {
+          "based_on": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MealBasedOn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "cuisine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cuisine"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingredients": {
+            "items": {
+              "$ref": "#/components/schemas/MealIngredientRow"
+            },
+            "title": "Ingredients",
+            "type": "array"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nutrition": {
+            "$ref": "#/components/schemas/MealNutrition"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MealPhoto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "servings": {
+            "title": "Servings",
+            "type": "integer"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner",
+          "is_owner",
+          "instructions",
+          "source_url",
+          "servings",
+          "cuisine",
+          "tags",
+          "photo",
+          "ingredients",
+          "nutrition",
+          "based_on",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Meal",
+        "type": "object"
+      },
+      "MealBasedOn": {
+        "description": "The original of a copy, shown as \"based on X by Y\" (MEAL-08) while the original exists\nand the viewer may see it.",
+        "properties": {
+          "meal_id": {
+            "title": "Meal Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        },
+        "required": [
+          "meal_id",
+          "name",
+          "owner"
+        ],
+        "title": "MealBasedOn",
+        "type": "object"
+      },
+      "MealCreate": {
+        "description": "Only the name is required (MEAL-01).\n\n- `instructions`: plain text with line breaks, at most 10000 characters;\n- `source_url`: an `http(s)` URL with a host and without user info (MEAL-05);\n- `servings`: 1 to 99;\n- `tags`: at most 10 names of 1 to 30 characters; existing tags are reused ignoring case and\n  umlauts, missing ones are created;\n- `ingredients`: at most 100 rows, in order.\n\nEmpty texts are stored as null.",
+        "properties": {
+          "cuisine_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuisine Id"
+          },
+          "ingredients": {
+            "items": {
+              "$ref": "#/components/schemas/MealIngredientInput"
+            },
+            "maxItems": 100,
+            "title": "Ingredients",
+            "type": "array"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "servings": {
+            "default": 1,
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Servings",
+            "type": "integer"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "tags": {
+            "items": {
+              "maxLength": 30,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "MealCreate",
+        "type": "object"
+      },
+      "MealIngredientInput": {
+        "description": "`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an\namount is refused (`ingredients.<i>.amount` `required`). An empty note is stored as null.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "ingredient_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ingredient_id"
+        ],
+        "title": "MealIngredientInput",
+        "type": "object"
+      },
+      "MealIngredientRow": {
+        "description": "An ingredient row; `amount` and `unit` are both null for e.g. \"salt, to taste\".",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingredient": {
+            "$ref": "#/components/schemas/IngredientSummary"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "ingredient",
+          "amount",
+          "unit",
+          "note"
+        ],
+        "title": "MealIngredientRow",
+        "type": "object"
+      },
+      "MealNutrition": {
+        "description": "Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing\ncontributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of\na g-based ingredient without density were counted as 1 g/ml (NUT-05). The totals are not\nbounded by the per-100 maximums of `NutrientValues`.",
+        "properties": {
+          "estimate": {
+            "title": "Estimate",
+            "type": "boolean"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/MealNutritionMissing"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "per_meal": {
+            "$ref": "#/components/schemas/NutrientValues"
+          },
+          "per_serving": {
+            "$ref": "#/components/schemas/NutrientValues"
+          }
+        },
+        "required": [
+          "per_meal",
+          "per_serving",
+          "incomplete",
+          "estimate",
+          "missing"
+        ],
+        "title": "MealNutrition",
+        "type": "object"
+      },
+      "MealNutritionMissing": {
+        "description": "Why a row does not (fully) count: no amount, an amount that cannot be converted to the\ningredient's base unit, or an unknown value for `nutrient` (NUT-04).",
+        "properties": {
+          "ingredient_id": {
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "ingredient_name": {
+            "title": "Ingredient Name",
+            "type": "string"
+          },
+          "nutrient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nutrient"
+          },
+          "reason": {
+            "enum": [
+              "no_amount",
+              "not_convertible",
+              "unknown_value"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ingredient_id",
+          "ingredient_name",
+          "reason",
+          "nutrient"
+        ],
+        "title": "MealNutritionMissing",
+        "type": "object"
+      },
+      "MealPhoto": {
+        "description": "Signed URLs of the photo and its thumbnail; they expire after 1 to 2 hours (VIS-05).",
+        "properties": {
+          "thumb_url": {
+            "title": "Thumb Url",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "thumb_url"
+        ],
+        "title": "MealPhoto",
+        "type": "object"
+      },
+      "MealSummary": {
+        "description": "A meal in the meal list; `thumb_url` is a signed URL of the photo's thumbnail.",
+        "properties": {
+          "cuisine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cuisine"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "servings": {
+            "title": "Servings",
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "thumb_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Url"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner",
+          "cuisine",
+          "tags",
+          "servings",
+          "thumb_url",
+          "updated_at"
+        ],
+        "title": "MealSummary",
+        "type": "object"
+      },
+      "MealUpdate": {
+        "description": "Only the fields that are sent change, with the rules of `MealCreate`. An explicit null\nclears the instructions, source link or cuisine, and is refused for the other fields (422\n`invalid`). `tags` and `ingredients` replace the whole list.",
+        "properties": {
+          "cuisine_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuisine Id"
+          },
+          "ingredients": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MealIngredientInput"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredients"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "servings": {
+            "anyOf": [
+              {
+                "maximum": 99.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servings"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 30,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "title": "MealUpdate",
         "type": "object"
       },
       "NutrientInfo": {
@@ -3958,6 +4571,562 @@
         "summary": "Revoke Session",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/api/meals": {
+      "get": {
+        "description": "The meals you can see, A-Z. `q` searches names, tags and cuisines ignoring case and\numlauts. Without `owner_ids`, owners you switched off in your filter chips\n(`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those owners'\nmeals are listed.",
+        "operationId": "list_meals",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cuisine_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cuisine Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 500,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MealSummary"
+                  },
+                  "title": "Response List Meals",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Meals",
+        "tags": [
+          "meals"
+        ]
+      },
+      "post": {
+        "description": "Add a meal of your own; only the name is required.",
+        "operationId": "create_meal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MealCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Meal",
+        "tags": [
+          "meals"
+        ]
+      }
+    },
+    "/api/meals/tags": {
+      "get": {
+        "description": "The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no\nlimit and ignores your filter chips.",
+        "operationId": "list_meal_tags",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Tag"
+                  },
+                  "title": "Response List Meal Tags",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Meal Tags",
+        "tags": [
+          "meals"
+        ]
+      }
+    },
+    "/api/meals/{meal_id}": {
+      "delete": {
+        "description": "Delete your meal.",
+        "operationId": "delete_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meal_id",
+            "required": true,
+            "schema": {
+              "title": "Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Meal",
+        "tags": [
+          "meals"
+        ]
+      },
+      "get": {
+        "description": "A meal you can see (404 otherwise), with nutrition and signed photo URLs.",
+        "operationId": "get_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meal_id",
+            "required": true,
+            "schema": {
+              "title": "Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Meal",
+        "tags": [
+          "meals"
+        ]
+      },
+      "patch": {
+        "description": "Change your meal; `tags` and `ingredients` replace the whole list.",
+        "operationId": "update_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meal_id",
+            "required": true,
+            "schema": {
+              "title": "Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MealUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Meal",
+        "tags": [
+          "meals"
+        ]
+      }
+    },
+    "/api/meals/{meal_id}/copy": {
+      "post": {
+        "description": "Copy a meal you can see to your meals, with its own copy of the photo (\"based on\").",
+        "operationId": "copy_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meal_id",
+            "required": true,
+            "schema": {
+              "title": "Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Copy Meal",
+        "tags": [
+          "meals"
+        ]
+      }
+    },
+    "/api/meals/{meal_id}/photo": {
+      "delete": {
+        "description": "Remove the photo of your meal.",
+        "operationId": "delete_meal_photo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meal_id",
+            "required": true,
+            "schema": {
+              "title": "Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Meal Photo",
+        "tags": [
+          "meals"
+        ]
+      },
+      "put": {
+        "description": "Set the photo of your meal (at most 20 uploads per 10 minutes). It is rotated upright,\nre-encoded without metadata and stored with a thumbnail; errors: 413 `media.too_large`,\n415 `media.unsupported_type`, 422 `media.too_many_pixels`.",
+        "operationId": "upload_meal_photo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meal_id",
+            "required": true,
+            "schema": {
+              "title": "Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_meal_photo"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload Meal Photo",
+        "tags": [
+          "meals"
+        ]
+      }
+    },
+    "/api/media/{name}": {
+      "get": {
+        "description": "A photo or thumbnail from a signed URL of a meal response. 404 `common.not_found` for\nan unknown name, a wrong or expired signature, or a deleted photo.",
+        "operationId": "get_media",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Expiry (Unix time), from the signed URL.",
+            "in": "query",
+            "name": "exp",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Expiry (Unix time), from the signed URL.",
+              "title": "Exp",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Signature, from the signed URL.",
+            "in": "query",
+            "name": "sig",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Signature, from the signed URL.",
+              "title": "Sig",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The WebP image"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Get Media",
+        "tags": [
+          "media"
         ]
       }
     },
