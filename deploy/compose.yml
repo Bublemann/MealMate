@@ -1,0 +1,23 @@
+# Production compose file for the Raspberry Pi (plan § 11.1). Installed to /srv/mealmate from the
+# running image's /opt/mealmate/deploy and always run through bin/mm-compose, which passes
+# /srv/mealmate/.env and state/override.env (IMAGE_REF pins a verified digest during updates).
+services:
+  app:
+    image: ${IMAGE_REF:-ghcr.io/bublemann/mealmate:${IMAGE_TAG}}
+    # Host networking and a loopback bind: only `tailscale serve` on this host reaches the app,
+    # and uvicorn sees its real peer address 127.0.0.1 (plan § 2).
+    network_mode: host
+    environment:
+      MEALMATE_SECRET_KEY: ${MEALMATE_SECRET_KEY:?}
+      MEALMATE_PUBLIC_URL: ${MEALMATE_PUBLIC_URL:?}
+      UVICORN_HOST: 127.0.0.1
+    volumes: ["./data:/data", "./state/status:/status:ro"]
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 200
+    mem_limit: 400m
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}

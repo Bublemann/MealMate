@@ -1,0 +1,240 @@
+# Every pull request and every push to main and release/**: tests, linters, the OpenAPI drift
+# check, end-to-end tests against the production image, deploy config and security checks
+# (plan § 10.2).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "release/**"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.12.19"
+  NODE_VERSION: "24"
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - name: Tests with coverage gate, incl. migrations
+        run: uv run pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  openapi-drift:
+    name: OpenAPI drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: make openapi
+      - name: Generated API files are committed and current (MNT-01)
+        run: |
+          git add --intent-to-add frontend/src/api/generated
+          if ! git diff --exit-code -- frontend/src/api/generated; then
+            echo "::error::frontend/src/api/generated is stale: run 'make openapi' and commit it."
+            exit 1
+          fi
+
+  e2e:
+    name: E2E (${{ matrix.browser }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the production image (amd64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: mealmate:e2e
+          build-args: |
+            MEALMATE_VERSION=ci
+            MEALMATE_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=e2e-image
+          cache-to: type=gha,scope=e2e-image,mode=max
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          cache-dependency-glob: e2e/uv.lock
+      - run: uv sync --locked
+        working-directory: e2e
+      - name: ruff and ruff format on the suite (once)
+        if: matrix.browser == 'chromium'
+        run: uv run ruff check . && uv run ruff format --check .
+        working-directory: e2e
+      - name: Install ${{ matrix.browser }}
+        run: uv run playwright install --with-deps "$BROWSER"
+        working-directory: e2e
+        env:
+          BROWSER: ${{ matrix.browser }}
+      - run: uv run pytest --browser "$BROWSER"
+        working-directory: e2e
+        env:
+          BROWSER: ${{ matrix.browser }}
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-test-results-${{ matrix.browser }}
+          path: e2e/test-results/
+          retention-days: 14
+
+  deploy-config:
+    name: Deploy config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Production compose file with the example environment
+        run: docker compose -f deploy/compose.yml --env-file deploy/pi/env.example config -q
+      - name: Development compose file
+        run: docker compose -f compose.dev.yml config -q
+
+  security:
+    name: Security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Secret scan of the whole history (gitleaks, SEC-01)
+        run: >-
+          docker run --rm --volume "$PWD:/repo" "$GITLEAKS_IMAGE"
+          git --config /repo/.gitleaks.toml --redact --verbose --no-banner /repo
+        env:
+          GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Known vulnerabilities in Python runtime dependencies (pip-audit, SEC-11)
+        working-directory: backend
+        run: |
+          uv export --locked --no-dev --no-emit-project --output-file "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.1 --requirement "$RUNNER_TEMP/requirements.txt" \
+            --require-hashes --disable-pip --progress-spinner off
+      - name: Known vulnerabilities in npm runtime dependencies (high and critical, SEC-11)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Licences of Python runtime dependencies (LIC-03)
+        working-directory: backend
+        run: |
+          uv sync --locked --no-dev
+          uvx pip-licenses@5.5.5 --python .venv/bin/python --from=mixed \
+            --ignore-packages mealmate-backend --partial-match \
+            --allow-only="MIT;BSD;Apache;ISC;PSF;Python Software Foundation;MPL 2.0;MPL-2.0"
+      - name: Licences of npm runtime dependencies (LIC-03)
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npx --yes license-checker-rseidelsohn@5.0.1 --production --excludePrivatePackages \
+            --onlyAllow "MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;BlueOak-1.0.0;MPL-2.0;CC0-1.0;Unlicense;Python-2.0"
+
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint (the image brings shellcheck for run steps)
+        run: >-
+          docker run --rm --volume "$PWD:/repo" --workdir /repo "$ACTIONLINT_IMAGE" -color
+        env:
+          ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: zizmor
+        run: uvx zizmor@1.30.1 --format=github .
+        env:
+          GH_TOKEN: ${{ github.token }}

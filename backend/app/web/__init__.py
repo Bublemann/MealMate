@@ -1,0 +1,1 @@
+"""Serving the built frontend."""

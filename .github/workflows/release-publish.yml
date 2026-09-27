@@ -1,0 +1,191 @@
+# Publishes a release from release/X.Y (plan § 10.2): checks that CI passed on the branch head,
+# computes the version, pushes the tag with the release App (which starts build-image.yml),
+# creates the GitHub release with notes and the deploy bundle, and opens the back-merge PR.
+name: Release publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "final: X.Y.0 · patch: X.Y.(n+1) · alpha|beta|rc: X.Y.0-<kind>.N"
+        required: true
+        type: choice
+        options: [final, patch, alpha, beta, rc]
+
+permissions: {}
+
+concurrency:
+  group: release-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.19"
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # history and tags for the version and the notes
+      actions: read # CI result of the branch head
+    outputs:
+      line: ${{ steps.ref.outputs.line }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      latest: ${{ steps.version.outputs.latest }}
+    steps:
+      - name: Require a release branch
+        id: ref
+        run: |
+          if [[ ! $GITHUB_REF =~ ^refs/heads/release/([0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Run this workflow on a release/X.Y branch, not ${GITHUB_REF}."
+            exit 1
+          fi
+          echo "line=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Require green CI on the branch head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          run=$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs" -X GET \
+            -f "branch=${BRANCH}" -f "head_sha=${SHA}" -f event=push -f per_page=1 \
+            --jq '.workflow_runs[0] // {} | "\(.status) \(.conclusion) \(.html_url)"')
+          read -r status conclusion url <<< "$run"
+          if [ "$status" != completed ] || [ "$conclusion" != success ]; then
+            echo "::error::CI on ${BRANCH} at ${SHA} is '${status}/${conclusion}' (${url}); it must pass first."
+            exit 1
+          fi
+          echo "CI passed: ${url}"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compute the version
+        id: version
+        env:
+          KIND: ${{ inputs.kind }}
+          LINE: ${{ steps.ref.outputs.line }}
+        run: .github/scripts/next-version.sh "$LINE" "$KIND" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Release notes, deploy bundle and checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIOUS: ${{ steps.version.outputs.previous }}
+        run: |
+          mkdir -p release/assets
+          git archive --format=tar.gz --prefix="mealmate-deploy-${VERSION}/" \
+            --output="release/assets/mealmate-deploy-${VERSION}.tar.gz" "${GITHUB_SHA}:deploy"
+          if [ -f deploy/pi/setup.sh ]; then
+            cp deploy/pi/setup.sh release/assets/setup.sh
+          fi
+
+          range=${PREVIOUS:+${PREVIOUS}..}${GITHUB_SHA}
+          uvx git-cliff@2.14.2 --config cliff.toml --ignore-tags '.*' --output release/changes.md "$range"
+          {
+            if grep -q '[^[:space:]]' release/changes.md; then
+              sed '/./,$!d' release/changes.md
+            else
+              echo "No changes since ${PREVIOUS}."
+            fi
+            echo
+            echo "## Image"
+            echo
+            echo "\`ghcr.io/bublemann/mealmate:${VERSION}\`, built from this tag with signed build provenance."
+            echo
+            echo "## Checksums (SHA-256)"
+            echo
+            echo '```'
+            (cd release/assets && sha256sum -- *)
+            echo '```'
+          } > release/notes.md
+          cat release/notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release
+          path: release/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: Publish ${{ needs.prepare.outputs.tag }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Everything that writes uses the App token below.
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: release
+
+      - name: Mint a token of the release App
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Push the tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          tag_object=$(gh api "repos/${REPO}/git/tags" -f "tag=${TAG}" -f "object=${GITHUB_SHA}" \
+            -f type=commit -f "message=MealMate ${VERSION}" --jq .sha)
+          gh api "repos/${REPO}/git/refs" -f "ref=refs/tags/${TAG}" -f "sha=${tag_object}" --silent
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          LATEST: ${{ needs.prepare.outputs.latest }}
+        run: |
+          flags=(--verify-tag --title "MealMate ${VERSION}" --notes-file release/notes.md)
+          if [ "$PRERELEASE" = true ]; then
+            flags+=(--prerelease --latest=false)
+          else
+            flags+=("--latest=${LATEST}")
+          fi
+          gh release create "$TAG" "${flags[@]}" release/assets/*
+
+      - name: Open the back-merge PR into main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          ahead=$(gh api "repos/${GH_REPO}/compare/main...${GITHUB_SHA}" --jq .ahead_by)
+          if [ "$ahead" -eq 0 ]; then
+            echo "main already contains ${TAG}."
+            exit 0
+          fi
+          open=$(gh pr list --base main --head "$BRANCH" --state open --json number --jq length)
+          if [ "$open" -gt 0 ]; then
+            echo "A back-merge PR from ${BRANCH} is already open."
+            exit 0
+          fi
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore: back-merge ${BRANCH} after ${TAG}" \
+            --body "Brings the fixes released in ${TAG} back to main. Merge with **Create a merge commit** (never squash), so both branches keep a shared history (plan § 10.1)."

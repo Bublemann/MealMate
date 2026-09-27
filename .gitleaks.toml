@@ -1,0 +1,26 @@
+# Secret scanning for this public repository (SEC-01): gitleaks' default rules plus the narrow
+# allowlists below. CI scans the whole history: `gitleaks git --config .gitleaks.toml .`
+title = "MealMate"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Dev-only key of compose.dev.yml: public on purpose, never used outside local development"
+condition = "AND"
+paths = ['''(^|/)compose\.dev\.yml$''']
+regexTarget = "match"
+regexes = ['''dev-only-insecure-key-change-me-0000000000''']
+
+[[allowlists]]
+description = "Key of the E2E test container: public on purpose, only ever used in tests"
+condition = "AND"
+paths = ['''(^|/)e2e/conftest\.py$''']
+regexTarget = "match"
+regexes = ['''e2e-only-insecure-test-key-0000000000000000''']
+
+[[allowlists]]
+description = "v1 self-signed TLS key, public in history and treated as compromised; never reused (SEC-01)"
+condition = "AND"
+commits = ["d9664fdc4a928eee9da1cde12922438d15d31e94"]
+paths = ['''^certs/key\.pem$''']

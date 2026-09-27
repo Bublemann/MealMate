@@ -1,0 +1,47 @@
+# git-cliff: release notes from the Conventional Commit subjects on a release branch.
+# Feature PRs are squash-merged, so each subject is a PR title (CONTRIBUTING.md). Used by
+# .github/workflows/release-publish.yml; try it locally with `uvx git-cliff --unreleased`.
+
+[changelog]
+# The GitHub release has the version as its title, so the notes start with the groups.
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{% if commit.breaking %}**Breaking:** {% endif %}\
+{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+"
+sort_commits = "oldest"
+topo_order = false
+commit_preprocessors = [
+  # "feat: add lists (#12)" -> link the pull request
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/Bublemann/MealMate/pull/${1}))" },
+]
+# The HTML comments only order the groups; they are stripped when rendering.
+commit_parsers = [
+  { message = "^Merge ", skip = true },
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^sec", group = "<!-- 3 -->Security" },
+  { message = "^refactor", group = "<!-- 4 -->Refactoring" },
+  { message = "^docs", group = "<!-- 5 -->Documentation" },
+  { message = "^test", group = "<!-- 6 -->Tests" },
+  { message = "^(build|ci)", group = "<!-- 7 -->Build and CI" },
+  { message = "^chore\\(deps", group = "<!-- 8 -->Dependencies" },
+  { message = "^(chore|style|revert)", group = "<!-- 9 -->Other changes" },
+]

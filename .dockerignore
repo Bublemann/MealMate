@@ -1,43 +1,46 @@
-# Git
+# Keep the build context to what the Dockerfile copies: backend/, frontend/, deploy/ and LICENSE.
 .git
-.gitignore
+.github
+docs
+e2e
+compose.dev.yml
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info
-dist
-build
-.pytest_cache
-.coverage
+# Secrets and local data
+**/.env
+**/.env.*
+!**/env.example
+**/*.pem
+**/*.key
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite3
+data
+backend/data
+deploy/data
+deploy/state
 
-# IDEs
-.vscode
-.idea
-*.swp
-*.swo
-*~
+# Dependencies, build output and caches (rebuilt inside the image)
+**/node_modules
+**/.venv
+frontend/dist
+frontend/dev-dist
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.hypothesis
+**/.coverage
+**/.coverage.*
+**/coverage
+**/coverage.xml
+**/htmlcov
+**/*.tsbuildinfo
+**/test-results
+**/playwright-report
 
-# Documentation
-README.md
-LICENSE
-promt.txt
-PROJECT_STATUS.md
-
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Local development
-*.db
-*.sqlite
-*.sqlite3
-venv
-env
-.env
+# Editors / OS
+**/.idea
+**/.vscode
+**/.DS_Store

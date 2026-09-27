@@ -1,0 +1,315 @@
+{
+  "components": {
+    "schemas": {
+      "DiagCookieCheck": {
+        "properties": {
+          "present": {
+            "title": "Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "present"
+        ],
+        "title": "DiagCookieCheck",
+        "type": "object"
+      },
+      "ErrorCode": {
+        "description": "What went wrong; the frontend shows the translation `error.<code>`.",
+        "enum": [
+          "common.internal",
+          "common.not_found",
+          "common.method_not_allowed",
+          "common.validation",
+          "common.rate_limited",
+          "common.unauthorized",
+          "common.forbidden",
+          "common.service_unavailable"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "ErrorResponse": {
+        "description": "`params` fill placeholders in the translation; `fields` lists rejected request fields.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "fields"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "FieldError": {
+        "description": "One rejected request field; `loc` is its path, e.g. `[\"body\", \"name\"]`.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/FieldErrorCode"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Loc",
+            "type": "array"
+          }
+        },
+        "required": [
+          "loc",
+          "code"
+        ],
+        "title": "FieldError",
+        "type": "object"
+      },
+      "FieldErrorCode": {
+        "description": "Why a single request field was rejected (`fields[].code` in the envelope).",
+        "enum": [
+          "required",
+          "invalid",
+          "too_short",
+          "too_long",
+          "out_of_range",
+          "invalid_format"
+        ],
+        "title": "FieldErrorCode",
+        "type": "string"
+      },
+      "HealthStatus": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthStatus",
+        "type": "object"
+      },
+      "VersionInfo": {
+        "description": "What is running and where its source is (LIC-02, AGPL § 13).",
+        "properties": {
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "commit",
+          "source_url"
+        ],
+        "title": "VersionInfo",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "license": {
+      "identifier": "AGPL-3.0-or-later",
+      "name": "AGPL-3.0-or-later"
+    },
+    "title": "MealMate",
+    "version": "0.0.0-dev"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/diag/check": {
+      "post": {
+        "description": "Reports whether the browser sent the diagnostics cookie.",
+        "operationId": "check_diag_cookie",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "mm_diag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mm Diag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagCookieCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Check Diag Cookie",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/auth/diag/set": {
+      "post": {
+        "description": "Sets the diagnostics cookie.",
+        "operationId": "set_diag_cookie",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Set Diag Cookie",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Checks that the database answers and the data directory is writable.",
+        "operationId": "get_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The database or the data directory is unavailable"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Get Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/version": {
+      "get": {
+        "description": "The running version and a link to its source code.",
+        "operationId": "get_version",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Get Version",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

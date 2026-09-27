@@ -1,1 +1,1 @@
-"""MealMate backend application."""
+"""MealMate backend."""
