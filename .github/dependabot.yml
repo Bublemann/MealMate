@@ -21,6 +21,15 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # eslint-plugin-jsx-a11y supports ESLint up to 9; lift this once it supports 10.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      # Types follow the Node LTS line the app runs on (24); bump together with Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /
@@ -31,6 +40,10 @@ updates:
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # Only even-numbered Node releases become LTS; odd ones are skipped.
+      - dependency-name: node
+        versions: ["25.x", "27.x", "29.x"]
 
   # The node image of compose.dev.yml (the same digest as the Dockerfile's).
   - package-ecosystem: docker-compose
@@ -42,6 +55,10 @@ updates:
     groups:
       compose-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # Only even-numbered Node releases become LTS; odd ones are skipped.
+      - dependency-name: node
+        versions: ["25.x", "27.x", "29.x"]
 
   - package-ecosystem: github-actions
     directory: /
