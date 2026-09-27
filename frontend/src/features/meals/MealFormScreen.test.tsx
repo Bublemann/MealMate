@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BEN, errorResponse, mockApi, nodeFormClasses, requestsTo } from '@/test/api';
 import { bareMeal, CUISINES, EGGS, FLOUR, meal, MEAL_ROUTES, MILK, SALT } from '@/test/meals';
+import { LIST_ID, listDetail } from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -446,5 +447,66 @@ describe('MealFormScreen (edit)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent("You're not allowed to do that.");
     expect(screen.queryByTestId(testIds.mealForm)).not.toBeInTheDocument();
+  });
+
+  describe('from the meal picker of a list (LIST-03)', () => {
+    const LIST = `/api/lists/${LIST_ID}`;
+
+    function renderFromList(routes: Record<string, unknown> = {}, addToList = LIST_ID) {
+      return renderForm(`/meals/new?addToList=${encodeURIComponent(addToList)}`, {
+        'POST /api/meals': Response.json(bareMeal({ name: 'Suppe' }), { status: 201 }),
+        [`POST ${LIST}/meals`]: listDetail(),
+        [`GET ${LIST}`]: listDetail(),
+        'GET /api/lists?scope=mine': [],
+        ...routes,
+      });
+    }
+
+    it('adds the new meal to the list and goes back there', async () => {
+      const { fetchMock, user, router } = renderFromList();
+      const form = await screen.findByTestId(testIds.mealForm);
+      expect(screen.getByRole('link', { name: 'Back to the list' })).toHaveAttribute(
+        'href',
+        `/lists/${LIST_ID}`,
+      );
+
+      await user.type(within(form).getByLabelText('Name'), 'Suppe');
+      await user.click(within(form).getByRole('button', { name: 'Create meal' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`));
+      await expect(bodyOf(fetchMock, `POST ${LIST}/meals`)).resolves.toEqual({
+        meal_id: 'meal-new',
+      });
+      expect(await screen.findByTestId(testIds.listMeals)).toBeVisible();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('goes back to the list and says so when the meal could not be added', async () => {
+      const { user, router } = renderFromList({
+        [`POST ${LIST}/meals`]: errorResponse(503, 'common.service_unavailable'),
+      });
+      const form = await screen.findByTestId(testIds.mealForm);
+
+      await user.type(within(form).getByLabelText('Name'), 'Suppe');
+      await user.click(within(form).getByRole('button', { name: 'Create meal' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`));
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "The meal is saved, but it couldn't be added to the list: MealMate is unavailable right now. Please try again later.",
+      );
+    });
+
+    it('ignores a list that is not a list id and saves the meal as usual', async () => {
+      const { fetchMock, user, router } = renderFromList({}, '../me/admin');
+      const form = await screen.findByTestId(testIds.mealForm);
+      expect(screen.getByRole('link', { name: 'All meals' })).toHaveAttribute('href', '/meals');
+
+      await user.type(within(form).getByLabelText('Name'), 'Suppe');
+      await user.click(within(form).getByRole('button', { name: 'Create meal' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/meals/meal-new'));
+      const paths = fetchMock.mock.calls.map(([request]) => new URL(request.url).pathname);
+      expect(paths.filter((path) => path.startsWith('/api/lists/'))).toEqual([]);
+    });
   });
 });

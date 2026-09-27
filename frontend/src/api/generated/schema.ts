@@ -412,7 +412,8 @@ export interface paths {
         post?: never;
         /**
          * End Couple
-         * @description End the couple (either partner, any time).
+         * @description End the couple (either partner, any time). The share switch goes off on all lists of
+         *     both, and each one's private meals leave the other's lists ("no longer available").
          */
         delete: operations["end_couple"];
         options?: never;
@@ -633,6 +634,212 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Lists
+         * @description The lists for the Lists home, most recently edited first. `mine`: your lists and those
+         *     your partner shares with you; `others`: other lists you may see (read-only; public owners'
+         *     lists and your partner's unshared ones), without the owners you switched off in your list
+         *     filter chips (`filter_hidden.lists`). Without `status`: drafts and lists being shopped.
+         */
+        get: operations["list_lists"];
+        put?: never;
+        /**
+         * Create List
+         * @description A new draft of yours; it is shared with your partner if you have one.
+         */
+        post: operations["create_list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get List
+         * @description A list you can see (404 otherwise), with a weak `ETag` over the response as you see it;
+         *     send it back as `If-None-Match` to get a 304 without a body while nothing changed.
+         */
+        get: operations["get_list"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete List
+         * @description Delete your list, whatever its state.
+         */
+        delete: operations["delete_list"];
+        options?: never;
+        head?: never;
+        /**
+         * Update List
+         * @description Rename a list you may edit; switch sharing with your partner on your own list.
+         */
+        patch: operations["update_list"];
+        trace?: never;
+    };
+    "/api/lists/{list_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy List
+         * @description Copy a list you can see into a new draft of yours; meals that no longer exist or that
+         *     you cannot see are left out and counted.
+         */
+        post: operations["copy_list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/extra-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Extra Item
+         * @description Add an extra item: linked to an ingredient or free text. With an `id` already on this
+         *     list nothing changes and the answer is 200 (safe to retry).
+         */
+        post: operations["add_extra_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/extra-items/{extra_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Extra Item
+         * @description Delete an extra item.
+         */
+        delete: operations["delete_extra_item"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Extra Item
+         * @description Change an extra item; it keeps its kind (linked or free text).
+         */
+        patch: operations["update_extra_item"];
+        trace?: never;
+    };
+    "/api/lists/{list_id}/lines/{line_key}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide List Line
+         * @description Remove a line for this list only (drafts; 409 `list.not_draft` otherwise).
+         */
+        post: operations["hide_list_line"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/lines/{line_key}/unhide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unhide List Line
+         * @description Restore a removed line (drafts; 409 `list.not_draft` otherwise).
+         */
+        post: operations["unhide_list_line"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/meals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add List Meal
+         * @description Add a meal you can see; if it is already on the list, its servings rise instead.
+         */
+        post: operations["add_list_meal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/meals/{list_meal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove List Meal
+         * @description Take a meal off the list (also one that is no longer available).
+         */
+        delete: operations["remove_list_meal"];
+        options?: never;
+        head?: never;
+        /**
+         * Update List Meal
+         * @description Set the servings of a meal on the list.
+         */
+        patch: operations["update_list_meal"];
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -764,6 +971,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meals/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recent Meals
+         * @description Up to 10 meals you recently added to lists, most recent first, as far as you can still
+         *     see them (the "recently used" meals of the meal picker).
+         */
+        get: operations["list_recent_meals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meals/tags": {
         parameters: {
             query?: never;
@@ -801,7 +1029,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Meal
-         * @description Delete your meal.
+         * @description Delete your meal; on lists it becomes "no longer available" (it keeps its ingredients
+         *     there until it is removed).
          */
         delete: operations["delete_meal"];
         options?: never;
@@ -1191,11 +1420,20 @@ export interface components {
             present: boolean;
         };
         /**
+         * DisplayAmountOut
+         * @description An amount rounded for display (AGG-04); the frontend only formats it for the locale.
+         */
+        DisplayAmountOut: {
+            unit: components["schemas"]["Unit"];
+            /** Value */
+            value: number;
+        };
+        /**
          * ErrorCode
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "list.not_draft" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -1208,6 +1446,78 @@ export interface components {
             params: {
                 [key: string]: string | number | boolean;
             };
+        };
+        /**
+         * ExtraItem
+         * @description An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`
+         *     and `unit`) or free text (`text`, optional `amount_text`, `category_id`).
+         */
+        ExtraItem: {
+            added_by: components["schemas"]["UserRef"] | null;
+            /** Amount */
+            amount: number | null;
+            /** Amount Text */
+            amount_text: string | null;
+            /** Category Id */
+            category_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Ingredient Id */
+            ingredient_id: string | null;
+            /** Text */
+            text: string | null;
+            unit: components["schemas"]["Unit"] | null;
+        };
+        /**
+         * ExtraItemCreate
+         * @description Exactly one of `ingredient_id` and `text` (LIST-06).
+         *
+         *     - linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
+         *       without a unit counts as pieces, a unit without an amount is refused; no `amount_text`
+         *       or `category_id`;
+         *     - free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)
+         *       and `category_id` (default: *Other*); no `amount` or `unit`.
+         *
+         *     `id` may be any UUID chosen by the client; sending the same id again changes nothing.
+         */
+        ExtraItemCreate: {
+            /** Amount */
+            amount?: number | null;
+            /** Amount Text */
+            amount_text?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Id */
+            id?: string | null;
+            /** Ingredient Id */
+            ingredient_id?: string | null;
+            /** Text */
+            text?: string | null;
+            unit?: components["schemas"]["Unit"] | null;
+        };
+        /**
+         * ExtraItemUpdate
+         * @description Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of
+         *     item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
+         *     unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`.
+         */
+        ExtraItemUpdate: {
+            /** Amount */
+            amount?: number | null;
+            /** Amount Text */
+            amount_text?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Ingredient Id */
+            ingredient_id?: string | null;
+            /** Text */
+            text?: string | null;
+            unit?: components["schemas"]["Unit"] | null;
         };
         /**
          * FieldError
@@ -1424,6 +1734,34 @@ export interface components {
             username: string;
         };
         /**
+         * LineSource
+         * @description Where a line comes from (LIST-08): a meal on the list (`list_meal_id`, its `servings`;
+         *     `meal_name` null and `private` if the viewer may not see it, VIS-06) or an extra item
+         *     (`extra_id`, with its own amount and unit, or its free-text `amount_text`).
+         */
+        LineSource: {
+            /** Amount */
+            amount: number | null;
+            /** Amount Text */
+            amount_text: string | null;
+            /** Extra Id */
+            extra_id: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "meal" | "extra";
+            /** List Meal Id */
+            list_meal_id: string | null;
+            /** Meal Name */
+            meal_name: string | null;
+            /** Private */
+            private: boolean;
+            /** Servings */
+            servings: number | null;
+            unit: components["schemas"]["Unit"] | null;
+        };
+        /**
          * LinkCreated
          * @description A reset link; the code is in the fragment (`/reset#<code>`).
          */
@@ -1435,6 +1773,200 @@ export interface components {
             expires_at: string;
             /** Url */
             url: string;
+        };
+        /**
+         * ListCopyResult
+         * @description The new draft, and how many meals were left out because they no longer exist or the
+         *     copier may not see them (VIS-03/06).
+         */
+        ListCopyResult: {
+            /** Left Out */
+            left_out: number;
+            list: components["schemas"]["ListDetail"];
+        };
+        /**
+         * ListCreate
+         * @description `name`: at most 60 characters; empty or left out shows the translated default.
+         */
+        ListCreate: {
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * ListDetail
+         * @description A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:
+         *     editors change the name, meals, servings, extra items and hidden lines; only the owner
+         *     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
+         *     `<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is
+         *     `reminder.<reminder_seed % 10 + 1>` (LIST-14).
+         */
+        ListDetail: {
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Extra Items */
+            extra_items: components["schemas"]["ExtraItem"][];
+            /** Id */
+            id: string;
+            /** Is Owner */
+            is_owner: boolean;
+            /** Lines */
+            lines: components["schemas"]["ListLine"][];
+            /** Meals */
+            meals: components["schemas"]["ListMealEntry"][];
+            /** Name */
+            name: string | null;
+            owner: components["schemas"]["UserRef"];
+            /** Reminder Seed */
+            reminder_seed: number;
+            /** Shared With Partner */
+            shared_with_partner: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "shopping" | "done";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * ListLine
+         * @description An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,
+         *     `x:<extra_id>` for a free-text item.
+         *
+         *     `amounts` are the display amounts, shown joined ("500 g + 2 Stk."); `has_unspecified` means
+         *     a part without an amount ("+ some", or "some" alone). A free-text line has no amounts and
+         *     shows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and
+         *     belong in the collapsed "Removed" section. `category_id` groups the lines; they come
+         *     sorted by category order and name (AGG-05).
+         */
+        ListLine: {
+            /** Amount Text */
+            amount_text: string | null;
+            /** Amounts */
+            amounts: components["schemas"]["DisplayAmountOut"][];
+            /** Category Id */
+            category_id: string;
+            /** Has Unspecified */
+            has_unspecified: boolean;
+            /** Hidden */
+            hidden: boolean;
+            /** Ingredient Id */
+            ingredient_id: string | null;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ingredient" | "text";
+            /** Name */
+            name: string;
+            /** Sources */
+            sources: components["schemas"]["LineSource"][];
+        };
+        /**
+         * ListMealAdd
+         * @description Add a meal you can see (LIST-03). `servings` (1 to 99) defaults to the meal's own; if
+         *     the meal is already on the list, its servings rise by that many (LIST-04), to at most
+         *     99.
+         */
+        ListMealAdd: {
+            /** Meal Id */
+            meal_id: string;
+            /** Servings */
+            servings?: number | null;
+        };
+        /**
+         * ListMealEntry
+         * @description A meal on a list with its servings (LIST-04).
+         *
+         *     A meal the viewer may not see is `private`: only its servings are shown, as "Private meal
+         *     (N servings)" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it
+         *     keeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is
+         *     the one it had). `meal_servings` is what the meal's rows are written for; the rows are
+         *     scaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.
+         */
+        ListMealEntry: {
+            /** Detached */
+            detached: ("deleted" | "unavailable") | null;
+            /** Id */
+            id: string;
+            /** Meal Id */
+            meal_id: string | null;
+            /** Meal Servings */
+            meal_servings: number;
+            /** Name */
+            name: string | null;
+            owner: components["schemas"]["UserRef"] | null;
+            /** Private */
+            private: boolean;
+            /** Servings */
+            servings: number;
+            /** Thumb Url */
+            thumb_url: string | null;
+        };
+        /** ListMealUpdate */
+        ListMealUpdate: {
+            /** Servings */
+            servings: number;
+        };
+        /**
+         * ListSummary
+         * @description A list on the Lists home (UI-02); `line_count` counts the lines that are not hidden.
+         */
+        ListSummary: {
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Is Owner */
+            is_owner: boolean;
+            /** Line Count */
+            line_count: number;
+            /** Meal Count */
+            meal_count: number;
+            /** Name */
+            name: string | null;
+            owner: components["schemas"]["UserRef"];
+            /** Shared With Partner */
+            shared_with_partner: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "shopping" | "done";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ListUpdate
+         * @description Only the fields that are sent change. `name` null or empty goes back to the default
+         *     name (editors). `shared_with_partner` is the owner's switch (CPL-02); it can only be turned
+         *     on while the owner is in a couple (422 `invalid` otherwise), and null is refused.
+         */
+        ListUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Shared With Partner */
+            shared_with_partner?: boolean | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -3090,6 +3622,487 @@ export interface operations {
             };
         };
     };
+    list_lists: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "others";
+                status?: ("draft" | "shopping" | "done") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSummary"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_list: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-none-match"?: string | null;
+            };
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Unchanged since the given ETag */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    copy_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListCopyResult"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_extra_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtraItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Already added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_extra_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                extra_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_extra_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                extra_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtraItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    hide_list_line: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                /** @description `i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`. */
+                line_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unhide_list_line: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                /** @description `i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`. */
+                line_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_list_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListMealAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    remove_list_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                list_meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_list_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                list_meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListMealUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_me: {
         parameters: {
             query?: never;
@@ -3324,6 +4337,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Meal"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_recent_meals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MealSummary"][];
                 };
             };
             /** @description Error envelope; `code` names the error */

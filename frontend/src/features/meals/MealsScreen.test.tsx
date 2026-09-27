@@ -1,6 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { BEN, CARL, errorResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import {
+  BEN,
+  CARL,
+  errorResponse,
+  mockApi,
+  requestsTo,
+  slowFilterSaves,
+  TEST_USER,
+} from '@/test/api';
 import { CUISINES, ME, MEAL_ROUTES, mealSummary, TAGS } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -141,6 +149,28 @@ describe('MealsScreen', () => {
     await expect(requestsTo(fetchMock, 'PATCH /api/me')[0]?.json()).resolves.toEqual({
       filter_hidden: { meals: [ME.id], lists: [] },
     });
+  });
+
+  it('keeps quick toggles while earlier ones are still being saved', async () => {
+    const saves = slowFilterSaves();
+    const { fetchMock, user } = renderMeals({ 'PATCH /api/me': saves.route });
+    const chips = await screen.findByTestId(testIds.mealUserChips);
+    const chip = (name: string) => within(chips).getByRole('button', { name });
+
+    await user.click(chip('Ben'));
+    await user.click(chip('Carl (deactivated)'));
+    // The first save answers while the second waits: it doesn't know about Carl yet.
+    await saves.answer(1);
+    await user.click(chip('Ben'));
+    await saves.answer(2);
+    await saves.answer(3);
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(3));
+    await expect(requestsTo(fetchMock, 'PATCH /api/me')[2]?.json()).resolves.toEqual({
+      filter_hidden: { meals: [CARL.id], lists: [] },
+    });
+    expect(chip('Ben')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Carl (deactivated)')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('turns the chip back when saving fails', async () => {

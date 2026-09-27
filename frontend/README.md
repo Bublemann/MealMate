@@ -61,13 +61,14 @@ frontend/
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
+    │   ├── lists/          # Lists tab, list view (meals, extra items, lines, sources), export text
     │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks
     ├── components/         # shared app components (Screen, FormField, ShareLink, ConfirmDialog, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
-    ├── lib/                # small helpers (`cn`, `shareText`, user-agent description)
+    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, user-agent description)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
     ├── sw/sw.ts            # service worker
     ├── test/               # setup, renderApp (signed in by default), mockApi (fetch router)
@@ -164,6 +165,11 @@ the first creates the link and shows it (`ShareLink`), the second ("Share") call
 `shareText(message)` from `src/lib/share.ts` synchronously in the click handler. Without a share
 sheet the button copies the message instead; a failed share falls back to copying. The message
 comes from i18n in the admin's language and has the two steps: Tailscale, then the link.
+
+A list's "Share as text" (EXP-01/02) works the same way with one tap: `exportText()` in
+`features/lists/exportText.ts` builds the text synchronously from the list already on screen, in
+the user's language, from the display values the server rounded; the click handler passes it to
+`shareText` right away.
 
 ## Tests
 
@@ -306,5 +312,31 @@ order.
 | `editMeal`               | `edit-meal`                | "Edit" on the meal detail (owner)           |
 | `deleteMeal`             | `delete-meal`              | "Delete" on the meal detail (owner)         |
 | `copyMeal`               | `copy-meal`                | "Copy to my meals" on the meal detail       |
+| `newList`                | `new-list`                 | "New list" on Lists (also its empty state)  |
+| `listDrafts`             | `list-drafts`              | My lists (drafts) on Lists                  |
+| `listCard`               | `list-card`                | One list on Lists (link)                    |
+| `othersLists`            | `others-lists`             | Others' lists section on Lists              |
+| `listUserChips`          | `list-user-chips`          | User filter chips of Others' lists          |
+| `screenList`             | `screen-list`              | List view screen                            |
+| `listReadOnly`           | `list-read-only`           | Read-only note on someone else's list       |
+| `copyList`               | `copy-list`                | "Copy to my lists" on a read-only list      |
+| `listLeftOut`            | `list-left-out`            | "N meals were left out" after a copy        |
+| `renameList`             | `rename-list`              | "Rename" on the list view                   |
+| `shareListSwitch`        | `share-list-switch`        | "Shared with <partner>" switch (owner)      |
+| `exportList`             | `export-list`              | Share the list as text (export)             |
+| `deleteList`             | `delete-list`              | "Delete" on the list view (owner)           |
+| `listMeals`              | `list-meals`               | Meals of the list with their servings       |
+| `listMeal`               | `list-meal`                | One meal on the list                        |
+| `addMeals`               | `add-meals`                | "Add meals" (opens the meal picker)         |
+| `mealPicker`             | `meal-picker`              | Meal picker dialog                          |
+| `mealPickerRecent`       | `meal-picker-recent`       | "Recently used" meals in the picker         |
+| `mealPickerResults`      | `meal-picker-results`      | Search results (or all meals) in the picker |
+| `mealPickerCreate`       | `meal-picker-create`       | "Create new meal" in the picker             |
+| `extraItemInput`         | `extra-item-input`         | Input for extra items (with autocomplete)   |
+| `listLines`              | `list-lines`               | Aggregated lines grouped by category        |
+| `listLine`               | `list-line`                | One line (opens its sources)                |
+| `lineSources`            | `line-sources`             | Sources dialog of a line                    |
+| `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
+| `listReminder`           | `list-reminder`            | Reminder in the last row of a list          |
 
 <!-- test-ids:end -->

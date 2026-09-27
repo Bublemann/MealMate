@@ -1,4 +1,5 @@
-import { vi } from 'vitest';
+import { act, waitFor } from '@testing-library/react';
+import { expect, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
 
 type Schemas = components['schemas'];
@@ -74,6 +75,9 @@ export const DEFAULT_ROUTES: Record<string, unknown> = {
   },
   'GET /api/couple': NO_COUPLE,
   'GET /api/users': [BEN, CARL],
+  // The Lists tab, where the app opens: no lists yet, nobody else visible.
+  'GET /api/lists': [],
+  'GET /api/users/visible': [],
 };
 
 /**
@@ -102,6 +106,24 @@ export function requestsTo(fetchMock: ReturnType<typeof mockApi>, route: string)
   return fetchMock.mock.calls
     .map(([request]) => request)
     .filter((request) => `${request.method} ${new URL(request.url).pathname}` === route);
+}
+
+/**
+ * `PATCH /api/me` that saves what it is sent but answers only when the test says so (`answer`
+ * answers the oldest waiting request).
+ */
+export function slowFilterSaves() {
+  const waiting: (() => void)[] = [];
+  const route = async (request: Request) => {
+    const { filter_hidden } = (await request.json()) as Pick<Schemas['Me'], 'filter_hidden'>;
+    await new Promise<void>((resolve) => waiting.push(resolve));
+    return { ...TEST_USER, filter_hidden };
+  };
+  const answer = async (count: number) => {
+    await waitFor(() => expect(waiting).toHaveLength(count));
+    act(() => waiting[count - 1]?.());
+  };
+  return { route, answer };
 }
 
 interface NodeProcess {

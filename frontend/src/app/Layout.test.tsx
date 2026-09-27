@@ -56,12 +56,12 @@ describe('Layout', () => {
   });
 
   it('shows an empty state with its main action on /lists', async () => {
+    mockApi();
     renderApp('/lists');
 
     expect(
       await screen.findByRole('heading', { level: 2, name: 'No shopping lists yet' }),
     ).toBeVisible();
-    // The action is wired up when lists arrive (M5a); Meals and Ingredients have their own tests.
-    expect(screen.getByRole('button', { name: 'New list' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'New list' })).toBeEnabled();
   });
 });

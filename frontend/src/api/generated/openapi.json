@@ -443,6 +443,24 @@
         "title": "DiagCookieCheck",
         "type": "object"
       },
+      "DisplayAmountOut": {
+        "description": "An amount rounded for display (AGG-04); the frontend only formats it for the locale.",
+        "properties": {
+          "unit": {
+            "$ref": "#/components/schemas/Unit"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "value",
+          "unit"
+        ],
+        "title": "DisplayAmountOut",
+        "type": "object"
+      },
       "ErrorCode": {
         "description": "What went wrong; the frontend shows the translation `error.<code>`.",
         "enum": [
@@ -474,6 +492,7 @@
           "ingredient.in_use",
           "ingredient.merge_base_unit_mismatch",
           "product.basis_mismatch",
+          "list.not_draft",
           "media.too_large",
           "media.unsupported_type",
           "media.too_many_pixels"
@@ -521,6 +540,282 @@
           "fields"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "ExtraItem": {
+        "description": "An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).",
+        "properties": {
+          "added_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "amount_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredient Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "ingredient_id",
+          "text",
+          "amount",
+          "unit",
+          "amount_text",
+          "category_id",
+          "added_by",
+          "created_at"
+        ],
+        "title": "ExtraItem",
+        "type": "object"
+      },
+      "ExtraItemCreate": {
+        "description": "Exactly one of `ingredient_id` and `text` (LIST-06).\n\n- linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount\n  without a unit counts as pieces, a unit without an amount is refused; no `amount_text`\n  or `category_id`;\n- free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)\n  and `category_id` (default: *Other*); no `amount` or `unit`.\n\n`id` may be any UUID chosen by the client; sending the same id again changes nothing.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "amount_text": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 45,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredient Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ExtraItemCreate",
+        "type": "object"
+      },
+      "ExtraItemUpdate": {
+        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nitem cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `ingredient_id`, `text` and `category_id`.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "amount_text": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredient Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ExtraItemUpdate",
         "type": "object"
       },
       "FieldError": {
@@ -1108,6 +1403,112 @@
         "title": "JoinRequest",
         "type": "object"
       },
+      "LineSource": {
+        "description": "Where a line comes from (LIST-08): a meal on the list (`list_meal_id`, its `servings`;\n`meal_name` null and `private` if the viewer may not see it, VIS-06) or an extra item\n(`extra_id`, with its own amount and unit, or its free-text `amount_text`).",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "amount_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "extra_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Id"
+          },
+          "kind": {
+            "enum": [
+              "meal",
+              "extra"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "list_meal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Meal Id"
+          },
+          "meal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meal Name"
+          },
+          "private": {
+            "title": "Private",
+            "type": "boolean"
+          },
+          "servings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servings"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "list_meal_id",
+          "extra_id",
+          "meal_name",
+          "private",
+          "servings",
+          "amount",
+          "unit",
+          "amount_text"
+        ],
+        "title": "LineSource",
+        "type": "object"
+      },
       "LinkCreated": {
         "description": "A reset link; the code is in the fragment (`/reset#<code>`).",
         "properties": {
@@ -1126,6 +1527,470 @@
           "expires_at"
         ],
         "title": "LinkCreated",
+        "type": "object"
+      },
+      "ListCopyResult": {
+        "description": "The new draft, and how many meals were left out because they no longer exist or the\ncopier may not see them (VIS-03/06).",
+        "properties": {
+          "left_out": {
+            "title": "Left Out",
+            "type": "integer"
+          },
+          "list": {
+            "$ref": "#/components/schemas/ListDetail"
+          }
+        },
+        "required": [
+          "list",
+          "left_out"
+        ],
+        "title": "ListCopyResult",
+        "type": "object"
+      },
+      "ListCreate": {
+        "description": "`name`: at most 60 characters; empty or left out shows the translated default.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "ListCreate",
+        "type": "object"
+      },
+      "ListDetail": {
+        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is\n`reminder.<reminder_seed % 10 + 1>` (LIST-14).",
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "extra_items": {
+            "items": {
+              "$ref": "#/components/schemas/ExtraItem"
+            },
+            "title": "Extra Items",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ListLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "meals": {
+            "items": {
+              "$ref": "#/components/schemas/ListMealEntry"
+            },
+            "title": "Meals",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "reminder_seed": {
+            "title": "Reminder Seed",
+            "type": "integer"
+          },
+          "shared_with_partner": {
+            "title": "Shared With Partner",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "shopping",
+              "done"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "version",
+          "created_at",
+          "updated_at",
+          "owner",
+          "is_owner",
+          "can_edit",
+          "shared_with_partner",
+          "reminder_seed",
+          "meals",
+          "lines",
+          "extra_items"
+        ],
+        "title": "ListDetail",
+        "type": "object"
+      },
+      "ListLine": {
+        "description": "An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,\n`x:<extra_id>` for a free-text item.\n\n`amounts` are the display amounts, shown joined (\"500 g + 2 Stk.\"); `has_unspecified` means\na part without an amount (\"+ some\", or \"some\" alone). A free-text line has no amounts and\nshows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and\nbelong in the collapsed \"Removed\" section. `category_id` groups the lines; they come\nsorted by category order and name (AGG-05).",
+        "properties": {
+          "amount_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "amounts": {
+            "items": {
+              "$ref": "#/components/schemas/DisplayAmountOut"
+            },
+            "title": "Amounts",
+            "type": "array"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "has_unspecified": {
+            "title": "Has Unspecified",
+            "type": "boolean"
+          },
+          "hidden": {
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredient Id"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ingredient",
+              "text"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/LineSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "ingredient_id",
+          "name",
+          "category_id",
+          "amounts",
+          "has_unspecified",
+          "amount_text",
+          "hidden",
+          "sources"
+        ],
+        "title": "ListLine",
+        "type": "object"
+      },
+      "ListMealAdd": {
+        "description": "Add a meal you can see (LIST-03). `servings` (1 to 99) defaults to the meal's own; if\nthe meal is already on the list, its servings rise by that many (LIST-04), to at most\n99.",
+        "properties": {
+          "meal_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Meal Id",
+            "type": "string"
+          },
+          "servings": {
+            "anyOf": [
+              {
+                "maximum": 99.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servings"
+          }
+        },
+        "required": [
+          "meal_id"
+        ],
+        "title": "ListMealAdd",
+        "type": "object"
+      },
+      "ListMealEntry": {
+        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.",
+        "properties": {
+          "detached": {
+            "anyOf": [
+              {
+                "enum": [
+                  "deleted",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detached"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "meal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meal Id"
+          },
+          "meal_servings": {
+            "title": "Meal Servings",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "private": {
+            "title": "Private",
+            "type": "boolean"
+          },
+          "servings": {
+            "title": "Servings",
+            "type": "integer"
+          },
+          "thumb_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Url"
+          }
+        },
+        "required": [
+          "id",
+          "meal_id",
+          "name",
+          "private",
+          "owner",
+          "thumb_url",
+          "servings",
+          "meal_servings",
+          "detached"
+        ],
+        "title": "ListMealEntry",
+        "type": "object"
+      },
+      "ListMealUpdate": {
+        "properties": {
+          "servings": {
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Servings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "servings"
+        ],
+        "title": "ListMealUpdate",
+        "type": "object"
+      },
+      "ListSummary": {
+        "description": "A list on the Lists home (UI-02); `line_count` counts the lines that are not hidden.",
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "line_count": {
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "meal_count": {
+            "title": "Meal Count",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "shared_with_partner": {
+            "title": "Shared With Partner",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "shopping",
+              "done"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "created_at",
+          "updated_at",
+          "owner",
+          "is_owner",
+          "can_edit",
+          "shared_with_partner",
+          "meal_count",
+          "line_count"
+        ],
+        "title": "ListSummary",
+        "type": "object"
+      },
+      "ListUpdate": {
+        "description": "Only the fields that are sent change. `name` null or empty goes back to the default\nname (editors). `shared_with_partner` is the owner's switch (CPL-02); it can only be turned\non while the owner is in a couple (422 `invalid` otherwise), and null is refused.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "shared_with_partner": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared With Partner"
+          }
+        },
+        "title": "ListUpdate",
         "type": "object"
       },
       "LoginRequest": {
@@ -3610,7 +4475,7 @@
     },
     "/api/couple": {
       "delete": {
-        "description": "End the couple (either partner, any time).",
+        "description": "End the couple (either partner, any time). The share switch goes off on all lists of\nboth, and each one's private meals leave the other's lists (\"no longer available\").",
         "operationId": "end_couple",
         "responses": {
           "204": {
@@ -4333,6 +5198,832 @@
         ]
       }
     },
+    "/api/lists": {
+      "get": {
+        "description": "The lists for the Lists home, most recently edited first. `mine`: your lists and those\nyour partner shares with you; `others`: other lists you may see (read-only; public owners'\nlists and your partner's unshared ones), without the owners you switched off in your list\nfilter chips (`filter_hidden.lists`). Without `status`: drafts and lists being shopped.",
+        "operationId": "list_lists",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "mine",
+              "enum": [
+                "mine",
+                "others"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "draft",
+                    "shopping",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListSummary"
+                  },
+                  "title": "Response List Lists",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Lists",
+        "tags": [
+          "lists"
+        ]
+      },
+      "post": {
+        "description": "A new draft of yours; it is shared with your partner if you have one.",
+        "operationId": "create_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create List",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}": {
+      "delete": {
+        "description": "Delete your list, whatever its state.",
+        "operationId": "delete_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete List",
+        "tags": [
+          "lists"
+        ]
+      },
+      "get": {
+        "description": "A list you can see (404 otherwise), with a weak `ETag` over the response as you see it;\nsend it back as `If-None-Match` to get a 304 without a body while nothing changed.",
+        "operationId": "get_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "Unchanged since the given ETag"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get List",
+        "tags": [
+          "lists"
+        ]
+      },
+      "patch": {
+        "description": "Rename a list you may edit; switch sharing with your partner on your own list.",
+        "operationId": "update_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update List",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/copy": {
+      "post": {
+        "description": "Copy a list you can see into a new draft of yours; meals that no longer exist or that\nyou cannot see are left out and counted.",
+        "operationId": "copy_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListCopyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Copy List",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/extra-items": {
+      "post": {
+        "description": "Add an extra item: linked to an ingredient or free text. With an `id` already on this\nlist nothing changes and the answer is 200 (safe to retry).",
+        "operationId": "add_extra_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtraItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Already added"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Extra Item",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/extra-items/{extra_id}": {
+      "delete": {
+        "description": "Delete an extra item.",
+        "operationId": "delete_extra_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "extra_id",
+            "required": true,
+            "schema": {
+              "title": "Extra Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Extra Item",
+        "tags": [
+          "lists"
+        ]
+      },
+      "patch": {
+        "description": "Change an extra item; it keeps its kind (linked or free text).",
+        "operationId": "update_extra_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "extra_id",
+            "required": true,
+            "schema": {
+              "title": "Extra Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtraItemUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Extra Item",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/lines/{line_key}/hide": {
+      "post": {
+        "description": "Remove a line for this list only (drafts; 409 `list.not_draft` otherwise).",
+        "operationId": "hide_list_line",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+            "in": "path",
+            "name": "line_key",
+            "required": true,
+            "schema": {
+              "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+              "maxLength": 80,
+              "pattern": "^(i|x):[0-9a-f-]{36}$",
+              "title": "Line Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hide List Line",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/lines/{line_key}/unhide": {
+      "post": {
+        "description": "Restore a removed line (drafts; 409 `list.not_draft` otherwise).",
+        "operationId": "unhide_list_line",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+            "in": "path",
+            "name": "line_key",
+            "required": true,
+            "schema": {
+              "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+              "maxLength": 80,
+              "pattern": "^(i|x):[0-9a-f-]{36}$",
+              "title": "Line Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unhide List Line",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/meals": {
+      "post": {
+        "description": "Add a meal you can see; if it is already on the list, its servings rise instead.",
+        "operationId": "add_list_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListMealAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add List Meal",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/meals/{list_meal_id}": {
+      "delete": {
+        "description": "Take a meal off the list (also one that is no longer available).",
+        "operationId": "remove_list_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove List Meal",
+        "tags": [
+          "lists"
+        ]
+      },
+      "patch": {
+        "description": "Set the servings of a meal on the list.",
+        "operationId": "update_list_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListMealUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update List Meal",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/api/me": {
       "get": {
         "description": "The own profile and settings.",
@@ -4733,6 +6424,47 @@
         ]
       }
     },
+    "/api/meals/recent": {
+      "get": {
+        "description": "Up to 10 meals you recently added to lists, most recent first, as far as you can still\nsee them (the \"recently used\" meals of the meal picker).",
+        "operationId": "list_recent_meals",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MealSummary"
+                  },
+                  "title": "Response List Recent Meals",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recent Meals",
+        "tags": [
+          "meals"
+        ]
+      }
+    },
     "/api/meals/tags": {
       "get": {
         "description": "The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no\nlimit and ignores your filter chips.",
@@ -4776,7 +6508,7 @@
     },
     "/api/meals/{meal_id}": {
       "delete": {
-        "description": "Delete your meal.",
+        "description": "Delete your meal; on lists it becomes \"no longer available\" (it keeps its ingredients\nthere until it is removed).",
         "operationId": "delete_meal",
         "parameters": [
           {

@@ -1,0 +1,247 @@
+import { Plus } from 'lucide-react';
+import { useId, useRef, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ErrorAlert } from '@/components/ErrorAlert';
+import { Button } from '@/components/ui/button';
+import { RemovableChip } from '@/components/ui/chip';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useIngredients, type IngredientSummary } from '@/features/ingredients/api';
+import { useCategories, type Unit } from '@/features/reference/api';
+import { categoryName, unitLabel } from '@/features/reference/labels';
+import { fieldErrorMessages } from '@/i18n/errors';
+import { parseAmount } from '@/i18n/format';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { uuidv7 } from '@/lib/uuid';
+import { testIds } from '@/testIds';
+import { useAddExtraItem, type ExtraItemCreate } from './api';
+import { AmountFields, FreeTextFields } from './ExtraItemFields';
+import { otherCategoryId } from './format';
+
+/** Suggestions shown under the input; typing more narrows them down. */
+const MAX_SUGGESTIONS = 6;
+/** The longest free-text item the server takes (LIST-06). */
+const MAX_TEXT_LENGTH = 80;
+
+/**
+ * LIST-06: one input with autocomplete over the ingredients. Picking one adds a linked item
+ * (optional amount and unit) that merges with the same ingredient from the meals; Enter or "Add"
+ * without a pick adds what was typed as a free-text item (optional amount text, category Other
+ * unless another is chosen).
+ *
+ * The item keeps its id until it is added or changed, so sending it again after an error (e.g. a
+ * timeout whose request did reach the server) doesn't add it twice.
+ */
+export function ExtraItemInput({ listId }: { listId: string }) {
+  const { t } = useTranslation();
+  const inputId = useId();
+  const hintId = `${inputId}-hint`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState('');
+  const [picked, setPicked] = useState<IngredientSummary | null>(null);
+  const [amount, setAmount] = useState('');
+  const [unit, setUnit] = useState<Unit>('g');
+  const [amountText, setAmountText] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [amountInvalid, setAmountInvalid] = useState(false);
+  /** The id of the item as it is typed; null until it is first sent. */
+  const pendingId = useRef<string | null>(null);
+  const add = useAddExtraItem(listId);
+  const categories = useCategories();
+  const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
+  const debounced = useDebouncedValue(text.trim());
+  const searching = debounced !== '' && !picked;
+  const suggestions = useIngredients(debounced, { enabled: searching });
+  const matches = searching ? (suggestions.data ?? []).slice(0, MAX_SUGGESTIONS) : [];
+  const typed = text.trim();
+  const chosenCategory = categoryId || otherCategoryId(categories.data);
+  const serverFields = fieldErrorMessages(t, add.error);
+  const shownFields = picked ? ['amount', 'unit'] : ['text', 'amount_text', 'category_id'];
+  const showAlert =
+    add.error !== null &&
+    (Object.keys(serverFields).length === 0 ||
+      Object.keys(serverFields).some((field) => !shownFields.includes(field)));
+
+  /** The item changed: a new id the next time it is sent. */
+  function edited() {
+    pendingId.current = null;
+  }
+
+  function pick(ingredient: IngredientSummary) {
+    add.reset();
+    edited();
+    setPicked(ingredient);
+    setUnit(ingredient.base_unit);
+    setAmount('');
+    setAmountInvalid(false);
+  }
+
+  function unpick() {
+    add.reset();
+    edited();
+    setPicked(null);
+    setAmountInvalid(false);
+    inputRef.current?.focus();
+  }
+
+  function clear() {
+    edited();
+    setText('');
+    setPicked(null);
+    setAmount('');
+    setAmountText('');
+    setCategoryId('');
+    setAmountInvalid(false);
+    inputRef.current?.focus();
+  }
+
+  function itemId(): string {
+    pendingId.current ??= uuidv7();
+    return pendingId.current;
+  }
+
+  function body(): ExtraItemCreate | null {
+    if (picked) {
+      const trimmed = amount.trim();
+      if (trimmed === '') return { id: itemId(), ingredient_id: picked.id };
+      const value = parseAmount(trimmed);
+      if (value === null) return null;
+      return { id: itemId(), ingredient_id: picked.id, amount: value, unit };
+    }
+    return {
+      id: itemId(),
+      text: typed,
+      ...(amountText.trim() ? { amount_text: amountText.trim() } : {}),
+      ...(chosenCategory ? { category_id: chosenCategory } : {}),
+    };
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (add.isPending || (!picked && !typed)) return;
+    const item = body();
+    setAmountInvalid(item === null);
+    if (item) add.mutate(item, { onSuccess: clear });
+  }
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      noValidate
+      aria-label={t('lists.extra.label')}
+      className="flex flex-col gap-3 rounded-xl border bg-card p-4"
+    >
+      <div className="flex flex-col gap-2">
+        {picked ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <RemovableChip
+              removeLabel={t('lists.extra.unpick', { name: picked.name })}
+              onRemove={unpick}
+            >
+              {picked.name}
+            </RemovableChip>
+            <span className="text-sm text-muted-foreground">
+              {categoryName(t, categoryKeys.get(picked.category_id) ?? 'other')}
+            </span>
+          </div>
+        ) : (
+          <>
+            <Label htmlFor={inputId}>{t('lists.extra.label')}</Label>
+            <Input
+              ref={inputRef}
+              id={inputId}
+              data-testid={testIds.extraItemInput}
+              autoComplete="off"
+              enterKeyHint="done"
+              maxLength={MAX_TEXT_LENGTH}
+              aria-describedby={hintId}
+              aria-invalid={serverFields.text ? true : undefined}
+              value={text}
+              onChange={(event) => {
+                add.reset();
+                edited();
+                setText(event.target.value);
+              }}
+            />
+            <p id={hintId} className="text-sm text-muted-foreground">
+              {serverFields.text ?? t('lists.extra.hint')}
+            </p>
+          </>
+        )}
+      </div>
+      {matches.length > 0 && (
+        <ul
+          aria-label={t('lists.extra.suggestions')}
+          className="flex flex-col divide-y rounded-lg border"
+        >
+          {matches.map((ingredient) => {
+            const key = categoryKeys.get(ingredient.category_id);
+            return (
+              <li key={ingredient.id}>
+                <button
+                  type="button"
+                  onClick={() => pick(ingredient)}
+                  className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+                >
+                  <span className="font-medium">{ingredient.name}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {key ? `${categoryName(t, key)} · ` : ''}
+                    {unitLabel(t, ingredient.base_unit)}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <ErrorAlert error={suggestions.error} />
+      {picked && (
+        <AmountFields
+          amount={amount}
+          unit={unit}
+          onAmountChange={(value) => {
+            edited();
+            setAmountInvalid(false);
+            setAmount(value);
+          }}
+          onUnitChange={(value) => {
+            edited();
+            setUnit(value);
+          }}
+          amountError={amountInvalid ? t('error.field.invalid_format') : serverFields.amount}
+          unitError={serverFields.unit}
+        />
+      )}
+      {!picked && typed && (
+        <FreeTextFields
+          amountText={amountText}
+          categoryId={chosenCategory}
+          onAmountTextChange={(value) => {
+            edited();
+            setAmountText(value);
+          }}
+          onCategoryChange={(value) => {
+            edited();
+            setCategoryId(value);
+          }}
+          amountTextError={serverFields.amount_text}
+          categoryError={serverFields.category_id}
+        />
+      )}
+      {showAlert && <ErrorAlert error={add.error} />}
+      <Button
+        type="submit"
+        className="self-start"
+        disabled={add.isPending || (!picked && !typed)}
+        aria-label={
+          picked || typed
+            ? t('lists.extra.addLabel', { name: picked ? picked.name : typed })
+            : undefined
+        }
+      >
+        <Plus aria-hidden="true" />
+        {t('lists.extra.add')}
+      </Button>
+    </form>
+  );
+}

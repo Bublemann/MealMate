@@ -318,7 +318,7 @@ describe('IngredientAdminActions', () => {
     const { user } = renderDetail(
       {
         'DELETE /api/admin/ingredients/ing-aepfel': Response.json(
-          { code: 'ingredient.in_use', params: { products: 2, meals: 1 }, fields: [] },
+          { code: 'ingredient.in_use', params: { products: 2, meals: 1, lists: 3 }, fields: [] },
           { status: 409 },
         ),
       },
@@ -331,7 +331,7 @@ describe('IngredientAdminActions', () => {
 
     expect(
       await screen.findByText(
-        'This ingredient is still in use (products: 2, meals: 1). Merge it into another ingredient instead.',
+        'This ingredient is still in use (products: 2, meals: 1, lists: 3). Merge it into another ingredient instead.',
       ),
     ).toBeVisible();
   });

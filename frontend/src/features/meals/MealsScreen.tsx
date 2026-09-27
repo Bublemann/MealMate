@@ -5,9 +5,9 @@ import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Screen } from '@/components/Screen';
+import { UserFilterChips } from '@/components/UserFilterChips';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ToggleChip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -181,27 +181,19 @@ function UserChips({ onlyWithOthers = false }: { onlyWithOthers?: boolean }) {
   const toggle = useToggleMealChip();
   const hidden = user.filter_hidden.meals;
 
-  function onToggle(id: string) {
-    toggle.mutate(hidden.includes(id) ? hidden.filter((other) => other !== id) : [...hidden, id]);
-  }
-
   if (!users.data) return <ErrorAlert error={users.error} />;
   if (onlyWithOthers && users.data.every((person) => person.id === user.id)) return null;
   return (
     <div className="flex flex-col gap-2">
-      <ul
-        data-testid={testIds.mealUserChips}
-        aria-label={t('meals.chips.label')}
-        className="flex flex-wrap gap-2"
-      >
-        {users.data.map((person) => (
-          <li key={person.id} className="max-w-full">
-            <ToggleChip pressed={!hidden.includes(person.id)} onClick={() => onToggle(person.id)}>
-              {person.id === user.id ? t('meals.chips.me') : userLabel(t, person)}
-            </ToggleChip>
-          </li>
-        ))}
-      </ul>
+      <UserFilterChips
+        users={users.data}
+        hidden={hidden}
+        meId={user.id}
+        meLabel={t('meals.chips.me')}
+        label={t('meals.chips.label')}
+        testId={testIds.mealUserChips}
+        onChange={(next) => toggle.mutate(next)}
+      />
       <ErrorAlert error={toggle.error} />
     </div>
   );

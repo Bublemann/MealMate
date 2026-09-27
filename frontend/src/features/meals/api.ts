@@ -183,18 +183,26 @@ export function useMealUsers() {
 }
 
 /**
+ * The saves of `filter_hidden` from the meal and list chips (MEAL-10, UI-02): they run one after
+ * another, as each sends both lists of hidden users.
+ */
+export const FILTER_HIDDEN_KEY = ['me', 'filter-hidden'] as const;
+
+/**
  * Switches a user's meal chip (MEAL-10). The chip changes at once (optimistic), the choice is
  * saved on the server in `filter_hidden.meals` so it follows the user to other devices, and the
- * meals load again once it is saved. Toggles run one after another, each sending the whole list.
- * When saving fails, the profile and meals are loaded again: going back to a snapshot could undo
- * a toggle queued after the failed one.
+ * meals load again once it is saved. Toggles run one after another, each sending the whole list;
+ * the saved state only replaces the chips once no other toggle is waiting, as it doesn't know
+ * those yet. When saving fails, the profile and meals are loaded again: going back to a snapshot
+ * could undo a toggle queued after the failed one.
  */
 export function useToggleMealChip() {
   const session = useAuthSession();
   const user = useCurrentUser();
   const queryClient = useQueryClient();
   return useMutation({
-    scope: { id: 'filter-hidden-meals' },
+    mutationKey: FILTER_HIDDEN_KEY,
+    scope: { id: FILTER_HIDDEN_KEY.join('-') },
     mutationFn: (hidden: string[]) =>
       unwrap(
         api.PATCH('/api/me', {
@@ -219,7 +227,8 @@ export function useToggleMealChip() {
       }
     },
     onSuccess: (me) => {
-      session.setUser(me);
+      // This save still counts as running here.
+      if (queryClient.isMutating({ mutationKey: FILTER_HIDDEN_KEY }) <= 1) session.setUser(me);
       invalidateLists(queryClient);
     },
   });
