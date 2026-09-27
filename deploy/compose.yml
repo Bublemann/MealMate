@@ -12,6 +12,9 @@ services:
       MEALMATE_PUBLIC_URL: ${MEALMATE_PUBLIC_URL:?}
       # The pinned image (<repository>@sha256:...) for the admin page; empty while unpinned.
       MEALMATE_IMAGE_DIGEST: ${IMAGE_REF:-}
+      # The /api/auth/diag/* endpoints of the M1 platform spike (the /diag screen), off unless
+      # the owner sets MEALMATE_DIAGNOSTICS_ENABLED=true in /srv/mealmate/.env; removed in M9.
+      MEALMATE_DIAGNOSTICS_ENABLED: ${MEALMATE_DIAGNOSTICS_ENABLED:-false}
       UVICORN_HOST: 127.0.0.1
     volumes: ["./data:/data", "./state/status:/status:ro"]
     user: "10001:10001"
