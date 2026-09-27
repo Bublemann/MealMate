@@ -33,6 +33,7 @@ export function describeUserAgent(userAgent: string | null | undefined): string 
 
 /** iOS Safari itself (not Chrome/Firefox/Edge on iOS), where "Add to Home Screen" lives. */
 export function isIosSafari(userAgent: string, maxTouchPoints = 0): boolean {
-  const ios = /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+  const ios =
+    /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
   return ios && /Safari\//.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent);
 }

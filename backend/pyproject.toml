@@ -58,6 +58,7 @@ cache-keys = [
     { file = "alembic/**/*.py" },
     { file = "alembic/**/*.mako" },
     { file = "app/**/*.py" },
+    { file = "app/**/*.txt" },
 ]
 
 [tool.ruff]

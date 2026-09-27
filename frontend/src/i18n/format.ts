@@ -25,6 +25,17 @@ export function formatDate(date: Date | number | string, language: Language): st
   return new Intl.DateTimeFormat(LOCALES[language], DATE_OPTIONS).format(new Date(date));
 }
 
+const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  ...DATE_OPTIONS,
+  hour: '2-digit',
+  minute: '2-digit',
+};
+
+/** `26.09.2026, 14:05` (de) or `26/09/2026, 14:05` (en), in the device's time zone. */
+export function formatDateTime(date: Date | number | string, language: Language): string {
+  return new Intl.DateTimeFormat(LOCALES[language], DATE_TIME_OPTIONS).format(new Date(date));
+}
+
 /** One run of digits with at most one decimal separator, which may be `,` or `.`. */
 const AMOUNT_PATTERN = /^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/;
 

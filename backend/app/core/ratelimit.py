@@ -90,7 +90,9 @@ class RequestRateLimit:
         (that request is then not counted), else None."""
         now = self.clock()
         if len(self._requests) > _PRUNE_ABOVE_KEYS:
-            for stale in [k for k, v in self._requests.items() if not v or v[-1] <= now - self.window]:
+            for stale in [
+                k for k, v in self._requests.items() if not v or v[-1] <= now - self.window
+            ]:
                 del self._requests[stale]
         requests = self._requests.setdefault(key, deque())
         while requests and requests[0] <= now - self.window:

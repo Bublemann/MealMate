@@ -104,3 +104,13 @@ def validation_error(fields: Iterable[FieldProblem]) -> ApiError:
 
 def not_found() -> ApiError:
     return ApiError(ErrorCode.NOT_FOUND, status_code=404)
+
+
+def rate_limited(retry_after: int) -> ApiError:
+    """429 `common.rate_limited`; the client may retry after `retry_after` seconds."""
+    return ApiError(
+        ErrorCode.RATE_LIMITED,
+        status_code=429,
+        params={"retry_after": retry_after},
+        headers={"Retry-After": str(retry_after)},
+    )

@@ -36,7 +36,11 @@ function AlertDialogContent({
 
 function AlertDialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
-    <div data-slot="alert-dialog-header" className={cn('flex flex-col gap-2', className)} {...props} />
+    <div
+      data-slot="alert-dialog-header"
+      className={cn('flex flex-col gap-2', className)}
+      {...props}
+    />
   );
 }
 
@@ -84,7 +88,10 @@ function AlertDialogAction({
   return (
     <AlertDialogPrimitive.Action
       data-slot="alert-dialog-action"
-      className={cn(buttonVariants({ variant: destructive ? 'destructive' : 'default' }), className)}
+      className={cn(
+        buttonVariants({ variant: destructive ? 'destructive' : 'default' }),
+        className,
+      )}
       {...props}
     />
   );

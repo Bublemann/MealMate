@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Admin List Events */
+        /**
+         * Admin List Events
+         * @description The admin activity log, newest first (at most 200 entries).
+         */
         get: operations["admin_list_events"];
         put?: never;
         post?: never;
@@ -28,10 +31,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Admin List Invites */
+        /**
+         * Admin List Invites
+         * @description All invites with their status, newest first.
+         */
         get: operations["admin_list_invites"];
         put?: never;
-        /** Admin Create Invite */
+        /**
+         * Admin Create Invite
+         * @description A new invite link (ACC-02); the link is returned only this once.
+         */
         post: operations["admin_create_invite"];
         delete?: never;
         options?: never;
@@ -49,7 +58,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Admin Revoke Invite */
+        /**
+         * Admin Revoke Invite
+         * @description Revoke an invite so it can no longer be used.
+         */
         delete: operations["admin_revoke_invite"];
         options?: never;
         head?: never;
@@ -63,7 +75,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Admin List Users */
+        /**
+         * Admin List Users
+         * @description All users, by display name.
+         */
         get: operations["admin_list_users"];
         put?: never;
         post?: never;
@@ -83,11 +98,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Admin Delete User */
+        /**
+         * Admin Delete User
+         * @description Delete another user and their data (ADM-03).
+         */
         delete: operations["admin_delete_user"];
         options?: never;
         head?: never;
-        /** Admin Update User */
+        /**
+         * Admin Update User
+         * @description Change another user's role or deactivate/reactivate them.
+         */
         patch: operations["admin_update_user"];
         trace?: never;
     };
@@ -100,7 +121,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Admin Create Reset Link */
+        /**
+         * Admin Create Reset Link
+         * @description A single-use password reset link for the user (ACC-10); older ones stop working.
+         */
         post: operations["admin_create_reset_link"];
         delete?: never;
         options?: never;
@@ -119,7 +143,7 @@ export interface paths {
         put?: never;
         /**
          * Check Code
-         * @description Checks an invite or reset code without consuming it.
+         * @description Whether an invite or reset code can be used; does not consume it (ACC-04).
          */
         post: operations["check_code"];
         delete?: never;
@@ -179,7 +203,7 @@ export interface paths {
         put?: never;
         /**
          * Join
-         * @description Registers with an invite code.
+         * @description Register with an invite code and log in (ACC-01, ACC-05, ACC-07).
          */
         post: operations["join"];
         delete?: never;
@@ -199,7 +223,7 @@ export interface paths {
         put?: never;
         /**
          * Login
-         * @description Logs in and sets the refresh cookie.
+         * @description Log in with username and password; sets the refresh cookie (throttled, ACC-11).
          */
         post: operations["login"];
         delete?: never;
@@ -219,7 +243,7 @@ export interface paths {
         put?: never;
         /**
          * Logout
-         * @description Ends the refresh cookie's session.
+         * @description Log out this device: revoke the cookie's session and remove the cookie.
          */
         post: operations["logout"];
         delete?: never;
@@ -239,7 +263,7 @@ export interface paths {
         put?: never;
         /**
          * Logout All
-         * @description Ends all of the user's sessions.
+         * @description Log out every device of the user, this one included (ACC-09).
          */
         post: operations["logout_all"];
         delete?: never;
@@ -259,7 +283,10 @@ export interface paths {
         put?: never;
         /**
          * Refresh
-         * @description Rotates the refresh cookie (or forks a new session) and returns a new access token.
+         * @description A new access token (and rotated cookie) for the refresh cookie.
+         *
+         *     Needs the header `X-MealMate-Client: web` (CSRF guard). `{"fork": true}` starts a new,
+         *     independent session instead (first start of the Home Screen app).
          */
         post: operations["refresh"];
         delete?: never;
@@ -279,7 +306,7 @@ export interface paths {
         put?: never;
         /**
          * Reset Password
-         * @description Sets a new password with a reset code.
+         * @description Set a new password with a reset code; ends all other sessions and logs in (ACC-10).
          */
         post: operations["reset_password"];
         delete?: never;
@@ -295,11 +322,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Couple */
+        /**
+         * Get Couple
+         * @description The partner, if any, and pending requests.
+         */
         get: operations["get_couple"];
         put?: never;
         post?: never;
-        /** End Couple */
+        /**
+         * End Couple
+         * @description End the couple (either partner, any time).
+         */
         delete: operations["end_couple"];
         options?: never;
         head?: never;
@@ -315,7 +348,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Couple Request */
+        /**
+         * Create Couple Request
+         * @description Send a couple request to another active user.
+         */
         post: operations["create_couple_request"];
         delete?: never;
         options?: never;
@@ -332,7 +368,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Accept Couple Request */
+        /**
+         * Accept Couple Request
+         * @description Accept a request sent to you; cancels all other pending requests of both users.
+         */
         post: operations["accept_couple_request"];
         delete?: never;
         options?: never;
@@ -349,7 +388,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel Couple Request */
+        /**
+         * Cancel Couple Request
+         * @description Withdraw your own request.
+         */
         post: operations["cancel_couple_request"];
         delete?: never;
         options?: never;
@@ -366,7 +408,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Decline Couple Request */
+        /**
+         * Decline Couple Request
+         * @description Decline a request sent to you.
+         */
         post: operations["decline_couple_request"];
         delete?: never;
         options?: never;
@@ -401,14 +446,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Me */
+        /**
+         * Get Me
+         * @description The own profile and settings.
+         */
         get: operations["get_me"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Me */
+        /**
+         * Update Me
+         * @description Change display name, language, privacy switches or hidden filter chips.
+         */
         patch: operations["update_me"];
         trace?: never;
     };
@@ -421,7 +472,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Change Password */
+        /**
+         * Change Password
+         * @description Change the password; logs out all other devices.
+         */
         post: operations["change_password"];
         delete?: never;
         options?: never;
@@ -436,7 +490,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Security */
+        /**
+         * Get Security
+         * @description Password change and reset notices ("Password reset by X on <date>").
+         */
         get: operations["get_security"];
         put?: never;
         post?: never;
@@ -453,7 +510,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Sessions */
+        /**
+         * List Sessions
+         * @description The own logged-in devices, most recently used first.
+         */
         get: operations["list_sessions"];
         put?: never;
         post?: never;
@@ -473,7 +533,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke Session */
+        /**
+         * Revoke Session
+         * @description Log out one of the own devices.
+         */
         delete: operations["revoke_session"];
         options?: never;
         head?: never;
@@ -487,7 +550,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Users */
+        /**
+         * List Users
+         * @description All active users except yourself, by display name.
+         */
         get: operations["list_users"];
         put?: never;
         post?: never;
@@ -504,7 +570,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Visible Users */
+        /**
+         * List Visible Users
+         * @description Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,
+         *     your partner, and everyone whose matching privacy switch is public.
+         */
         get: operations["list_visible_users"];
         put?: never;
         post?: never;
@@ -538,11 +608,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AdminEvent */
+        /**
+         * AdminAction
+         * @description What an admin (or the command line, with no actor) did.
+         * @enum {string}
+         */
+        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete";
+        /**
+         * AdminEvent
+         * @description `actor` is null for the command line or a deleted admin, `target` for a deleted user.
+         */
         AdminEvent: {
-            /** Action */
-            action: string;
-            /** Actor */
+            action: components["schemas"]["AdminAction"];
             actor: components["schemas"]["UserRef"] | null;
             /**
              * Created At
@@ -551,14 +628,10 @@ export interface components {
             created_at: string;
             /** Details */
             details: {
-                [key: string]: unknown;
+                [key: string]: string | number | boolean | null;
             };
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
-            /** Target */
             target: components["schemas"]["UserRef"] | null;
         };
         /** AdminUser */
@@ -570,10 +643,7 @@ export interface components {
             created_at: string;
             /** Display Name */
             display_name: string;
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
             /** Is Active */
             is_active: boolean;
@@ -587,7 +657,10 @@ export interface components {
             /** Username */
             username: string;
         };
-        /** AdminUserUpdate */
+        /**
+         * AdminUserUpdate
+         * @description Only the fields that are sent change.
+         */
         AdminUserUpdate: {
             /** Is Active */
             is_active?: boolean | null;
@@ -599,7 +672,10 @@ export interface components {
             /** Code */
             code: string;
         };
-        /** CodeInfo */
+        /**
+         * CodeInfo
+         * @description A usable code. `username` is set for reset codes only (the account being reset).
+         */
         CodeInfo: {
             /**
              * Expires At
@@ -622,28 +698,23 @@ export interface components {
              */
             created_at: string;
             from_user: components["schemas"]["UserRef"];
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
             to_user: components["schemas"]["UserRef"];
         };
         /** CoupleRequestCreate */
         CoupleRequestCreate: {
-            /**
-             * User Id
-             * Format: uuid
-             */
+            /** User Id */
             user_id: string;
         };
-        /** CoupleState */
+        /**
+         * CoupleState
+         * @description The own couple (`partner`, accepted at `since`) and pending requests.
+         */
         CoupleState: {
             /** Incoming */
             incoming: components["schemas"]["CoupleRequest"][];
-            /** Outgoing */
             outgoing: components["schemas"]["CoupleRequest"] | null;
-            /** Partner */
             partner: components["schemas"]["UserRef"] | null;
             /** Since */
             since: string | null;
@@ -687,7 +758,10 @@ export interface components {
          * @enum {string}
          */
         FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username";
-        /** FilterHidden */
+        /**
+         * FilterHidden
+         * @description User filter chips this user has switched off, per screen (MEAL-10, UI-02).
+         */
         FilterHidden: {
             /** Lists */
             lists: string[];
@@ -709,17 +783,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Created By */
             created_by: components["schemas"]["UserRef"] | null;
             /**
              * Expires At
              * Format: date-time
              */
             expires_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
             /**
              * Status
@@ -728,21 +798,29 @@ export interface components {
             status: "open" | "used" | "expired" | "revoked";
             /** Tailscale Share Url */
             tailscale_share_url: string | null;
-            /** Used By */
             used_by: components["schemas"]["UserRef"] | null;
         };
-        /** InviteCreate */
+        /**
+         * InviteCreate
+         * @description `tailscale_share_url`: the optional share link for step 1 of the invite message.
+         */
         InviteCreate: {
             /** Tailscale Share Url */
             tailscale_share_url?: string | null;
         };
-        /** InviteCreated */
+        /**
+         * InviteCreated
+         * @description The new invite and its link (`/join#<code>`); the code is shown only this once.
+         */
         InviteCreated: {
             invite: components["schemas"]["Invite"];
             /** Url */
             url: string;
         };
-        /** JoinRequest */
+        /**
+         * JoinRequest
+         * @description Registration with an invite code (ACC-05).
+         */
         JoinRequest: {
             /** Code */
             code: string;
@@ -758,7 +836,10 @@ export interface components {
             /** Username */
             username: string;
         };
-        /** LinkCreated */
+        /**
+         * LinkCreated
+         * @description A reset link; the code is in the fragment (`/reset#<code>`).
+         */
         LinkCreated: {
             /**
              * Expires At
@@ -775,7 +856,10 @@ export interface components {
             /** Username */
             username: string;
         };
-        /** LoginResponse */
+        /**
+         * LoginResponse
+         * @description `access_token` goes into `Authorization: Bearer`; it expires after `expires_in` s.
+         */
         LoginResponse: {
             /** Access Token */
             access_token: string;
@@ -793,10 +877,7 @@ export interface components {
             /** Display Name */
             display_name: string;
             filter_hidden: components["schemas"]["FilterHidden"];
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
             /**
              * Language
@@ -815,11 +896,13 @@ export interface components {
             /** Username */
             username: string;
         };
-        /** MeUpdate */
+        /**
+         * MeUpdate
+         * @description Only the fields that are sent change (ACC-13, VIS-02, I18N-01).
+         */
         MeUpdate: {
             /** Display Name */
             display_name?: string | null;
-            /** Filter Hidden */
             filter_hidden?: components["schemas"]["FilterHidden"] | null;
             /** Language */
             language?: ("de" | "en") | null;
@@ -835,7 +918,10 @@ export interface components {
             /** New Password */
             new_password: string;
         };
-        /** RefreshRequest */
+        /**
+         * RefreshRequest
+         * @description `fork` asks for a new, independent session (first start of the Home Screen app).
+         */
         RefreshRequest: {
             /**
              * Fork
@@ -850,16 +936,23 @@ export interface components {
             /** Password */
             password: string;
         };
-        /** SecurityInfo */
+        /**
+         * SecurityInfo
+         * @description What *Me → Security* shows, e.g. "Password reset by X on <date>" (ACC-10).
+         *
+         *     `password_reset_by` is null for a reset link from the command line or a deleted admin.
+         */
         SecurityInfo: {
             /** Password Changed At */
             password_changed_at: string | null;
             /** Password Reset At */
             password_reset_at: string | null;
-            /** Password Reset By */
             password_reset_by: components["schemas"]["UserRef"] | null;
         };
-        /** SessionInfo */
+        /**
+         * SessionInfo
+         * @description A logged-in device; `current` is the one making this request (ACC-09).
+         */
         SessionInfo: {
             /**
              * Created At
@@ -868,10 +961,7 @@ export interface components {
             created_at: string;
             /** Current */
             current: boolean;
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
             /**
              * Last Used At
@@ -881,16 +971,16 @@ export interface components {
             /** User Agent */
             user_agent: string | null;
         };
-        /** UserRef */
+        /**
+         * UserRef
+         * @description Another user as everyone sees them; deactivated users are shown with a note (ADM-02).
+         */
         UserRef: {
             /** Deactivated */
             deactivated: boolean;
             /** Display Name */
             display_name: string;
-            /**
-             * Id
-             * Format: uuid
-             */
+            /** Id */
             id: string;
         };
         /**
@@ -994,15 +1084,6 @@ export interface operations {
                     "application/json": components["schemas"]["InviteCreated"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1031,15 +1112,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
             };
             /** @description Error envelope; `code` names the error */
             default: {
@@ -1099,15 +1171,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1143,15 +1206,6 @@ export interface operations {
                     "application/json": components["schemas"]["AdminUser"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1181,15 +1235,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkCreated"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1223,15 +1268,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CodeInfo"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1325,15 +1361,6 @@ export interface operations {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1367,15 +1394,6 @@ export interface operations {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1392,7 +1410,9 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mm_refresh?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -1444,9 +1464,13 @@ export interface operations {
     refresh: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-MealMate-Client"?: string | null;
+            };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mm_refresh?: string | null;
+            };
         };
         requestBody?: {
             content: {
@@ -1494,15 +1518,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoginResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1594,15 +1609,6 @@ export interface operations {
                     "application/json": components["schemas"]["CoupleState"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1632,15 +1638,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoupleState"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1674,15 +1671,6 @@ export interface operations {
                     "application/json": components["schemas"]["CoupleState"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1712,15 +1700,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoupleState"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1823,15 +1802,6 @@ export interface operations {
                     "application/json": components["schemas"]["Me"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -1862,15 +1832,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
             };
             /** @description Error envelope; `code` names the error */
             default: {
@@ -1959,15 +1920,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
             /** @description Error envelope; `code` names the error */
             default: {
                 headers: {
@@ -2026,15 +1978,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserRef"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Error envelope; `code` names the error */

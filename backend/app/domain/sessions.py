@@ -3,14 +3,15 @@
 Every refresh presents one token of a session. What happens depends only on that token, its
 session and the time, so the decision is a pure function; the service applies it.
 
-| Token (session live)                      | Normal refresh               | Fork (`{"fork": true}`) |
-|-------------------------------------------|------------------------------|-------------------------|
-| active (not superseded)                   | ROTATE: supersede it and its | FORK once: new session; |
-|                                           | still-active siblings, issue | a forked token rotates  |
-|                                           | a new token                  | normally, forks no more |
-| superseded less than 60 s ago             | GRACE: issue a new token,    | FORK_REFUSED            |
-| (lost response, parallel refresh)         | revoke nothing               | (nothing revoked)       |
-| superseded 60 s ago or longer             | REUSE: revoke the session    | FORK_REFUSED            |
+- **Active** token (not superseded):
+  - normal refresh: ROTATE, i.e. supersede it and its still-active siblings, issue a new token;
+  - fork: FORK once (a new session); a forked token still rotates normally but forks no more.
+- Token superseded **less than 60 s ago** (lost response, parallel refresh):
+  - normal refresh: GRACE, i.e. issue a new token and revoke nothing;
+  - fork: FORK_REFUSED, nothing revoked.
+- Token superseded **60 s ago or longer**:
+  - normal refresh: REUSE, i.e. revoke the whole session;
+  - fork: FORK_REFUSED, nothing revoked.
 
 Before that: a revoked session is REVOKED, and an idle-expired token or session is EXPIRED.
 """

@@ -47,15 +47,6 @@ async def supersede_active_tokens(session: AsyncSession, session_id: str, now: d
     )
 
 
-async def active_tokens(session: AsyncSession, session_id: str) -> Sequence[SessionToken]:
-    result = await session.execute(
-        select(SessionToken).where(
-            SessionToken.session_id == session_id, SessionToken.superseded_at.is_(None)
-        )
-    )
-    return result.scalars().all()
-
-
 async def live_for_user(
     session: AsyncSession, user_id: str, now: datetime
 ) -> Sequence[AuthSession]:

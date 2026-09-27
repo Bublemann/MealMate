@@ -19,9 +19,7 @@ export function shareText(text: string): Promise<ShareResult> {
   return pending.then(
     (): ShareResult => 'shared',
     (error: unknown) =>
-      error instanceof DOMException && error.name === 'AbortError'
-        ? 'cancelled'
-        : copyText(text),
+      error instanceof DOMException && error.name === 'AbortError' ? 'cancelled' : copyText(text),
   );
 }
 

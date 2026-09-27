@@ -5,8 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
 
-COUPLE_STATUSES = ("pending", "accepted")
-
 
 class Couple(IdMixin, TimestampMixin, Base):
     """A couple request (`pending`) or a couple (`accepted`) (CPL-01).

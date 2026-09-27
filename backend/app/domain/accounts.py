@@ -23,7 +23,7 @@ def username_norm(username: str) -> str:
 
 
 def username_problem(username: str) -> FieldErrorCode | None:
-    """3–30 characters of `a–z 0–9 . _ -`. Uppercase is rejected; the UI lowercases."""
+    """3 to 30 characters of `a-z 0-9 . _ -`. Uppercase is rejected; the UI lowercases."""
     if len(username) < USERNAME_MIN_LENGTH:
         return FieldErrorCode.TOO_SHORT
     if len(username) > USERNAME_MAX_LENGTH:
@@ -39,7 +39,7 @@ def clean_display_name(display_name: str) -> str:
 
 
 def display_name_problem(display_name: str) -> FieldErrorCode | None:
-    """1–40 characters after trimming, no control or format characters, and something left
+    """1 to 40 characters after trimming, no control or format characters, and something left
     after normalisation (unique ignoring case and umlaut spelling via `display_name_norm`)."""
     cleaned = clean_display_name(display_name)
     if not cleaned:

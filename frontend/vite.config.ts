@@ -60,6 +60,15 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        // The framework changes less often than the app: a separate chunk keeps the main chunk
+        // small and lets an app update reuse the cached framework code.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router'],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

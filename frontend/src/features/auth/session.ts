@@ -38,8 +38,8 @@ type Outcome = 'ok' | 'ended' | 'unreachable';
 export const REFRESH_LOCK = 'mm-refresh';
 
 export interface AuthSession extends AuthBridge {
-  getState(): AuthState;
-  subscribe(listener: () => void): () => void;
+  getState: () => AuthState;
+  subscribe: (listener: () => void) => () => void;
   /** The start-up refresh: forks on the first Home Screen start (plan § 5.4). Idempotent. */
   start(): Promise<void>;
   /** Tries the start-up refresh again after `unreachable`. */
@@ -89,11 +89,14 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
   }
 
   function end(reason: EndReason | null): void {
+    const wasSignedIn = state.user !== null;
     accessToken = null;
     // SYNC-10: the cached profile and every other user-specific key go with the session.
     clearUserStorage();
     setState({ status: 'anonymous', user: null, offline: false, reason });
-    for (const listener of endListeners) listener();
+    // Only a session that was in use has server data to drop; at start-up there is none yet, and
+    // clearing then would cut off public queries in flight (e.g. the invite code check).
+    if (wasSignedIn) for (const listener of endListeners) listener();
   }
 
   function endReasonFor(code: string, wasSignedIn: boolean): EndReason | null {
@@ -103,10 +106,11 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
   }
 
   async function requestRefresh(fork: boolean): Promise<Outcome> {
-    const wasSignedIn = state.user !== null;
+    // "Expired" only makes sense to someone who was signed in on this device.
+    const wasSignedIn = state.user !== null || readCachedProfile() !== null;
     try {
       const { data, error, response } = await api.POST('/api/auth/refresh', {
-        body: fork ? { fork: true } : {},
+        body: { fork },
       });
       if (data) {
         applyLogin(data);

@@ -5,8 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
 
-CODE_KINDS = ("invite", "reset")
-
 
 class OneTimeCode(IdMixin, TimestampMixin, Base):
     """An invite (ACC-01..04) or password reset link (ACC-10), stored as its HMAC."""

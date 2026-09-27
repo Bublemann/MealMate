@@ -6,9 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
 
-ROLES = ("user", "admin")
-LANGUAGES = ("de", "en")
-
 
 def empty_filter_hidden() -> dict[str, list[str]]:
     return {"meals": [], "lists": []}

@@ -1,11 +1,25 @@
 {
   "components": {
     "schemas": {
+      "AdminAction": {
+        "description": "What an admin (or the command line, with no actor) did.",
+        "enum": [
+          "invite.create",
+          "invite.revoke",
+          "user.reset_link",
+          "user.role_change",
+          "user.deactivate",
+          "user.reactivate",
+          "user.delete"
+        ],
+        "title": "AdminAction",
+        "type": "string"
+      },
       "AdminEvent": {
+        "description": "`actor` is null for the command line or a deleted admin, `target` for a deleted user.",
         "properties": {
           "action": {
-            "title": "Action",
-            "type": "string"
+            "$ref": "#/components/schemas/AdminAction"
           },
           "actor": {
             "anyOf": [
@@ -15,8 +29,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Actor"
+            ]
           },
           "created_at": {
             "format": "date-time",
@@ -24,12 +37,26 @@
             "type": "string"
           },
           "details": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "title": "Details",
             "type": "object"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -41,8 +68,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Target"
+            ]
           }
         },
         "required": [
@@ -68,7 +94,6 @@
             "type": "string"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -114,6 +139,7 @@
         "type": "object"
       },
       "AdminUserUpdate": {
+        "description": "Only the fields that are sent change.",
         "properties": {
           "is_active": {
             "anyOf": [
@@ -142,13 +168,14 @@
             "title": "Role"
           }
         },
-        "required": [],
         "title": "AdminUserUpdate",
         "type": "object"
       },
       "CodeCheckRequest": {
         "properties": {
           "code": {
+            "maxLength": 100,
+            "minLength": 1,
             "title": "Code",
             "type": "string"
           }
@@ -160,6 +187,7 @@
         "type": "object"
       },
       "CodeInfo": {
+        "description": "A usable code. `username` is set for reset codes only (the account being reset).",
         "properties": {
           "expires_at": {
             "format": "date-time",
@@ -205,7 +233,6 @@
             "$ref": "#/components/schemas/UserRef"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -225,7 +252,8 @@
       "CoupleRequestCreate": {
         "properties": {
           "user_id": {
-            "format": "uuid",
+            "maxLength": 36,
+            "minLength": 1,
             "title": "User Id",
             "type": "string"
           }
@@ -237,6 +265,7 @@
         "type": "object"
       },
       "CoupleState": {
+        "description": "The own couple (`partner`, accepted at `since`) and pending requests.",
         "properties": {
           "incoming": {
             "items": {
@@ -253,8 +282,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Outgoing"
+            ]
           },
           "partner": {
             "anyOf": [
@@ -264,8 +292,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Partner"
+            ]
           },
           "since": {
             "anyOf": [
@@ -419,20 +446,23 @@
         "type": "string"
       },
       "FilterHidden": {
+        "description": "User filter chips this user has switched off, per screen (MEAL-10, UI-02).",
         "properties": {
           "lists": {
             "items": {
-              "format": "uuid",
+              "maxLength": 36,
               "type": "string"
             },
+            "maxItems": 500,
             "title": "Lists",
             "type": "array"
           },
           "meals": {
             "items": {
-              "format": "uuid",
+              "maxLength": 36,
               "type": "string"
             },
+            "maxItems": 500,
             "title": "Meals",
             "type": "array"
           }
@@ -473,8 +503,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Created By"
+            ]
           },
           "expires_at": {
             "format": "date-time",
@@ -482,7 +511,6 @@
             "type": "string"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -515,8 +543,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Used By"
+            ]
           }
         },
         "required": [
@@ -532,6 +559,7 @@
         "type": "object"
       },
       "InviteCreate": {
+        "description": "`tailscale_share_url`: the optional share link for step 1 of the invite message.",
         "properties": {
           "tailscale_share_url": {
             "anyOf": [
@@ -546,11 +574,11 @@
             "title": "Tailscale Share Url"
           }
         },
-        "required": [],
         "title": "InviteCreate",
         "type": "object"
       },
       "InviteCreated": {
+        "description": "The new invite and its link (`/join#<code>`); the code is shown only this once.",
         "properties": {
           "invite": {
             "$ref": "#/components/schemas/Invite"
@@ -568,12 +596,17 @@
         "type": "object"
       },
       "JoinRequest": {
+        "description": "Registration with an invite code (ACC-05).",
         "properties": {
           "code": {
+            "maxLength": 100,
+            "minLength": 1,
             "title": "Code",
             "type": "string"
           },
           "display_name": {
+            "maxLength": 40,
+            "minLength": 1,
             "title": "Display Name",
             "type": "string"
           },
@@ -586,10 +619,14 @@
             "type": "string"
           },
           "password": {
+            "maxLength": 1024,
             "title": "Password",
             "type": "string"
           },
           "username": {
+            "maxLength": 30,
+            "minLength": 3,
+            "pattern": "^[a-z0-9._-]+$",
             "title": "Username",
             "type": "string"
           }
@@ -605,6 +642,7 @@
         "type": "object"
       },
       "LinkCreated": {
+        "description": "A reset link; the code is in the fragment (`/reset#<code>`).",
         "properties": {
           "expires_at": {
             "format": "date-time",
@@ -626,10 +664,12 @@
       "LoginRequest": {
         "properties": {
           "password": {
+            "maxLength": 1024,
             "title": "Password",
             "type": "string"
           },
           "username": {
+            "maxLength": 100,
             "title": "Username",
             "type": "string"
           }
@@ -642,6 +682,7 @@
         "type": "object"
       },
       "LoginResponse": {
+        "description": "`access_token` goes into `Authorization: Bearer`; it expires after `expires_in` s.",
         "properties": {
           "access_token": {
             "title": "Access Token",
@@ -678,7 +719,6 @@
             "$ref": "#/components/schemas/FilterHidden"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -726,10 +766,13 @@
         "type": "object"
       },
       "MeUpdate": {
+        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01).",
         "properties": {
           "display_name": {
             "anyOf": [
               {
+                "maxLength": 40,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -746,8 +789,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Filter Hidden"
+            ]
           },
           "language": {
             "anyOf": [
@@ -787,17 +829,18 @@
             "title": "Meals Public"
           }
         },
-        "required": [],
         "title": "MeUpdate",
         "type": "object"
       },
       "PasswordChange": {
         "properties": {
           "current_password": {
+            "maxLength": 1024,
             "title": "Current Password",
             "type": "string"
           },
           "new_password": {
+            "maxLength": 1024,
             "title": "New Password",
             "type": "string"
           }
@@ -810,6 +853,7 @@
         "type": "object"
       },
       "RefreshRequest": {
+        "description": "`fork` asks for a new, independent session (first start of the Home Screen app).",
         "properties": {
           "fork": {
             "default": false,
@@ -817,17 +861,19 @@
             "type": "boolean"
           }
         },
-        "required": [],
         "title": "RefreshRequest",
         "type": "object"
       },
       "ResetRequest": {
         "properties": {
           "code": {
+            "maxLength": 100,
+            "minLength": 1,
             "title": "Code",
             "type": "string"
           },
           "password": {
+            "maxLength": 1024,
             "title": "Password",
             "type": "string"
           }
@@ -840,6 +886,7 @@
         "type": "object"
       },
       "SecurityInfo": {
+        "description": "What *Me → Security* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
         "properties": {
           "password_changed_at": {
             "anyOf": [
@@ -873,8 +920,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Password Reset By"
+            ]
           }
         },
         "required": [
@@ -886,6 +932,7 @@
         "type": "object"
       },
       "SessionInfo": {
+        "description": "A logged-in device; `current` is the one making this request (ACC-09).",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -897,7 +944,6 @@
             "type": "boolean"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -929,6 +975,7 @@
         "type": "object"
       },
       "UserRef": {
+        "description": "Another user as everyone sees them; deactivated users are shown with a note (ADM-02).",
         "properties": {
           "deactivated": {
             "title": "Deactivated",
@@ -939,7 +986,6 @@
             "type": "string"
           },
           "id": {
-            "format": "uuid",
             "title": "Id",
             "type": "string"
           }
@@ -976,6 +1022,13 @@
         "title": "VersionInfo",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "The access token from login, refresh, join or reset.",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -990,6 +1043,7 @@
   "paths": {
     "/api/admin/events": {
       "get": {
+        "description": "The admin activity log, newest first (at most 200 entries).",
         "operationId": "admin_list_events",
         "responses": {
           "200": {
@@ -1017,6 +1071,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin List Events",
         "tags": [
           "admin"
@@ -1025,6 +1084,7 @@
     },
     "/api/admin/invites": {
       "get": {
+        "description": "All invites with their status, newest first.",
         "operationId": "admin_list_invites",
         "responses": {
           "200": {
@@ -1052,12 +1112,18 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin List Invites",
         "tags": [
           "admin"
         ]
       },
       "post": {
+        "description": "A new invite link (ACC-02); the link is returned only this once.",
         "operationId": "admin_create_invite",
         "requestBody": {
           "content": {
@@ -1080,16 +1146,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1101,6 +1157,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin Create Invite",
         "tags": [
           "admin"
@@ -1109,6 +1170,7 @@
     },
     "/api/admin/invites/{invite_id}": {
       "delete": {
+        "description": "Revoke an invite so it can no longer be used.",
         "operationId": "admin_revoke_invite",
         "parameters": [
           {
@@ -1116,7 +1178,6 @@
             "name": "invite_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Invite Id",
               "type": "string"
             }
@@ -1126,16 +1187,6 @@
           "204": {
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1147,6 +1198,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin Revoke Invite",
         "tags": [
           "admin"
@@ -1155,6 +1211,7 @@
     },
     "/api/admin/users": {
       "get": {
+        "description": "All users, by display name.",
         "operationId": "admin_list_users",
         "responses": {
           "200": {
@@ -1182,6 +1239,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin List Users",
         "tags": [
           "admin"
@@ -1190,6 +1252,7 @@
     },
     "/api/admin/users/{user_id}": {
       "delete": {
+        "description": "Delete another user and their data (ADM-03).",
         "operationId": "admin_delete_user",
         "parameters": [
           {
@@ -1197,7 +1260,6 @@
             "name": "user_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
@@ -1206,16 +1268,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
           },
           "default": {
             "content": {
@@ -1228,12 +1280,18 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin Delete User",
         "tags": [
           "admin"
         ]
       },
       "patch": {
+        "description": "Change another user's role or deactivate/reactivate them.",
         "operationId": "admin_update_user",
         "parameters": [
           {
@@ -1241,7 +1299,6 @@
             "name": "user_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
@@ -1268,16 +1325,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1289,6 +1336,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin Update User",
         "tags": [
           "admin"
@@ -1297,6 +1349,7 @@
     },
     "/api/admin/users/{user_id}/reset-link": {
       "post": {
+        "description": "A single-use password reset link for the user (ACC-10); older ones stop working.",
         "operationId": "admin_create_reset_link",
         "parameters": [
           {
@@ -1304,7 +1357,6 @@
             "name": "user_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
@@ -1321,16 +1373,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1342,6 +1384,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Admin Create Reset Link",
         "tags": [
           "admin"
@@ -1350,7 +1397,7 @@
     },
     "/api/auth/codes/check": {
       "post": {
-        "description": "Checks an invite or reset code without consuming it.",
+        "description": "Whether an invite or reset code can be used; does not consume it (ACC-04).",
         "operationId": "check_code",
         "requestBody": {
           "content": {
@@ -1372,16 +1419,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
           },
           "default": {
             "content": {
@@ -1477,7 +1514,7 @@
     },
     "/api/auth/join": {
       "post": {
-        "description": "Registers with an invite code.",
+        "description": "Register with an invite code and log in (ACC-01, ACC-05, ACC-07).",
         "operationId": "join",
         "requestBody": {
           "content": {
@@ -1500,16 +1537,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1529,7 +1556,7 @@
     },
     "/api/auth/login": {
       "post": {
-        "description": "Logs in and sets the refresh cookie.",
+        "description": "Log in with username and password; sets the refresh cookie (throttled, ACC-11).",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -1552,16 +1579,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1581,8 +1598,26 @@
     },
     "/api/auth/logout": {
       "post": {
-        "description": "Ends the refresh cookie's session.",
+        "description": "Log out this device: revoke the cookie's session and remove the cookie.",
         "operationId": "logout",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "mm_refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mm Refresh"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -1606,7 +1641,7 @@
     },
     "/api/auth/logout-all": {
       "post": {
-        "description": "Ends all of the user's sessions.",
+        "description": "Log out every device of the user, this one included (ACC-09).",
         "operationId": "logout_all",
         "responses": {
           "204": {
@@ -1623,6 +1658,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Logout All",
         "tags": [
           "auth"
@@ -1631,8 +1671,42 @@
     },
     "/api/auth/refresh": {
       "post": {
-        "description": "Rotates the refresh cookie (or forks a new session) and returns a new access token.",
+        "description": "A new access token (and rotated cookie) for the refresh cookie.\n\nNeeds the header `X-MealMate-Client: web` (CSRF guard). `{\"fork\": true}` starts a new,\nindependent session instead (first start of the Home Screen app).",
         "operationId": "refresh",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-MealMate-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mealmate-Client"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "mm_refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mm Refresh"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1680,7 +1754,7 @@
     },
     "/api/auth/reset": {
       "post": {
-        "description": "Sets a new password with a reset code.",
+        "description": "Set a new password with a reset code; ends all other sessions and logs in (ACC-10).",
         "operationId": "reset_password",
         "requestBody": {
           "content": {
@@ -1703,16 +1777,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1732,6 +1796,7 @@
     },
     "/api/couple": {
       "delete": {
+        "description": "End the couple (either partner, any time).",
         "operationId": "end_couple",
         "responses": {
           "204": {
@@ -1748,12 +1813,18 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "End Couple",
         "tags": [
           "couple"
         ]
       },
       "get": {
+        "description": "The partner, if any, and pending requests.",
         "operationId": "get_couple",
         "responses": {
           "200": {
@@ -1777,6 +1848,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Couple",
         "tags": [
           "couple"
@@ -1785,6 +1861,7 @@
     },
     "/api/couple/requests": {
       "post": {
+        "description": "Send a couple request to another active user.",
         "operationId": "create_couple_request",
         "requestBody": {
           "content": {
@@ -1807,16 +1884,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1828,6 +1895,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Create Couple Request",
         "tags": [
           "couple"
@@ -1836,6 +1908,7 @@
     },
     "/api/couple/requests/{request_id}/accept": {
       "post": {
+        "description": "Accept a request sent to you; cancels all other pending requests of both users.",
         "operationId": "accept_couple_request",
         "parameters": [
           {
@@ -1843,7 +1916,6 @@
             "name": "request_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Request Id",
               "type": "string"
             }
@@ -1860,16 +1932,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1881,6 +1943,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Accept Couple Request",
         "tags": [
           "couple"
@@ -1889,6 +1956,7 @@
     },
     "/api/couple/requests/{request_id}/cancel": {
       "post": {
+        "description": "Withdraw your own request.",
         "operationId": "cancel_couple_request",
         "parameters": [
           {
@@ -1896,7 +1964,6 @@
             "name": "request_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Request Id",
               "type": "string"
             }
@@ -1913,16 +1980,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1934,6 +1991,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Cancel Couple Request",
         "tags": [
           "couple"
@@ -1942,6 +2004,7 @@
     },
     "/api/couple/requests/{request_id}/decline": {
       "post": {
+        "description": "Decline a request sent to you.",
         "operationId": "decline_couple_request",
         "parameters": [
           {
@@ -1949,7 +2012,6 @@
             "name": "request_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Request Id",
               "type": "string"
             }
@@ -1966,16 +2028,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -1987,6 +2039,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Decline Couple Request",
         "tags": [
           "couple"
@@ -2037,6 +2094,7 @@
     },
     "/api/me": {
       "get": {
+        "description": "The own profile and settings.",
         "operationId": "get_me",
         "responses": {
           "200": {
@@ -2060,12 +2118,18 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Me",
         "tags": [
           "me"
         ]
       },
       "patch": {
+        "description": "Change display name, language, privacy switches or hidden filter chips.",
         "operationId": "update_me",
         "requestBody": {
           "content": {
@@ -2088,16 +2152,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -2109,6 +2163,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Update Me",
         "tags": [
           "me"
@@ -2117,6 +2176,7 @@
     },
     "/api/me/password": {
       "post": {
+        "description": "Change the password; logs out all other devices.",
         "operationId": "change_password",
         "requestBody": {
           "content": {
@@ -2132,16 +2192,6 @@
           "204": {
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -2153,6 +2203,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Change Password",
         "tags": [
           "me"
@@ -2161,6 +2216,7 @@
     },
     "/api/me/security": {
       "get": {
+        "description": "Password change and reset notices (\"Password reset by X on <date>\").",
         "operationId": "get_security",
         "responses": {
           "200": {
@@ -2184,6 +2240,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Security",
         "tags": [
           "me"
@@ -2192,6 +2253,7 @@
     },
     "/api/me/sessions": {
       "get": {
+        "description": "The own logged-in devices, most recently used first.",
         "operationId": "list_sessions",
         "responses": {
           "200": {
@@ -2219,6 +2281,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "List Sessions",
         "tags": [
           "me"
@@ -2227,6 +2294,7 @@
     },
     "/api/me/sessions/{session_id}": {
       "delete": {
+        "description": "Log out one of the own devices.",
         "operationId": "revoke_session",
         "parameters": [
           {
@@ -2234,7 +2302,6 @@
             "name": "session_id",
             "required": true,
             "schema": {
-              "format": "uuid",
               "title": "Session Id",
               "type": "string"
             }
@@ -2243,16 +2310,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
           },
           "default": {
             "content": {
@@ -2265,6 +2322,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Revoke Session",
         "tags": [
           "me"
@@ -2273,6 +2335,7 @@
     },
     "/api/users": {
       "get": {
+        "description": "All active users except yourself, by display name.",
         "operationId": "list_users",
         "responses": {
           "200": {
@@ -2300,6 +2363,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "List Users",
         "tags": [
           "users"
@@ -2308,6 +2376,7 @@
     },
     "/api/users/visible": {
       "get": {
+        "description": "Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,\nyour partner, and everyone whose matching privacy switch is public.",
         "operationId": "list_visible_users",
         "parameters": [
           {
@@ -2339,16 +2408,6 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
           "default": {
             "content": {
               "application/json": {
@@ -2360,6 +2419,11 @@
             "description": "Error envelope; `code` names the error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "List Visible Users",
         "tags": [
           "users"

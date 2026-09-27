@@ -17,10 +17,6 @@ async def by_username_norm(session: AsyncSession, username_norm: str) -> User | 
     return result.scalar_one_or_none()
 
 
-async def username_taken(session: AsyncSession, username_norm: str) -> bool:
-    return await by_username_norm(session, username_norm) is not None
-
-
 async def display_name_taken(
     session: AsyncSession, display_name_norm: str, *, except_user_id: str | None = None
 ) -> bool:
@@ -68,4 +64,3 @@ async def with_public(session: AsyncSession, *, meals: bool) -> Sequence[User]:
     column = User.meals_public if meals else User.lists_public
     result = await session.execute(select(User).where(column.is_(True)))
     return result.scalars().all()
-
