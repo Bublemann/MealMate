@@ -5,7 +5,8 @@ The backend never returns user-facing text. Every error is a code, translated by
 add both translations; a frontend test fails until they exist.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -21,6 +22,34 @@ class ErrorCode(StrEnum):
     FORBIDDEN = "common.forbidden"
     SERVICE_UNAVAILABLE = "common.service_unavailable"
 
+    # 401: wrong username or password.
+    INVALID_CREDENTIALS = "auth.invalid_credentials"
+    # 403: the password was right, but an admin deactivated the account.
+    ACCOUNT_DEACTIVATED = "auth.account_deactivated"
+    # 401: the access token expired; the client refreshes it and retries.
+    TOKEN_EXPIRED = "auth.token_expired"  # noqa: S105 -- an error code, not a secret
+    # 401: no usable refresh cookie (missing, unknown or idle-expired); the client shows login.
+    SESSION_EXPIRED = "auth.session_expired"
+    # 401: the session was revoked (reuse, logout elsewhere, deactivation); the client wipes
+    # its local data (SYNC-10).
+    SESSION_REVOKED = "auth.session_revoked"
+    # 401: a Home Screen fork was refused; the client shows the login screen once.
+    LOGIN_REQUIRED = "auth.login_required"
+    # 403: a refresh request without the `X-MealMate-Client` header.
+    CSRF = "auth.csrf"
+    # 404: an invite or reset code that is unknown, expired, used or revoked.
+    CODE_INVALID = "auth.code_invalid"
+    # 403: the current password given to change it is wrong.
+    PASSWORD_INCORRECT = "auth.password_incorrect"  # noqa: S105 -- an error code
+
+    COUPLE_ALREADY_IN_COUPLE = "couple.already_in_couple"
+    COUPLE_TARGET_IN_COUPLE = "couple.target_in_couple"
+    COUPLE_REQUEST_PENDING = "couple.request_pending"
+
+    ADMIN_SELF_FORBIDDEN = "admin.self_forbidden"
+    ADMIN_LAST_ADMIN = "admin.last_admin"
+    ADMIN_PUBLIC_URL_MISSING = "admin.public_url_missing"
+
 
 class FieldErrorCode(StrEnum):
     """Why a single request field was rejected (`fields[].code` in the envelope)."""
@@ -31,10 +60,21 @@ class FieldErrorCode(StrEnum):
     TOO_LONG = "too_long"
     OUT_OF_RANGE = "out_of_range"
     INVALID_FORMAT = "invalid_format"
+    TAKEN = "taken"
+    TOO_COMMON = "too_common"
+    SAME_AS_USERNAME = "same_as_username"
 
 
 # A plain alias (not a `type` statement) so the OpenAPI schema inlines the union.
 ErrorParam = str | int | float | bool
+
+
+@dataclass(frozen=True)
+class FieldProblem:
+    """One rejected request field, found by a service rather than by request validation."""
+
+    loc: tuple[str | int, ...]
+    code: FieldErrorCode
 
 
 class ApiError(Exception):
@@ -47,9 +87,20 @@ class ApiError(Exception):
         status_code: int,
         params: Mapping[str, ErrorParam] | None = None,
         headers: Mapping[str, str] | None = None,
+        fields: Iterable[FieldProblem] = (),
     ) -> None:
         super().__init__(code)
         self.code = code
         self.status_code = status_code
         self.params = dict(params or {})
         self.headers = dict(headers or {})
+        self.fields = list(fields)
+
+
+def validation_error(fields: Iterable[FieldProblem]) -> ApiError:
+    """A 422 `common.validation` with the given field problems, as request validation sends."""
+    return ApiError(ErrorCode.VALIDATION, status_code=422, fields=fields)
+
+
+def not_found() -> ApiError:
+    return ApiError(ErrorCode.NOT_FOUND, status_code=404)

@@ -78,7 +78,10 @@ def error_response(
 def exception_response(exc: Exception) -> JSONResponse:
     match exc:
         case ApiError():
-            return error_response(exc.status_code, exc.code, params=exc.params, headers=exc.headers)
+            fields = (FieldError(loc=list(field.loc), code=field.code) for field in exc.fields)
+            return error_response(
+                exc.status_code, exc.code, params=exc.params, fields=fields, headers=exc.headers
+            )
         case RequestValidationError():
             fields = (
                 FieldError(loc=list(error["loc"]), code=field_error_code(error["type"]))

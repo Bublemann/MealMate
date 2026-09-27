@@ -4,6 +4,21 @@ Every model is imported here so that `Base.metadata` is complete for Alembic.
 """
 
 from app.db.base import Base
+from app.models.admin_event import AdminEvent
 from app.models.app_meta import AppMeta
+from app.models.auth_session import AuthSession, SessionToken
+from app.models.couple import Couple, CoupleMember
+from app.models.one_time_code import OneTimeCode
+from app.models.user import User
 
-__all__ = ["AppMeta", "Base"]
+__all__ = [
+    "AdminEvent",
+    "AppMeta",
+    "AuthSession",
+    "Base",
+    "Couple",
+    "CoupleMember",
+    "OneTimeCode",
+    "SessionToken",
+    "User",
+]

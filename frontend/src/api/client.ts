@@ -58,9 +58,103 @@ const clientHeader: Middleware = {
   },
 };
 
+/**
+ * What the API client needs from the signed-in session (`features/auth/session.ts` connects it).
+ * Kept as an interface so the client doesn't depend on React or the auth feature.
+ */
+export interface AuthBridge {
+  /** The current access token (memory only), or null. */
+  accessToken(): string | null;
+  /** Resolves once no refresh is in flight, so no request goes out with a stale token. */
+  settled(): Promise<void>;
+  /** Refreshes the access token (single-flight); true if a new token is available. */
+  refresh(): Promise<boolean>;
+  /** The server ended the session (expired, or revoked: SYNC-10). */
+  sessionEnded(code: SessionEndCode): void;
+}
+
+export type SessionEndCode = 'auth.session_expired' | 'auth.session_revoked';
+
+let authBridge: AuthBridge | null = null;
+
+/** Connects the signed-in session to every API client; `null` disconnects it. */
+export function connectAuth(bridge: AuthBridge | null): void {
+  authBridge = bridge;
+}
+
+/** Endpoints that work without an access token; they never wait for or trigger a refresh. */
+const PUBLIC_AUTH_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+  '/api/auth/join',
+  '/api/auth/reset',
+  '/api/auth/codes/check',
+]);
+/** A 401 with one of these codes means "get a new access token and try again" (once). */
+const RETRY_CODES = new Set(['auth.token_expired', 'common.unauthorized']);
+const END_CODES = new Set<string>(['auth.session_expired', 'auth.session_revoked']);
+
+async function errorCodeOf(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.clone().json();
+    if (typeof body === 'object' && body !== null && 'code' in body) {
+      return typeof body.code === 'string' ? body.code : null;
+    }
+  } catch {
+    // Not an error envelope.
+  }
+  return null;
+}
+
+/**
+ * Adds `Authorization: Bearer …`. On a 401 that asks for a new access token it refreshes once
+ * (single-flight, shared by all requests) and retries the request with the new token. A 401
+ * saying the session expired or was revoked ends the session (logged-out state, SYNC-10).
+ */
+function authMiddleware(): Middleware {
+  const retryCopies = new Map<string, Request>();
+
+  return {
+    async onRequest({ request, schemaPath, id }) {
+      const bridge = authBridge;
+      if (!bridge || PUBLIC_AUTH_PATHS.has(schemaPath)) return request;
+      await bridge.settled();
+      const token = bridge.accessToken();
+      if (token) request.headers.set('Authorization', `Bearer ${token}`);
+      // The body can only be read once: keep a copy for a retry after refreshing.
+      retryCopies.set(id, request.clone());
+      return request;
+    },
+    async onResponse({ response, schemaPath, options, id }) {
+      const copy = retryCopies.get(id);
+      retryCopies.delete(id);
+      const bridge = authBridge;
+      if (!bridge || response.status !== 401 || PUBLIC_AUTH_PATHS.has(schemaPath)) return;
+      const code = await errorCodeOf(response);
+      if (code && END_CODES.has(code)) {
+        bridge.sessionEnded(code as SessionEndCode);
+        return;
+      }
+      if (!copy || !code || !RETRY_CODES.has(code) || !(await bridge.refresh())) return;
+      const token = bridge.accessToken();
+      if (token) copy.headers.set('Authorization', `Bearer ${token}`);
+      const retried = await options.fetch(copy);
+      if (retried.status === 401) {
+        const retryCode = await errorCodeOf(retried);
+        if (retryCode && END_CODES.has(retryCode)) bridge.sessionEnded(retryCode as SessionEndCode);
+      }
+      return retried;
+    },
+    onError({ id }) {
+      retryCopies.delete(id);
+    },
+  };
+}
+
 export function createApiClient({ baseUrl = '' }: { baseUrl?: string } = {}) {
   const client = createClient<paths>({ baseUrl, fetch: createTimeoutFetch() });
-  client.use(clientHeader);
+  client.use(clientHeader, authMiddleware());
   return client;
 }
 

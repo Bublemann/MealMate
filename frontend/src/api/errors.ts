@@ -62,6 +62,20 @@ export function errorKey(error: unknown): `error.${ApiErrorCode}` {
   return `error.${isApiError(error) ? error.code : FALLBACK_CODE}`;
 }
 
+/**
+ * The rejected request fields by name: `{"loc": ["body", "username"], "code": "taken"}` becomes
+ * `{username: "taken"}`. Only the first error per field is kept.
+ */
+export function fieldErrorCodes(error: unknown): Partial<Record<string, FieldErrorCode>> {
+  const codes: Partial<Record<string, FieldErrorCode>> = {};
+  if (!isApiError(error)) return codes;
+  for (const { loc, code } of error.fields) {
+    const name = loc[0] === 'body' ? loc[1] : loc[loc.length - 1];
+    if (typeof name === 'string' && !(name in codes)) codes[name] = code;
+  }
+  return codes;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
