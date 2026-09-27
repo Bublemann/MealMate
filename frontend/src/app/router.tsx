@@ -79,6 +79,12 @@ export const routes: RouteObject[] = [
                   Component: (await import('@/features/admin/AdminEventsScreen')).AdminEventsScreen,
                 }),
               },
+              {
+                path: 'system',
+                lazy: async () => ({
+                  Component: (await import('@/features/admin/AdminSystemScreen')).AdminSystemScreen,
+                }),
+              },
             ],
           },
           { path: '*', element: <Navigate to="/lists" replace /> },

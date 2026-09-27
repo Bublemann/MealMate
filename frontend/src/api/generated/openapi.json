@@ -13,7 +13,8 @@
           "user.delete",
           "category.reorder",
           "ingredient.merge",
-          "ingredient.delete"
+          "ingredient.delete",
+          "system.backup_request"
         ],
         "title": "AdminAction",
         "type": "string"
@@ -172,6 +173,61 @@
           }
         },
         "title": "AdminUserUpdate",
+        "type": "object"
+      },
+      "BackupStatus": {
+        "description": "The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).",
+        "properties": {
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "label": {
+            "enum": [
+              "regular",
+              "pre-update",
+              "manual"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          }
+        },
+        "required": [
+          "finished_at",
+          "label",
+          "ok",
+          "size_bytes",
+          "message"
+        ],
+        "title": "BackupStatus",
         "type": "object"
       },
       "Body_upload_meal_photo": {
@@ -441,6 +497,40 @@
           "present"
         ],
         "title": "DiagCookieCheck",
+        "type": "object"
+      },
+      "DiskStatus": {
+        "description": "Free space on the Pi's root file system when the host last checked (`disk.json`).",
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "free_bytes": {
+            "minimum": 0.0,
+            "title": "Free Bytes",
+            "type": "integer"
+          },
+          "free_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Free Percent",
+            "type": "number"
+          },
+          "total_bytes": {
+            "minimum": 0.0,
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checked_at",
+          "free_bytes",
+          "total_bytes",
+          "free_percent"
+        ],
+        "title": "DiskStatus",
         "type": "object"
       },
       "DisplayAmountOut": {
@@ -4250,6 +4340,64 @@
         "title": "SessionInfo",
         "type": "object"
       },
+      "SystemInfo": {
+        "description": "What is running and how the host is doing (ADM-01). `backup` and `disk` are null\nwhile the host has not written its status files (or they can't be read).",
+        "properties": {
+          "backup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "disk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "image_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Digest"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "commit",
+          "source_url",
+          "image_digest",
+          "backup",
+          "disk"
+        ],
+        "title": "SystemInfo",
+        "type": "object"
+      },
       "Tag": {
         "properties": {
           "id": {
@@ -4375,6 +4523,36 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/backup": {
+      "post": {
+        "description": "Ask the host for a backup now (OPS-08), e.g. before an SD card swap; a request that is\nalready waiting stays as it is. At most one request per minute (429).",
+        "operationId": "admin_request_backup",
+        "responses": {
+          "202": {
+            "description": "Requested; the host starts the backup shortly"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Request Backup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/admin/categories/order": {
       "put": {
         "description": "Set the category order to the shop's walking order; every category exactly once.",
@@ -4688,6 +4866,43 @@
           }
         ],
         "summary": "Admin Revoke Invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/system": {
+      "get": {
+        "description": "The running version and the host's last backup and free disk space, as the host last\nwrote them to its read-only status files (null while there is none).",
+        "operationId": "admin_get_system",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Get System",
         "tags": [
           "admin"
         ]

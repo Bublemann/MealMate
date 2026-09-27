@@ -41,6 +41,7 @@ const ADMIN_LINKS = [
   { to: '/me/admin/invites', label: 'admin.invites.title' },
   { to: '/me/admin/categories', label: 'admin.categories.title' },
   { to: '/me/admin/events', label: 'admin.events.title' },
+  { to: '/me/admin/system', label: 'admin.system.title' },
 ] as const;
 
 /** ADM-01: only shown to admins; the server checks the role on every admin request. */

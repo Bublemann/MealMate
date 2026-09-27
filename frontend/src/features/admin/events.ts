@@ -13,6 +13,7 @@ const ACTION_KEYS = {
   'category.reorder': 'admin.events.action.categoryReorder',
   'ingredient.merge': 'admin.events.action.ingredientMerge',
   'ingredient.delete': 'admin.events.action.ingredientDelete',
+  'system.backup_request': 'admin.events.action.systemBackupRequest',
 } as const;
 
 function isKnownAction(action: string): action is keyof typeof ACTION_KEYS {
