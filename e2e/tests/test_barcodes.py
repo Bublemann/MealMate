@@ -6,15 +6,13 @@ Facts in fake_off/ that conftest serves to the container (`fake_off_app`).
 """
 
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
-from playwright.sync_api import Browser, Locator, Page, Request, expect
+from playwright.sync_api import Locator, Page, Request, expect
 
-from support.api import Account, Api, new_barcode, sign_in, unique
+from support.api import Account, Api, new_barcode, unique
 from support.container import AppContainer
 from support.frontend import TEST_IDS, text
 
@@ -218,39 +216,48 @@ def foreign_requests(urls: list[str], base_url: str) -> list[str]:
     ]
 
 
+# A camera for the test: a canvas stream stands in for getUserMedia, so no fake-device support
+# of the browser build is needed (the headless shell used in CI has none that works here).
+FAKE_CAMERA = """
+navigator.mediaDevices.getUserMedia = async () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 480;
+  const context = canvas.getContext('2d');
+  setInterval(() => {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }, 100);
+  return canvas.captureStream(10);
+};
+"""
+
+
 def test_the_decoder_is_the_apps_own_file(
-    launch_browser: Callable[..., Browser],
-    browser_context_args: dict[str, Any],
-    browser_name: str,
-    member: Account,
-    base_url: str,
+    member_page: Page, browser_name: str, base_url: str
 ) -> None:
     """SEC-08, BAR-01: once the camera runs, the decoder's wasm comes from the app, no CDN.
 
-    The decoder is loaded only with a camera stream; Chromium can fake one
-    (`--use-fake-device-for-media-stream`), the other browsers can't."""
+    The decoder is loaded only with a camera stream, so the page gets a canvas stream as its
+    camera. Only run in Chromium: the other engines' stream and wasm handling is covered by the
+    manual iPhone check (QA-06)."""
     if browser_name != "chromium":
-        pytest.skip("only Chromium can fake a camera")
-    browser = launch_browser(args=["--use-fake-device-for-media-stream"])
-    try:
-        context = browser.new_context(**browser_context_args, permissions=["camera"])
-        requested: list[str] = []
-        context.on("request", lambda request: requested.append(request.url))
-        sign_in(context, member)
-        page = context.new_page()
+        pytest.skip("the canvas camera is only exercised in Chromium")
+    page = member_page
+    requested: list[str] = []
+    page.on("request", lambda request: requested.append(request.url))
+    page.add_init_script(FAKE_CAMERA)
 
-        with page.expect_response(re.compile(r"/assets/zxing_reader-[\w-]+\.wasm$")) as wasm:
-            page.goto("/scan")
+    with page.expect_response(re.compile(r"/assets/zxing_reader-[\w-]+\.wasm$")) as wasm:
+        page.goto("/scan")
 
-        expect(page.get_by_test_id(TEST_IDS["scannerVideo"])).to_be_visible()
-        assert wasm.value.ok
-        assert wasm.value.header_value("content-type") == "application/wasm"
-        assert urlsplit(wasm.value.url).netloc == urlsplit(base_url).netloc
-        # The manual input stays next to the camera (BAR-01).
-        expect(page.get_by_test_id(TEST_IDS["barcodeInput"])).to_be_visible()
-        assert foreign_requests(requested, base_url) == []
-    finally:
-        browser.close()
+    expect(page.get_by_test_id(TEST_IDS["scannerVideo"])).to_be_visible()
+    assert wasm.value.ok
+    assert wasm.value.header_value("content-type") == "application/wasm"
+    assert urlsplit(wasm.value.url).netloc == urlsplit(base_url).netloc
+    # The manual input stays next to the camera (BAR-01).
+    expect(page.get_by_test_id(TEST_IDS["barcodeInput"])).to_be_visible()
+    assert foreign_requests(requested, base_url) == []
 
 
 def test_scanning_in_the_meal_form_adds_the_ingredient(
