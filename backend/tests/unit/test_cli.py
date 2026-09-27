@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -86,6 +87,16 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "create_product",
         "get_product",
         "update_product",
+        "list_meals",
+        "list_meal_tags",
+        "create_meal",
+        "get_meal",
+        "update_meal",
+        "delete_meal",
+        "copy_meal",
+        "upload_meal_photo",
+        "delete_meal_photo",
+        "get_media",
         "admin_reorder_categories",
         "admin_merge_ingredient",
         "admin_delete_ingredient",
@@ -96,6 +107,18 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
             error_ref
         )
     assert document["info"]["license"]["identifier"] == "AGPL-3.0-or-later"
+
+    upload = operations[("/api/meals/{meal_id}/photo", "put")]["requestBody"]["content"]
+    body = schemas_of(document)[upload["multipart/form-data"]["schema"]["$ref"].split("/")[-1]]
+    assert body["required"] == ["file"]
+    media = operations[("/api/media/{name}", "get")]
+    assert "security" not in media
+    assert set(media["responses"]["200"]["content"]) == {"image/webp"}
+
+
+def schemas_of(document: dict[str, Any]) -> dict[str, Any]:
+    schemas: dict[str, Any] = document["components"]["schemas"]
+    return schemas
 
 
 def test_export_openapi_ignores_the_environment(

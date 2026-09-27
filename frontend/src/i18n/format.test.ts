@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatNumber, parseAmount } from './format';
+import { formatDate, formatDateTime, formatList, formatNumber, parseAmount } from './format';
 
 describe('formatNumber', () => {
   it('uses the decimal separator of the UI language', () => {
@@ -68,5 +68,13 @@ describe('parseAmount', () => {
     ',',
   ])('rejects %j', (input) => {
     expect(parseAmount(input)).toBeNull();
+  });
+});
+
+describe('formatList', () => {
+  it('joins items in the UI language', () => {
+    expect(formatList(['Calories', 'Fat'], 'en')).toBe('Calories and Fat');
+    expect(formatList(['Kalorien', 'Eiweiß', 'Fett'], 'de')).toBe('Kalorien, Eiweiß und Fett');
+    expect(formatList(['Fat'], 'en')).toBe('Fat');
   });
 });

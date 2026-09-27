@@ -11,6 +11,7 @@ from app.core.config import Settings
 from app.core.errors import ApiError, ErrorCode, rate_limited
 from app.core.ratelimit import RateLimits
 from app.db.session import ReadSession
+from app.media.store import MediaStore
 from app.services import access, auth
 from app.services.context import AuthConfig
 from app.services.principal import Principal
@@ -33,6 +34,11 @@ def get_rate_limits(request: Request) -> RateLimits:
     return limits
 
 
+def get_media(request: Request) -> MediaStore:
+    media: MediaStore = request.app.state.media
+    return media
+
+
 def get_now(request: Request) -> datetime:
     """The current time from the app's clock (`app.state.clock`), which tests can move."""
     clock: Callable[[], datetime] = request.app.state.clock
@@ -52,6 +58,7 @@ def get_user_agent(request: Request) -> str | None:
 AppSettings = Annotated[Settings, Depends(get_app_settings)]
 Config = Annotated[AuthConfig, Depends(get_auth_config)]
 Limits = Annotated[RateLimits, Depends(get_rate_limits)]
+Media = Annotated[MediaStore, Depends(get_media)]
 Now = Annotated[datetime, Depends(get_now)]
 ClientIp = Annotated[str, Depends(get_client_ip)]
 UserAgent = Annotated[str | None, Depends(get_user_agent)]
@@ -88,4 +95,10 @@ CurrentAdmin = Annotated[Principal, Depends(admin_principal)]
 async def limit_code_requests(limits: Limits, client_ip: ClientIp) -> None:
     """Join, reset and code checks: at most 10 requests per minute per client (SEC-05)."""
     if (retry_after := limits.codes.hit(client_ip)) is not None:
+        raise rate_limited(retry_after)
+
+
+async def limit_uploads(limits: Limits, principal: CurrentUser) -> None:
+    """Photo uploads: at most 20 per 10 minutes per user (SEC-07, PERF-05)."""
+    if (retry_after := limits.uploads.hit(principal.user_id)) is not None:
         raise rate_limited(retry_after)

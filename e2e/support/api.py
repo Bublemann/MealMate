@@ -1,4 +1,4 @@
-"""Test setup through the app's own API: accounts, invites, couples, ingredients (plan § 9).
+"""Test setup through the app's own API: accounts, couples, ingredients, meals (plan § 9).
 
 The journeys drive the UI; everything they merely need to exist (an admin, invited users, a couple)
 is created here over HTTP, which is faster and keeps each test about one thing.
@@ -208,6 +208,34 @@ class Api:
         """POST /api/products with a new barcode; the created Product."""
         body = {"barcode": new_barcode(), "ingredient_id": ingredient_id, **fields}
         return self.call("POST", "/api/products", token=self.token(account), json=body)
+
+    def update_me(self, account: Account, **fields: Any) -> dict[str, Any]:
+        """PATCH /api/me, e.g. `meals_public=False`; the updated Me."""
+        return self.call("PATCH", "/api/me", token=self.token(account), json=fields)
+
+    def create_meal(self, account: Account, name: str, **fields: Any) -> dict[str, Any]:
+        """POST /api/meals owned by `account`, e.g. with `ingredients=[{...}]`; the created Meal."""
+        body = {"name": name, **fields}
+        return self.call("POST", "/api/meals", token=self.token(account), json=body)
+
+    def upload_meal_photo(
+        self, account: Account, meal_id: str, image: bytes, *, content_type: str = "image/png"
+    ) -> dict[str, Any]:
+        """PUT /api/meals/{id}/photo as multipart field `file`; the updated Meal."""
+        headers = {**CLIENT_HEADER, "Authorization": f"Bearer {self.token(account)}"}
+        try:
+            response = self._client.put(
+                f"/api/meals/{meal_id}/photo",
+                headers=headers,
+                files={"file": ("photo.png", image, content_type)},
+            )
+        finally:
+            self._client.cookies.clear()
+        if not response.is_success:
+            raise ApiError(
+                f"PUT /api/meals/{meal_id}/photo: {response.status_code} {response.text}"
+            )
+        return response.json()
 
 
 def sign_in(context: BrowserContext, account: Account) -> None:

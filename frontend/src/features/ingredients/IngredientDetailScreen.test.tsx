@@ -304,7 +304,7 @@ describe('IngredientAdminActions', () => {
     await user.click(option);
 
     const confirm = await screen.findByRole('alertdialog', { name: 'Merge Äpfel into Apfel?' });
-    expect(confirm).toHaveTextContent('All products of Äpfel move to Apfel');
+    expect(confirm).toHaveTextContent('All products of Äpfel and its uses in meals move to Apfel');
     await user.click(within(confirm).getByRole('button', { name: 'Merge' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${apfel.id}`));
@@ -318,7 +318,7 @@ describe('IngredientAdminActions', () => {
     const { user } = renderDetail(
       {
         'DELETE /api/admin/ingredients/ing-aepfel': Response.json(
-          { code: 'ingredient.in_use', params: { products: 2 }, fields: [] },
+          { code: 'ingredient.in_use', params: { products: 2, meals: 1 }, fields: [] },
           { status: 409 },
         ),
       },
@@ -331,7 +331,7 @@ describe('IngredientAdminActions', () => {
 
     expect(
       await screen.findByText(
-        'This ingredient is still in use (products: 2). Merge it into another ingredient instead.',
+        'This ingredient is still in use (products: 2, meals: 1). Merge it into another ingredient instead.',
       ),
     ).toBeVisible();
   });

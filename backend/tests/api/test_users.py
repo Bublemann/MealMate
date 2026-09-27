@@ -6,22 +6,19 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from tests.accounts import Account, error, fields, insert_user, make_user
+from tests.accounts import (
+    Account,
+    error,
+    fields,
+    insert_user,
+    make_couple,
+    make_user,
+    set_privacy,
+)
 
 
 def ref(user: Account, *, deactivated: bool = False) -> dict[str, Any]:
     return {"id": user.id, "display_name": user.display_name, "deactivated": deactivated}
-
-
-async def make_couple(api: AsyncClient, a: Account, b: Account) -> None:
-    response = await api.post("/api/couple/requests", json={"user_id": b.id}, headers=a.headers)
-    request_id = response.json()["outgoing"]["id"]
-    accepted = await api.post(f"/api/couple/requests/{request_id}/accept", headers=b.headers)
-    assert accepted.status_code == 200
-
-
-async def set_privacy(api: AsyncClient, user: Account, **switches: bool) -> None:
-    assert (await api.patch("/api/me", json=switches, headers=user.headers)).status_code == 200
 
 
 async def test_list_users_for_the_couple_picker(app: FastAPI, api: AsyncClient) -> None:

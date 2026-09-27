@@ -21,6 +21,8 @@ class ErrorCode(StrEnum):
     UNAUTHORIZED = "common.unauthorized"
     FORBIDDEN = "common.forbidden"
     SERVICE_UNAVAILABLE = "common.service_unavailable"
+    # 413: a request body larger than the server accepts (1 MiB; photos: `media.too_large`).
+    PAYLOAD_TOO_LARGE = "common.payload_too_large"
 
     # 401: wrong username or password.
     INVALID_CREDENTIALS = "auth.invalid_credentials"
@@ -53,12 +55,19 @@ class ErrorCode(StrEnum):
     # 409: the base unit cannot change while products are linked (ING-02).
     INGREDIENT_BASE_UNIT_LOCKED = "ingredient.base_unit_locked"
     # 409: the ingredient is still referenced; `params` counts the references per kind
-    # (`products`; meals and lists join in later milestones).
+    # (`products`, `meals`; lists join in M5a).
     INGREDIENT_IN_USE = "ingredient.in_use"
     # 409: merging would move products to an ingredient with another base unit.
     INGREDIENT_MERGE_BASE_UNIT_MISMATCH = "ingredient.merge_base_unit_mismatch"
     # 409: a product's nutrition basis must be its ingredient's base unit (ING-04).
     PRODUCT_BASIS_MISMATCH = "product.basis_mismatch"
+
+    # 413: an uploaded photo is larger than 10 MB (SEC-07).
+    MEDIA_TOO_LARGE = "media.too_large"
+    # 415: an upload that is not a JPEG, PNG or WebP image (whatever its name claims).
+    MEDIA_UNSUPPORTED_TYPE = "media.unsupported_type"
+    # 422: an image with more than 24 megapixels (SEC-07).
+    MEDIA_TOO_MANY_PIXELS = "media.too_many_pixels"
 
 
 class FieldErrorCode(StrEnum):

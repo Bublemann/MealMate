@@ -38,7 +38,10 @@ class Cuisine(IdMixin, TimestampMixin, Base):
 
 
 class Tag(IdMixin, TimestampMixin, Base):
-    """A free-text meal tag from one shared pool (REF-04); `meal_tags` comes with meals (M4)."""
+    """A free-text meal tag from one shared pool (REF-04), linked to meals by `meal_tags`.
+
+    Tags are created when a meal first uses them and keep the spelling of their creator.
+    """
 
     __tablename__ = "tags"
 
