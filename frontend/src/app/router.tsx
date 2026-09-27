@@ -5,6 +5,7 @@ import { RequireAdmin, RequireAuth } from '@/features/auth/RequireAuth';
 import { ResetScreen } from '@/features/auth/ResetScreen';
 import { IngredientDetailScreen } from '@/features/ingredients/IngredientDetailScreen';
 import { IngredientsScreen } from '@/features/ingredients/IngredientsScreen';
+import { HistoryScreen } from '@/features/lists/HistoryScreen';
 import { ListScreen } from '@/features/lists/ListScreen';
 import { ListsScreen } from '@/features/lists/ListsScreen';
 import { MealDetailScreen } from '@/features/meals/MealDetailScreen';
@@ -30,6 +31,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/lists" replace /> },
           { path: 'lists', element: <ListsScreen /> },
+          { path: 'lists/history', element: <HistoryScreen /> },
           { path: 'lists/:id', element: <ListScreen /> },
           { path: 'meals', element: <MealsScreen /> },
           { path: 'meals/new', element: <MealFormScreen /> },

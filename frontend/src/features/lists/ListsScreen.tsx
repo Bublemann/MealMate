@@ -1,4 +1,4 @@
-import { ChevronRight, ListChecks, Plus } from 'lucide-react';
+import { ChevronRight, History, ListChecks, Plus, ShoppingCart } from 'lucide-react';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
@@ -11,6 +11,7 @@ import { useCurrentUser } from '@/features/auth/context';
 import { useCouple } from '@/features/couple/api';
 import { FirstLoginHints } from '@/features/hints/FirstLoginHints';
 import { useLanguage } from '@/i18n';
+import { formatDayMonth } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { testIds, type TestId } from '@/testIds';
 import { useCreateList, useListUsers, useLists, useToggleListChip, type ListSummary } from './api';
@@ -18,8 +19,9 @@ import { listDisplayName } from './format';
 import type { ListViewState } from './ListScreen';
 
 /**
- * The Lists tab, where the app opens (UI-02): "+ New list" and my drafts (mine and the partner's
- * shared ones), most recently edited first, then others' lists with their own user chips.
+ * The Lists tab, where the app opens (UI-02): a large "Continue shopping" card for each of my
+ * lists being shopped, "+ New list" and my drafts (mine and the partner's shared ones), most
+ * recently edited first, the entry to the history, then others' lists with their own user chips.
  */
 export function ListsScreen() {
   const { t } = useTranslation();
@@ -27,15 +29,17 @@ export function ListsScreen() {
   return (
     <Screen title={t('nav.lists')} testId={testIds.screenLists}>
       <FirstLoginHints />
-      {/* M5b: the "Continue shopping" card for a list being shopped goes here (UI-02). */}
       <MyLists />
-      {/* M5b: the entry to the history goes here, between my lists and others' (UI-02). */}
+      <HistoryEntry />
       <OthersLists />
     </Screen>
   );
 }
 
-/** LIST-01: "+ New list" creates a draft right away and opens it with the meal picker. */
+/**
+ * LIST-01: "+ New list" creates a draft right away and opens it with the meal picker. Lists being
+ * shopped come first, as "Continue shopping" cards (UI-02).
+ */
 function MyLists() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -68,8 +72,14 @@ function MyLists() {
     );
   }
 
+  const shopping = lists.data?.filter((list) => list.status === 'shopping') ?? [];
+  const drafts = lists.data?.filter((list) => list.status !== 'shopping');
+
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
+      {shopping.map((list) => (
+        <ContinueShopping key={list.id} list={list} />
+      ))}
       <Button
         data-testid={testIds.newList}
         onClick={newList}
@@ -85,8 +95,52 @@ function MyLists() {
       </h2>
       {lists.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <ErrorAlert error={lists.error} />
-      {lists.data && <ListCards lists={lists.data} testId={testIds.listDrafts} />}
+      {drafts && drafts.length === 0 && (
+        <p className="text-muted-foreground">{t('lists.mine.noDrafts')}</p>
+      )}
+      {drafts && drafts.length > 0 && <ListCards lists={drafts} testId={testIds.listDrafts} />}
     </section>
+  );
+}
+
+/** UI-02: a list being shopped, as a large card at the top. */
+function ContinueShopping({ list }: { list: ListSummary }) {
+  const { t } = useTranslation();
+  const language = useLanguage();
+
+  return (
+    <Link
+      to={`/lists/${list.id}`}
+      data-testid={testIds.continueShopping}
+      className="flex min-h-(--tap-target) items-center gap-4 rounded-xl bg-primary px-5 py-4 text-primary-foreground shadow-sm outline-none hover:bg-primary/90 focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <ShoppingCart aria-hidden="true" className="size-8 shrink-0" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-lg font-semibold">{t('lists.continue.title')}</span>
+        <span className="break-words">{listDisplayName(list, t, language)}</span>
+      </span>
+      <ChevronRight aria-hidden="true" className="size-6 shrink-0" />
+    </Link>
+  );
+}
+
+/** SHOP-05: the way to the history, between my lists and others' (UI-02). */
+function HistoryEntry() {
+  const { t } = useTranslation();
+
+  return (
+    <Link
+      to="/lists/history"
+      data-testid={testIds.historyLink}
+      className="flex min-h-(--tap-target) items-center gap-3 rounded-xl border bg-card px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring"
+    >
+      <History aria-hidden="true" className="size-6 shrink-0 text-primary" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="font-medium">{t('lists.history.entry')}</span>
+        <span className="text-sm text-muted-foreground">{t('lists.history.entryText')}</span>
+      </span>
+      <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+    </Link>
   );
 }
 
@@ -148,7 +202,7 @@ function OthersLists() {
   );
 }
 
-function ListCards({ lists, testId }: { lists: ListSummary[]; testId?: TestId }) {
+export function ListCards({ lists, testId }: { lists: ListSummary[]; testId?: TestId }) {
   return (
     <ul data-testid={testId} className="flex flex-col divide-y rounded-xl border bg-card">
       {lists.map((list) => (
@@ -166,6 +220,10 @@ function ListCard({ list }: { list: ListSummary }) {
   const couple = useCouple();
   const partner = couple.data?.partner;
   const details = [
+    list.status === 'shopping' ? t('lists.card.shopping') : null,
+    list.status === 'done' && list.finished_at
+      ? t('lists.card.boughtOn', { date: formatDayMonth(list.finished_at, language) })
+      : null,
     t('lists.card.meals', { count: list.meal_count }),
     t('lists.card.items', { count: list.line_count }),
     list.is_owner

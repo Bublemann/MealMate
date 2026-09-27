@@ -16,8 +16,10 @@ import { ServingsStepper } from './ServingsStepper';
 
 interface ListMealsProps {
   list: ListDetail;
-  /** Servings can be changed and meals added or removed (editors of a draft). */
+  /** Servings can be changed and meals added or removed (editors of a draft or while shopping). */
   editable: boolean;
+  /** Collapsed under "Meals (N)", as while shopping (LIST-12). */
+  collapsible?: boolean;
   onAddMeals: () => void;
 }
 
@@ -26,17 +28,14 @@ interface ListMealsProps {
  * see is only "Private meal (N servings)" (VIS-06); a detached one is marked "no longer
  * available" and can be removed (LIST-15).
  */
-export function ListMeals({ list, editable, onAddMeals }: ListMealsProps) {
+export function ListMeals({ list, editable, collapsible = false, onAddMeals }: ListMealsProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const setServings = useSetListMealServings(list.id);
   const remove = useRemoveListMeal(list.id);
 
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="text-xl font-semibold">
-        {t('lists.meals.title')}
-      </h2>
+  const content = (
+    <>
       {list.meals.length === 0 ? (
         <p className="text-muted-foreground">{t('lists.meals.empty')}</p>
       ) : (
@@ -69,6 +68,29 @@ export function ListMeals({ list, editable, onAddMeals }: ListMealsProps) {
           {t('lists.meals.add')}
         </Button>
       )}
+    </>
+  );
+
+  if (collapsible) {
+    return (
+      <details data-testid={testIds.shoppingMeals} className="rounded-xl border bg-card">
+        <summary
+          id={headingId}
+          className="flex min-h-(--tap-target) cursor-pointer items-center px-4 text-lg font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
+        >
+          {t('lists.meals.titleCount', { count: list.meals.length })}
+        </summary>
+        <div className="flex flex-col gap-3 border-t p-3">{content}</div>
+      </details>
+    );
+  }
+
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-3">
+      <h2 id={headingId} className="text-xl font-semibold">
+        {t('lists.meals.title')}
+      </h2>
+      {content}
     </section>
   );
 }

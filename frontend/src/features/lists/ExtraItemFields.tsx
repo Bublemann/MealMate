@@ -76,6 +76,8 @@ interface FreeTextFieldsProps {
   onCategoryChange: (categoryId: string) => void;
   amountTextError?: string;
   categoryError?: string;
+  /** Without the category (an item changed while shopping keeps its category). */
+  withoutCategory?: boolean;
 }
 
 /** Optional free-text amount and the category of a free-text extra item (LIST-06). */
@@ -86,6 +88,7 @@ export function FreeTextFields({
   onCategoryChange,
   amountTextError,
   categoryError,
+  withoutCategory = false,
 }: FreeTextFieldsProps) {
   const { t } = useTranslation();
   const categories = useCategories();
@@ -105,25 +108,27 @@ export function FreeTextFields({
           />
         )}
       </FormField>
-      <FormField label={t('lists.extra.category')} error={categoryError}>
-        {(control) => (
-          <NativeSelect
-            {...control}
-            name="category_id"
-            value={categoryId}
-            onChange={(event) => onCategoryChange(event.target.value)}
-          >
-            {!categories.data && (
-              <NativeSelectOption value="">{categoryName(t, 'other')}</NativeSelectOption>
-            )}
-            {categories.data?.map((category) => (
-              <NativeSelectOption key={category.id} value={category.id}>
-                {categoryName(t, category.key)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        )}
-      </FormField>
+      {!withoutCategory && (
+        <FormField label={t('lists.extra.category')} error={categoryError}>
+          {(control) => (
+            <NativeSelect
+              {...control}
+              name="category_id"
+              value={categoryId}
+              onChange={(event) => onCategoryChange(event.target.value)}
+            >
+              {!categories.data && (
+                <NativeSelectOption value="">{categoryName(t, 'other')}</NativeSelectOption>
+              )}
+              {categories.data?.map((category) => (
+                <NativeSelectOption key={category.id} value={category.id}>
+                  {categoryName(t, category.key)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+        </FormField>
+      )}
     </div>
   );
 }

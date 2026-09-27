@@ -18,6 +18,12 @@ export function createQueryClient(): QueryClient {
         // mode queries pause instead and the screen would stay on "Loading…".
         networkMode: 'always',
       },
+      mutations: {
+        // The same for changes: while offline they fail at once, so the optimistic state is
+        // undone and the error says why, instead of the change waiting unseen (e.g. *Finish*
+        // spinning). M6's outbox takes over offline changes of lists.
+        networkMode: 'always',
+      },
     },
   });
 }

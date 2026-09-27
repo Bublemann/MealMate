@@ -23,7 +23,8 @@ import {
   type ListLine,
 } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
-import { groupByCategory, lineAmount, reminderText, sourceAmount } from './format';
+import { groupByCategory, lineAmount, sourceAmount } from './format';
+import { Reminder } from './Reminder';
 
 /** How far (px) a line has to be swiped to the left to be removed for this list (LIST-07). */
 const SWIPE_DISTANCE = 96;
@@ -87,13 +88,7 @@ export function ListLines({ list, categoryKeys, editable }: ListLinesProps) {
       {hidden.length > 0 && (
         <HiddenLines lines={hidden} editable={editable} onRestore={(line) => hide(line, false)} />
       )}
-      <p
-        data-testid={testIds.listReminder}
-        className="rounded-xl bg-accent px-4 py-3 text-accent-foreground"
-      >
-        <span className="sr-only">{t('lists.reminderLabel')}: </span>
-        {reminderText(t, list.reminder_seed)}
-      </p>
+      <Reminder seed={list.reminder_seed} />
       <SourcesDialog
         listId={list.id}
         line={open}

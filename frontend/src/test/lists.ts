@@ -64,7 +64,18 @@ function mealSource(overrides: Partial<Schemas['LineSource']> = {}): Schemas['Li
   };
 }
 
-function line(overrides: Partial<Schemas['ListLine']> & { name: string }): Schemas['ListLine'] {
+/** The check state of a line nobody checked (always so in a draft). */
+export const UNCHECKED = {
+  checked: false,
+  checked_at: null,
+  checked_by: null,
+  new: false,
+  needs_more: null,
+} satisfies Partial<Schemas['ListLine']>;
+
+export function line(
+  overrides: Partial<Schemas['ListLine']> & { name: string },
+): Schemas['ListLine'] {
   return {
     key: `i:${overrides.name}`,
     kind: 'ingredient',
@@ -75,6 +86,7 @@ function line(overrides: Partial<Schemas['ListLine']> & { name: string }): Schem
     amount_text: null,
     hidden: false,
     sources: [mealSource()],
+    ...UNCHECKED,
     ...overrides,
   };
 }
@@ -197,6 +209,8 @@ export function listDetail(overrides: Partial<Schemas['ListDetail']> = {}): Sche
     can_edit: true,
     shared_with_partner: false,
     reminder_seed: 1230,
+    shopping_started_at: null,
+    finished_at: null,
     meals: [listMeal(), PRIVATE_MEAL, DETACHED_MEAL],
     lines: LINES,
     extra_items: EXTRA_ITEMS,
@@ -232,6 +246,7 @@ export function listSummary(
     shared_with_partner: false,
     meal_count: 3,
     line_count: 5,
+    finished_at: null,
     ...overrides,
   };
 }
@@ -272,3 +287,59 @@ export const LIST_ROUTES: Record<string, unknown> = {
   [`GET /api/lists/${LIST_ID}`]: listDetail(),
   'GET /api/meals/recent': [],
 };
+
+/** A line checked off by `user` at 13:30 on 26.09.2026. */
+export function checkedBy(user: Schemas['UserRef']): Partial<Schemas['ListLine']> {
+  return { checked: true, checked_at: '2026-09-26T13:30:00Z', checked_by: user };
+}
+
+/**
+ * The lines of "Wochenende" while shopping: Zwiebeln to buy, Eier removed in the draft, Milch in
+ * the cart (checked by Ben), Geburtstagskerzen new, Mehl checked but now needing more, Salz in the
+ * cart (checked by me).
+ */
+export const SHOPPING_LINES: Schemas['ListLine'][] = LINES.map((entry) => {
+  switch (entry.name) {
+    case MILK.name:
+      return { ...entry, ...checkedBy(BEN) };
+    case 'Geburtstagskerzen':
+      return { ...entry, new: true };
+    case FLOUR.name:
+      return {
+        ...entry,
+        needs_more: {
+          grown: [{ value: 300, unit: 'g' }],
+          new_unit: true,
+          new_unspecified: true,
+          changed: false,
+        },
+      };
+    case SALT.name:
+      return { ...entry, ...checkedBy(ME) };
+    default:
+      return entry;
+  }
+});
+
+/** "Wochenende" being shopped. */
+export function shoppingList(
+  overrides: Partial<Schemas['ListDetail']> = {},
+): Schemas['ListDetail'] {
+  return listDetail({
+    status: 'shopping',
+    version: 5,
+    shopping_started_at: '2026-09-26T13:00:00Z',
+    lines: SHOPPING_LINES,
+    ...overrides,
+  });
+}
+
+/** "Wochenende" after shopping, finished on Saturday 26.09.2026 in the afternoon. */
+export function doneList(overrides: Partial<Schemas['ListDetail']> = {}): Schemas['ListDetail'] {
+  return shoppingList({
+    status: 'done',
+    version: 9,
+    finished_at: '2026-09-26T14:00:00Z',
+    ...overrides,
+  });
+}

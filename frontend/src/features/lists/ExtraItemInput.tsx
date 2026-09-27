@@ -14,7 +14,13 @@ import { parseAmount } from '@/i18n/format';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { uuidv7 } from '@/lib/uuid';
 import { testIds } from '@/testIds';
-import { useAddExtraItem, type ExtraItemCreate } from './api';
+import {
+  stampOp,
+  useAddExtraItem,
+  type ExtraAddPayload,
+  type ExtraItemCreate,
+  type OpStamp,
+} from './api';
 import { AmountFields, FreeTextFields } from './ExtraItemFields';
 import { otherCategoryId } from './format';
 
@@ -30,9 +36,16 @@ const MAX_TEXT_LENGTH = 80;
  * unless another is chosen).
  *
  * The item keeps its id until it is added or changed, so sending it again after an error (e.g. a
- * timeout whose request did reach the server) doesn't add it twice.
+ * timeout whose request did reach the server) doesn't add it twice. While shopping (SHOP-02) a
+ * free-text item is sent as an op, with its category's key and a stamp it keeps along with the id.
  */
-export function ExtraItemInput({ listId }: { listId: string }) {
+export function ExtraItemInput({
+  listId,
+  shopping = false,
+}: {
+  listId: string;
+  shopping?: boolean;
+}) {
   const { t } = useTranslation();
   const inputId = useId();
   const hintId = `${inputId}-hint`;
@@ -44,8 +57,9 @@ export function ExtraItemInput({ listId }: { listId: string }) {
   const [amountText, setAmountText] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [amountInvalid, setAmountInvalid] = useState(false);
-  /** The id of the item as it is typed; null until it is first sent. */
+  /** The id of the item as it is typed (and its op's stamp); null until it is first sent. */
   const pendingId = useRef<string | null>(null);
+  const pendingStamp = useRef<OpStamp | null>(null);
   const add = useAddExtraItem(listId);
   const categories = useCategories();
   const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
@@ -65,6 +79,7 @@ export function ExtraItemInput({ listId }: { listId: string }) {
   /** The item changed: a new id the next time it is sent. */
   function edited() {
     pendingId.current = null;
+    pendingStamp.current = null;
   }
 
   function pick(ingredient: IngredientSummary) {
@@ -100,13 +115,26 @@ export function ExtraItemInput({ listId }: { listId: string }) {
     return pendingId.current;
   }
 
-  function body(): ExtraItemCreate | null {
+  function body(): ExtraItemCreate | ({ op: ExtraAddPayload } & OpStamp) | null {
     if (picked) {
       const trimmed = amount.trim();
       if (trimmed === '') return { id: itemId(), ingredient_id: picked.id };
       const value = parseAmount(trimmed);
       if (value === null) return null;
       return { id: itemId(), ingredient_id: picked.id, amount: value, unit };
+    }
+    if (shopping) {
+      const categoryKey = categoryKeys.get(chosenCategory);
+      pendingStamp.current ??= stampOp();
+      return {
+        ...pendingStamp.current,
+        op: {
+          extra_id: itemId(),
+          text: typed,
+          ...(amountText.trim() ? { amount_text: amountText.trim() } : {}),
+          ...(categoryKey ? { category_key: categoryKey } : {}),
+        },
+      };
     }
     return {
       id: itemId(),

@@ -25,6 +25,23 @@ export function formatDate(date: Date | number | string, language: Language): st
   return new Intl.DateTimeFormat(LOCALES[language], DATE_OPTIONS).format(new Date(date));
 }
 
+/**
+ * `26.09.` (de) or `26/09` (en): a day in the current year, e.g. "bought on 26.09." (SHOP-05).
+ * In the device's time zone unless `timeZone` is given (`'UTC'` for a calendar date such as
+ * `2026-09-21`, which `Date` reads as midnight UTC).
+ */
+export function formatDayMonth(
+  date: Date | number | string,
+  language: Language,
+  timeZone?: string,
+): string {
+  return new Intl.DateTimeFormat(LOCALES[language], {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone,
+  }).format(new Date(date));
+}
+
 const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   ...DATE_OPTIONS,
   hour: '2-digit',

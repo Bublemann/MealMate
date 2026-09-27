@@ -113,3 +113,30 @@ export function otherCategoryId(
 ): string {
   return categories?.find((category) => category.key === 'other')?.id ?? '';
 }
+
+interface NeedsMore {
+  grown: readonly { value: number; unit: string }[];
+  new_unit: boolean;
+  new_unspecified: boolean;
+  changed: boolean;
+}
+
+/**
+ * LIST-12: why a line that was checked needs more, as badge texts: "+300 g" per grown amount
+ * (the server computed and rounded the difference), "new unit", "+ some", "changed".
+ */
+export function needsMoreTexts(t: TFunction, language: Language, needsMore: NeedsMore): string[] {
+  return [
+    ...needsMore.grown.map(({ value, unit }) =>
+      t('lists.shop.more', { amount: formatAmount(t, language, value, unit) }),
+    ),
+    ...(needsMore.new_unit ? [t('lists.shop.newUnit')] : []),
+    ...(needsMore.new_unspecified ? [t('lists.lines.plusSome')] : []),
+    ...(needsMore.changed ? [t('lists.shop.changed')] : []),
+  ];
+}
+
+/** SHOP-01: who checked a line, as one letter: "B" for "ben". */
+export function initialOf(name: string): string {
+  return (Array.from(name.trim())[0] ?? '?').toLocaleUpperCase();
+}
