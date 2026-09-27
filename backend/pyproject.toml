@@ -92,7 +92,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--import-mode=importlib --cov=app --cov-report=term-missing --cov-fail-under=85"
+# The contract check against the real Open Food Facts API runs only in its weekly CI job.
+addopts = "--import-mode=importlib --cov=app --cov-report=term-missing --cov-fail-under=85 -m 'not off_contract'"
+markers = ["off_contract: asks the real Open Food Facts API (weekly, non-blocking CI job)"]
 filterwarnings = ["error"]
 
 [tool.coverage.run]

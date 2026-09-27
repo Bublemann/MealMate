@@ -61,6 +61,10 @@ class ErrorCode(StrEnum):
     INGREDIENT_MERGE_BASE_UNIT_MISMATCH = "ingredient.merge_base_unit_mismatch"
     # 409: a product's nutrition basis must be its ingredient's base unit (ING-04).
     PRODUCT_BASIS_MISMATCH = "product.basis_mismatch"
+    # 409: apply or ignore, but the product has no newer Open Food Facts values (BAR-06).
+    PRODUCT_NO_PENDING_UPDATE = "product.no_pending_update"
+    # 503: too many Open Food Facts lookups right now (BAR-08); retry or enter values by hand.
+    OFF_BUSY = "off.busy"
 
     # 409: the action is only possible while the list is a draft (e.g. hiding a line, LIST-07).
     LIST_NOT_DRAFT = "list.not_draft"

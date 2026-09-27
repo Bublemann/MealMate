@@ -12,6 +12,8 @@ REPO_URL = "https://github.com/Bublemann/MealMate"
 DATABASE_FILENAME = "mealmate.db"
 MEDIA_DIRNAME = "media"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# Open Food Facts' limit for product reads (BAR-08), for the app and the nightly job together.
+OFF_REQUESTS_PER_MINUTE = 10
 
 type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -41,6 +43,11 @@ class Settings(BuildInfo):
     off_base_url: str = "https://world.openfoodfacts.org"
     off_refresh_days: int = Field(default=30, ge=1)
     off_user_agent_contact: str = REPO_URL
+    # Open Food Facts requests started in any 60 s window by the app (lookups, background
+    # refreshes) and by `mealmate jobs off-refresh`; together at most OFF_REQUESTS_PER_MINUTE,
+    # as both may run at the same time (BAR-08).
+    off_rate_app_per_minute: int = Field(default=6, ge=1)
+    off_rate_job_per_minute: int = Field(default=4, ge=1)
     invite_ttl_days: int = Field(default=7, ge=1)
     reset_ttl_hours: int = Field(default=24, ge=1)
     session_idle_days: int = Field(default=90, ge=1)
@@ -71,6 +78,15 @@ class Settings(BuildInfo):
                 raise ValueError(
                     "cookie_secure may only be false when public_url is a loopback address"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _check_off_rates(self) -> Self:
+        if self.off_rate_app_per_minute + self.off_rate_job_per_minute > OFF_REQUESTS_PER_MINUTE:
+            raise ValueError(
+                "off_rate_app_per_minute + off_rate_job_per_minute must be at most "
+                f"{OFF_REQUESTS_PER_MINUTE} (Open Food Facts' limit)"
+            )
         return self
 
     @property

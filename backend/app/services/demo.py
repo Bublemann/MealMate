@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passwords import hash_password
 from app.db.ids import new_id
+from app.domain.catalog import PRODUCT_FIELDS
 from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
@@ -61,7 +62,6 @@ from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
 from app.services import accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
-from app.services.products import DATA_FIELDS
 
 DEMO_USERS: tuple[tuple[str, str, Role, Language], ...] = (
     ("admin", "Admin", "admin", "de"),
@@ -543,10 +543,7 @@ async def _insert_catalog(
             pack_quantity=demo.pack_quantity,
             pack_unit=demo.pack_unit.value,
             source="manual",
-            user_edited_fields=[
-                *DATA_FIELDS,
-                *(f"nutrients.{key}" for key in NUTRIENT_KEYS),
-            ],
+            user_edited_fields=list(PRODUCT_FIELDS),
             created_by=creator,
             updated_by=creator,
             created_at=now,

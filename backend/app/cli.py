@@ -7,8 +7,10 @@ import secrets
 import sqlite3
 import sys
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -32,10 +34,11 @@ from app.db.migrations import (
 )
 from app.db.session import Database
 from app.domain.accounts import username_norm
+from app.integrations.off import OffClient
 from app.main import create_app
 from app.media.store import MediaStore
 from app.repositories import users as users_repo
-from app.services import accounts, codes, jobs
+from app.services import accounts, codes, jobs, off_refresh
 from app.services.context import AuthConfig
 from app.services.demo import (
     DEMO_INGREDIENTS,
@@ -278,6 +281,39 @@ def jobs_cleanup() -> None:
     media = _media(settings)
     removed = _run(settings, lambda session: jobs.cleanup(session, media, now=time.time()))
     typer.echo(f"Removed {removed} orphaned media files.")
+
+
+@jobs_app.command("off-refresh")
+def jobs_off_refresh() -> None:
+    """Refresh products from Open Food Facts fetched longer than MEALMATE_OFF_REFRESH_DAYS ago,
+    oldest first, at most MEALMATE_OFF_RATE_JOB_PER_MINUTE per minute and an hour's worth per
+    run (BAR-05, BAR-08). A product that fails is logged and counted; the others go on."""
+    settings = _load_settings()
+    _require_current_database(settings)
+    off = OffClient.from_settings(settings, job=True)
+    max_age = timedelta(days=settings.off_refresh_days)
+    max_products = off_refresh.JOB_MAX_MINUTES * settings.off_rate_job_per_minute
+
+    async def run() -> Counter[off_refresh.Outcome]:
+        database = Database.open(settings.data_dir)
+        try:
+            return await off_refresh.refresh_stale(
+                database, off, max_age=max_age, max_products=max_products
+            )
+        finally:
+            await database.dispose()
+
+    outcomes = asyncio.run(run())
+    kept = outcomes[off_refresh.Outcome.UNAVAILABLE] + outcomes[off_refresh.Outcome.NOT_FOUND]
+    typer.echo(
+        f"Refreshed {outcomes.total()} products from Open Food Facts: "
+        f"{outcomes[off_refresh.Outcome.UPDATED]} updated, "
+        f"{outcomes[off_refresh.Outcome.PENDING]} with newer values for user-edited fields, "
+        f"{outcomes[off_refresh.Outcome.UNCHANGED]} unchanged, "
+        f"{kept} kept for the next run ({outcomes[off_refresh.Outcome.UNAVAILABLE]} unavailable, "
+        f"{outcomes[off_refresh.Outcome.NOT_FOUND]} not found), "
+        f"{outcomes[off_refresh.Outcome.ERROR]} failed with an error (see the log)."
+    )
 
 
 @main.command("version")

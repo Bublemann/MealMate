@@ -36,6 +36,7 @@ def test_defaults(secret_key: str) -> None:
     assert settings.off_base_url == "https://world.openfoodfacts.org"
     assert settings.off_refresh_days == 30
     assert settings.off_user_agent_contact == REPO_URL
+    assert (settings.off_rate_app_per_minute, settings.off_rate_job_per_minute) == (6, 4)
     assert (settings.invite_ttl_days, settings.reset_ttl_hours) == (7, 24)
     assert settings.session_idle_days == 90
     assert (settings.version, settings.commit) == ("0.0.0-dev", "unknown")
@@ -60,6 +61,22 @@ def test_reads_prefixed_environment(monkeypatch: pytest.MonkeyPatch, secret_key:
     assert settings.log_level == "DEBUG"
     assert (settings.version, settings.commit) == ("2.0.0-alpha.1", "0123abc")
     assert get_settings() is settings
+
+
+def test_open_food_facts_rates_stay_within_its_limit(
+    monkeypatch: pytest.MonkeyPatch, secret_key: str
+) -> None:
+    """The app and the nightly job may run at the same time: together at most 10 per minute
+    (BAR-08)."""
+    monkeypatch.setenv("MEALMATE_OFF_RATE_APP_PER_MINUTE", "7")
+    monkeypatch.setenv("MEALMATE_OFF_RATE_JOB_PER_MINUTE", "3")
+    settings = Settings(secret_key=secret_key)
+    assert (settings.off_rate_app_per_minute, settings.off_rate_job_per_minute) == (7, 3)
+
+    with pytest.raises(ValidationError, match="at most 10"):
+        Settings(secret_key=secret_key, off_rate_app_per_minute=7, off_rate_job_per_minute=4)
+    with pytest.raises(ValidationError, match="off_rate_job_per_minute"):
+        Settings(secret_key=secret_key, off_rate_job_per_minute=0)
 
 
 def test_build_info_needs_no_secret(monkeypatch: pytest.MonkeyPatch) -> None:

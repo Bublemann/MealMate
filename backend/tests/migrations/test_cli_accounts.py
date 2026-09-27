@@ -1,20 +1,25 @@
-"""`create-admin`, `reset-link`, `seed-demo` and `jobs cleanup` (ACC-12, plan § 5.11)."""
+"""`create-admin`, `reset-link`, `seed-demo`, `jobs cleanup` and `jobs off-refresh` (ACC-12,
+BAR-05, plan § 5.11)."""
 
 import os
 import sqlite3
 import time
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import bcrypt
 import pytest
+import respx
 from sqlalchemy.exc import IntegrityError
 from typer.testing import CliRunner
 
 from app.cli import main
 from app.db.migrations import upgrade_database
 from app.domain.barcodes import normalize_barcode
-from app.services import demo
+from app.integrations.off import OffClient
+from app.services import demo, off_refresh
+from tests.off import OFF_URL, product_response, product_url
 
 runner = CliRunner()
 PUBLIC_URL = "https://mealmate.example.ts.net"
@@ -58,7 +63,13 @@ def create_admin(*args: str, stdin: str = PASSWORD + "\n") -> tuple[int, str]:
 
 
 def test_account_commands_need_a_migrated_database(data_dir: Path) -> None:
-    for args in (["create-admin"], ["reset-link", "admin"], ["seed-demo"], ["jobs", "cleanup"]):
+    for args in (
+        ["create-admin"],
+        ["reset-link", "admin"],
+        ["seed-demo"],
+        ["jobs", "cleanup"],
+        ["jobs", "off-refresh"],
+    ):
         result = runner.invoke(main, args)
         assert result.exit_code == 1, args
         assert "run `mealmate db upgrade` first" in result.output
@@ -350,3 +361,56 @@ def test_jobs_cleanup(database: Path, data_dir: Path) -> None:
     assert "Removed 2 orphaned media files." in result.output
     assert {path.name for path in media.iterdir()} == photos
     assert "Removed 0 orphaned media files." in runner.invoke(main, ["jobs", "cleanup"]).output
+
+
+def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEALMATE_OFF_BASE_URL", OFF_URL)
+    monkeypatch.setenv("MEALMATE_VERSION", "2.0.0")
+    assert runner.invoke(main, ["seed-demo"]).exit_code == 0
+    [(found,), (down,), (broken,), *_] = query(
+        database, "SELECT barcode FROM products ORDER BY barcode"
+    )
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(
+            "UPDATE products SET source = 'off', fetched_at = NULL, user_edited_fields = '[]'"
+            " WHERE barcode IN (?, ?, ?)",
+            (found, down, broken),
+        )
+    jobs: list[tuple[int, int | None]] = []
+    refresh_stale = off_refresh.refresh_stale
+    apply_refresh = off_refresh.apply_refresh
+
+    async def spy(database: Any, off: OffClient, **options: Any) -> Any:
+        jobs.append((off.rate_limit.limit, options["max_products"]))
+        return await refresh_stale(database, off, **options)
+
+    def fails_for_broken(row: Any, found: Any, **options: Any) -> Any:
+        if row.barcode == broken:
+            raise RuntimeError("bug")
+        return apply_refresh(row, found, **options)
+
+    monkeypatch.setattr(off_refresh, "refresh_stale", spy)
+    monkeypatch.setattr(off_refresh, "apply_refresh", fails_for_broken)
+
+    with respx.mock(base_url=OFF_URL) as off_api:
+        request = off_api.get(product_url(found)).respond(
+            json=product_response(found, brands="Neu")
+        )
+        off_api.get(product_url(down)).respond(503)
+        off_api.get(product_url(broken)).respond(json=product_response(broken))
+        result = runner.invoke(main, ["jobs", "off-refresh"])
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "Refreshed 3 products from Open Food Facts: 1 updated, 0 with newer values for "
+        "user-edited fields, 0 unchanged, 1 kept for the next run (1 unavailable, 0 not found), "
+        "1 failed with an error (see the log)."
+    ) in result.output
+    # The job's own rate limit (4 per minute, the app has 6), an hour's worth of products.
+    assert jobs == [(4, 240)]
+    assert request.calls.last.request.headers["user-agent"] == (
+        "MealMate/2.0.0 (https://github.com/Bublemann/MealMate)"
+    )
+    assert query(database, "SELECT brand FROM products WHERE barcode = ?", found) == [("Neu",)]
+    [(fetched_at,)] = query(database, "SELECT fetched_at FROM products WHERE barcode = ?", down)
+    assert fetched_at is None

@@ -11,16 +11,23 @@ tests replace.
   the check; a success then clears the username key and takes the client's charge back.
 - `RequestRateLimit`: at most N requests per key in a sliding window (join, reset, code checks
   per client IP; photo uploads per user).
+- `SlidingWindow`: requests to Open Food Facts (BAR-08): at most N started in any 60 s window,
+  shared by the lookups and background refreshes of the app process; the nightly job has its own
+  with a smaller N, so that both together stay within Open Food Facts' 10 per minute. Callers
+  wait for their turn, lookups only up to a few seconds.
 """
 
 import math
 import time
 from collections import deque
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field
 
+import anyio
+
 type Clock = Callable[[], float]
+type Sleep = Callable[[float], Awaitable[None]]
 
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_FREE_FAILURES = 5
@@ -120,6 +127,48 @@ class RequestRateLimit:
             return _retry_after(requests[0] + self.window - now)
         requests.append(now)
         return None
+
+
+@dataclass
+class SlidingWindow:
+    """At most `limit` requests started in any `window` seconds.
+
+    A caller reserves the next free start time and sleeps until it is due: the earliest moment
+    that is not before an earlier reservation and at least `window` after the start `limit`
+    places back. Starts are thus in order, and no `window` holds more than `limit` of them.
+    The reservation is made without an await, which makes it atomic on the event loop.
+    """
+
+    limit: int
+    window: float = 60.0
+    clock: Clock = time.monotonic
+    sleep: Sleep = anyio.sleep
+    _starts: deque[float] = field(default_factory=deque, init=False, repr=False)
+
+    def reserve(self, max_wait: float | None) -> float | None:
+        """Reserve the next start; returns the seconds until it is due, or None (and reserves
+        nothing) if that is longer than `max_wait` (None: any wait)."""
+        now = self.clock()
+        starts = self._starts
+        while starts and starts[0] <= now - self.window:
+            starts.popleft()  # outside every window from now on
+        start = max(now, starts[-1]) if starts else now
+        if len(starts) >= self.limit:
+            start = max(start, starts[-self.limit] + self.window)
+        wait = start - now
+        if max_wait is not None and wait > max_wait:
+            return None
+        starts.append(start)
+        return wait
+
+    async def acquire(self, max_wait: float | None = None) -> bool:
+        """Wait for a start (at most `max_wait` seconds); False if the wait would be longer."""
+        wait = self.reserve(max_wait)
+        if wait is None:
+            return False
+        if wait > 0:
+            await self.sleep(wait)
+        return True
 
 
 @dataclass

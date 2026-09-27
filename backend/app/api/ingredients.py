@@ -2,9 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 
-from app.api.deps import CurrentUser, Now
+from app.api.deps import CurrentUser, Db, Now, OffRefresh
 from app.db.session import ReadSession, WriteSession
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.ingredients import (
@@ -14,7 +14,7 @@ from app.schemas.ingredients import (
     IngredientUpdate,
 )
 from app.schemas.products import Product
-from app.services import ingredients
+from app.services import ingredients, off_refresh
 
 router = APIRouter(prefix="/api/ingredients", tags=["ingredients"], responses=ERROR_RESPONSES)
 
@@ -71,7 +71,16 @@ async def update_ingredient(
 
 @router.get("/{ingredient_id}/products")
 async def list_ingredient_products(
-    ingredient_id: str, principal: CurrentUser, session: ReadSession
+    ingredient_id: str,
+    principal: CurrentUser,
+    session: ReadSession,
+    refresh: OffRefresh,
+    database: Db,
+    background: BackgroundTasks,
+    now: Now,
 ) -> list[Product]:
-    """The ingredient's products, by name and barcode."""
-    return await ingredients.list_products(session, ingredient_id)
+    """The ingredient's products, by name and barcode; stale Open Food Facts products are
+    refreshed after the response."""
+    result = await ingredients.list_products(session, ingredient_id)
+    off_refresh.schedule_if_stale(background, refresh, database, result, now=now)
+    return result
