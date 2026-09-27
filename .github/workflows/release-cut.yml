@@ -21,6 +21,8 @@ jobs:
     name: Create release/${{ inputs.version }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # The release App credentials live in the protected `release` environment (plan § 13).
+    environment: release
     permissions: {}
     steps:
       - name: Check the version line
