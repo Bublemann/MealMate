@@ -5,6 +5,16 @@ What to build is defined in [`docs/requirements.md`](docs/requirements.md); how 
 ## Workflow
 
 - `main` is the integration branch. Work on a short-lived branch and open a pull request. CI must be green.
+- Branch names say what the branch is about:
+
+  | Prefix | For | Example |
+  |---|---|---|
+  | `feature/` | new functionality | `feature/v2-accounts`, `feature/barcode-scanner` |
+  | `fix/` | bug fixes | `fix/list-rounding` |
+  | `docs/` | documentation only | `docs/operations-runbook` |
+  | `chore/` | tooling, dependencies, CI | `chore/bump-node-24` |
+  | `release/X.Y` | release lines (created by the release workflow) | `release/2.0` |
+  | `hotfix/` | fixes branched from and merged back into `release/X.Y` | `hotfix/2.0-login-timeout` |
 - PR titles use [Conventional Commits](https://www.conventionalcommits.org/): `feat: …`, `fix: …`, `docs: …`, `chore: …`, `test: …`, `refactor: …`. Feature PRs are **squash-merged**, so the PR title becomes the changelog entry.
 - Releases are cut from `release/X.Y` branches. Sync PRs (`main → release/X.Y`) and back-merge PRs (`release/X.Y → main`) use **merge commits**, never squash. Details: plan § 10.
 - Never commit secrets, keys, certificates, databases or `.env` files. CI runs a secret scanner.
