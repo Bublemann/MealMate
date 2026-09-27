@@ -9,14 +9,16 @@ Reloading offline with a service worker is broken in Playwright WebKit (plan O-1
 runs in Chromium only, and only Chromium waits for the service worker to take control; WebKit
 covers the offline check-off without a reload, and the lie-fi case by opening the list in a new
 page of the same browser context instead of reloading (so the list on screen comes from the
-stored copy, not from the previous page's cache). Recheck on every Playwright upgrade.
+stored copy, not from the previous page's cache), with service workers blocked: in Playwright
+WebKit, requests of a page a service worker controls bypass the routes that simulate lie-fi.
+Recheck on every Playwright upgrade.
 """
 
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
-from playwright.sync_api import BrowserContext, Locator, Page, Request, Route, expect
+from playwright.sync_api import Browser, BrowserContext, Locator, Page, Request, Route, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
@@ -196,9 +198,33 @@ def leave_unanswered(route: Route) -> None:
 
 
 def test_lie_fi_shows_the_stored_list(
-    page: Page, api: Api, invite_user: Callable[..., Account], base_url: str, browser_name: str
+    page: Page,
+    browser: Browser,
+    browser_context_args: dict[str, Any],
+    api: Api,
+    invite_user: Callable[..., Account],
+    base_url: str,
+    browser_name: str,
 ) -> None:
     """SYNC-09: a connection that carries nothing never leaves a blank screen."""
+    own_context: BrowserContext | None = None
+    if browser_name != "chromium":
+        # In Playwright WebKit the requests of a page that a service worker controls bypass
+        # page and context routes, so lie-fi cannot be simulated with the service worker on.
+        # WebKit runs this test with service workers blocked and checks what matters there: the
+        # list comes from the stored copy. Chromium covers the start from the service worker.
+        own_context = browser.new_context(**browser_context_args, service_workers="block")
+        page = own_context.new_page()
+    try:
+        lie_fi_shows_the_stored_list(page, api, invite_user, base_url, browser_name)
+    finally:
+        if own_context is not None:
+            own_context.close()
+
+
+def lie_fi_shows_the_stored_list(
+    page: Page, api: Api, invite_user: Callable[..., Account], base_url: str, browser_name: str
+) -> None:
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     setup = shopping_list(api, anna, tag, ["Zwiebeln"])
@@ -222,8 +248,8 @@ def test_lie_fi_shows_the_stored_list(
         shown.on("request", record)
         shown.reload()
     else:
-        # Reloading with a service worker is unreliable in Playwright WebKit (plan O-11). A new
-        # page of the same context has no query cache: what it shows comes from the stored copy.
+        # A new page of the same context has no query cache: what it shows comes from the
+        # stored copy.
         shown = page.context.new_page()
         shown.on("request", record)
         shown.route("**/api/**", leave_unanswered)
