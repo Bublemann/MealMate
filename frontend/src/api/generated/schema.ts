@@ -726,6 +726,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lists/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sync Lists
+         * @description The local copy for offline use (SYNC-02, SYNC-10): every list you can edit that is a
+         *     draft or being shopped (yours and those your partner shares with you), each as
+         *     `GET /api/lists/{id}` shows it, most recently edited first. Replace the stored copy with
+         *     it: a list that is missing was deleted, finished or is no longer yours to edit. The weak
+         *     `ETag` covers `lists` but not `generated_at`, so `If-None-Match` gives a 304 while no list
+         *     in it changed.
+         */
+        get: operations["sync_lists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lists/{list_id}": {
         parameters: {
             query?: never;
@@ -925,6 +950,9 @@ export interface paths {
          *     off, add, rename and delete free-text items, finish. Each op is applied once, however often
          *     it is sent (SYNC-05); the result of each and the list afterwards come back. The list must
          *     be one you may edit (404, 403 otherwise).
+         *
+         *     `X-MealMate-User` guards against a phone sending one user's queued ops with another user's
+         *     session (SYNC-10): a mismatch is refused before anything else (409 `auth.user_mismatch`).
          */
         post: operations["apply_list_ops"];
         delete?: never;
@@ -1695,7 +1723,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "product.no_pending_update" | "off.busy" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "product.no_pending_update" | "off.busy" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -2420,6 +2448,23 @@ export interface components {
             name?: string | null;
             /** Shared With Partner */
             shared_with_partner?: boolean | null;
+        };
+        /**
+         * ListsSync
+         * @description The local copy for offline use (SYNC-02): every list the viewer can edit that is a
+         *     draft or being shopped (their own and those their partner shares with them), each exactly
+         *     as `GET /api/lists/{id}` shows it, most recently edited first. A list that is missing from
+         *     it is gone from the copy (deleted, done, or access lost; SYNC-10). `generated_at` is the
+         *     server time of the answer; it is not part of the `ETag`, which covers `lists` only.
+         */
+        ListsSync: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Lists */
+            lists: components["schemas"]["ListDetail"][];
         };
         /** LoginRequest */
         LoginRequest: {
@@ -4385,6 +4430,44 @@ export interface operations {
             };
         };
     };
+    sync_lists: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-none-match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListsSync"];
+                };
+            };
+            /** @description Unchanged since the given ETag */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_list: {
         parameters: {
             query?: never;
@@ -4804,7 +4887,10 @@ export interface operations {
     apply_list_ops: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The id of the user who made the ops. If given and not the signed-in user, nothing is applied (409 `auth.user_mismatch`). */
+                "X-MealMate-User"?: string | null;
+            };
             path: {
                 list_id: string;
             };

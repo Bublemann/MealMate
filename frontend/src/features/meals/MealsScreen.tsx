@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { UserFilterChips } from '@/components/UserFilterChips';
 import { Button } from '@/components/ui/button';
@@ -96,7 +97,7 @@ export function MealsScreen() {
             <UserChips />
           </div>
           {meals.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-          <ErrorAlert error={meals.error} />
+          <LoadError error={meals.error} />
           {shown && shown.length === 0 && (
             <Card className="items-start gap-3 px-5" aria-live="polite">
               <div className="flex flex-col gap-1">
@@ -181,7 +182,7 @@ function UserChips({ onlyWithOthers = false }: { onlyWithOthers?: boolean }) {
   const toggle = useToggleMealChip();
   const hidden = user.filter_hidden.meals;
 
-  if (!users.data) return <ErrorAlert error={users.error} />;
+  if (!users.data) return <LoadError error={users.error} />;
   if (onlyWithOthers && users.data.every((person) => person.id === user.id)) return null;
   return (
     <div className="flex flex-col gap-2">

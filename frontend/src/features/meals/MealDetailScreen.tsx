@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -56,7 +57,7 @@ export function MealDetailScreen() {
         </Alert>
       )}
       {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={meal.error} />
+      <LoadError error={meal.error} />
       {meal.data && <MealContent key={meal.data.id} meal={meal.data} />}
     </Screen>
   );

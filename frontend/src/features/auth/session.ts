@@ -1,4 +1,10 @@
-import { api, type AuthBridge, type SessionEndCode } from '@/api/client';
+import {
+  api,
+  READ_TIMEOUT_MS,
+  withTimeout,
+  type AuthBridge,
+  type SessionEndCode,
+} from '@/api/client';
 import { ApiError, isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
 import i18n, { changeLanguage } from '@/i18n';
@@ -16,9 +22,10 @@ import {
 export type LoginResponse = components['schemas']['LoginResponse'];
 
 /**
- * - `loading`: the start-up refresh is still running;
- * - `authenticated`: a user is signed in (`offline` if the server couldn't be reached at start and
- *   the cached profile is shown; requests then refresh first);
+ * - `loading`: the start-up refresh is still running and there is no cached profile;
+ * - `authenticated`: a user is signed in (`offline` while the cached profile is shown because the
+ *   server hasn't confirmed the session yet: during the start-up refresh, or after it couldn't
+ *   reach the server; requests then refresh first);
  * - `anonymous`: nobody is signed in; `reason` says why a session ended, if one did;
  * - `unreachable`: the server couldn't be reached at start and there is no cached profile.
  */
@@ -33,6 +40,15 @@ export interface AuthState {
 }
 
 type Outcome = 'ok' | 'ended' | 'unreachable';
+
+/**
+ * A session of `userId` ended on this device; `reason` null: someone else signed in. The sync
+ * module decides by it what happens to the local data (SYNC-10).
+ */
+export interface SessionEnd {
+  reason: EndReason | null;
+  userId: string;
+}
 
 /** The cross-tab lock that serialises refreshes (plan § 8). */
 export const REFRESH_LOCK = 'mm-refresh';
@@ -53,7 +69,7 @@ export interface AuthSession extends AuthBridge {
   /** Logs out every device of the user, including this one. */
   logoutAll(): Promise<void>;
   /** Called whenever a session ends locally, so cached server data can be dropped. */
-  onEnd(listener: () => void): () => void;
+  onEnd(listener: (event: SessionEnd) => void): () => void;
 }
 
 export interface AuthSessionOptions {
@@ -70,7 +86,7 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
   let inflight: Promise<Outcome> | null = null;
   let startup: Promise<void> | null = initial ? Promise.resolve() : null;
   const listeners = new Set<() => void>();
-  const endListeners = new Set<() => void>();
+  const endListeners = new Set<(event: SessionEnd) => void>();
 
   function setState(next: Partial<AuthState>): void {
     state = { ...state, ...next };
@@ -92,14 +108,15 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
   }
 
   function end(reason: EndReason | null): void {
-    const wasSignedIn = state.user !== null;
+    const user = state.user;
     accessToken = null;
     // SYNC-10: the cached profile and every other user-specific key go with the session.
     clearUserStorage();
     setState({ status: 'anonymous', user: null, offline: false, reason });
-    // Only a session that was in use has server data to drop; at start-up there is none yet, and
-    // clearing then would cut off public queries in flight (e.g. the invite code check).
-    if (wasSignedIn) for (const listener of endListeners) listener();
+    // Only a session that was in use (or shown from the cache) has data to drop; at start-up
+    // there is none yet, and clearing then would cut off public queries in flight (e.g. the
+    // invite code check).
+    if (user) for (const listener of endListeners) listener({ reason, userId: user.id });
   }
 
   function endReasonFor(code: string, wasSignedIn: boolean): EndReason | null {
@@ -112,8 +129,10 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
     // "Expired" only makes sense to someone who was signed in on this device.
     const wasSignedIn = state.user !== null || readCachedProfile() !== null;
     try {
+      // A read's deadline: the app waits for this before anything else (SYNC-09).
       const { data, error, response } = await api.POST('/api/auth/refresh', {
         body: { fork },
+        ...withTimeout(READ_TIMEOUT_MS),
       });
       if (data) {
         applyLogin(data);
@@ -146,11 +165,17 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
 
   async function runStartup(): Promise<void> {
     const fork = isStandalone() && readStorage(STANDALONE_MARKER_KEY) === null;
-    const outcome = await refreshOnce(fork);
+    const refreshed = refreshOnce(fork);
+    // SYNC-09: the cached profile (and with it the local copy of the lists) shows at once; the
+    // refresh confirms it in the background, and nothing is sent before it has settled.
+    const cached = readCachedProfile();
+    if (cached && state.status === 'loading') {
+      setState({ status: 'authenticated', user: cached, offline: true, reason: null });
+    }
+    const outcome = await refreshed;
     // Any answer from the server settles the first start; a network failure tries again next time.
     if (fork && outcome !== 'unreachable') writeStorage(STANDALONE_MARKER_KEY, '1');
     if (outcome !== 'unreachable') return;
-    const cached = readCachedProfile();
     if (cached) setState({ status: 'authenticated', user: cached, offline: true, reason: null });
     else setState({ status: 'unreachable' });
   }

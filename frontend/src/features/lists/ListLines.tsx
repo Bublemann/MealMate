@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { useLanguage } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useConnected } from '@/features/sync/context';
 import { testIds } from '@/testIds';
 import {
   useRemoveExtraItem,
@@ -41,10 +42,12 @@ interface ListLinesProps {
  * The aggregated lines under their category headings, in the order the server sorted them
  * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be removed for
  * this list by swiping it to the left or with the button in that dialog, and comes back from the
- * collapsed "Removed" section (LIST-07). The reminder is the last row (LIST-14).
+ * collapsed "Removed" section (LIST-07). The reminder is the last row (LIST-14). Offline these
+ * changes are disabled (SYNC-03).
  */
 export function ListLines({ list, categoryKeys, editable }: ListLinesProps) {
   const { t } = useTranslation();
+  const offline = !useConnected();
   const headingId = useId();
   const setHidden = useSetLineHidden(list.id);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export function ListLines({ list, categoryKeys, editable }: ListLinesProps) {
               key={group.categoryId}
               name={group.name}
               lines={group.lines}
-              editable={editable}
+              editable={editable && !offline}
               onOpen={(line) => setOpenKey(line.key)}
               onHide={(line) => hide(line, true)}
             />
@@ -86,13 +89,19 @@ export function ListLines({ list, categoryKeys, editable }: ListLinesProps) {
         </div>
       )}
       {hidden.length > 0 && (
-        <HiddenLines lines={hidden} editable={editable} onRestore={(line) => hide(line, false)} />
+        <HiddenLines
+          lines={hidden}
+          editable={editable}
+          offline={offline}
+          onRestore={(line) => hide(line, false)}
+        />
       )}
       <Reminder seed={list.reminder_seed} />
       <SourcesDialog
         listId={list.id}
         line={open}
         editable={editable}
+        offline={offline}
         onClose={() => setOpenKey(null)}
         onHide={(line, value) => {
           hide(line, value);
@@ -242,11 +251,12 @@ function LineRow({ line, swipeable, onOpen, onHide }: LineRowProps) {
 interface HiddenLinesProps {
   lines: ListLine[];
   editable: boolean;
+  offline: boolean;
   onRestore: (line: ListLine) => void;
 }
 
 /** LIST-07: lines removed for this list, collapsed; each can be restored. */
-function HiddenLines({ lines, editable, onRestore }: HiddenLinesProps) {
+function HiddenLines({ lines, editable, offline, onRestore }: HiddenLinesProps) {
   const { t } = useTranslation();
   const language = useLanguage();
 
@@ -271,6 +281,7 @@ function HiddenLines({ lines, editable, onRestore }: HiddenLinesProps) {
                     variant="outline"
                     size="compact"
                     aria-label={t('lists.lines.restoreLabel', { name: line.name })}
+                    disabled={offline}
                     onClick={() => onRestore(line)}
                   >
                     <RotateCcw aria-hidden="true" />
@@ -291,13 +302,23 @@ interface SourcesDialogProps {
   /** The line whose sources are shown; null closes the dialog. */
   line: ListLine | null;
   editable: boolean;
+  /** Without a connection: the buttons are disabled. */
+  offline: boolean;
   onClose: () => void;
   onHide: (line: ListLine, hidden: boolean) => void;
   onEdit: (extraId: string) => void;
 }
 
 /** LIST-08: where a line comes from; meals the viewer can't see are "Private meal" (VIS-06). */
-function SourcesDialog({ listId, line, editable, onClose, onHide, onEdit }: SourcesDialogProps) {
+function SourcesDialog({
+  listId,
+  line,
+  editable,
+  offline,
+  onClose,
+  onHide,
+  onEdit,
+}: SourcesDialogProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const removeItem = useRemoveExtraItem(listId);
@@ -333,6 +354,7 @@ function SourcesDialog({ listId, line, editable, onClose, onHide, onEdit }: Sour
                         variant="outline"
                         size="compact"
                         aria-label={t('lists.sources.editLabel', { name: line.name })}
+                        disabled={offline}
                         onClick={() => source.extra_id && onEdit(source.extra_id)}
                       >
                         <Pencil aria-hidden="true" />
@@ -342,7 +364,7 @@ function SourcesDialog({ listId, line, editable, onClose, onHide, onEdit }: Sour
                         variant="outline"
                         size="compact"
                         aria-label={t('lists.item.removeLabel', { name: line.name })}
-                        disabled={removeItem.isPending}
+                        disabled={removeItem.isPending || offline}
                         onClick={() => source.extra_id && removeItem.mutate(source.extra_id)}
                       >
                         <Trash2 aria-hidden="true" />
@@ -357,7 +379,7 @@ function SourcesDialog({ listId, line, editable, onClose, onHide, onEdit }: Sour
             {editable && (
               <DialogFooter>
                 {line.hidden ? (
-                  <Button variant="outline" onClick={() => onHide(line, false)}>
+                  <Button variant="outline" disabled={offline} onClick={() => onHide(line, false)}>
                     <RotateCcw aria-hidden="true" />
                     {t('lists.lines.restore')}
                   </Button>
@@ -365,6 +387,7 @@ function SourcesDialog({ listId, line, editable, onClose, onHide, onEdit }: Sour
                   <Button
                     variant="outline"
                     aria-label={t('lists.lines.hideLabel', { name: line.name })}
+                    disabled={offline}
                     onClick={() => onHide(line, true)}
                   >
                     <EyeOff aria-hidden="true" />

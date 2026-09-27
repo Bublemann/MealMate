@@ -18,6 +18,7 @@ const TABS = [
 
 describe('Layout', () => {
   it('opens on Lists with the four tabs in the bottom navigation', async () => {
+    mockApi();
     const { router } = renderApp('/');
 
     expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();
@@ -49,6 +50,7 @@ describe('Layout', () => {
   });
 
   it('sends unknown paths to Lists', async () => {
+    mockApi();
     const { router } = renderApp('/does/not/exist');
 
     expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();

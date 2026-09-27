@@ -572,6 +572,7 @@
           "auth.csrf",
           "auth.code_invalid",
           "auth.password_incorrect",
+          "auth.user_mismatch",
           "couple.already_in_couple",
           "couple.target_in_couple",
           "couple.request_pending",
@@ -2478,6 +2479,29 @@
           }
         },
         "title": "ListUpdate",
+        "type": "object"
+      },
+      "ListsSync": {
+        "description": "The local copy for offline use (SYNC-02): every list the viewer can edit that is a\ndraft or being shopped (their own and those their partner shares with them), each exactly\nas `GET /api/lists/{id}` shows it, most recently edited first. A list that is missing from\nit is gone from the copy (deleted, done, or access lost; SYNC-10). `generated_at` is the\nserver time of the answer; it is not part of the `ETag`, which covers `lists` only.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "lists": {
+            "items": {
+              "$ref": "#/components/schemas/ListDetail"
+            },
+            "title": "Lists",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lists",
+          "generated_at"
+        ],
+        "title": "ListsSync",
         "type": "object"
       },
       "LoginRequest": {
@@ -6423,6 +6447,65 @@
         ]
       }
     },
+    "/api/lists/sync": {
+      "get": {
+        "description": "The local copy for offline use (SYNC-02, SYNC-10): every list you can edit that is a\ndraft or being shopped (yours and those your partner shares with you), each as\n`GET /api/lists/{id}` shows it, most recently edited first. Replace the stored copy with\nit: a list that is missing was deleted, finished or is no longer yours to edit. The weak\n`ETag` covers `lists` but not `generated_at`, so `If-None-Match` gives a 304 while no list\nin it changed.",
+        "operationId": "sync_lists",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListsSync"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "Unchanged since the given ETag"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Sync Lists",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/api/lists/{list_id}": {
       "delete": {
         "description": "Delete your list, whatever its state.",
@@ -7128,7 +7211,7 @@
     },
     "/api/lists/{list_id}/ops": {
       "post": {
-        "description": "Apply the actions of shopping mode in order, in one transaction (plan § 5.8): check\noff, add, rename and delete free-text items, finish. Each op is applied once, however often\nit is sent (SYNC-05); the result of each and the list afterwards come back. The list must\nbe one you may edit (404, 403 otherwise).",
+        "description": "Apply the actions of shopping mode in order, in one transaction (plan § 5.8): check\noff, add, rename and delete free-text items, finish. Each op is applied once, however often\nit is sent (SYNC-05); the result of each and the list afterwards come back. The list must\nbe one you may edit (404, 403 otherwise).\n\n`X-MealMate-User` guards against a phone sending one user's queued ops with another user's\nsession (SYNC-10): a mismatch is refused before anything else (409 `auth.user_mismatch`).",
         "operationId": "apply_list_ops",
         "parameters": [
           {
@@ -7138,6 +7221,25 @@
             "schema": {
               "title": "List Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The id of the user who made the ops. If given and not the signed-in user, nothing is applied (409 `auth.user_mismatch`).",
+            "in": "header",
+            "name": "X-MealMate-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The id of the user who made the ops. If given and not the signed-in user, nothing is applied (409 `auth.user_mismatch`).",
+              "title": "X-Mealmate-User"
             }
           }
         ],

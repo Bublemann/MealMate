@@ -13,8 +13,11 @@ import {
 } from '@/components/ui/alert-dialog';
 
 interface ConfirmDialogProps {
-  /** The button that opens the dialog. */
-  trigger: ReactNode;
+  /** The button that opens the dialog; without it the dialog is opened with `open`. */
+  trigger?: ReactNode;
+  /** Controlled: whether the dialog is open, and what happens when it wants to close. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   title: string;
   description: string;
   confirmLabel: string;
@@ -25,6 +28,8 @@ interface ConfirmDialogProps {
 /** Asks before an action that can't (easily) be undone. */
 export function ConfirmDialog({
   trigger,
+  open,
+  onOpenChange,
   title,
   description,
   confirmLabel,
@@ -34,8 +39,8 @@ export function ConfirmDialog({
   const { t } = useTranslation();
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

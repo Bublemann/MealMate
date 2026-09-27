@@ -6,11 +6,16 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
-import { ApiError, isApiError, type ErrorCode } from '@/api/errors';
+import { ApiError, isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
 import { useAuthSession, useCurrentUser } from '@/features/auth/context';
 import { FILTER_HIDDEN_KEY } from '@/features/meals/api';
+import { useSyncEngine } from '@/features/sync/context';
 import { uuidv7 } from '@/lib/uuid';
+import { detailKey, HISTORY_KEY, SUMMARIES_KEY, summariesKey, type ListScope } from './keys';
+
+export { isUnreachable } from '@/api/errors';
+export type { ListScope } from './keys';
 
 export type ListDetail = components['schemas']['ListDetail'];
 export type ListSummary = components['schemas']['ListSummary'];
@@ -23,23 +28,14 @@ export type ExtraItemUpdate = components['schemas']['ExtraItemUpdate'];
 export type ListUpdate = components['schemas']['ListUpdate'];
 export type ListCopyResult = components['schemas']['ListCopyResult'];
 export type LineNeedsMore = components['schemas']['LineNeedsMore'];
-type Op = components['schemas']['OpsRequest']['ops'][number];
+export type Op = components['schemas']['Op'];
 export type ExtraAddPayload = Extract<Op, { type: 'extra.add' }>['payload'];
 export type ExtraUpdatePayload = Extract<Op, { type: 'extra.update' }>['payload'];
 
 /** SYNC-08: a list on screen is loaded again this often (ms), while the app is visible. */
 export const POLL_INTERVAL_MS = 5_000;
 
-/** `mine`: my drafts and my partner's shared ones; `others`: other lists I may look at (UI-02). */
-export type ListScope = 'mine' | 'others';
-
-const LISTS_KEY = ['lists'] as const;
-const SUMMARIES_KEY = [...LISTS_KEY, 'summaries'] as const;
-const summariesKey = (scope: ListScope) => [...SUMMARIES_KEY, scope] as const;
-const detailKey = (id: string) => [...LISTS_KEY, 'detail', id] as const;
-const changeKey = (id: string) => [...LISTS_KEY, 'change', id] as const;
-// Below ['meals'], so everything that reloads the meals reloads these too.
-const historyKey = [...SUMMARIES_KEY, 'history'] as const;
+const changeKey = (id: string) => ['lists', 'change', id] as const;
 const RECENT_MEALS_KEY = ['meals', 'recent'] as const;
 const VISIBLE_USERS_KEY = ['users', 'visible', 'lists'] as const;
 
@@ -49,10 +45,14 @@ function invalidateSummaries(queryClient: QueryClient) {
 
 /** Lists in `scope` that are drafts or being shopped, most recently edited first (UI-02). */
 export function useLists(scope: ListScope) {
+  const engine = useSyncEngine();
   return useQuery({
     queryKey: summariesKey(scope),
     queryFn: ({ signal }) =>
       unwrap(api.GET('/api/lists', { params: { query: { scope } }, signal })),
+    // My lists are shown from the local copy until the server answers (SYNC-09).
+    initialData: scope === 'mine' ? () => engine.copiedSummaries() : undefined,
+    initialDataUpdatedAt: () => engine.copiedSummariesAt(),
   });
 }
 
@@ -136,38 +136,28 @@ function isFinal(error: unknown): boolean {
 /**
  * One list with its meals and the aggregated lines, as the server computed them (AGG-01). While
  * it is on screen and the app is visible it is checked for changes every 5 seconds, and at once
- * when the app comes back to the foreground (SYNC-08, LIST-09).
+ * when the app comes back to the foreground (SYNC-08, LIST-09). Until the server answers, the
+ * local copy is shown, and it stays when the server can't be reached (SYNC-09). The view layers
+ * the user's waiting ops on top (`usePendingList`).
  */
 export function useList(id: string) {
   const queryClient = useQueryClient();
+  const engine = useSyncEngine();
   return useQuery({
     queryKey: detailKey(id),
     queryFn: ({ signal }) => loadList(queryClient, id, signal),
+    initialData: () => engine.copied(id),
+    initialDataUpdatedAt: () => engine.copiedAt(id),
     refetchOnWindowFocus: 'always',
     refetchInterval: (query) => (isFinal(query.state.error) ? false : POLL_INTERVAL_MS),
     structuralSharing: shareWithEtag,
   });
 }
 
-/** Whether a failed load means the server couldn't be reached (SYNC-07/09). */
-export function isUnreachable(error: unknown): boolean {
-  return !isApiError(error) || error.status === 0 || error.status >= 500;
-}
-
-/** An op the server turned down (plan § 5.8); `list` is the list as it is now. */
-export class OpRejectedError extends ApiError {
-  readonly list: ListDetail;
-
-  constructor(code: ErrorCode, list: ListDetail) {
-    super({ status: 409, code });
-    this.list = list;
-  }
-}
-
 /**
  * What makes an action one op (SYNC-05/06): a UUIDv7 and the time of the tap, made when the user
- * acts, not when the op is sent (a change may wait for the ones before it). Sending the same
- * action again (a retry) keeps both, so the server applies it once.
+ * acts, not when the op is sent (it may wait in the outbox for a long time). Sending it again
+ * keeps both, so the server applies it once.
  */
 export interface OpStamp {
   opId: string;
@@ -181,43 +171,22 @@ export function stampOp(): OpStamp {
 }
 
 /**
- * Sends ops through `POST /lists/{id}/ops`, the endpoint the offline outbox uses too (plan § 5.8).
- * Resolves to the list as it is now; rejects with an OpRejectedError if the server turned an op
- * down.
- */
-async function sendOps(listId: string, ops: Op[]): Promise<ListDetail> {
-  const { results, list } = await unwrap(
-    api.POST('/api/lists/{list_id}/ops', {
-      params: { path: { list_id: listId } },
-      body: { ops },
-    }),
-  );
-  const rejected = results.find((result) => result.status === 'rejected');
-  if (rejected) throw new OpRejectedError(rejected.code ?? 'common.internal', list);
-  return list;
-}
-
-/**
  * A change to list `listId` that answers with the whole list. Changes of one list run one after
  * another (scope), and only the answer to the last one is put into the cache: an earlier answer
  * would briefly undo the optimistic state of a change still waiting (e.g. several taps on +).
  * A load of the list that is still running when a change starts is cancelled, and loads that
  * answer while changes wait are ignored, so an older answer can't replace the change's.
- * A failed change is undone on screen where it says how (`revert`), and the list is loaded again
- * instead of guessing; an op the server turned down brings the list as it is now.
+ * A failed change is undone by loading the list again instead of guessing.
  */
 function useListChange<Variables>(
   listId: string,
   mutationFn: (variables: Variables) => Promise<ListDetail>,
   {
     optimistic,
-    revert,
     onSuccess,
   }: {
     /** The change as it will look, applied to the cached list right away. */
     optimistic?: (variables: Variables) => (list: ListDetail) => ListDetail;
-    /** Undoes the optimistic change on the cached list, given the list from before it. */
-    revert?: (variables: Variables, before: ListDetail) => (list: ListDetail) => ListDetail;
     onSuccess?: (queryClient: QueryClient) => void;
   } = {},
 ) {
@@ -230,23 +199,16 @@ function useListChange<Variables>(
     mutationFn,
     onMutate: async (variables) => {
       changeStarted(queryClient, listId);
-      const before = queryClient.getQueryData<ListDetail>(detailKey(listId));
       await queryClient.cancelQueries({ queryKey: detailKey(listId) });
       if (optimistic) update(optimistic(variables));
-      return { before };
     },
     onSuccess: (list) => {
       if (changeAnswered(queryClient, listId) === 0)
         queryClient.setQueryData(detailKey(listId), list);
       onSuccess?.(queryClient);
     },
-    onError: (error, variables, context) => {
-      const waiting = changeAnswered(queryClient, listId);
-      if (error instanceof OpRejectedError) {
-        if (waiting === 0) queryClient.setQueryData(detailKey(listId), error.list);
-      } else if (revert && context?.before) {
-        update(revert(variables, context.before));
-      }
+    onError: () => {
+      changeAnswered(queryClient, listId);
       void queryClient.invalidateQueries({ queryKey: detailKey(listId) });
     },
     onSettled: () => invalidateSummaries(queryClient),
@@ -358,62 +320,42 @@ export function useRemoveListMeal(listId: string) {
 /**
  * LIST-06: a linked or free-text extra item. Its id comes with it (made by the input, which keeps
  * it while the item is sent again), so a retry after a lost answer doesn't add it twice. While
- * shopping, a free-text item is sent as an `extra.add` op instead (SHOP-02), as offline (SYNC-03),
- * with the stamp the input keeps along with the id.
+ * shopping, a free-text item is an `extra.add` op of the outbox instead (SHOP-02, SYNC-03).
  */
 export function useAddExtraItem(listId: string) {
-  return useListChange(listId, (item: ExtraItemCreate | ({ op: ExtraAddPayload } & OpStamp)) =>
-    'op' in item
-      ? sendOps(listId, [{ type: 'extra.add', payload: item.op, op_id: item.opId, at: item.at }])
-      : unwrap(
-          api.POST('/api/lists/{list_id}/extra-items', {
-            params: { path: { list_id: listId } },
-            body: item,
-          }),
-        ),
+  return useListChange(listId, (item: ExtraItemCreate) =>
+    unwrap(
+      api.POST('/api/lists/{list_id}/extra-items', {
+        params: { path: { list_id: listId } },
+        body: item,
+      }),
+    ),
   );
 }
 
 /**
  * Changes an extra item; it keeps its kind. While shopping, a free-text item is renamed with an
- * `extra.update` op instead (LIST-12), as offline (M6).
+ * `extra.update` op of the outbox instead (LIST-12, SYNC-03).
  */
 export function useUpdateExtraItem(listId: string) {
-  return useListChange(
-    listId,
-    (
-      change: { extraId: string; body: ExtraItemUpdate } | ({ op: ExtraUpdatePayload } & OpStamp),
-    ) =>
-      'op' in change
-        ? sendOps(listId, [
-            { type: 'extra.update', payload: change.op, op_id: change.opId, at: change.at },
-          ])
-        : unwrap(
-            api.PATCH('/api/lists/{list_id}/extra-items/{extra_id}', {
-              params: { path: { list_id: listId, extra_id: change.extraId } },
-              body: change.body,
-            }),
-          ),
+  return useListChange(listId, ({ extraId, body }: { extraId: string; body: ExtraItemUpdate }) =>
+    unwrap(
+      api.PATCH('/api/lists/{list_id}/extra-items/{extra_id}', {
+        params: { path: { list_id: listId, extra_id: extraId } },
+        body,
+      }),
+    ),
   );
 }
 
-/** Deletes an extra item; while shopping, a free-text item through an `extra.delete` op. */
+/** Deletes an extra item; while shopping, a free-text item is an `extra.delete` op instead. */
 export function useRemoveExtraItem(listId: string) {
-  return useListChange(listId, (item: string | ({ extraId: string } & OpStamp)) =>
-    typeof item === 'string'
-      ? unwrap(
-          api.DELETE('/api/lists/{list_id}/extra-items/{extra_id}', {
-            params: { path: { list_id: listId, extra_id: item } },
-          }),
-        )
-      : sendOps(listId, [
-          {
-            type: 'extra.delete',
-            payload: { extra_id: item.extraId },
-            op_id: item.opId,
-            at: item.at,
-          },
-        ]),
+  return useListChange(listId, (extraId: string) =>
+    unwrap(
+      api.DELETE('/api/lists/{list_id}/extra-items/{extra_id}', {
+        params: { path: { list_id: listId, extra_id: extraId } },
+      }),
+    ),
   );
 }
 
@@ -452,78 +394,41 @@ export function useStartShopping(listId: string) {
   );
 }
 
-export interface CheckLine extends OpStamp {
-  key: string;
-  checked: boolean;
-}
-
 /**
- * SHOP-01: checks a line off or back on through the ops (the most recent tap wins, SYNC-06), with
- * the stamp of the tap (`stampOp()` where it happened). The line moves at once, marked as checked
- * by me; if sending fails it moves back.
+ * The shopping actions as ops (plan § 5.8), stamped where the user acted (`stampOp()`). They go
+ * through the outbox, online or offline (`useQueueOp` of the sync module): one code path.
  */
-export function useCheckLine(listId: string) {
-  const me = useCurrentUser();
-  return useListChange(
-    listId,
-    ({ key, checked, opId, at }: CheckLine) =>
-      sendOps(listId, [
-        { type: 'line.check', payload: { line_key: key, checked }, op_id: opId, at },
-      ]),
-    {
-      optimistic:
-        ({ key, checked, at }) =>
-        (list) => ({
-          ...list,
-          lines: list.lines.map((line) =>
-            line.key === key
-              ? {
-                  ...line,
-                  checked,
-                  checked_at: at,
-                  checked_by: checked
-                    ? { id: me.id, display_name: me.display_name, deactivated: false }
-                    : null,
-                  new: false,
-                  needs_more: null,
-                }
-              : line,
-          ),
-        }),
-      revert:
-        ({ key }, before) =>
-        (list) => {
-          const previous = before.lines.find((line) => line.key === key);
-          if (!previous) return list;
-          return {
-            ...list,
-            lines: list.lines.map((line) =>
-              line.key === key
-                ? {
-                    ...line,
-                    checked: previous.checked,
-                    checked_at: previous.checked_at,
-                    checked_by: previous.checked_by,
-                    new: previous.new,
-                    needs_more: previous.needs_more,
-                  }
-                : line,
-            ),
-          };
-        },
-    },
-  );
-}
-
-/**
- * SHOP-04: finishes shopping (the `list.finish` op, stamped when *Finish* was tapped: the list
- * counts as finished then); the list moves to the history.
- */
-export function useFinishList(listId: string) {
-  return useListChange(listId, ({ opId, at }: OpStamp) =>
-    sendOps(listId, [{ type: 'list.finish', payload: {}, op_id: opId, at }]),
-  );
-}
+export const shoppingOps = {
+  /** SHOP-01: check a line off or back on; the most recent tap wins (SYNC-06). */
+  check: (key: string, checked: boolean, { opId, at }: OpStamp): Op => ({
+    type: 'line.check',
+    payload: { line_key: key, checked },
+    op_id: opId,
+    at,
+  }),
+  /** SHOP-02: a free-text item with the client's id. */
+  addExtra: (payload: ExtraAddPayload, { opId, at }: OpStamp): Op => ({
+    type: 'extra.add',
+    payload,
+    op_id: opId,
+    at,
+  }),
+  /** LIST-12: rename a free-text item (its category stays). */
+  updateExtra: (payload: ExtraUpdatePayload, { opId, at }: OpStamp): Op => ({
+    type: 'extra.update',
+    payload,
+    op_id: opId,
+    at,
+  }),
+  removeExtra: (extraId: string, { opId, at }: OpStamp): Op => ({
+    type: 'extra.delete',
+    payload: { extra_id: extraId },
+    op_id: opId,
+    at,
+  }),
+  /** SHOP-04: stamped when *Finish* was tapped: the list counts as finished then. */
+  finish: ({ opId, at }: OpStamp): Op => ({ type: 'list.finish', payload: {}, op_id: opId, at }),
+};
 
 /** SHOP-06: a done list goes back to shopping, e.g. after finishing by mistake. */
 export function useReopenList(listId: string) {
@@ -553,7 +458,7 @@ export function useShopAgain(listId: string) {
 /** SHOP-05: done lists in my history (mine and my partner's shared ones), newest first. */
 export function useListHistory() {
   return useQuery({
-    queryKey: historyKey,
+    queryKey: HISTORY_KEY,
     queryFn: ({ signal }) => unwrap(api.GET('/api/lists/history', { signal })),
   });
 }

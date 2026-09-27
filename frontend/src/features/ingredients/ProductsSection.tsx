@@ -3,6 +3,7 @@ import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { unitLabel } from '@/features/reference/labels';
@@ -34,7 +35,7 @@ export function ProductsSection({ ingredient }: { ingredient: Ingredient }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {products.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-        <ErrorAlert error={products.error} />
+        <LoadError error={products.error} />
         {products.data?.length === 0 && (
           <p className="text-muted-foreground">{t('ingredients.products.empty')}</p>
         )}

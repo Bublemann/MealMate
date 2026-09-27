@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Button } from '@/components/ui/button';
 import { useCategories, type Category } from '@/features/reference/api';
 import { categoryName } from '@/features/reference/labels';
@@ -20,7 +21,7 @@ export function AdminCategoriesScreen() {
     <AdminScreen title={t('admin.categories.title')} testId={testIds.screenAdminCategories}>
       <p className="text-muted-foreground">{t('admin.categories.text')}</p>
       {categories.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={categories.error} />
+      <LoadError error={categories.error} />
       {categories.data && <CategoryOrder categories={categories.data} />}
     </AdminScreen>
   );

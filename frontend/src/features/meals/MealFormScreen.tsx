@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +63,7 @@ function EditMeal({ id }: { id: string }) {
         testId={testIds.screenMealForm}
       >
         {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-        <ErrorAlert error={meal.error ?? forbidden} />
+        <LoadError error={meal.error ?? forbidden} />
       </Screen>
     );
   }

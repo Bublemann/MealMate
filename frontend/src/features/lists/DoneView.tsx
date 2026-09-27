@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { cn } from '@/lib/utils';
@@ -16,13 +17,15 @@ import type { ListViewState } from './ListScreen';
 import { Reminder } from './Reminder';
 
 interface DoneViewProps {
-  list: ListDetail;
+  /** `pendingFinish`: finished here, not sent yet; reopening waits until it is. */
+  list: ListDetail & { pendingFinish?: boolean };
   categoryKeys: ReadonlyMap<string, string>;
 }
 
 /**
  * A finished list, read-only (LIST-10): checked lines count as bought, the others are greyed
- * (SHOP-05). "Shop again" starts a new draft from it, "Reopen" goes back to shopping (SHOP-06).
+ * (SHOP-05). "Shop again" starts a new draft from it, "Reopen" goes back to shopping (SHOP-06);
+ * both need a connection (SYNC-03). A list finished here but not sent yet shows as done already.
  */
 export function DoneView({ list, categoryKeys }: DoneViewProps) {
   const { t } = useTranslation();
@@ -31,6 +34,7 @@ export function DoneView({ list, categoryKeys }: DoneViewProps) {
   const headingId = useId();
   const shopAgain = useShopAgain(list.id);
   const reopen = useReopenList(list.id);
+  const offline = !useConnected();
   const groups = groupByCategory(
     list.lines.filter((line) => !line.hidden),
     categoryKeys,
@@ -55,7 +59,7 @@ export function DoneView({ list, categoryKeys }: DoneViewProps) {
         <div className="flex flex-wrap gap-2">
           <Button
             data-testid={testIds.shopAgain}
-            disabled={shopAgain.isPending}
+            disabled={shopAgain.isPending || offline}
             onClick={onShopAgain}
           >
             <ShoppingCart aria-hidden="true" />
@@ -65,7 +69,7 @@ export function DoneView({ list, categoryKeys }: DoneViewProps) {
             <Button
               variant="outline"
               data-testid={testIds.reopenList}
-              disabled={reopen.isPending}
+              disabled={reopen.isPending || offline || list.pendingFinish === true}
               onClick={() => reopen.mutate()}
             >
               <RotateCcw aria-hidden="true" />

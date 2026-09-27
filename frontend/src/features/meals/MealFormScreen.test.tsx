@@ -541,7 +541,9 @@ describe('MealFormScreen (edit)', () => {
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/meals/meal-new'));
       const paths = fetchMock.mock.calls.map(([request]) => new URL(request.url).pathname);
-      expect(paths.filter((path) => path.startsWith('/api/lists/'))).toEqual([]);
+      // The sync module's refresh of the local copy is not about this list.
+      const listPaths = paths.filter((path) => path.startsWith('/api/lists/'));
+      expect(listPaths.filter((path) => path !== '/api/lists/sync')).toEqual([]);
     });
   });
 });

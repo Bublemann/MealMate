@@ -4,12 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { UserFilterChips } from '@/components/UserFilterChips';
 import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/features/auth/context';
 import { useCouple } from '@/features/couple/api';
 import { FirstLoginHints } from '@/features/hints/FirstLoginHints';
+import { useConnected, usePendingFinishes } from '@/features/sync/context';
+import { SyncIndicator } from '@/features/sync/SyncIndicator';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
@@ -28,6 +31,8 @@ export function ListsScreen() {
 
   return (
     <Screen title={t('nav.lists')} testId={testIds.screenLists}>
+      {/* Only when there is something to say: offline, or changes waiting (SYNC-07). */}
+      <SyncIndicator quiet />
       <FirstLoginHints />
       <MyLists />
       <HistoryEntry />
@@ -38,14 +43,18 @@ export function ListsScreen() {
 
 /**
  * LIST-01: "+ New list" creates a draft right away and opens it with the meal picker. Lists being
- * shopped come first, as "Continue shopping" cards (UI-02).
+ * shopped come first, as "Continue shopping" cards (UI-02). Creating a list needs the server, so
+ * offline the button is disabled rather than failing on a tap (SYNC-03).
  */
 function MyLists() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const headingId = useId();
   const lists = useLists('mine');
+  const finishing = usePendingFinishes();
   const create = useCreateList();
+  const connected = useConnected();
+  const canCreate = connected && !create.isPending;
 
   function newList() {
     create.mutate(undefined, {
@@ -64,7 +73,7 @@ function MyLists() {
           title={t('lists.empty.title')}
           text={t('lists.empty.text')}
           actionLabel={t('lists.empty.action')}
-          onAction={create.isPending ? undefined : newList}
+          onAction={canCreate ? newList : undefined}
           actionTestId={testIds.newList}
         />
         <ErrorAlert error={create.error} />
@@ -72,8 +81,10 @@ function MyLists() {
     );
   }
 
-  const shopping = lists.data?.filter((list) => list.status === 'shopping') ?? [];
-  const drafts = lists.data?.filter((list) => list.status !== 'shopping');
+  // Finished here but not sent yet: already in the history as far as this phone knows.
+  const current = lists.data?.filter((list) => !finishing.has(list.id));
+  const shopping = current?.filter((list) => list.status === 'shopping') ?? [];
+  const drafts = current?.filter((list) => list.status !== 'shopping');
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
@@ -83,7 +94,7 @@ function MyLists() {
       <Button
         data-testid={testIds.newList}
         onClick={newList}
-        disabled={create.isPending}
+        disabled={!canCreate}
         className="self-start"
       >
         <Plus aria-hidden="true" />
@@ -94,7 +105,8 @@ function MyLists() {
         {t('lists.mine.title')}
       </h2>
       {lists.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={lists.error} />
+      {/* Shown from the local copy when the server can't be reached (SYNC-09). */}
+      <LoadError error={lists.data ? null : lists.error} />
       {drafts && drafts.length === 0 && (
         <p className="text-muted-foreground">{t('lists.mine.noDrafts')}</p>
       )}
@@ -173,7 +185,7 @@ function OthersLists() {
         </h2>
         <p className="text-muted-foreground">{t('lists.others.text')}</p>
       </div>
-      <ErrorAlert error={users.error} />
+      <LoadError error={users.error} />
       {others && others.length > 0 && (
         <div className="flex flex-col gap-2">
           <UserFilterChips
@@ -189,7 +201,8 @@ function OthersLists() {
         </div>
       )}
       {lists.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={lists.error} />
+      {/* One offline message per section. */}
+      <LoadError error={users.error ? null : lists.error} />
       {shown && shown.length === 0 && (
         <p className="text-muted-foreground">
           {others?.some((person) => hidden.includes(person.id))

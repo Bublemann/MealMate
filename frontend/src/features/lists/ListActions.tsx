@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useCouple } from '@/features/couple/api';
+import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { userLabel } from '@/i18n/users';
@@ -41,10 +42,12 @@ interface ListActionsProps {
  * What can be done with the list as a whole: export (everyone, EXP-01), rename (editors,
  * LIST-02), delete and the share switch (owner, LIST-13, CPL-02), or, on someone else's list,
  * "Copy to my lists" (VIS-03). The server says who may do what (`can_edit`, `is_owner`); a done
- * list can't be renamed or shared differently any more (LIST-10).
+ * list can't be renamed or shared differently any more (LIST-10). Export also works offline from
+ * the local copy (EXP-03); the rest needs a connection and is disabled without one (SYNC-03).
  */
 export function ListActions({ list, categoryKeys }: ListActionsProps) {
   const { t } = useTranslation();
+  const offline = !useConnected();
   const language = useLanguage();
   const navigate = useNavigate();
   const remove = useDeleteList(list.id);
@@ -74,7 +77,7 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
           <p>{t('lists.detail.readOnly', { name: userLabel(t, list.owner) })}</p>
           <Button
             data-testid={testIds.copyList}
-            disabled={copy.isPending}
+            disabled={copy.isPending || offline}
             onClick={onCopy}
             className="self-start"
           >
@@ -88,7 +91,7 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
           <Share aria-hidden="true" />
           {canShare() ? t('lists.detail.export') : t('lists.detail.exportCopy')}
         </Button>
-        {list.can_edit && list.status !== 'done' && <RenameDialog list={list} />}
+        {list.can_edit && list.status !== 'done' && <RenameDialog list={list} offline={offline} />}
         {list.is_owner && (
           <ConfirmDialog
             trigger={
@@ -96,7 +99,7 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
                 variant="outline"
                 data-testid={testIds.deleteList}
                 aria-label={t('lists.detail.deleteLabel', { name })}
-                disabled={remove.isPending}
+                disabled={remove.isPending || offline}
               >
                 <Trash2 aria-hidden="true" />
                 {t('lists.detail.delete')}
@@ -118,14 +121,14 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
         {exported === 'copied' && t('lists.detail.exportCopied')}
         {exported === 'failed' && t('lists.detail.exportFailed')}
       </p>
-      {list.is_owner && list.status !== 'done' && <ShareSwitch list={list} />}
+      {list.is_owner && list.status !== 'done' && <ShareSwitch list={list} offline={offline} />}
       <ErrorAlert error={remove.error ?? copy.error} />
     </div>
   );
 }
 
 /** CPL-02: only the owner, and only while in a couple, shares a list with the partner. */
-function ShareSwitch({ list }: { list: ListDetail }) {
+function ShareSwitch({ list, offline }: { list: ListDetail; offline: boolean }) {
   const { t } = useTranslation();
   const couple = useCouple();
   const update = useUpdateList(list.id);
@@ -155,7 +158,7 @@ function ShareSwitch({ list }: { list: ListDetail }) {
           data-testid={testIds.shareListSwitch}
           aria-describedby={hintId}
           checked={checked}
-          disabled={update.isPending}
+          disabled={update.isPending || offline}
           onCheckedChange={(value) => update.mutate({ shared_with_partner: value })}
         />
       </div>
@@ -165,7 +168,7 @@ function ShareSwitch({ list }: { list: ListDetail }) {
 }
 
 /** LIST-02: editors rename the list; an empty name goes back to the translated default. */
-function RenameDialog({ list }: { list: ListDetail }) {
+function RenameDialog({ list, offline }: { list: ListDetail; offline: boolean }) {
   const { t } = useTranslation();
   const update = useUpdateList(list.id);
   const [open, setOpen] = useState(false);
@@ -189,7 +192,7 @@ function RenameDialog({ list }: { list: ListDetail }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" data-testid={testIds.renameList}>
+        <Button variant="outline" data-testid={testIds.renameList} disabled={offline}>
           <Pencil aria-hidden="true" />
           {t('lists.detail.rename')}
         </Button>

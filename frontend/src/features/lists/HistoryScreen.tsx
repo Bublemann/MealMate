@@ -3,7 +3,7 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
-import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
@@ -32,7 +32,7 @@ export function HistoryScreen() {
         {t('lists.detail.back')}
       </Link>
       {history.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={history.error} />
+      <LoadError error={history.error} />
       {history.data && weeks.length === 0 && (
         <EmptyState
           icon={History}
