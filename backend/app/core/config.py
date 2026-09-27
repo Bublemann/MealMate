@@ -43,6 +43,8 @@ class Settings(BuildInfo):
     invite_ttl_days: int = Field(default=7, ge=1)
     reset_ttl_hours: int = Field(default=24, ge=1)
     session_idle_days: int = Field(default=90, ge=1)
+    # bcrypt cost factor (plan § 5.4, O-7); tests use the minimum of 4.
+    bcrypt_rounds: int = Field(default=12, ge=4, le=16)
 
     @field_validator("public_url")
     @classmethod

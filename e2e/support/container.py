@@ -37,6 +37,17 @@ class AppContainer:
         )
         return result.stdout.strip() == "true"
 
+    def exec(self, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+        """Runs a command inside the container (as its app user), e.g. the `mealmate` CLI."""
+        command = ["docker", "exec", *(["--interactive"] if stdin is not None else [])]
+        return subprocess.run(
+            [*command, self.container_id, *args],
+            input=stdin,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
     def stop(self) -> None:
         # Started with --rm, so stopping also removes it.
         subprocess.run(

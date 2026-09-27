@@ -11,6 +11,7 @@ from app.cli import main
 from app.db.migrations import alembic_config, current_revision, upgrade_database
 
 runner = CliRunner()
+HEAD = "0002"
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +34,7 @@ def test_upgrade_creates_the_database_without_a_snapshot(data_dir: Path) -> None
 
     assert result.exit_code == 0, result.output
     assert "Database is up to date." in result.output
-    assert current_revision(data_dir / "mealmate.db") == "0001"
+    assert current_revision(data_dir / "mealmate.db") == HEAD
     assert snapshots(data_dir) == []
 
 
@@ -50,7 +51,7 @@ def test_snapshot_only_when_migrations_are_pending(data_dir: Path) -> None:
     assert snapshot.startswith("mealmate-base-")
     assert f"Pre-migration snapshot: {data_dir / 'pre-migrate' / snapshot}" in result.output
     assert current_revision(data_dir / "pre-migrate" / snapshot) is None
-    assert current_revision(data_dir / "mealmate.db") == "0001"
+    assert current_revision(data_dir / "mealmate.db") == HEAD
 
 
 def test_keeps_the_newest_three_snapshots(data_dir: Path) -> None:
@@ -94,7 +95,7 @@ def test_backup_db(data_dir: Path, tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert f"Backup written to {target}" in result.output
-    assert current_revision(target) == "0001"
+    assert current_revision(target) == HEAD
 
 
 def test_backup_db_without_a_database(tmp_path: Path) -> None:

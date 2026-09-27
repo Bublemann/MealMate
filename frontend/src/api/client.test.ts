@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApiClient, READ_TIMEOUT_MS, unwrap, withTimeout, WRITE_TIMEOUT_MS } from './client';
+import {
+  connectAuth,
+  createApiClient,
+  READ_TIMEOUT_MS,
+  unwrap,
+  withTimeout,
+  WRITE_TIMEOUT_MS,
+  type AuthBridge,
+} from './client';
 import { ApiError } from './errors';
 
 const BASE_URL = 'http://mealmate.test';
@@ -163,5 +171,129 @@ describe('api client', () => {
 
       await expect(result).resolves.toMatchObject({ code: 'client.timeout' });
     });
+  });
+});
+
+describe('auth middleware', () => {
+  const api = createApiClient({ baseUrl: BASE_URL });
+
+  function fakeBridge(token = 'old-token') {
+    let current: string | null = token;
+    const bridge = {
+      accessToken: vi.fn(() => current),
+      settled: vi.fn(() => Promise.resolve()),
+      refresh: vi.fn(() => {
+        current = 'new-token';
+        return Promise.resolve(true);
+      }),
+      sessionEnded: vi.fn(),
+    } satisfies AuthBridge;
+    connectAuth(bridge);
+    return bridge;
+  }
+
+  /** Answers 401 with `code` to the old token and 200 (echoing the body) to the new one. */
+  function expiringServer(code = 'auth.token_expired') {
+    const fetchMock = vi.fn(async (request: Request) => {
+      if (request.headers.get('Authorization') !== 'Bearer new-token') {
+        return jsonResponse({ code, params: {}, fields: [] }, 401);
+      }
+      const body: unknown = request.method === 'GET' ? VERSION : await request.json();
+      return jsonResponse(body);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('sends the access token', async () => {
+    fakeBridge('abc');
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>(() =>
+      Promise.resolve(jsonResponse(VERSION)),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await unwrap(api.GET('/api/version'));
+
+    expect(fetchMock.mock.calls[0]?.[0].headers.get('Authorization')).toBe('Bearer abc');
+  });
+
+  it.each(['auth.token_expired', 'common.unauthorized'])(
+    'refreshes once on %s and retries with the new token and the same body',
+    async (code) => {
+      const bridge = fakeBridge();
+      const fetchMock = expiringServer(code);
+
+      await expect(
+        unwrap(api.PATCH('/api/me', { body: { display_name: 'Anna' } })),
+      ).resolves.toEqual({ display_name: 'Anna' });
+
+      expect(bridge.refresh).toHaveBeenCalledOnce();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1]?.[0].headers.get('Authorization')).toBe('Bearer new-token');
+    },
+  );
+
+  it('gives up after one retry', async () => {
+    const bridge = fakeBridge();
+    bridge.refresh.mockImplementation(() => Promise.resolve(true)); // token stays old
+    const fetchMock = expiringServer();
+
+    await expect(unwrap(api.GET('/api/version'))).rejects.toMatchObject({
+      status: 401,
+      code: 'auth.token_expired',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bridge.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('returns the 401 when the refresh fails', async () => {
+    const bridge = fakeBridge();
+    bridge.refresh.mockImplementation(() => Promise.resolve(false));
+    const fetchMock = expiringServer();
+
+    await expect(unwrap(api.GET('/api/version'))).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(['auth.session_revoked', 'auth.session_expired'])(
+    'ends the session on %s without refreshing',
+    async (code) => {
+      const bridge = fakeBridge();
+      expiringServer(code);
+
+      await expect(unwrap(api.GET('/api/version'))).rejects.toMatchObject({ code });
+      expect(bridge.sessionEnded).toHaveBeenCalledWith(code);
+      expect(bridge.refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  it('leaves the public auth endpoints alone', async () => {
+    const bridge = fakeBridge();
+    const fetchMock = expiringServer('auth.invalid_credentials');
+
+    await expect(
+      unwrap(api.POST('/api/auth/login', { body: { username: 'a', password: 'b' } })),
+    ).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+
+    expect(bridge.settled).not.toHaveBeenCalled();
+    expect(bridge.refresh).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls[0]?.[0].headers.get('Authorization')).toBeNull();
+  });
+
+  it('waits for a refresh in flight before sending', async () => {
+    const bridge = fakeBridge();
+    let settle: () => void = () => undefined;
+    bridge.settled.mockImplementation(() => new Promise<void>((resolve) => (settle = resolve)));
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>(() =>
+      Promise.resolve(jsonResponse(VERSION)),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = unwrap(api.GET('/api/version'));
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+    settle();
+
+    await expect(pending).resolves.toEqual(VERSION);
   });
 });

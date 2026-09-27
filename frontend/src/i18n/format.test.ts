@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatNumber, parseAmount } from './format';
+import { formatDate, formatDateTime, formatNumber, parseAmount } from './format';
 
 describe('formatNumber', () => {
   it('uses the decimal separator of the UI language', () => {
@@ -26,6 +26,14 @@ describe('formatDate', () => {
   it('accepts timestamps and ISO strings', () => {
     expect(formatDate(date.getTime(), 'de')).toBe('26.09.2026');
     expect(formatDate(date.toISOString(), 'en')).toBe('26/09/2026');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('adds the 24-hour time to the date', () => {
+    const date = new Date(2026, 8, 26, 14, 5);
+    expect(formatDateTime(date, 'de')).toBe('26.09.2026, 14:05');
+    expect(formatDateTime(date, 'en')).toBe('26/09/2026, 14:05');
   });
 });
 

@@ -4,6 +4,154 @@
  */
 
 export interface paths {
+    "/api/admin/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Events
+         * @description The admin activity log, newest first (at most 200 entries).
+         */
+        get: operations["admin_list_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Invites
+         * @description All invites with their status, newest first.
+         */
+        get: operations["admin_list_invites"];
+        put?: never;
+        /**
+         * Admin Create Invite
+         * @description A new invite link (ACC-02); the link is returned only this once.
+         */
+        post: operations["admin_create_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/invites/{invite_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin Revoke Invite
+         * @description Revoke an invite so it can no longer be used.
+         */
+        delete: operations["admin_revoke_invite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Users
+         * @description All users, by display name.
+         */
+        get: operations["admin_list_users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin Delete User
+         * @description Delete another user and their data (ADM-03).
+         */
+        delete: operations["admin_delete_user"];
+        options?: never;
+        head?: never;
+        /**
+         * Admin Update User
+         * @description Change another user's role or deactivate/reactivate them.
+         */
+        patch: operations["admin_update_user"];
+        trace?: never;
+    };
+    "/api/admin/users/{user_id}/reset-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Create Reset Link
+         * @description A single-use password reset link for the user (ACC-10); older ones stop working.
+         */
+        post: operations["admin_create_reset_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/codes/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Code
+         * @description Whether an invite or reset code can be used; does not consume it (ACC-04).
+         */
+        post: operations["check_code"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/diag/check": {
         parameters: {
             query?: never;
@@ -44,6 +192,233 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join
+         * @description Register with an invite code and log in (ACC-01, ACC-05, ACC-07).
+         */
+        post: operations["join"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Log in with username and password; sets the refresh cookie (throttled, ACC-11).
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Log out this device: revoke the cookie's session and remove the cookie.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout All
+         * @description Log out every device of the user, this one included (ACC-09).
+         */
+        post: operations["logout_all"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description A new access token (and rotated cookie) for the refresh cookie.
+         *
+         *     Needs the header `X-MealMate-Client: web` (CSRF guard). `{"fork": true}` starts a new,
+         *     independent session instead (first start of the Home Screen app).
+         */
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Password
+         * @description Set a new password with a reset code; ends all other sessions and logs in (ACC-10).
+         */
+        post: operations["reset_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/couple": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Couple
+         * @description The partner, if any, and pending requests.
+         */
+        get: operations["get_couple"];
+        put?: never;
+        post?: never;
+        /**
+         * End Couple
+         * @description End the couple (either partner, any time).
+         */
+        delete: operations["end_couple"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/couple/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Couple Request
+         * @description Send a couple request to another active user.
+         */
+        post: operations["create_couple_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/couple/requests/{request_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Couple Request
+         * @description Accept a request sent to you; cancels all other pending requests of both users.
+         */
+        post: operations["accept_couple_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/couple/requests/{request_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Couple Request
+         * @description Withdraw your own request.
+         */
+        post: operations["cancel_couple_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/couple/requests/{request_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Couple Request
+         * @description Decline a request sent to you.
+         */
+        post: operations["decline_couple_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -56,6 +431,151 @@ export interface paths {
          * @description Checks that the database answers and the data directory is writable.
          */
         get: operations["get_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me
+         * @description The own profile and settings.
+         */
+        get: operations["get_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Me
+         * @description Change display name, language, privacy switches or hidden filter chips.
+         */
+        patch: operations["update_me"];
+        trace?: never;
+    };
+    "/api/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description Change the password; logs out all other devices (throttled like login, ACC-11).
+         */
+        post: operations["change_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Security
+         * @description Password change and reset notices ("Password reset by X on <date>").
+         */
+        get: operations["get_security"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description The own logged-in devices, most recently used first.
+         */
+        get: operations["list_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Session
+         * @description Log out one of the own devices.
+         */
+        delete: operations["revoke_session"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Users
+         * @description All active users except yourself, by display name.
+         */
+        get: operations["list_users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/visible": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Visible Users
+         * @description Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,
+         *     your partner, and everyone whose matching privacy switch is public.
+         */
+        get: operations["list_visible_users"];
         put?: never;
         post?: never;
         delete?: never;
@@ -88,6 +608,117 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AdminAction
+         * @description What an admin (or the command line, with no actor) did.
+         * @enum {string}
+         */
+        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete";
+        /**
+         * AdminEvent
+         * @description `actor` is null for the command line or a deleted admin, `target` for a deleted user.
+         */
+        AdminEvent: {
+            action: components["schemas"]["AdminAction"];
+            actor: components["schemas"]["UserRef"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Details */
+            details: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Id */
+            id: string;
+            target: components["schemas"]["UserRef"] | null;
+        };
+        /** AdminUser */
+        AdminUser: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "admin";
+            /** Username */
+            username: string;
+        };
+        /**
+         * AdminUserUpdate
+         * @description Only the fields that are sent change.
+         */
+        AdminUserUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Role */
+            role?: ("user" | "admin") | null;
+        };
+        /** CodeCheckRequest */
+        CodeCheckRequest: {
+            /** Code */
+            code: string;
+        };
+        /**
+         * CodeInfo
+         * @description A usable code. `username` is set for reset codes only (the account being reset).
+         */
+        CodeInfo: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "invite" | "reset";
+            /** Username */
+            username: string | null;
+        };
+        /** CoupleRequest */
+        CoupleRequest: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            from_user: components["schemas"]["UserRef"];
+            /** Id */
+            id: string;
+            to_user: components["schemas"]["UserRef"];
+        };
+        /** CoupleRequestCreate */
+        CoupleRequestCreate: {
+            /** User Id */
+            user_id: string;
+        };
+        /**
+         * CoupleState
+         * @description The own couple (`partner`, accepted at `since`) and pending requests.
+         */
+        CoupleState: {
+            /** Incoming */
+            incoming: components["schemas"]["CoupleRequest"][];
+            outgoing: components["schemas"]["CoupleRequest"] | null;
+            partner: components["schemas"]["UserRef"] | null;
+            /** Since */
+            since: string | null;
+        };
         /** DiagCookieCheck */
         DiagCookieCheck: {
             /** Present */
@@ -98,7 +729,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -126,7 +757,17 @@ export interface components {
          * @description Why a single request field was rejected (`fields[].code` in the envelope).
          * @enum {string}
          */
-        FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format";
+        FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username";
+        /**
+         * FilterHidden
+         * @description User filter chips this user has switched off, per screen (MEAL-10, UI-02).
+         */
+        FilterHidden: {
+            /** Lists */
+            lists: string[];
+            /** Meals */
+            meals: string[];
+        };
         /** HealthStatus */
         HealthStatus: {
             /**
@@ -134,6 +775,213 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** Invite */
+        Invite: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["UserRef"] | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "used" | "expired" | "revoked";
+            /** Tailscale Share Url */
+            tailscale_share_url: string | null;
+            used_by: components["schemas"]["UserRef"] | null;
+        };
+        /**
+         * InviteCreate
+         * @description `tailscale_share_url`: the optional share link for step 1 of the invite message.
+         */
+        InviteCreate: {
+            /** Tailscale Share Url */
+            tailscale_share_url?: string | null;
+        };
+        /**
+         * InviteCreated
+         * @description The new invite and its link (`/join#<code>`); the code is shown only this once.
+         */
+        InviteCreated: {
+            invite: components["schemas"]["Invite"];
+            /** Url */
+            url: string;
+        };
+        /**
+         * JoinRequest
+         * @description Registration with an invite code (ACC-05).
+         */
+        JoinRequest: {
+            /** Code */
+            code: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "de" | "en";
+            /** Password */
+            password: string;
+            /** Username */
+            username: string;
+        };
+        /**
+         * LinkCreated
+         * @description A reset link; the code is in the fragment (`/reset#<code>`).
+         */
+        LinkCreated: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Url */
+            url: string;
+        };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Password */
+            password: string;
+            /** Username */
+            username: string;
+        };
+        /**
+         * LoginResponse
+         * @description `access_token` goes into `Authorization: Bearer`; it expires after `expires_in` s.
+         */
+        LoginResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Expires In */
+            expires_in: number;
+            user: components["schemas"]["Me"];
+        };
+        /** Me */
+        Me: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            filter_hidden: components["schemas"]["FilterHidden"];
+            /** Id */
+            id: string;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "de" | "en";
+            /** Lists Public */
+            lists_public: boolean;
+            /** Meals Public */
+            meals_public: boolean;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "admin";
+            /** Username */
+            username: string;
+        };
+        /**
+         * MeUpdate
+         * @description Only the fields that are sent change (ACC-13, VIS-02, I18N-01).
+         */
+        MeUpdate: {
+            /** Display Name */
+            display_name?: string | null;
+            filter_hidden?: components["schemas"]["FilterHidden"] | null;
+            /** Language */
+            language?: ("de" | "en") | null;
+            /** Lists Public */
+            lists_public?: boolean | null;
+            /** Meals Public */
+            meals_public?: boolean | null;
+        };
+        /** PasswordChange */
+        PasswordChange: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
+        /**
+         * RefreshRequest
+         * @description `fork` asks for a new, independent session (first start of the Home Screen app).
+         */
+        RefreshRequest: {
+            /**
+             * Fork
+             * @default false
+             */
+            fork: boolean;
+        };
+        /** ResetRequest */
+        ResetRequest: {
+            /** Code */
+            code: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * SecurityInfo
+         * @description What *Me → Security* shows, e.g. "Password reset by X on <date>" (ACC-10).
+         *
+         *     `password_reset_by` is null for a reset link from the command line or a deleted admin.
+         */
+        SecurityInfo: {
+            /** Password Changed At */
+            password_changed_at: string | null;
+            /** Password Reset At */
+            password_reset_at: string | null;
+            password_reset_by: components["schemas"]["UserRef"] | null;
+        };
+        /**
+         * SessionInfo
+         * @description A logged-in device; `current` is the one making this request (ACC-09).
+         */
+        SessionInfo: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current */
+            current: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Last Used At
+             * Format: date-time
+             */
+            last_used_at: string;
+            /** User Agent */
+            user_agent: string | null;
+        };
+        /**
+         * UserRef
+         * @description Another user as everyone sees them; deactivated users are shown with a note (ADM-02).
+         */
+        UserRef: {
+            /** Deactivated */
+            deactivated: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Id */
+            id: string;
         };
         /**
          * VersionInfo
@@ -156,6 +1004,283 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    admin_list_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_list_invites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invite"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_create_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteCreated"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_revoke_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_list_users: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_delete_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_update_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUserUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_create_reset_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkCreated"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    check_code: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeInfo"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     check_diag_cookie: {
         parameters: {
             query?: never;
@@ -214,6 +1339,380 @@ export interface operations {
             };
         };
     };
+    join: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                mm_refresh?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout_all: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-MealMate-Client"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mm_refresh?: string | null;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reset_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_couple: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoupleState"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    end_couple: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_couple_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoupleRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoupleState"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_couple_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoupleState"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_couple_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoupleState"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    decline_couple_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoupleState"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_health: {
         parameters: {
             query?: never;
@@ -239,6 +1738,246 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_security: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityInfo"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionInfo"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revoke_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_users: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRef"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_visible_users: {
+        parameters: {
+            query: {
+                for: "meals" | "lists";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRef"][];
                 };
             };
             /** @description Error envelope; `code` names the error */

@@ -1,6 +1,321 @@
 {
   "components": {
     "schemas": {
+      "AdminAction": {
+        "description": "What an admin (or the command line, with no actor) did.",
+        "enum": [
+          "invite.create",
+          "invite.revoke",
+          "user.reset_link",
+          "user.role_change",
+          "user.deactivate",
+          "user.reactivate",
+          "user.delete"
+        ],
+        "title": "AdminAction",
+        "type": "string"
+      },
+      "AdminEvent": {
+        "description": "`actor` is null for the command line or a deleted admin, `target` for a deleted user.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/AdminAction"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "actor",
+          "action",
+          "target",
+          "details",
+          "created_at"
+        ],
+        "title": "AdminEvent",
+        "type": "object"
+      },
+      "AdminUser": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "admin"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "role",
+          "is_active",
+          "created_at",
+          "last_seen_at"
+        ],
+        "title": "AdminUser",
+        "type": "object"
+      },
+      "AdminUserUpdate": {
+        "description": "Only the fields that are sent change.",
+        "properties": {
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "admin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "AdminUserUpdate",
+        "type": "object"
+      },
+      "CodeCheckRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "CodeCheckRequest",
+        "type": "object"
+      },
+      "CodeInfo": {
+        "description": "A usable code. `username` is set for reset codes only (the account being reset).",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "invite",
+              "reset"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "kind",
+          "expires_at",
+          "username"
+        ],
+        "title": "CodeInfo",
+        "type": "object"
+      },
+      "CoupleRequest": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "from_user": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "to_user": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        },
+        "required": [
+          "id",
+          "from_user",
+          "to_user",
+          "created_at"
+        ],
+        "title": "CoupleRequest",
+        "type": "object"
+      },
+      "CoupleRequestCreate": {
+        "properties": {
+          "user_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "CoupleRequestCreate",
+        "type": "object"
+      },
+      "CoupleState": {
+        "description": "The own couple (`partner`, accepted at `since`) and pending requests.",
+        "properties": {
+          "incoming": {
+            "items": {
+              "$ref": "#/components/schemas/CoupleRequest"
+            },
+            "title": "Incoming",
+            "type": "array"
+          },
+          "outgoing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoupleRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "partner",
+          "since",
+          "outgoing",
+          "incoming"
+        ],
+        "title": "CoupleState",
+        "type": "object"
+      },
       "DiagCookieCheck": {
         "properties": {
           "present": {
@@ -24,7 +339,22 @@
           "common.rate_limited",
           "common.unauthorized",
           "common.forbidden",
-          "common.service_unavailable"
+          "common.service_unavailable",
+          "auth.invalid_credentials",
+          "auth.account_deactivated",
+          "auth.token_expired",
+          "auth.session_expired",
+          "auth.session_revoked",
+          "auth.login_required",
+          "auth.csrf",
+          "auth.code_invalid",
+          "auth.password_incorrect",
+          "couple.already_in_couple",
+          "couple.target_in_couple",
+          "couple.request_pending",
+          "admin.self_forbidden",
+          "admin.last_admin",
+          "admin.public_url_missing"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -107,10 +437,42 @@
           "too_short",
           "too_long",
           "out_of_range",
-          "invalid_format"
+          "invalid_format",
+          "taken",
+          "too_common",
+          "same_as_username"
         ],
         "title": "FieldErrorCode",
         "type": "string"
+      },
+      "FilterHidden": {
+        "description": "User filter chips this user has switched off, per screen (MEAL-10, UI-02).",
+        "properties": {
+          "lists": {
+            "items": {
+              "maxLength": 36,
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Lists",
+            "type": "array"
+          },
+          "meals": {
+            "items": {
+              "maxLength": 36,
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Meals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "meals",
+          "lists"
+        ],
+        "title": "FilterHidden",
+        "type": "object"
       },
       "HealthStatus": {
         "properties": {
@@ -124,6 +486,516 @@
           "status"
         ],
         "title": "HealthStatus",
+        "type": "object"
+      },
+      "Invite": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "used",
+              "expired",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tailscale_share_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tailscale Share Url"
+          },
+          "used_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "expires_at",
+          "created_by",
+          "used_by",
+          "tailscale_share_url"
+        ],
+        "title": "Invite",
+        "type": "object"
+      },
+      "InviteCreate": {
+        "description": "`tailscale_share_url`: the optional share link for step 1 of the invite message.",
+        "properties": {
+          "tailscale_share_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tailscale Share Url"
+          }
+        },
+        "title": "InviteCreate",
+        "type": "object"
+      },
+      "InviteCreated": {
+        "description": "The new invite and its link (`/join#<code>`); the code is shown only this once.",
+        "properties": {
+          "invite": {
+            "$ref": "#/components/schemas/Invite"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invite",
+          "url"
+        ],
+        "title": "InviteCreated",
+        "type": "object"
+      },
+      "JoinRequest": {
+        "description": "Registration with an invite code (ACC-05).",
+        "properties": {
+          "code": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "language": {
+            "enum": [
+              "de",
+              "en"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 1024,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 30,
+            "minLength": 3,
+            "pattern": "^[a-z0-9._-]+$",
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "username",
+          "display_name",
+          "password",
+          "language"
+        ],
+        "title": "JoinRequest",
+        "type": "object"
+      },
+      "LinkCreated": {
+        "description": "A reset link; the code is in the fragment (`/reset#<code>`).",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "LinkCreated",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 100,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "LoginResponse": {
+        "description": "`access_token` goes into `Authorization: Bearer`; it expires after `expires_in` s.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/Me"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in",
+          "user"
+        ],
+        "title": "LoginResponse",
+        "type": "object"
+      },
+      "Me": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "filter_hidden": {
+            "$ref": "#/components/schemas/FilterHidden"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "enum": [
+              "de",
+              "en"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "lists_public": {
+            "title": "Lists Public",
+            "type": "boolean"
+          },
+          "meals_public": {
+            "title": "Meals Public",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "admin"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "role",
+          "language",
+          "meals_public",
+          "lists_public",
+          "filter_hidden",
+          "created_at"
+        ],
+        "title": "Me",
+        "type": "object"
+      },
+      "MeUpdate": {
+        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01).",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "filter_hidden": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FilterHidden"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "anyOf": [
+              {
+                "enum": [
+                  "de",
+                  "en"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "lists_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lists Public"
+          },
+          "meals_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meals Public"
+          }
+        },
+        "title": "MeUpdate",
+        "type": "object"
+      },
+      "PasswordChange": {
+        "properties": {
+          "current_password": {
+            "maxLength": 1024,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 1024,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChange",
+        "type": "object"
+      },
+      "RefreshRequest": {
+        "description": "`fork` asks for a new, independent session (first start of the Home Screen app).",
+        "properties": {
+          "fork": {
+            "default": false,
+            "title": "Fork",
+            "type": "boolean"
+          }
+        },
+        "title": "RefreshRequest",
+        "type": "object"
+      },
+      "ResetRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 1024,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "password"
+        ],
+        "title": "ResetRequest",
+        "type": "object"
+      },
+      "SecurityInfo": {
+        "description": "What *Me → Security* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
+        "properties": {
+          "password_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password Changed At"
+          },
+          "password_reset_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password Reset At"
+          },
+          "password_reset_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "password_changed_at",
+          "password_reset_at",
+          "password_reset_by"
+        ],
+        "title": "SecurityInfo",
+        "type": "object"
+      },
+      "SessionInfo": {
+        "description": "A logged-in device; `current` is the one making this request (ACC-09).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "title": "Last Used At",
+            "type": "string"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "required": [
+          "id",
+          "user_agent",
+          "created_at",
+          "last_used_at",
+          "current"
+        ],
+        "title": "SessionInfo",
+        "type": "object"
+      },
+      "UserRef": {
+        "description": "Another user as everyone sees them; deactivated users are shown with a note (ADM-02).",
+        "properties": {
+          "deactivated": {
+            "title": "Deactivated",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "deactivated"
+        ],
+        "title": "UserRef",
         "type": "object"
       },
       "VersionInfo": {
@@ -150,6 +1022,13 @@
         "title": "VersionInfo",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "The access token from login, refresh, join or reset.",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -162,6 +1041,402 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/events": {
+      "get": {
+        "description": "The admin activity log, newest first (at most 200 entries).",
+        "operationId": "admin_list_events",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminEvent"
+                  },
+                  "title": "Response Admin List Events",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin List Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/invites": {
+      "get": {
+        "description": "All invites with their status, newest first.",
+        "operationId": "admin_list_invites",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Invite"
+                  },
+                  "title": "Response Admin List Invites",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin List Invites",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "A new invite link (ACC-02); the link is returned only this once.",
+        "operationId": "admin_create_invite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Create Invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/invites/{invite_id}": {
+      "delete": {
+        "description": "Revoke an invite so it can no longer be used.",
+        "operationId": "admin_revoke_invite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "title": "Invite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Revoke Invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "description": "All users, by display name.",
+        "operationId": "admin_list_users",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminUser"
+                  },
+                  "title": "Response Admin List Users",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin List Users",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "delete": {
+        "description": "Delete another user and their data (ADM-03).",
+        "operationId": "admin_delete_user",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Delete User",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Change another user's role or deactivate/reactivate them.",
+        "operationId": "admin_update_user",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUser"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Update User",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}/reset-link": {
+      "post": {
+        "description": "A single-use password reset link for the user (ACC-10); older ones stop working.",
+        "operationId": "admin_create_reset_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Create Reset Link",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/auth/codes/check": {
+      "post": {
+        "description": "Whether an invite or reset code can be used; does not consume it (ACC-04).",
+        "operationId": "check_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Check Code",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/diag/check": {
       "post": {
         "description": "Reports whether the browser sent the diagnostics cookie.",
@@ -237,6 +1512,544 @@
         ]
       }
     },
+    "/api/auth/join": {
+      "post": {
+        "description": "Register with an invite code and log in (ACC-01, ACC-05, ACC-07).",
+        "operationId": "join",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Join",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "description": "Log in with username and password; sets the refresh cookie (throttled, ACC-11).",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "description": "Log out this device: revoke the cookie's session and remove the cookie.",
+        "operationId": "logout",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "mm_refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mm Refresh"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/logout-all": {
+      "post": {
+        "description": "Log out every device of the user, this one included (ACC-09).",
+        "operationId": "logout_all",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Logout All",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "description": "A new access token (and rotated cookie) for the refresh cookie.\n\nNeeds the header `X-MealMate-Client: web` (CSRF guard). `{\"fork\": true}` starts a new,\nindependent session instead (first start of the Home Screen app).",
+        "operationId": "refresh",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-MealMate-Client",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mealmate-Client"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "mm_refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mm Refresh"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Refresh",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/reset": {
+      "post": {
+        "description": "Set a new password with a reset code; ends all other sessions and logs in (ACC-10).",
+        "operationId": "reset_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Reset Password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/couple": {
+      "delete": {
+        "description": "End the couple (either partner, any time).",
+        "operationId": "end_couple",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "End Couple",
+        "tags": [
+          "couple"
+        ]
+      },
+      "get": {
+        "description": "The partner, if any, and pending requests.",
+        "operationId": "get_couple",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoupleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Couple",
+        "tags": [
+          "couple"
+        ]
+      }
+    },
+    "/api/couple/requests": {
+      "post": {
+        "description": "Send a couple request to another active user.",
+        "operationId": "create_couple_request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoupleRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoupleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Couple Request",
+        "tags": [
+          "couple"
+        ]
+      }
+    },
+    "/api/couple/requests/{request_id}/accept": {
+      "post": {
+        "description": "Accept a request sent to you; cancels all other pending requests of both users.",
+        "operationId": "accept_couple_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoupleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Accept Couple Request",
+        "tags": [
+          "couple"
+        ]
+      }
+    },
+    "/api/couple/requests/{request_id}/cancel": {
+      "post": {
+        "description": "Withdraw your own request.",
+        "operationId": "cancel_couple_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoupleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Couple Request",
+        "tags": [
+          "couple"
+        ]
+      }
+    },
+    "/api/couple/requests/{request_id}/decline": {
+      "post": {
+        "description": "Decline a request sent to you.",
+        "operationId": "decline_couple_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoupleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decline Couple Request",
+        "tags": [
+          "couple"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Checks that the database answers and the data directory is writable.",
@@ -276,6 +2089,344 @@
         "summary": "Get Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/me": {
+      "get": {
+        "description": "The own profile and settings.",
+        "operationId": "get_me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Me",
+        "tags": [
+          "me"
+        ]
+      },
+      "patch": {
+        "description": "Change display name, language, privacy switches or hidden filter chips.",
+        "operationId": "update_me",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Me",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/me/password": {
+      "post": {
+        "description": "Change the password; logs out all other devices (throttled like login, ACC-11).",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change Password",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/me/security": {
+      "get": {
+        "description": "Password change and reset notices (\"Password reset by X on <date>\").",
+        "operationId": "get_security",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Security",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/me/sessions": {
+      "get": {
+        "description": "The own logged-in devices, most recently used first.",
+        "operationId": "list_sessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionInfo"
+                  },
+                  "title": "Response List Sessions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Sessions",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/me/sessions/{session_id}": {
+      "delete": {
+        "description": "Log out one of the own devices.",
+        "operationId": "revoke_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Session",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/users": {
+      "get": {
+        "description": "All active users except yourself, by display name.",
+        "operationId": "list_users",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserRef"
+                  },
+                  "title": "Response List Users",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Users",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/visible": {
+      "get": {
+        "description": "Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,\nyour partner, and everyone whose matching privacy switch is public.",
+        "operationId": "list_visible_users",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "for",
+            "required": true,
+            "schema": {
+              "enum": [
+                "meals",
+                "lists"
+              ],
+              "title": "For",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserRef"
+                  },
+                  "title": "Response List Visible Users",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Visible Users",
+        "tags": [
+          "users"
         ]
       }
     },

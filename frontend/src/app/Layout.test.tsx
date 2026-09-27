@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { renderApp, VERSION_INFO } from '@/test/render';
+import { describe, expect, it } from 'vitest';
+import { mockApi } from '@/test/api';
+import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const TABS = [
@@ -30,7 +31,7 @@ describe('Layout', () => {
   });
 
   it('navigates between the tabs', async () => {
-    vi.stubGlobal('fetch', () => Promise.resolve(Response.json(VERSION_INFO)));
+    mockApi();
     const { router, user } = renderApp('/lists');
 
     for (const { tab, screen: screenId, path, title } of [...TABS].reverse()) {

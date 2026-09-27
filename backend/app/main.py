@@ -11,7 +11,10 @@ from app.core.config import Settings, get_settings
 from app.core.error_handlers import ErrorEnvelopeMiddleware, install_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
 from app.core.logging import RequestLogMiddleware, configure_logging
+from app.core.ratelimit import RateLimits
+from app.db.base import utcnow
 from app.db.session import Database
+from app.services.context import AuthConfig
 from app.web.static import add_frontend_route
 
 DOCS_URL = "/api/docs"
@@ -53,6 +56,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.auth_config = AuthConfig.from_settings(settings)
+    app.state.rate_limits = RateLimits()
+    app.state.clock = utcnow
 
     install_exception_handlers(app)
     app.include_router(api_router)
