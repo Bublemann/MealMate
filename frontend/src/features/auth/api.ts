@@ -32,6 +32,12 @@ export function useResetPassword() {
   });
 }
 
+/** Logs out on the server, then locally (rejects, keeping the user signed in, if unreachable). */
+export function useLogout() {
+  const session = useAuthSession();
+  return useMutation({ mutationFn: () => session.logout() });
+}
+
 /** Checks an invite or reset code without consuming it (ACC-04). */
 export function useCodeCheck(code: string | null) {
   return useQuery({

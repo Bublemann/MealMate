@@ -10,7 +10,9 @@ session and the time, so the decision is a pure function; the service applies it
   - normal refresh: GRACE, i.e. issue a new token and revoke nothing;
   - fork: FORK_REFUSED, nothing revoked.
 - Token superseded **60 s ago or longer**:
-  - normal refresh: REUSE, i.e. revoke the whole session;
+  - normal refresh: REUSE, i.e. revoke the whole session, and with it every session linked to it
+    by a fork (the one it was forked from, those forked from it, recursively): whoever holds a
+    stolen token may have forked it, or be holding the fork;
   - fork: FORK_REFUSED, nothing revoked.
 
 Before that: a revoked session is REVOKED, and an idle-expired token or session is EXPIRED.

@@ -2176,7 +2176,7 @@
     },
     "/api/me/password": {
       "post": {
-        "description": "Change the password; logs out all other devices.",
+        "description": "Change the password; logs out all other devices (throttled like login, ACC-11).",
         "operationId": "change_password",
         "requestBody": {
           "content": {

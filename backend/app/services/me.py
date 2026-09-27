@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode, FieldProblem, not_found, validation_error
 from app.core.passwords import hash_password, verify_password
+from app.core.ratelimit import LoginThrottle
 from app.domain.accounts import clean_display_name, display_name_problem
 from app.domain.text import normalize
 from app.models import User
@@ -14,6 +15,7 @@ from app.repositories import sessions as sessions_repo
 from app.repositories import users as users_repo
 from app.schemas.users import FilterHidden, Me, MeUpdate, SecurityInfo, SessionInfo
 from app.services import accounts, hooks
+from app.services.auth import start_attempt
 from app.services.context import AuthConfig
 from app.services.principal import Principal
 from app.services.users import user_ref
@@ -73,18 +75,23 @@ async def update_me(
 async def change_password(
     session: AsyncSession,
     config: AuthConfig,
+    throttle: LoginThrottle,
     principal: Principal,
     *,
     current_password: str,
     new_password: str,
+    client_ip: str,
     now: datetime,
 ) -> None:
-    """Change the password and log out all *other* devices (ACC-09)."""
+    """Change the password and log out all *other* devices (ACC-09). Guesses at the current
+    password count towards the login throttle of the user and the client (ACC-11)."""
     async with session.begin():
         user = await _user(session, principal)
         old_hash, username = user.password_hash, user.username
+    attempt = start_attempt(throttle, username=username, client_ip=client_ip)
     if not await verify_password(current_password, old_hash, rounds=config.bcrypt_rounds):
         raise ApiError(ErrorCode.PASSWORD_INCORRECT, status_code=403)
+    attempt.succeeded()
     if problems := accounts.check_password(
         new_password, username=username, loc=("body", "new_password")
     ):

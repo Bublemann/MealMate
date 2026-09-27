@@ -228,6 +228,35 @@ describe('session end (SYNC-10)', () => {
     expect(localStorage.getItem(STANDALONE_MARKER_KEY)).toBe('1');
   });
 
+  it("drops the previous user's data when someone else signs in", () => {
+    const session = createAuthSession({ initial: { user: TEST_USER, accessToken: 'token' } });
+    const onEnd = vi.fn();
+    session.onEnd(onEnd);
+    localStorage.setItem('mm.user.something', 'x');
+    const ben = { ...TEST_USER, id: '0190c0de-0000-7000-8000-000000000002', username: 'ben' };
+
+    session.signIn(loginResponse(ben));
+
+    expect(onEnd).toHaveBeenCalledOnce();
+    expect(localStorage.getItem('mm.user.something')).toBeNull();
+    expect(JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? 'null')).toEqual(ben);
+    expect(session.getState()).toMatchObject({ status: 'authenticated', user: ben, reason: null });
+    expect(session.accessToken()).toBe('fresh-access-token');
+  });
+
+  it('keeps the data when the same user signs in again', () => {
+    const session = createAuthSession({ initial: { user: TEST_USER, accessToken: 'token' } });
+    const onEnd = vi.fn();
+    session.onEnd(onEnd);
+    localStorage.setItem('mm.user.something', 'x');
+
+    session.signIn(loginResponse({ ...TEST_USER, display_name: 'Anna M.' }));
+
+    expect(onEnd).not.toHaveBeenCalled();
+    expect(localStorage.getItem('mm.user.something')).toBe('x');
+    expect(session.getState().user?.display_name).toBe('Anna M.');
+  });
+
   it('ends the session when a refresh finds it revoked', async () => {
     mockApi({ 'POST /api/auth/refresh': errorResponse(401, 'auth.session_revoked') });
     const session = createAuthSession({ initial: { user: TEST_USER, accessToken: 'old' } });

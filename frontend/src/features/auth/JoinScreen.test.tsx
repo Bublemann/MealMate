@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
 import { errorResponse, loginResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import type { Me } from '@/features/auth/storage';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -9,9 +10,9 @@ const CODE = 'q2mXc3Jw-Invite_Code';
 const EXPIRES = '2026-10-03T12:00:00Z';
 
 /** Opens `path#code` like a tapped link: the fragment is in the real address bar. */
-function openLink(path: string, code: string | null) {
+function openLink(path: string, code: string | null, user: Me | null = null) {
   window.history.replaceState(null, '', code === null ? path : `${path}#${code}`);
-  return renderApp(path, { user: null });
+  return renderApp(path, { user });
 }
 
 function signedOut(routes: Record<string, unknown>) {
@@ -140,6 +141,52 @@ describe('JoinScreen', () => {
 
     expect(await screen.findByTestId(testIds.linkInvalid)).toBeVisible();
     expect(requestsTo(fetchMock, 'POST /api/auth/codes/check')).toHaveLength(0);
+  });
+});
+
+describe('a link opened while someone is signed in', () => {
+  it('asks to log out first, on the server too, before showing the join form', async () => {
+    const fetchMock = mockApi({
+      'POST /api/auth/codes/check': { kind: 'invite', expires_at: EXPIRES, username: null },
+      'POST /api/auth/logout': null,
+    });
+    const { user, queryClient } = openLink('/join', CODE, TEST_USER);
+    queryClient.setQueryData(['me', 'sessions'], ['cached for Anna']);
+    localStorage.setItem('mm.user.something', 'x');
+
+    expect(
+      await screen.findByText('Signed in as Anna – log out first to use this link.'),
+    ).toBeVisible();
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+
+    expect(await screen.findByLabelText('Username')).toBeVisible();
+    expect(requestsTo(fetchMock, 'POST /api/auth/logout')).toHaveLength(1);
+    expect(queryClient.getQueryData(['me', 'sessions'])).toBeUndefined();
+    expect(localStorage.getItem('mm.user.something')).toBeNull();
+    await expect(requestsTo(fetchMock, 'POST /api/auth/codes/check')[0]?.json()).resolves.toEqual({
+      code: CODE,
+    });
+  });
+
+  it('keeps the reset form hidden while the logout fails', async () => {
+    await i18n.changeLanguage('de');
+    mockApi({
+      'POST /api/auth/codes/check': { kind: 'reset', expires_at: EXPIRES, username: 'ben' },
+      'POST /api/auth/logout': errorResponse(500, 'common.internal'),
+    });
+    const { user, authSession } = openLink('/reset', 'reset-code', TEST_USER);
+
+    await user.click(await screen.findByRole('button', { name: 'Abmelden' }));
+
+    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(
+      screen.getByText('Angemeldet als Anna – melde dich zuerst ab, um diesen Link zu nutzen.'),
+    ).toBeVisible();
+    expect(screen.queryByLabelText('Neues Passwort')).not.toBeInTheDocument();
+    expect(authSession.getState().status).toBe('authenticated');
   });
 });
 

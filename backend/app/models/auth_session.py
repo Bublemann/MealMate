@@ -7,7 +7,11 @@ from app.db.base import Base, IdMixin, UTCDateTime, utcnow
 
 
 class AuthSession(IdMixin, Base):
-    """One logged-in device (plan § 5.4). `expires_at` slides: last use + SESSION_IDLE_DAYS."""
+    """One logged-in device (plan § 5.4). `expires_at` slides: last use + SESSION_IDLE_DAYS.
+
+    `parent_session_id` links a session made by a fork to the session it was forked from, so
+    that detected token reuse revokes both (see `app.domain.sessions`).
+    """
 
     __tablename__ = "sessions"
 
@@ -19,6 +23,9 @@ class AuthSession(IdMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     user_agent: Mapped[str | None] = mapped_column(String(200))
+    parent_session_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("sessions.id", ondelete="SET NULL"), index=True
+    )
 
 
 class SessionToken(IdMixin, Base):

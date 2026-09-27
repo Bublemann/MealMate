@@ -6,7 +6,9 @@ tests replace.
 
 - `LoginThrottle`: failed logins per key (the normalised username, and the client IP). From the
   fifth failure within 15 minutes on, further attempts wait `2 ** (failures - 5)` seconds (at most
-  60) after the last failure. There is no lockout, and a successful login clears the key.
+  60) after the last failure. There is no lockout. Callers count each attempt as a failure *before*
+  checking the password (`app.services.auth.start_attempt`), so parallel requests cannot all pass
+  the check; a success then clears the username key and takes the client's charge back.
 - `RequestRateLimit`: at most N requests per key in a sliding window (join, reset, code checks).
 """
 
@@ -14,6 +16,7 @@ import math
 import time
 from collections import deque
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass, field
 
 type Clock = Callable[[], float]
@@ -65,13 +68,26 @@ class LoginThrottle:
         delay = max((self.delay(key) for key in keys), default=0.0)
         return _retry_after(delay) if delay > 0 else None
 
-    def record_failure(self, keys: Iterable[str]) -> None:
+    def record_failure(self, keys: Iterable[str]) -> float:
+        """Count a failure for each of `keys`; returns its time, for `refund`."""
         now = self.clock()
         if len(self._failures) > _PRUNE_ABOVE_KEYS:
             for stale in list(self._failures):
                 self._recent(stale, now)
         for key in keys:
             self._failures.setdefault(key, deque(maxlen=_MAX_EVENTS_PER_KEY)).append(now)
+        return now
+
+    def refund(self, keys: Iterable[str], at: float) -> None:
+        """Take back the failure `record_failure` counted at `at` (an attempt that succeeded)."""
+        for key in keys:
+            failures = self._failures.get(key)
+            if failures is None:
+                continue
+            with suppress(ValueError):  # already left the window, or cleared
+                failures.remove(at)
+            if not failures:
+                del self._failures[key]
 
     def reset(self, keys: Iterable[str]) -> None:
         for key in keys:

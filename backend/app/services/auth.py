@@ -77,10 +77,13 @@ async def open_session(
     *,
     now: datetime,
     user_agent: str | None,
+    parent_session_id: str | None = None,
 ) -> LoginResult:
-    """Start a new session for `user` inside the caller's transaction."""
+    """Start a new session for `user` inside the caller's transaction; `parent_session_id` is
+    the session it was forked from, if any."""
     auth_session = AuthSession(
         user_id=user.id,
+        parent_session_id=parent_session_id,
         created_at=now,
         last_used_at=now,
         expires_at=now + config.session_idle,
@@ -91,6 +94,35 @@ async def open_session(
     refresh_token = _issue_token(session, config, auth_session.id, now)
     user.last_seen_at = now
     return LoginResult(_login_response(config, user, auth_session.id, now), refresh_token)
+
+
+@dataclass(frozen=True)
+class PasswordAttempt:
+    """A password attempt, already counted as a failure (ACC-11); see `start_attempt`."""
+
+    throttle: LoginThrottle
+    user_key: str
+    client_key: str
+    charged_at: float
+
+    def succeeded(self) -> None:
+        """The password was right: clear the username's failures and take back the client's
+        charge. The client's earlier failures stay, so logging in to an own account does not
+        buy more guesses at others."""
+        self.throttle.reset([self.user_key])
+        self.throttle.refund([self.client_key], self.charged_at)
+
+
+def start_attempt(throttle: LoginThrottle, *, username: str, client_ip: str) -> PasswordAttempt:
+    """Check the throttle and count this attempt as a failure in one step, before the password
+    is checked: with no await in between, parallel requests cannot all pass the check.
+    Raises 429 `common.rate_limited` if the username or the client has to wait."""
+    user_key, client_key = f"user:{username_norm(username)}", f"ip:{client_ip}"
+    keys = (user_key, client_key)
+    if (retry_after := throttle.retry_after(keys)) is not None:
+        raise rate_limited(retry_after)
+    charged_at = throttle.record_failure(keys)
+    return PasswordAttempt(throttle, user_key, client_key, charged_at)
 
 
 async def login(
@@ -105,18 +137,15 @@ async def login(
     user_agent: str | None,
 ) -> LoginResult:
     """Check the password (ACC-11: throttled per username and client), then open a session."""
-    keys = (f"user:{username_norm(username)}", f"ip:{client_ip}")
-    if (retry_after := throttle.retry_after(keys)) is not None:
-        raise rate_limited(retry_after)
+    attempt = start_attempt(throttle, username=username, client_ip=client_ip)
 
     async with session.begin():
         user = await users_repo.by_username_norm(session, username_norm(username))
         password_hash = None if user is None else user.password_hash
     if not await verify_password(password, password_hash, rounds=config.bcrypt_rounds):
-        throttle.record_failure(keys)
         raise _unauthorized(ErrorCode.INVALID_CREDENTIALS)
 
-    throttle.reset(keys)
+    attempt.succeeded()
     session.expire_all()  # read the user afresh; bcrypt took a while
     async with session.begin():
         user = await users_repo.by_username_norm(session, username_norm(username))
@@ -139,8 +168,9 @@ async def refresh(
 ) -> LoginResult:
     """Rotate the refresh token, or fork a new session (see `app.domain.sessions`).
 
-    Reuse of an old token revokes the session; that revocation is committed before the error
-    is raised.
+    Reuse of an old token revokes the session together with the sessions forked from it and
+    the one it was forked from (recursively); that revocation is committed before the error is
+    raised.
     """
     if not refresh_token:
         raise _unauthorized(ErrorCode.SESSION_EXPIRED)
@@ -175,9 +205,17 @@ async def refresh(
                 result = LoginResult(_login_response(config, user, auth_session.id, now), new_token)
             elif outcome is RefreshOutcome.FORK:
                 token.forked_at = now
-                result = await open_session(session, config, user, now=now, user_agent=user_agent)
+                result = await open_session(
+                    session,
+                    config,
+                    user,
+                    now=now,
+                    user_agent=user_agent,
+                    parent_session_id=auth_session.id,
+                )
             elif outcome is RefreshOutcome.REUSE:
-                auth_session.revoked_at = now
+                # A stolen token may have been forked (or be a fork): revoke the whole family.
+                await sessions_repo.revoke_family(session, auth_session, now)
 
     if result is not None:
         return result

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Response, status
 
-from app.api.deps import Config, CurrentUser, Now
+from app.api.deps import ClientIp, Config, CurrentUser, Limits, Now
 from app.db.session import ReadSession, WriteSession
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.users import Me, MeUpdate, PasswordChange, SecurityInfo, SessionInfo
@@ -25,15 +25,23 @@ async def update_me(body: MeUpdate, principal: CurrentUser, session: WriteSessio
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def change_password(
-    body: PasswordChange, principal: CurrentUser, session: WriteSession, config: Config, now: Now
+    body: PasswordChange,
+    principal: CurrentUser,
+    session: WriteSession,
+    config: Config,
+    limits: Limits,
+    client_ip: ClientIp,
+    now: Now,
 ) -> None:
-    """Change the password; logs out all other devices."""
+    """Change the password; logs out all other devices (throttled like login, ACC-11)."""
     await me.change_password(
         session,
         config,
+        limits.login,
         principal,
         current_password=body.current_password,
         new_password=body.new_password,
+        client_ip=client_ip,
         now=now,
     )
 

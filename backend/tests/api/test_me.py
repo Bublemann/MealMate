@@ -1,8 +1,10 @@
 """The own account: profile, settings, password, sessions, security (ACC-09/10/13, VIS-02)."""
 
+import asyncio
+
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 
 from app.models import User
 from app.services import hooks
@@ -165,6 +167,70 @@ async def test_change_password_checks_the_current_one(app: FastAPI, api: AsyncCl
     )
     assert response.status_code == 403
     assert error(response) == "auth.password_incorrect"
+
+
+async def change_password(
+    api: AsyncClient, user: Account, current_password: str, new_password: str = NEW_PASSWORD
+) -> Response:
+    return await api.post(
+        "/api/me/password",
+        json={"current_password": current_password, "new_password": new_password},
+        headers=user.headers,
+    )
+
+
+async def test_change_password_is_throttled_like_login(
+    app: FastAPI, api: AsyncClient, clock: FakeClock
+) -> None:
+    """Someone holding a stolen access token cannot guess the current password quickly
+    (ACC-11): wrong guesses count towards the user's and the client's login throttle."""
+    anna = await make_user(app, api, "anna")
+    for index in range(5):
+        response = await change_password(api, anna, f"guess number {index}")
+        assert response.status_code == 403
+        assert error(response) == "auth.password_incorrect"
+
+    # Throttled even with the right password, and so is logging in as anna.
+    blocked = await change_password(api, anna, PASSWORD)
+    assert blocked.status_code == 429
+    assert blocked.json() == {
+        "code": "common.rate_limited",
+        "params": {"retry_after": 1},
+        "fields": [],
+    }
+    assert blocked.headers["retry-after"] == "1"
+    login_blocked = await api.post(
+        "/api/auth/login", json={"username": "anna", "password": PASSWORD}
+    )
+    assert error(login_blocked) == "common.rate_limited"
+
+    clock.advance(seconds=1)
+    assert (await change_password(api, anna, PASSWORD)).status_code == 204
+    # Success clears the user's failures; the client's stay.
+    throttle = app.state.rate_limits.login
+    assert "user:anna" not in throttle._failures
+    assert len(throttle._failures["ip:127.0.0.1"]) == 5
+
+
+async def test_parallel_password_guesses_are_throttled(
+    app: FastAPI, api: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    anna = await make_user(app, api, "anna")
+    real_verify = me_service.verify_password
+    verified: list[str] = []
+
+    async def slow_verify(password: str, password_hash: str | None, *, rounds: int) -> bool:
+        verified.append(password)
+        await asyncio.sleep(0.05)  # let every other request reach the throttle meanwhile
+        return await real_verify(password, password_hash, rounds=rounds)
+
+    monkeypatch.setattr(me_service, "verify_password", slow_verify)
+    responses = await asyncio.gather(
+        *(change_password(api, anna, f"guess number {index}") for index in range(10))
+    )
+
+    assert len(verified) == 5
+    assert sorted(response.status_code for response in responses) == [403] * 5 + [429] * 5
 
 
 @pytest.mark.parametrize(

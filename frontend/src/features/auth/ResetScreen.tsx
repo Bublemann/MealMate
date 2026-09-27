@@ -14,6 +14,7 @@ import { AuthScreen } from './AuthScreen';
 import { CodeGate } from './CodeGate';
 import { useAuth } from './context';
 import { clearLinkCode, useLinkCode } from './linkCode';
+import { SignedInGate } from './SignedInGate';
 
 /** Setting a new password with a reset link from an admin (ACC-10). */
 export function ResetScreen() {
@@ -22,11 +23,17 @@ export function ResetScreen() {
 
   return (
     <AuthScreen title={t('auth.reset.title')} testId={testIds.screenReset}>
-      <CodeGate kind="reset" code={code}>
-        {(info, validCode) => (
-          <ResetForm code={validCode} username={info.username ?? ''} expiresAt={info.expires_at} />
-        )}
-      </CodeGate>
+      <SignedInGate>
+        <CodeGate kind="reset" code={code}>
+          {(info, validCode) => (
+            <ResetForm
+              code={validCode}
+              username={info.username ?? ''}
+              expiresAt={info.expires_at}
+            />
+          )}
+        </CodeGate>
+      </SignedInGate>
     </AuthScreen>
   );
 }

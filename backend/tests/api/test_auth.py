@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 from datetime import timedelta
 from pathlib import Path
@@ -23,6 +24,7 @@ from tests.accounts import (
     refresh,
     refresh_cookie,
     scalars,
+    set_refresh_cookie,
 )
 from tests.accounts import (
     password_hash as password_hash_of,
@@ -176,9 +178,10 @@ async def test_login_throttle_per_username(
     clock.advance(seconds=2)
     ok = await api.post("/api/auth/login", json={"username": "anna", "password": PASSWORD})
     assert ok.status_code == 200
-    # Success resets the counter: five more free failures.
-    for _ in range(5):
-        assert (await api.post("/api/auth/login", json=wrong)).status_code == 401
+    # Success clears the username's failures (the client's stay, see below).
+    throttle = app.state.rate_limits.login
+    assert "user:anna" not in throttle._failures
+    assert len(throttle._failures["ip:127.0.0.1"]) == 6
 
 
 async def test_login_throttle_per_client(app: FastAPI, api: AsyncClient) -> None:
@@ -190,6 +193,54 @@ async def test_login_throttle_per_client(app: FastAPI, api: AsyncClient) -> None
         assert response.status_code == 401
     blocked = await api.post("/api/auth/login", json={"username": "anna", "password": PASSWORD})
     assert error(blocked) == "common.rate_limited"
+
+
+async def test_own_login_does_not_clear_the_client_throttle(app: FastAPI, api: AsyncClient) -> None:
+    """Logging in to an own account between guesses at others buys no extra guesses."""
+    await insert_user(app, "anna")
+    for index in range(4):
+        response = await api.post(
+            "/api/auth/login", json={"username": f"guess{index}", "password": "whatever1"}
+        )
+        assert response.status_code == 401
+    ok = await api.post("/api/auth/login", json={"username": "anna", "password": PASSWORD})
+    assert ok.status_code == 200
+
+    # The successful login itself does not count as a failure: one more guess is free ...
+    guess = await api.post("/api/auth/login", json={"username": "guess4", "password": "x" * 9})
+    assert guess.status_code == 401
+    # ... and then the client waits, even for the own account.
+    for username in ("guess5", "anna"):
+        blocked = await api.post(
+            "/api/auth/login", json={"username": username, "password": PASSWORD}
+        )
+        assert error(blocked) == "common.rate_limited"
+
+
+async def test_parallel_wrong_logins_are_throttled(
+    app: FastAPI, api: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check and count happen in one step, so parallel requests cannot all get past the check
+    while the first ones are still verifying their password."""
+    await insert_user(app, "anna")
+    real_verify = auth_service.verify_password
+    verified: list[str] = []
+
+    async def slow_verify(password: str, password_hash: str | None, *, rounds: int) -> bool:
+        verified.append(password)
+        await asyncio.sleep(0.05)  # let every other request reach the throttle meanwhile
+        return await real_verify(password, password_hash, rounds=rounds)
+
+    monkeypatch.setattr(auth_service, "verify_password", slow_verify)
+    responses = await asyncio.gather(
+        *(
+            api.post("/api/auth/login", json={"username": "anna", "password": f"wrong {index}"})
+            for index in range(10)
+        )
+    )
+
+    assert len(verified) == 5
+    assert sorted(response.status_code for response in responses) == [401] * 5 + [429] * 5
 
 
 async def test_throttle_is_never_a_lockout(
@@ -422,6 +473,108 @@ async def test_fork_with_a_superseded_token_is_refused_without_revoking(
     assert error(response) == "auth.login_required"
     [session] = await sessions_of(app, anna)
     assert session.revoked_at is None
+
+
+async def revoked(app: FastAPI, user: Account) -> list[bool]:
+    return [session.revoked_at is not None for session in await sessions_of(app, user)]
+
+
+async def test_fork_records_its_parent(app: FastAPI, api: AsyncClient) -> None:
+    anna = await make_user(app, api, "anna")
+    [parent] = await sessions_of(app, anna)
+    assert parent.parent_session_id is None
+
+    assert (await refresh(api, fork=True)).status_code == 200
+
+    [child] = [session for session in await sessions_of(app, anna) if session.id != parent.id]
+    assert child.parent_session_id == parent.id
+
+
+async def test_reuse_on_the_parent_revokes_the_fork(
+    app: FastAPI, api: AsyncClient, clock: FakeClock
+) -> None:
+    anna = await make_user(app, api, "anna")
+    safari = refresh_cookie(api)
+    assert safari is not None
+    assert (await refresh(api, safari, fork=True)).status_code == 200
+    home = refresh_cookie(api)
+    assert home is not None
+    assert (await refresh(api, safari)).status_code == 200  # rotates the parent's token
+    clock.advance(seconds=60)
+
+    reuse = await refresh(api, safari)
+
+    assert error(reuse) == "auth.session_revoked"
+    assert await revoked(app, anna) == [True, True]
+    assert error(await refresh(api, home)) == "auth.session_revoked"
+
+
+async def test_reuse_on_the_fork_revokes_the_parent(
+    app: FastAPI, api: AsyncClient, clock: FakeClock
+) -> None:
+    anna = await make_user(app, api, "anna")
+    safari = refresh_cookie(api)
+    assert safari is not None
+    assert (await refresh(api, safari, fork=True)).status_code == 200
+    home = refresh_cookie(api)
+    assert home is not None
+    assert (await refresh(api, home)).status_code == 200  # rotates the fork's token
+    clock.advance(seconds=60)
+
+    reuse = await refresh(api, home)
+
+    assert error(reuse) == "auth.session_revoked"
+    assert await revoked(app, anna) == [True, True]
+    assert error(await refresh(api, safari)) == "auth.session_revoked"
+
+
+async def test_reuse_revokes_the_whole_fork_family_and_nothing_else(
+    app: FastAPI, api: AsyncClient, client: AsyncClient, clock: FakeClock
+) -> None:
+    """Parent P with forks C and S, and G forked from C: reuse on G reaches all four."""
+    anna = await make_user(app, api, "anna")
+    other = Account(anna.id, "anna", "Anna")
+    await login(client, other)  # an unrelated session of the same user
+    ben = await make_user(app, client, "ben")
+    p_token = refresh_cookie(api)
+    assert p_token is not None
+    assert (await refresh(api, p_token, fork=True)).status_code == 200
+    c_token = refresh_cookie(api)
+    assert c_token is not None
+    assert (await refresh(api, c_token, fork=True)).status_code == 200
+    g_token = refresh_cookie(api)
+    assert g_token is not None
+    assert (await refresh(api, p_token)).status_code == 200  # P rotates ...
+    p_token = refresh_cookie(api)
+    assert p_token is not None
+    assert (await refresh(api, p_token, fork=True)).status_code == 200  # ... and forks S
+    assert (await refresh(api, g_token)).status_code == 200
+    clock.advance(seconds=60)
+
+    assert error(await refresh(api, g_token)) == "auth.session_revoked"
+
+    assert sorted(await revoked(app, anna)) == [False, True, True, True, True]
+    assert await me_status(api, other) == (200, None)
+    assert await me_status(api, ben) == (200, None)
+
+
+@pytest.mark.parametrize("log_out", ["parent", "fork"])
+async def test_logging_out_one_of_a_fork_family_keeps_the_other(
+    app: FastAPI, api: AsyncClient, log_out: str
+) -> None:
+    await make_user(app, api, "anna")
+    safari = refresh_cookie(api)
+    assert safari is not None
+    assert (await refresh(api, safari, fork=True)).status_code == 200
+    home = refresh_cookie(api)
+    assert home is not None
+    leaving, staying = (safari, home) if log_out == "parent" else (home, safari)
+
+    set_refresh_cookie(api, leaving)
+    assert (await api.post("/api/auth/logout")).status_code == 204
+
+    assert error(await refresh(api, leaving)) == "auth.session_revoked"
+    assert (await refresh(api, staying)).status_code == 200
 
 
 # --- logout ----------------------------------------------------------------------------------

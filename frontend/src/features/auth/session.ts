@@ -82,6 +82,9 @@ export function createAuthSession({ initial }: AuthSessionOptions = {}): AuthSes
   }
 
   function applyLogin(response: LoginResponse): void {
+    // Someone else signing in on this device (join, reset, another tab): the previous user's
+    // stored data and cached queries must not carry over (SYNC-10).
+    if (state.user !== null && state.user.id !== response.user.id) end(null);
     accessToken = response.access_token;
     cacheProfile(response.user);
     followLanguage(response.user);

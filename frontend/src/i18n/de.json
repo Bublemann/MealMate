@@ -30,6 +30,7 @@
   "auth.link.invalidTitle": "Dieser Link funktioniert nicht (mehr)",
   "auth.link.invalidText": "Vielleicht wurde er schon benutzt, widerrufen oder ist abgelaufen. Frag deinen Admin nach einem neuen.",
   "auth.link.toLogin": "Zur Anmeldung",
+  "auth.link.signedIn": "Angemeldet als {{name}} – melde dich zuerst ab, um diesen Link zu nutzen.",
   "auth.unreachable.title": "MealMate ist nicht erreichbar",
   "auth.unreachable.text": "Prüf deine Verbindung und ob Tailscale eingeschaltet ist, und versuch es dann noch einmal.",
   "hints.label": "Tipps",

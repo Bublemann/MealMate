@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuthSession, SessionToken, User
@@ -72,3 +72,29 @@ async def revoke_for_user(
     if except_session_id is not None:
         query = query.where(AuthSession.id != except_session_id)
     await session.execute(query.values(revoked_at=now))
+
+
+async def revoke_family(session: AsyncSession, auth_session: AuthSession, now: datetime) -> None:
+    """Revoke `auth_session` and every session linked to it by forks: the one it was forked
+    from, those forked from it, and so on (a household device has at most a few)."""
+    family = {auth_session.id}
+    frontier = {auth_session.id}
+    while frontier:
+        linked = await session.scalars(
+            select(AuthSession.id).where(
+                AuthSession.user_id == auth_session.user_id,
+                or_(
+                    AuthSession.id.in_(
+                        select(AuthSession.parent_session_id).where(AuthSession.id.in_(frontier))
+                    ),
+                    AuthSession.parent_session_id.in_(frontier),
+                ),
+            )
+        )
+        frontier = set(linked) - family
+        family |= frontier
+    await session.execute(
+        update(AuthSession)
+        .where(AuthSession.id.in_(family), AuthSession.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )

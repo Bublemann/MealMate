@@ -166,13 +166,23 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(), nullable=False),
         sa.Column("revoked_at", sa.DateTime(), nullable=True),
         sa.Column("user_agent", sa.String(length=200), nullable=True),
+        sa.Column("parent_session_id", sa.String(length=36), nullable=True),
         sa.Column("id", sa.String(length=36), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["parent_session_id"],
+            ["sessions.id"],
+            name=op.f("fk_sessions_parent_session_id_sessions"),
+            ondelete="SET NULL",
+        ),
         sa.ForeignKeyConstraint(
             ["user_id"], ["users.id"], name=op.f("fk_sessions_user_id_users"), ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_sessions")),
     )
     with op.batch_alter_table("sessions", schema=None) as batch_op:
+        batch_op.create_index(
+            batch_op.f("ix_sessions_parent_session_id"), ["parent_session_id"], unique=False
+        )
         batch_op.create_index(batch_op.f("ix_sessions_user_id"), ["user_id"], unique=False)
 
     op.create_table(
@@ -233,6 +243,7 @@ def downgrade() -> None:
     op.drop_table("couple_members")
     with op.batch_alter_table("sessions", schema=None) as batch_op:
         batch_op.drop_index(batch_op.f("ix_sessions_user_id"))
+        batch_op.drop_index(batch_op.f("ix_sessions_parent_session_id"))
 
     op.drop_table("sessions")
     with op.batch_alter_table("one_time_codes", schema=None) as batch_op:

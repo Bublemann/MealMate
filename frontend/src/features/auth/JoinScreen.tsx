@@ -23,6 +23,7 @@ import { AuthScreen } from './AuthScreen';
 import { CodeGate } from './CodeGate';
 import { useAuth } from './context';
 import { clearLinkCode, useLinkCode } from './linkCode';
+import { SignedInGate } from './SignedInGate';
 
 /** Registration with an invite link (ACC-01, ACC-04..07). */
 export function JoinScreen() {
@@ -31,9 +32,11 @@ export function JoinScreen() {
 
   return (
     <AuthScreen title={t('auth.join.title')} testId={testIds.screenJoin}>
-      <CodeGate kind="invite" code={code}>
-        {(info, validCode) => <JoinForm code={validCode} expiresAt={info.expires_at} />}
-      </CodeGate>
+      <SignedInGate>
+        <CodeGate kind="invite" code={code}>
+          {(info, validCode) => <JoinForm code={validCode} expiresAt={info.expires_at} />}
+        </CodeGate>
+      </SignedInGate>
     </AuthScreen>
   );
 }

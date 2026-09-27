@@ -474,7 +474,7 @@ export interface paths {
         put?: never;
         /**
          * Change Password
-         * @description Change the password; logs out all other devices.
+         * @description Change the password; logs out all other devices (throttled like login, ACC-11).
          */
         post: operations["change_password"];
         delete?: never;

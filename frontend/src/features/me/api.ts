@@ -78,11 +78,6 @@ export function useSecurityInfo() {
   });
 }
 
-export function useLogout() {
-  const session = useAuthSession();
-  return useMutation({ mutationFn: () => session.logout() });
-}
-
 export function useLogoutAll() {
   const session = useAuthSession();
   return useMutation({ mutationFn: () => session.logoutAll() });

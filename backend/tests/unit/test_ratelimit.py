@@ -107,3 +107,19 @@ def test_rate_limits_share_the_clock(clock: Clock) -> None:
     assert limits.login.clock is clock
     assert limits.codes.clock is clock
     assert limits.codes.limit == 10
+
+
+def test_refund_takes_back_one_failure(clock: Clock) -> None:
+    throttle = LoginThrottle(clock=clock)
+    first = throttle.record_failure(["ip:x"])
+    clock.now += 1
+    second = throttle.record_failure(["ip:x", "user:anna"])
+    clock.now += 1
+    throttle.record_failure(["ip:x"])
+
+    throttle.refund(["ip:x", "user:anna", "never-seen"], second)
+
+    assert list(throttle._failures["ip:x"]) == [first, first + 2]
+    assert "user:anna" not in throttle._failures
+    throttle.refund(["ip:x"], second)  # already taken back: nothing happens
+    assert len(throttle._failures["ip:x"]) == 2
