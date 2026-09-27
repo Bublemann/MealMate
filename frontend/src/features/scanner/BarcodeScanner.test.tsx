@@ -66,7 +66,8 @@ describe('BarcodeScanner', () => {
       video: { facingMode: 'environment' },
       audio: false,
     });
-    expect(loadDecoder).toHaveBeenCalled();
+    // The decoder loads in the effect that follows the stream, not synchronously with it.
+    await waitFor(() => expect(loadDecoder).toHaveBeenCalled());
     await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
     expect(onBarcode).toHaveBeenCalledTimes(1);
     // Nothing else decoded once the barcode is found.
