@@ -18,6 +18,9 @@ export type NutrientInfo = components['schemas']['NutrientInfo'];
 export type Product = components['schemas']['Product'];
 export type ProductCreate = components['schemas']['ProductCreate'];
 export type ProductUpdate = components['schemas']['ProductUpdate'];
+export type ProductField = Product['user_edited_fields'][number];
+export type PendingUpdateField = components['schemas']['PendingUpdateField'];
+export type ProductProposal = components['schemas']['ProductProposal'];
 
 const INGREDIENTS_KEY = ['ingredients'] as const;
 const listKey = (query: string) => [...INGREDIENTS_KEY, 'list', query] as const;
@@ -139,6 +142,25 @@ export function useUpdateProduct(productId: string) {
           body,
         }),
       ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: INGREDIENTS_KEY }),
+  });
+}
+
+/**
+ * BAR-06: takes Open Food Facts' newer values for the user-edited fields (`apply`), or keeps the
+ * user's values and stops proposing this Open Food Facts version (`ignore`).
+ */
+export function usePendingUpdate(productId: string, action: 'apply' | 'ignore') {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => {
+      const params = { params: { path: { product_id: productId } } };
+      return unwrap(
+        action === 'apply'
+          ? api.POST('/api/products/{product_id}/pending-update/apply', params)
+          : api.POST('/api/products/{product_id}/pending-update/ignore', params),
+      );
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: INGREDIENTS_KEY }),
   });
 }

@@ -93,6 +93,17 @@ describe('IngredientsScreen', () => {
     expect(await screen.findByRole('dialog', { name: 'New ingredient' })).toBeVisible();
   });
 
+  it.each([
+    ['with ingredients', listIngredients],
+    ['without ingredients', []],
+  ])('offers the barcode scanner %s (BAR-01)', async (_case, answer) => {
+    renderIngredients({ 'GET /api/ingredients': answer });
+
+    const link = await screen.findByRole('link', { name: 'Scan barcode' });
+    expect(link).toHaveAttribute('href', '/scan');
+    expect(link).toHaveAttribute('data-testid', testIds.scanBarcode);
+  });
+
   it('shows a translated error when the list cannot be loaded', async () => {
     renderIngredients({ 'GET /api/ingredients': errorResponse(503, 'common.service_unavailable') });
 

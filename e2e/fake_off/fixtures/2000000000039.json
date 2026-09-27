@@ -1,0 +1,30 @@
+{
+  "code": "2000000000039",
+  "errors": [],
+  "product": {
+    "brands": "Küstensalz",
+    "categories_tags": [
+      "en:condiments",
+      "en:salts",
+      "en:sea-salts"
+    ],
+    "code": "2000000000039",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "no_nutrition_data": "on",
+    "nutriments": {},
+    "product_name": "Sea salt",
+    "product_name_de": "Meersalz",
+    "product_name_en": "Sea salt",
+    "product_quantity": 500,
+    "product_quantity_unit": "g",
+    "quantity": "500 g"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

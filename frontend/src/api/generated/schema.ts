@@ -623,7 +623,8 @@ export interface paths {
         };
         /**
          * List Ingredient Products
-         * @description The ingredient's products, by name and barcode.
+         * @description The ingredient's products, by name and barcode; stale Open Food Facts products are
+         *     refreshed after the response.
          */
         get: operations["list_ingredient_products"];
         put?: never;
@@ -1235,9 +1236,32 @@ export interface paths {
         put?: never;
         /**
          * Create Product
-         * @description Add a product by hand; its nutrition basis must be the ingredient's base unit.
+         * @description Add a product by hand or from an Open Food Facts proposal; its nutrition basis must be
+         *     the ingredient's base unit.
          */
         post: operations["create_product"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookup Product
+         * @description Look a scanned or typed barcode up: our own products first, then Open Food Facts (a
+         *     proposal, not saved). 422 `invalid_format` for a barcode with a wrong check digit, 503
+         *     `off.busy` while too many lookups wait for Open Food Facts.
+         */
+        get: operations["lookup_product"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1253,7 +1277,7 @@ export interface paths {
         };
         /**
          * Get Product
-         * @description One product.
+         * @description One product; a stale Open Food Facts product is refreshed after the response.
          */
         get: operations["get_product"];
         put?: never;
@@ -1266,6 +1290,48 @@ export interface paths {
          * @description Change a product (anyone may); every field sent is marked user-edited.
          */
         patch: operations["update_product"];
+        trace?: never;
+    };
+    "/api/products/{product_id}/pending-update/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Pending Update
+         * @description Take the newer Open Food Facts values (BAR-06); those fields are no longer
+         *     user-edited. 409 `product.no_pending_update` if there are none.
+         */
+        post: operations["apply_pending_update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/pending-update/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ignore Pending Update
+         * @description Keep the user's values (BAR-06); the same Open Food Facts version is not proposed
+         *     again. 409 `product.no_pending_update` if there is nothing to ignore.
+         */
+        post: operations["ignore_pending_update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/tags": {
@@ -1548,7 +1614,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "product.no_pending_update" | "off.busy" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -2618,10 +2684,40 @@ export interface components {
             new_password: string;
         };
         /**
+         * PendingUpdate
+         * @description Newer Open Food Facts values for user-edited fields (BAR-06), shown as "Open Food Facts
+         *     has newer values: kcal 165 → 158 [Apply] [Ignore]". `off_last_modified_at` is when the
+         *     product was last changed on Open Food Facts.
+         */
+        PendingUpdate: {
+            /** Fields */
+            fields: components["schemas"]["PendingUpdateField"][];
+            /** Off Last Modified At */
+            off_last_modified_at: string | null;
+        };
+        /**
+         * PendingUpdateField
+         * @description A user-edited field for which Open Food Facts now has another value: `current` is the
+         *     product's value, `proposed` the new one (a text, a number or null).
+         */
+        PendingUpdateField: {
+            /** Current */
+            current: string | number | null;
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "nutrition_basis" | "name" | "brand" | "quantity_text" | "pack_quantity" | "pack_unit" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
+            /** Proposed */
+            proposed: string | number | null;
+        };
+        /**
          * Product
          * @description `nutrients` are per 100 g or 100 ml (`nutrition_basis`, always the ingredient's base
          *     unit). `user_edited_fields` names the fields a user typed or changed (`name`,
-         *     `nutrients.kcal`, ...); Open Food Facts never overwrites them (BAR-04).
+         *     `nutrients.kcal`, ...); Open Food Facts never overwrites them (BAR-04). Products with
+         *     `source` off are refreshed from Open Food Facts; `pending_update` then holds newer values
+         *     for user-edited fields (BAR-06).
          */
         Product: {
             /** Barcode */
@@ -2651,6 +2747,7 @@ export interface components {
             /** Pack Quantity */
             pack_quantity: number | null;
             pack_unit: components["schemas"]["Unit"] | null;
+            pending_update: components["schemas"]["PendingUpdate"] | null;
             /** Quantity Text */
             quantity_text: string | null;
             /**
@@ -2665,20 +2762,30 @@ export interface components {
             updated_at: string;
             updated_by: components["schemas"]["UserRef"] | null;
             /** User Edited Fields */
-            user_edited_fields: string[];
+            user_edited_fields: ("nutrition_basis" | "name" | "brand" | "quantity_text" | "pack_quantity" | "pack_unit" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
         };
         /**
          * ProductCreate
-         * @description A product entered by hand. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid
-         *     check digit (spaces are ignored); it is stored as EAN-13 (UPC-A with a leading 0, UPC-E
-         *     expanded first), an EAN-8 as it is. `nutrition_basis` defaults to the ingredient's base unit
-         *     and must match it (409 `product.basis_mismatch`).
+         * @description A product entered by hand, or saved from an Open Food Facts proposal. The barcode is
+         *     EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are ignored); it is stored as
+         *     EAN-13 (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is.
+         *     `nutrition_basis` defaults to the ingredient's base unit and must match it (409
+         *     `product.basis_mismatch`).
+         *
+         *     - `source` manual (the default): every field given is marked user-edited.
+         *     - `source` off: the values come from the lookup's proposal (possibly corrected), with its
+         *       `off_last_modified_at`; only the `edited_fields` (those the user changed compared with
+         *       the proposal) are marked user-edited, the others are refreshed from Open Food Facts
+         *       (BAR-04, BAR-05). `edited_fields` and `off_last_modified_at` are ignored for manual
+         *       products.
          */
         ProductCreate: {
             /** Barcode */
             barcode: string;
             /** Brand */
             brand?: string | null;
+            /** Edited Fields */
+            edited_fields?: ("nutrition_basis" | "name" | "brand" | "quantity_text" | "pack_quantity" | "pack_unit" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[] | null;
             /** Ingredient Id */
             ingredient_id: string;
             /** Name */
@@ -2686,11 +2793,75 @@ export interface components {
             nutrients?: components["schemas"]["NutrientValues"] | null;
             /** Nutrition Basis */
             nutrition_basis?: ("g" | "ml") | null;
+            /** Off Last Modified At */
+            off_last_modified_at?: string | null;
             /** Pack Quantity */
             pack_quantity?: number | null;
             pack_unit?: components["schemas"]["Unit"] | null;
             /** Quantity Text */
             quantity_text?: string | null;
+            /**
+             * Source
+             * @default manual
+             * @enum {string}
+             */
+            source: "off" | "manual";
+        };
+        /**
+         * ProductLookup
+         * @description The result of a barcode lookup (BAR-02, BAR-03), our own database first:
+         *
+         *     - `found_in` db: `product` and its `ingredient` (go straight to it);
+         *     - `found_in` off: the `proposal` and name-matched `suggestions` for "Which ingredient is
+         *       this?"; nothing is saved yet;
+         *     - `found_in` none: unknown to Open Food Facts, or `off_unavailable` when it could not be
+         *       asked (slow or unreachable); the user enters the values.
+         *
+         *     `barcode` is the canonical form (EAN-13, or EAN-8) to save the product with.
+         */
+        ProductLookup: {
+            /** Barcode */
+            barcode: string;
+            /**
+             * Found In
+             * @enum {string}
+             */
+            found_in: "db" | "off" | "none";
+            ingredient: components["schemas"]["IngredientSummary"] | null;
+            /** Off Unavailable */
+            off_unavailable: boolean;
+            product: components["schemas"]["Product"] | null;
+            proposal: components["schemas"]["ProductProposal"] | null;
+            /** Suggestions */
+            suggestions: components["schemas"]["IngredientSummary"][];
+        };
+        /**
+         * ProductProposal
+         * @description A product from Open Food Facts, validated and cleaned (BAR-10) but not saved.
+         *
+         *     `name` is in the user's language if Open Food Facts has it. `nutrition_basis` is null when
+         *     Open Food Facts gives no values per 100 g or 100 ml; the nutrients are then all unknown and
+         *     the basis is the chosen ingredient's base unit. `category_key` is a guessed category
+         *     (`/api/categories` key) for a new ingredient, or null. Values that are not plausible are
+         *     dropped (null).
+         */
+        ProductProposal: {
+            /** Brand */
+            brand: string | null;
+            /** Category Key */
+            category_key: string | null;
+            /** Name */
+            name: string | null;
+            nutrients: components["schemas"]["NutrientValues"];
+            /** Nutrition Basis */
+            nutrition_basis: ("g" | "ml") | null;
+            /** Off Last Modified At */
+            off_last_modified_at: string | null;
+            /** Pack Quantity */
+            pack_quantity: number | null;
+            pack_unit: components["schemas"]["Unit"] | null;
+            /** Quantity Text */
+            quantity_text: string | null;
         };
         /**
          * ProductUpdate
@@ -5168,6 +5339,37 @@ export interface operations {
             };
         };
     };
+    lookup_product: {
+        parameters: {
+            query: {
+                barcode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductLookup"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_product: {
         parameters: {
             query?: never;
@@ -5213,6 +5415,68 @@ export interface operations {
                 "application/json": components["schemas"]["ProductUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_pending_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ignore_pending_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

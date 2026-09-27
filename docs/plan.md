@@ -332,7 +332,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   - strings are trimmed to name ≤ 200, brand ≤ 100 and quantity ≤ 50 characters;
   - control and bidi characters are removed;
   - nutrients must be finite and within the registry range (e.g. 0–100 g per 100 g, kcal ≤ 900), otherwise they are dropped.
-- **Rate limit:** a global token bucket of 10 requests/min. Excess lookups wait up to 5 s, then return `off.busy`, and the user can retry or enter the values by hand. So the server always answers a lookup within about 15 s.
+- **Rate limit:** sliding 60-second windows, so OFF never gets more than 10 requests in any minute from the Pi: the app process may start at most 6 (`OFF_RATE_APP_PER_MINUTE`), the nightly job, which runs as a separate process, at most 4 (`OFF_RATE_JOB_PER_MINUTE`); their sum is checked to be ≤ 10. Excess lookups wait up to 5 s, then return `off.busy`, and the user can retry or enter the values by hand. So the server always answers a lookup within about 15 s. Background refreshes only take a free slot and never wait.
 - **Lookup flow:** `GET /api/products/lookup?barcode=`:
   1. validate the check digit;
   2. look in the own database;
@@ -384,6 +384,7 @@ Each rule has API tests, including negative cases and the switch combinations in
 | `OFF_BASE_URL` | `https://world.openfoodfacts.org` | |
 | `OFF_REFRESH_DAYS` | `30` | |
 | `OFF_USER_AGENT_CONTACT` | repo URL | |
+| `OFF_RATE_APP_PER_MINUTE` / `OFF_RATE_JOB_PER_MINUTE` | `6` / `4` | Requests to OFF per 60 s from the app and from the nightly job; together ≤ 10 (BAR-08) |
 | `INVITE_TTL_DAYS` / `RESET_TTL_HOURS` | `7` / `24` | |
 | `SESSION_IDLE_DAYS` | `90` | |
 | `API_DOCS_ENABLED` | `false` | `true` in dev |
@@ -918,7 +919,7 @@ The size is relative (S < M < L < XL).
 
 ### M7 — Barcode scanning and Open Food Facts (M)
 *BAR, SEC-13*
-- **Backend:** OFF v3 client (O-4) with validation, token bucket, lookup proposal, save and link (basis check), refresh job + background refresh, pending-update apply/ignore, attribution data.
+- **Backend:** OFF v3 client (O-4) with validation, rate limit, lookup proposal, save and link (basis check), refresh job + background refresh, pending-update apply/ignore, attribution data.
 - **Frontend:** scanner route (lazy, self-hosted wasm, torch toggle if available, manual input fallback), "Which ingredient is this?" flow, pending-update hint, attribution.
 - **Tests:** OFF contract tests on recorded fixtures (a weekly non-blocking CI job checks one real known barcode); E2E journey 3; Vitest decoding of sample EAN images; a real-device check of the iOS 26 camera-rotation issue (O-6).
 

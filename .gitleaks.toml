@@ -24,3 +24,10 @@ description = "v1 self-signed TLS key, public in history and treated as compromi
 condition = "AND"
 commits = ["d9664fdc4a928eee9da1cde12922438d15d31e94"]
 paths = ['''^certs/key\.pem$''']
+
+[[allowlists]]
+description = "Made-up SSH public key used by the deploy tests for --set-backup-key; not a credential"
+condition = "AND"
+paths = ['''(^|/)deploy/tests/test_host_files\.py$''']
+regexTarget = "match"
+regexes = ['''AAAAC3NzaC1lZDI1NTE5AAAAIC2l1Pv3m3sR1Ukn8mHkCZ0wX8q3QYxY4N7d0w7sWm1k''']

@@ -1,9 +1,11 @@
-from dataclasses import dataclass
+import random
+import time
+from dataclasses import dataclass, field
 
 import pytest
 
 from app.core import ratelimit
-from app.core.ratelimit import LoginThrottle, RateLimits, RequestRateLimit
+from app.core.ratelimit import LoginThrottle, RateLimits, RequestRateLimit, SlidingWindow
 
 
 @dataclass
@@ -123,3 +125,76 @@ def test_refund_takes_back_one_failure(clock: Clock) -> None:
     assert "user:anna" not in throttle._failures
     throttle.refund(["ip:x"], second)  # already taken back: nothing happens
     assert len(throttle._failures["ip:x"]) == 2
+
+
+# --- the Open Food Facts sliding window (BAR-08) ------------------------------------------------
+
+
+@dataclass
+class FakeSleep:
+    """Sleeping moves the clock instead of waiting."""
+
+    clock: Clock
+    slept: list[float] = field(default_factory=list)
+
+    async def __call__(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.clock.now += seconds
+
+
+def max_in_any_window(starts: list[float], window: float = 60) -> int:
+    """The most starts in any half-open `window` (it suffices to try each start as its
+    beginning)."""
+    return max(sum(first <= other < first + window for other in starts) for first in starts)
+
+
+def test_window_allows_n_then_waits_for_the_oldest(clock: Clock) -> None:
+    limit = SlidingWindow(6, clock=clock)
+    assert [limit.reserve(max_wait=0) for _ in range(6)] == [0.0] * 6
+    assert limit.reserve(max_wait=0) is None  # nothing reserved
+    clock.now += 10
+    assert limit.reserve(max_wait=50) == 50  # 60 s after the first start
+    assert limit.reserve(max_wait=49) is None
+    assert limit.reserve(max_wait=None) == 50  # also 60 s after the second one
+    clock.now += 50  # the first six leave the window as the seventh and eighth start
+    assert [limit.reserve(max_wait=0) for _ in range(4)] == [0.0] * 4
+    assert limit.reserve(max_wait=0) is None
+    clock.now += 60
+    assert [limit.reserve(max_wait=0) for _ in range(6)] == [0.0] * 6
+
+
+def test_never_more_than_n_starts_in_any_window(clock: Clock) -> None:
+    """Callers arriving at random, some waiting as long as needed, some at most 5 s."""
+    rng = random.Random(7)  # noqa: S311 -- reproducible test data
+    limit = SlidingWindow(4, clock=clock)
+    starts: list[float] = []
+    for _ in range(500):
+        clock.now += rng.choice([0, 0, 0.5, 3, 11, 29])
+        wait = limit.reserve(max_wait=rng.choice([None, 0, 5]))
+        if wait is not None:
+            starts.append(clock.now + wait)
+    assert starts == sorted(starts)  # served in order
+    assert max_in_any_window(starts) == 4
+    assert max_in_any_window(starts, window=59.9) == 4
+    assert len(starts) > 100
+
+
+async def test_window_callers_wait_their_turn(clock: Clock) -> None:
+    sleep = FakeSleep(clock)
+    limit = SlidingWindow(6, clock=clock, sleep=sleep)
+    for _ in range(6):
+        assert await limit.acquire(max_wait=5)
+        clock.now += 1
+    assert not await limit.acquire(max_wait=5)  # 54 s away: `off.busy` for a lookup
+    clock.now += 50
+    assert await limit.acquire(max_wait=5)  # 4 s away: worth the wait
+    assert sleep.slept == [4]
+    assert await limit.acquire()  # the refresh job waits as long as needed
+    assert sleep.slept == [4, 1]
+    assert clock.now == 1_061
+
+
+def test_window_uses_real_time_by_default() -> None:
+    limit = SlidingWindow(6)
+    assert (limit.clock, limit.window) == (time.monotonic, 60)
+    assert limit.reserve(max_wait=0) == 0.0

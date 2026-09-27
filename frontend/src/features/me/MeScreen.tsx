@@ -1,5 +1,5 @@
 import { ChevronRight, LogOut } from 'lucide-react';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLogout } from '@/features/auth/api';
 import { useCurrentUser } from '@/features/auth/context';
 import { CoupleSection } from '@/features/couple/CoupleSection';
+import { OffAttribution } from '@/features/ingredients/OffAttribution';
 import { errorMessage } from '@/i18n/errors';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
@@ -16,8 +17,6 @@ import { useMeRefresh, useVersionInfo } from './api';
 import { PrivacySection } from './PrivacySection';
 import { ProfileSection } from './ProfileSection';
 import { SecuritySection } from './SecuritySection';
-
-const OPEN_FOOD_FACTS_URL = 'https://world.openfoodfacts.org';
 
 export function MeScreen() {
   const { t } = useTranslation();
@@ -124,12 +123,7 @@ function AboutCard() {
             {t('me.sourceCode')}
           </ExternalLink>
         )}
-        <p className="text-sm text-muted-foreground">
-          <Trans
-            i18nKey="me.offAttribution"
-            components={{ offLink: <ExternalLink href={OPEN_FOOD_FACTS_URL} /> }}
-          />
-        </p>
+        <OffAttribution />
       </CardContent>
     </Card>
   );

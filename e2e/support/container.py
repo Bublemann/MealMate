@@ -57,8 +57,11 @@ class AppContainer:
         )
 
 
-def start_app(image: str, port: int, env: dict[str, str]) -> AppContainer:
-    """Starts `image` on 127.0.0.1:`port` with an empty tmpfs /data."""
+def start_app(
+    image: str, port: int, env: dict[str, str], *, hosts: dict[str, str] | None = None
+) -> AppContainer:
+    """Starts `image` on 127.0.0.1:`port` with an empty tmpfs /data; `hosts` adds names
+    (`{"host.docker.internal": "host-gateway"}`) to the container's /etc/hosts."""
     command = [
         "docker",
         "run",
@@ -76,6 +79,8 @@ def start_app(image: str, port: int, env: dict[str, str]) -> AppContainer:
         "--security-opt",
         "no-new-privileges:true",
     ]
+    for name, address in (hosts or {}).items():
+        command += ["--add-host", f"{name}:{address}"]
     for name, value in env.items():
         command += ["--env", f"{name}={value}"]
     command.append(image)

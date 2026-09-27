@@ -15,6 +15,7 @@ from app.media.store import MediaStore
 from app.services import access, auth
 from app.services.context import AuthConfig
 from app.services.list_cache import ListCache
+from app.services.off_refresh import OffRefresher
 from app.services.principal import Principal
 
 UNKNOWN_CLIENT = "unknown"
@@ -45,6 +46,11 @@ def get_list_cache(request: Request) -> ListCache:
     return cache
 
 
+def get_off_refresher(request: Request) -> OffRefresher:
+    refresher: OffRefresher = request.app.state.off_refresh
+    return refresher
+
+
 def get_now(request: Request) -> datetime:
     """The current time from the app's clock (`app.state.clock`), which tests can move."""
     clock: Callable[[], datetime] = request.app.state.clock
@@ -67,6 +73,7 @@ Limits = Annotated[RateLimits, Depends(get_rate_limits)]
 Media = Annotated[MediaStore, Depends(get_media)]
 Db = Annotated[Database, Depends(get_database)]
 ListResponses = Annotated[ListCache, Depends(get_list_cache)]
+OffRefresh = Annotated[OffRefresher, Depends(get_off_refresher)]
 Now = Annotated[datetime, Depends(get_now)]
 ClientIp = Annotated[str, Depends(get_client_ip)]
 UserAgent = Annotated[str | None, Depends(get_user_agent)]

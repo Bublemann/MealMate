@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, CircleAlert, X } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowDown, ArrowUp, CircleAlert, ScanBarcode, X } from 'lucide-react';
+import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,11 @@ import { useUnits, type Unit } from '@/features/reference/api';
 import { unitLabel } from '@/features/reference/labels';
 import { testIds } from '@/testIds';
 import { moved, newRow, withAmountText, type RowState } from './form';
+
+// The scanner and its decoder are a separate chunk, loaded on the first tap (PERF-03).
+const ScanDialog = lazy(async () => ({
+  default: (await import('@/features/scanner/ScanDialog')).ScanDialog,
+}));
 
 interface IngredientRowsProps {
   rows: RowState[];
@@ -27,6 +32,7 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
   const { t } = useTranslation();
   // A new picker after each pick starts with an empty search.
   const [pickerKey, setPickerKey] = useState(0);
+  const [scanning, setScanning] = useState(false);
 
   function update(index: number, row: RowState) {
     onChange(rows.map((current, i) => (i === index ? row : current)));
@@ -75,7 +81,22 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
           label={t('meals.field.addIngredient')}
           onSelect={onPick}
         />
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-3"
+          data-testid={testIds.scanBarcode}
+          onClick={() => setScanning(true)}
+        >
+          <ScanBarcode aria-hidden="true" />
+          {t('scanner.open')}
+        </Button>
       </div>
+      {scanning && (
+        <Suspense fallback={null}>
+          <ScanDialog open onOpenChange={setScanning} onIngredient={onPick} />
+        </Suspense>
+      )}
     </fieldset>
   );
 }

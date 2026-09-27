@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Product
@@ -12,6 +12,28 @@ from app.models import Product
 
 async def get(session: AsyncSession, product_id: str) -> Product | None:
     return await session.get(Product, product_id)
+
+
+async def by_barcode(session: AsyncSession, barcode: str) -> Product | None:
+    result = await session.execute(select(Product).where(Product.barcode == barcode))
+    return result.scalar_one_or_none()
+
+
+async def stale_from_off(
+    session: AsyncSession, fetched_before: datetime, *, limit: int | None = None
+) -> list[str]:
+    """The ids of the products from Open Food Facts fetched before `fetched_before` (or never),
+    the longest ago first; at most `limit` (None: all)."""
+    result = await session.execute(
+        select(Product.id)
+        .where(
+            Product.source == "off",
+            or_(Product.fetched_at.is_(None), Product.fetched_at < fetched_before),
+        )
+        .order_by(Product.fetched_at.asc().nulls_first(), Product.id)
+        .limit(limit)
+    )
+    return list(result.scalars())
 
 
 async def barcode_taken(

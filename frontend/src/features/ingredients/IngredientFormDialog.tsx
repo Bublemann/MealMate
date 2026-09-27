@@ -59,6 +59,10 @@ interface IngredientFormDialogProps {
   ingredient?: Ingredient;
   /** Prefills the name of a new ingredient (e.g. from a search). */
   initialName?: string;
+  /** Preselects the category of a new ingredient by key (e.g. guessed from a scanned product). */
+  initialCategoryKey?: string | null;
+  /** Preselects the base unit of a new ingredient (default g). */
+  initialBaseUnit?: BaseUnit;
   /** Called with the saved ingredient; the dialog closes itself. */
   onSaved?: (ingredient: Ingredient) => void;
   /**
@@ -97,6 +101,8 @@ type FormProps = Omit<IngredientFormDialogProps, 'open' | 'onOpenChange'> & {
 function IngredientForm({
   ingredient,
   initialName = '',
+  initialCategoryKey,
+  initialBaseUnit = 'g',
   onSaved,
   onPickExisting,
   onClose,
@@ -111,7 +117,7 @@ function IngredientForm({
 
   const [name, setName] = useState(ingredient?.name ?? initialName);
   const [categoryId, setCategoryId] = useState<string | null>(ingredient?.category_id ?? null);
-  const [baseUnit, setBaseUnit] = useState<BaseUnit>(ingredient?.base_unit ?? 'g');
+  const [baseUnit, setBaseUnit] = useState<BaseUnit>(ingredient?.base_unit ?? initialBaseUnit);
   // The number fields as the form opened with them. Only fields whose text was changed are
   // sent: a stored value with more decimals than shown would otherwise be cut on every save.
   const [initialNumbers] = useState<Record<NumberField, string>>(() => ({
@@ -128,7 +134,9 @@ function IngredientForm({
   const [manual, setManual] = useState(initialManual);
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
 
-  const defaultCategory = categories.data?.find((category) => category.key === 'other');
+  const defaultCategory =
+    categories.data?.find((category) => category.key === initialCategoryKey) ??
+    categories.data?.find((category) => category.key === 'other');
   const selectedCategory = categoryId ?? defaultCategory?.id ?? '';
   const baseUnitLocked = (ingredient?.product_count ?? 0) > 0;
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);

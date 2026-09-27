@@ -1,0 +1,66 @@
+# Weekly contract check against the real Open Food Facts API (plan § 9, O-4): the backend's OFF
+# client asks for one well-known product and checks the response has the shape the recorded test
+# fixtures assume. It never blocks anything; a failure opens (or updates) one issue, and the next
+# passing run closes it.
+name: Open Food Facts contract
+
+on:
+  schedule:
+    - cron: "41 5 * * 1" # Mondays 05:41 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: off-contract
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.19"
+
+jobs:
+  contract:
+    name: Real API check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # check out the tests
+      issues: write # report a failure
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: Contract tests (marker off_contract)
+        id: check
+        continue-on-error: true
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run pytest -m off_contract --no-cov -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/pytest.txt"
+          exit "${PIPESTATUS[0]}"
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OUTCOME: ${{ steps.check.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Open Food Facts contract check failed"
+          if [ "$OUTCOME" = "success" ]; then
+            .github/scripts/upsert-issue.sh "$title"
+            exit 0
+          fi
+          {
+            echo "The weekly check against the real Open Food Facts API failed (${RUN_URL})."
+            echo "The API may have changed (plan § 15, O-4): check backend/app/integrations/off.py"
+            echo "and the recorded fixtures in backend/tests/fixtures/off/ and e2e/fake_off/."
+            echo
+            echo '```'
+            tail -n 60 "$RUNNER_TEMP/pytest.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/issue.md"
+          .github/scripts/upsert-issue.sh "$title" "$RUNNER_TEMP/issue.md"

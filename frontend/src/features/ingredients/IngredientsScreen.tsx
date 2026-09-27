@@ -1,4 +1,4 @@
-import { Carrot, ChevronRight, Plus, Search } from 'lucide-react';
+import { Carrot, ChevronRight, Plus, ScanBarcode, Search } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
@@ -61,18 +61,19 @@ export function IngredientsScreen() {
           text={t('ingredients.empty.text')}
           actionLabel={t('ingredients.empty.action')}
           onAction={() => setCreating(true)}
-        />
+        >
+          <ScanLink />
+        </EmptyState>
       ) : (
         <>
           <div className="flex flex-col gap-3">
-            <Button
-              data-testid={testIds.newIngredient}
-              onClick={() => setCreating(true)}
-              className="self-start"
-            >
-              <Plus aria-hidden="true" />
-              {t('ingredients.new')}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button data-testid={testIds.newIngredient} onClick={() => setCreating(true)}>
+                <Plus aria-hidden="true" />
+                {t('ingredients.new')}
+              </Button>
+              <ScanLink />
+            </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={searchId}>{t('ingredients.search.label')}</Label>
               <div className="relative">
@@ -117,6 +118,20 @@ export function IngredientsScreen() {
         onSaved={(ingredient) => void navigate(`/ingredients/${ingredient.id}`)}
       />
     </Screen>
+  );
+}
+
+/** BAR-01: opens the scanner, which ends on the barcode's ingredient. */
+function ScanLink() {
+  const { t } = useTranslation();
+
+  return (
+    <Button asChild variant="outline">
+      <Link to="/scan" data-testid={testIds.scanBarcode}>
+        <ScanBarcode aria-hidden="true" />
+        {t('scanner.open')}
+      </Link>
+    </Button>
   );
 }
 

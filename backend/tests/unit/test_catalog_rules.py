@@ -16,6 +16,10 @@ from app.domain.text import fold_umlauts, normalize
         ("bidi‮override", True),
         ("zero​width", True),
         ("\x00", True),
+        ("lone\ud800surrogate", True),
+        ("private\ue000use", True),
+        ("unassigned\u0378", True),
+        ("Käse 🧀 - 45 % Fett", False),
     ],
 )
 def test_control_characters(text: str, expected: bool) -> None:

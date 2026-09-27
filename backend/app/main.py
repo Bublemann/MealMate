@@ -18,6 +18,7 @@ from app.db.session import Database
 from app.media.store import MediaStore
 from app.services.context import AuthConfig
 from app.services.list_cache import ListCache
+from app.services.off_refresh import OffRefresher
 from app.web.static import add_frontend_route
 
 DOCS_URL = "/api/docs"
@@ -65,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.media = MediaStore(settings.media_dir, key=app.state.auth_config.keys.media)
     app.state.rate_limits = RateLimits()
     app.state.list_cache = ListCache()
+    app.state.off_refresh = OffRefresher.from_settings(settings)
     app.state.clock = utcnow
 
     install_exception_handlers(app)

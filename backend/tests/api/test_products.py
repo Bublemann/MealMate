@@ -1,5 +1,6 @@
 """Products entered by hand: barcode, basis, per-field user edits (ING-04, BAR-04)."""
 
+import json
 from typing import Any
 
 import pytest
@@ -67,6 +68,7 @@ async def test_create_minimal(api: AsyncClient, anna: Account, milk: Any) -> Non
         "source": "manual",
         "user_edited_fields": [],
         "fetched_at": None,
+        "pending_update": None,
         "created_by": ref(anna),
         "updated_by": ref(anna),
         "created_at": "2026-09-27T12:00:00Z",
@@ -181,6 +183,8 @@ async def test_basis_must_match_the_base_unit(api: AsyncClient, anna: Account, m
         ({"quantity_text": "x" * 41}, ("body", "quantity_text"), "too_long"),
         ({"name": "Pasta‏"}, ("body", "name"), "invalid_format"),
         ({"brand": "\x07"}, ("body", "brand"), "invalid_format"),
+        ({"brand": "Hausmarke\ue000"}, ("body", "brand"), "invalid_format"),
+        ({"quantity_text": "500\u0378 g"}, ("body", "quantity_text"), "invalid_format"),
         ({"pack_quantity": 0}, ("body", "pack_quantity"), "out_of_range"),
         ({"pack_quantity": 100_001}, ("body", "pack_quantity"), "out_of_range"),
         ({"pack_unit": "cup"}, ("body", "pack_unit"), "invalid"),
@@ -199,6 +203,19 @@ async def test_invalid_fields(
     response = await post(api, anna, **({"barcode": EAN_13, "ingredient_id": pasta["id"]} | body))
     assert response.status_code == 422
     assert fields(response) == {loc: code}
+
+
+async def test_a_lone_surrogate_is_refused(api: AsyncClient, anna: Account, pasta: Any) -> None:
+    """JSON may escape half a UTF-16 pair (`\\ud800`), which cannot be stored as UTF-8;
+    Pydantic refuses it as no valid string."""
+    body = {"barcode": EAN_13, "ingredient_id": pasta["id"], "name": "Pasta\ud800"}
+    response = await api.post(
+        "/api/products",
+        content=json.dumps(body),  # ASCII with escapes: httpx cannot encode the surrogate
+        headers=anna.headers | {"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422
+    assert fields(response) == {("body", "name"): "invalid"}
 
 
 async def test_unknown_product(api: AsyncClient, anna: Account) -> None:
