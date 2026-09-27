@@ -9,6 +9,7 @@ from playwright.sync_api import Page, expect
 from support.a11y import serious_violations
 from support.api import CODE_REQUESTS, Account, Api, code_from_link, sign_in, unique
 from support.frontend import TEST_IDS, text
+from support.images import png
 
 Visitor = Literal["anonymous", "member", "admin"]
 
@@ -33,6 +34,13 @@ SCREENS = [
         "/ingredients/:id",
         "member",
         (TEST_IDS["ingredientNutrition"], TEST_IDS["productList"]),
+    ),
+    Screen("/meals/new", "member", (TEST_IDS["mealForm"], TEST_IDS["ingredientPicker"])),
+    # A meal with a photo and ingredient rows is created in the test: /meals/<id>.
+    Screen(
+        "/meals/:id",
+        "member",
+        (TEST_IDS["mealPhoto"], TEST_IDS["mealNutrition"], TEST_IDS["mealIngredients"]),
     ),
     Screen("/me", "member", (TEST_IDS["appVersion"], TEST_IDS["sessionList"])),
     Screen("/me/admin/users", "admin", (TEST_IDS["adminUserList"],)),
@@ -65,6 +73,22 @@ def test_no_serious_violations(
         ingredient = api.create_ingredient(account, unique("A11y"), manual={"kcal": 52})
         api.create_product(account, ingredient["id"], name=unique("Product"))
         path = f"/ingredients/{ingredient['id']}"
+    if path == "/meals/:id":
+        api = request.getfixturevalue("api")
+        ingredient = api.create_ingredient(account, unique("A11y"), manual={"kcal": 52})
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            instructions="Line one.\nLine two.",
+            source_url="https://example.org/recipe",
+            ingredients=[
+                {"ingredient_id": ingredient["id"], "amount": 150, "unit": "g"},
+                {"ingredient_id": ingredient["id"], "note": "to taste"},
+            ],
+        )
+        api.upload_meal_photo(account, meal["id"], png())
+        path = f"/meals/{meal['id']}"
 
     page.goto(path)
     if screen.path == "/join":
