@@ -1,6 +1,7 @@
 """Queries on `products`."""
 
-from collections.abc import Sequence
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import func, select, update
@@ -49,3 +50,16 @@ async def move(
         .where(Product.ingredient_id == from_ingredient_id)
         .values(ingredient_id=to_ingredient_id, updated_by=actor_id, updated_at=now)
     )
+
+
+async def for_ingredients(
+    session: AsyncSession, ingredient_ids: Iterable[str]
+) -> dict[str, list[Product]]:
+    """The products per ingredient id (ingredients without products are missing)."""
+    ids = set(ingredient_ids)
+    products: dict[str, list[Product]] = defaultdict(list)
+    if ids:
+        result = await session.execute(select(Product).where(Product.ingredient_id.in_(ids)))
+        for row in result.scalars():
+            products[row.ingredient_id].append(row)
+    return products

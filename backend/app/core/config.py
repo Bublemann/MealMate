@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_URL = "https://github.com/Bublemann/MealMate"
 DATABASE_FILENAME = "mealmate.db"
+MEDIA_DIRNAME = "media"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -75,6 +76,11 @@ class Settings(BuildInfo):
     @property
     def database_path(self) -> Path:
         return self.data_dir / DATABASE_FILENAME
+
+    @property
+    def media_dir(self) -> Path:
+        """Meal photos (plan § 5.10), outside any web root."""
+        return self.data_dir / MEDIA_DIRNAME
 
 
 @cache

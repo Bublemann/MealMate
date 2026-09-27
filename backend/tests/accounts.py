@@ -102,6 +102,17 @@ async def make_user(app: FastAPI, client: AsyncClient, username: str, **kwargs: 
     return user
 
 
+async def make_couple(api: AsyncClient, a: Account, b: Account) -> None:
+    response = await api.post("/api/couple/requests", json={"user_id": b.id}, headers=a.headers)
+    request_id = response.json()["outgoing"]["id"]
+    accepted = await api.post(f"/api/couple/requests/{request_id}/accept", headers=b.headers)
+    assert accepted.status_code == 200
+
+
+async def set_privacy(api: AsyncClient, user: Account, **switches: bool) -> None:
+    assert (await api.patch("/api/me", json=switches, headers=user.headers)).status_code == 200
+
+
 def error(response: Response) -> str:
     code: str = response.json()["code"]
     return code

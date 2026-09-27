@@ -1,6 +1,6 @@
 """Queries on `categories`, `cuisines` and `tags`."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,3 +42,25 @@ async def tags_matching(session: AsyncSession, query: str, limit: int) -> Sequen
         statement = statement.where(matches).order_by(prefix.is_(False))
     result = await session.execute(statement.order_by(Tag.name_norm).limit(limit))
     return result.scalars().all()
+
+
+async def get_cuisine(session: AsyncSession, cuisine_id: str) -> Cuisine | None:
+    return await session.get(Cuisine, cuisine_id)
+
+
+async def cuisines_by_ids(
+    session: AsyncSession, cuisine_ids: Iterable[str | None]
+) -> dict[str, Cuisine]:
+    ids = {cuisine_id for cuisine_id in cuisine_ids if cuisine_id is not None}
+    if not ids:
+        return {}
+    result = await session.execute(select(Cuisine).where(Cuisine.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}
+
+
+async def tags_by_name_norm(session: AsyncSession, names_norm: Iterable[str]) -> dict[str, Tag]:
+    norms = set(names_norm)
+    if not norms:
+        return {}
+    result = await session.execute(select(Tag).where(Tag.name_norm.in_(norms)))
+    return {row.name_norm: row for row in result.scalars()}

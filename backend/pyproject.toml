@@ -19,6 +19,7 @@ dependencies = [
     "pillow>=12.3",
     "typer>=0.27",
     "anyio>=4.15",
+    "python-multipart>=0.0.32",
 ]
 
 [project.urls]

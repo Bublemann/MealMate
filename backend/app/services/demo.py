@@ -4,23 +4,32 @@
 - M3: ingredients across most categories, about half of them with manual nutrition, and a few
   products entered by hand (`seed_catalog`): Spaghetti has two products (an average), Milch
   has manual values and a product (the hint).
+- M4: meals of every demo user (`seed_meals`) with cuisines, tags and rows in all kinds of
+  units (pieces with a piece weight, spoons, rows "to taste" without an amount, a spoon of
+  butter that makes an estimate, bread in pieces without a piece weight that cannot be
+  counted); three have photos drawn with Pillow and sent through the real pipeline, and carl
+  copied anna's Bolognese ("based on"). carl's meals are private (VIS-02).
 
-Later milestones add meals, lists and history. The content is fixed; only ids, the password and
-the invite code differ between runs.
+Later milestones add lists and history. The content is fixed; only ids, the password, the
+invite code and the photo keys differ between runs.
 """
 
+import io
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from PIL import Image, ImageDraw
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passwords import hash_password
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
 from app.domain.units import Unit
-from app.models import Couple, CoupleMember, Ingredient, Product
+from app.media.store import MediaStore
+from app.models import Couple, CoupleMember, Ingredient, Meal, MealIngredient, MealTag, Product, Tag
+from app.repositories import ingredients as ingredients_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
@@ -35,6 +44,8 @@ DEMO_USERS: tuple[tuple[str, str, Role, Language], ...] = (
     ("carl", "Carl", "user", "de"),
 )
 DEMO_COUPLE = ("anna", "ben")
+# Users whose *meals public* switch is off.
+DEMO_PRIVATE_MEALS = ("carl",)
 
 
 def _values(
@@ -122,6 +133,138 @@ DEMO_PRODUCTS: tuple[DemoProduct, ...] = (
 )  # fmt: skip
 
 
+type RGB = tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class DemoRow:
+    ingredient: str
+    amount: float | None = None
+    unit: Unit | None = None
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class DemoPhoto:
+    """A simple picture: a vertical gradient, a plate and the food on it."""
+
+    top: RGB
+    bottom: RGB
+    food: RGB
+
+
+@dataclass(frozen=True)
+class DemoMeal:
+    name: str
+    owner: str
+    servings: int = 1
+    cuisine: str | None = None
+    tags: tuple[str, ...] = ()
+    rows: tuple[DemoRow, ...] = ()
+    instructions: str | None = None
+    source_url: str | None = None
+    photo: DemoPhoto | None = None
+    # The name of another demo meal this one is a copy of (everything else comes from it).
+    copy_of: str | None = None
+
+
+_TO_TASTE = "nach Geschmack"
+
+DEMO_MEALS: tuple[DemoMeal, ...] = (
+    DemoMeal(
+        "Spaghetti Bolognese", "anna", servings=4, cuisine="italian", tags=("Pasta", "Klassiker"),
+        rows=(
+            DemoRow("Spaghetti", 500, Unit.G),
+            DemoRow("Hackfleisch", 400, Unit.G),
+            DemoRow("Passierte Tomaten", 700, Unit.G),
+            DemoRow("Zwiebeln", 1, Unit.PIECE),
+            DemoRow("Knoblauch", 2, Unit.PIECE, "fein gehackt"),
+            DemoRow("Olivenöl", 2, Unit.TBSP),
+            DemoRow("Parmesan", 50, Unit.G, "gerieben"),
+            DemoRow("Salz", note=_TO_TASTE),
+            DemoRow("Pfeffer", note=_TO_TASTE),
+        ),
+        instructions="Zwiebeln und Knoblauch in Olivenöl andünsten.\n"
+        "Hackfleisch krümelig braten, passierte Tomaten dazugeben und 30 Minuten köcheln.\n"
+        "Mit Salz und Pfeffer abschmecken, mit den Spaghetti und Parmesan servieren.",
+        source_url="https://de.wikipedia.org/wiki/Sauce_bolognese",
+        photo=DemoPhoto(top=(250, 214, 165), bottom=(196, 92, 58), food=(178, 44, 32)),
+    ),
+    DemoMeal(
+        "Pfannkuchen", "anna", servings=2, cuisine="german", tags=("Süß", "Schnell"),
+        rows=(
+            DemoRow("Mehl", 200, Unit.G),
+            DemoRow("Milch", 300, Unit.ML),
+            DemoRow("Eier", 2, Unit.PIECE),
+            DemoRow("Zucker", 1, Unit.TBSP),
+            DemoRow("Salz", note="1 Prise"),
+            DemoRow("Butter", 1, Unit.TBSP, "zum Braten"),
+        ),
+        instructions="Mehl, Milch, Eier, Zucker und Salz glatt rühren und 10 Minuten quellen "
+        "lassen.\nIn Butter goldbraun ausbacken.",
+        photo=DemoPhoto(top=(255, 243, 205), bottom=(233, 180, 76), food=(240, 196, 98)),
+    ),
+    DemoMeal(
+        "Hähnchen-Reis-Pfanne", "ben", servings=2, cuisine="chinese", tags=("Schnell",),
+        rows=(
+            DemoRow("Hähnchenbrust", 300, Unit.G, "in Streifen"),
+            DemoRow("Reis", 200, Unit.G),
+            DemoRow("Erbsen (TK)", 150, Unit.G),
+            DemoRow("Karotten", 2, Unit.PIECE),
+            DemoRow("Zwiebeln", 1, Unit.PIECE),
+            DemoRow("Olivenöl", 1, Unit.TBSP),
+        ),
+        instructions="Reis kochen. Hähnchen scharf anbraten, Gemüse dazugeben.\n"
+        "Den Reis unterheben und alles kurz zusammen braten.",
+    ),
+    DemoMeal(
+        "Tomatensalat", "ben", servings=2, cuisine="mediterranean", tags=("Vegetarisch", "Salat"),
+        rows=(
+            DemoRow("Tomaten", 4, Unit.PIECE),
+            DemoRow("Zwiebeln", 0.5, Unit.PIECE),
+            DemoRow("Olivenöl", 3, Unit.TBSP),
+            DemoRow("Salz", note=_TO_TASTE),
+            DemoRow("Pfeffer", note=_TO_TASTE),
+        ),
+        instructions="Tomaten in Scheiben, Zwiebel in feine Ringe schneiden.\n"
+        "Mit Olivenöl, Salz und Pfeffer anmachen.",
+        photo=DemoPhoto(top=(220, 239, 200), bottom=(84, 140, 70), food=(214, 58, 48)),
+    ),
+    DemoMeal(
+        "Ofenkartoffeln mit Kräuterjoghurt", "carl", servings=3, cuisine="german",
+        tags=("Vegetarisch",),
+        rows=(
+            DemoRow("Kartoffeln", 1, Unit.KG),
+            DemoRow("Olivenöl", 2, Unit.TBSP),
+            DemoRow("Joghurt", 250, Unit.G),
+            DemoRow("Knoblauch", 1, Unit.PIECE),
+            DemoRow("Salz", note=_TO_TASTE),
+        ),
+        instructions="Kartoffeln vierteln, mit Öl und Salz 40 Minuten bei 200 °C backen.\n"
+        "Joghurt mit Knoblauch verrühren und dazu reichen.",
+    ),
+    DemoMeal(
+        "Tofu-Gemüse-Curry", "carl", servings=2, cuisine="thai", tags=("Vegan",),
+        rows=(
+            DemoRow("Tofu", 400, Unit.G),
+            DemoRow("Karotten", 3, Unit.PIECE),
+            DemoRow("Zwiebeln", 1, Unit.PIECE),
+            DemoRow("Reis", 250, Unit.G),
+            DemoRow("Olivenöl", 1, Unit.TBSP),
+        ),
+    ),
+    DemoMeal(
+        "Käsebrot", "admin", cuisine="german", tags=("Frühstück", "Schnell"),
+        rows=(
+            DemoRow("Brot", 2, Unit.PIECE, "Scheiben"),
+            DemoRow("Butter", 10, Unit.G),
+            DemoRow("Gouda", 40, Unit.G),
+        ),
+    ),
+    DemoMeal("Spaghetti Bolognese", "carl", copy_of="Spaghetti Bolognese"),
+)  # fmt: skip
+
+
 class DemoRefusedError(RuntimeError):
     """The database already has users; demo data is only for empty installations."""
 
@@ -161,6 +304,7 @@ async def _insert_accounts(
             language=language,
             now=now,
         )
+        user.meals_public = username not in DEMO_PRIVATE_MEALS
         ids[username] = user.id
     requester, addressee = (ids[name] for name in DEMO_COUPLE)
     couple = Couple(
@@ -234,6 +378,96 @@ async def _insert_catalog(
         session.add(product)
 
 
+def demo_picture(photo: DemoPhoto) -> bytes:
+    """A 1200 x 900 JPEG, as a phone would upload it."""
+    size = (1200, 900)
+    mask = Image.linear_gradient("L").resize(size)
+    picture = Image.composite(
+        Image.new("RGB", size, photo.bottom), Image.new("RGB", size, photo.top), mask
+    )
+    draw = ImageDraw.Draw(picture)
+    draw.ellipse((300, 150, 900, 750), fill=(246, 244, 238), outline=(205, 200, 190), width=14)
+    draw.ellipse((410, 260, 790, 640), fill=photo.food)
+    buffer = io.BytesIO()
+    picture.save(buffer, "JPEG", quality=85)
+    return buffer.getvalue()
+
+
+def _original(meal: DemoMeal) -> DemoMeal:
+    return next(item for item in DEMO_MEALS if item.name == meal.copy_of and not item.copy_of)
+
+
+async def _write_photos(media: MediaStore) -> list[str | None]:
+    """The photo key of each demo meal (by index); the files are written first, outside the
+    transaction. A copy gets its own copy of its original's files (MEAL-08)."""
+    keys: list[str | None] = []
+    for meal in DEMO_MEALS:
+        if meal.copy_of is not None:
+            original_key = keys[DEMO_MEALS.index(_original(meal))]
+            keys.append(None if original_key is None else await media.copy_in_thread(original_key))
+        elif meal.photo is not None:
+            keys.append(await media.process_and_write(demo_picture(meal.photo)))
+        else:
+            keys.append(None)
+    return keys
+
+
+async def _insert_meals(
+    session: AsyncSession,
+    user_ids: Mapping[str, str],
+    photo_keys: list[str | None],
+    *,
+    now: datetime,
+) -> None:
+    ingredient_ids = {
+        name_norm: row_id for row_id, name_norm in await ingredients_repo.names(session)
+    }
+    cuisine_ids = {row.key: row.id for row in await reference_repo.all_cuisines(session)}
+    tag_ids: dict[str, str] = {}
+    meal_ids: dict[tuple[str, str], str] = {}
+    for demo, photo_key in zip(DEMO_MEALS, photo_keys, strict=True):
+        source = demo if demo.copy_of is None else _original(demo)
+        meal = Meal(
+            owner_id=user_ids[demo.owner],
+            name=source.name,
+            name_norm=normalize(source.name),
+            instructions=source.instructions,
+            source_url=source.source_url,
+            servings=source.servings,
+            cuisine_id=None if source.cuisine is None else cuisine_ids[source.cuisine],
+            photo_key=photo_key,
+            copied_from_meal_id=(
+                None if demo.copy_of is None else meal_ids[(source.owner, source.name)]
+            ),
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(meal)
+        await session.flush()
+        meal_ids[(demo.owner, demo.name)] = meal.id
+        for name in source.tags:
+            if (name_norm := normalize(name)) not in tag_ids:
+                tag = Tag(name=name, name_norm=name_norm, created_at=now, updated_at=now)
+                session.add(tag)
+                await session.flush()
+                tag_ids[name_norm] = tag.id
+            session.add(MealTag(meal_id=meal.id, tag_id=tag_ids[name_norm]))
+        session.add_all(
+            MealIngredient(
+                meal_id=meal.id,
+                position=position,
+                ingredient_id=ingredient_ids[normalize(row.ingredient)],
+                amount=row.amount,
+                unit=None if row.unit is None else row.unit.value,
+                note=row.note,
+                created_at=now,
+                updated_at=now,
+            )
+            for position, row in enumerate(source.rows)
+        )
+    await session.flush()
+
+
 async def seed_accounts(session: AsyncSession, config: AuthConfig, *, now: datetime) -> DemoSeed:
     """The demo users (all with one random password), the couple and an open invite."""
     password, password_hash = await _demo_password(config)
@@ -249,11 +483,26 @@ async def seed_catalog(
         await _insert_catalog(session, user_ids, now=now)
 
 
-async def seed_demo(session: AsyncSession, config: AuthConfig, *, now: datetime) -> DemoSeed:
-    """Accounts and catalog in one transaction: if anything fails, nothing is left behind and
-    `seed-demo` can simply run again."""
+async def seed_meals(
+    session: AsyncSession, user_ids: Mapping[str, str], media: MediaStore, *, now: datetime
+) -> None:
+    """The demo meals of the demo users, with their photos (needs the demo catalog)."""
+    photo_keys = await _write_photos(media)
+    async with session.begin():
+        await _insert_meals(session, user_ids, photo_keys, now=now)
+
+
+async def seed_demo(
+    session: AsyncSession, config: AuthConfig, media: MediaStore, *, now: datetime
+) -> DemoSeed:
+    """Accounts, catalog and meals in one transaction: if anything fails, nothing is left
+    behind (but photo files, which `mealmate jobs cleanup` removes) and `seed-demo` can simply
+    run again."""
     password, password_hash = await _demo_password(config)
+    photo_keys = await _write_photos(media)
     async with session.begin():
         seed = await _insert_accounts(session, config, password, password_hash, now=now)
         await _insert_catalog(session, seed.user_ids, now=now)
+        await session.flush()
+        await _insert_meals(session, seed.user_ids, photo_keys, now=now)
     return seed

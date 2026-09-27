@@ -1,6 +1,8 @@
-"""`create-admin`, `reset-link` and `seed-demo` (ACC-12, plan § 5.11)."""
+"""`create-admin`, `reset-link`, `seed-demo` and `jobs cleanup` (ACC-12, plan § 5.11)."""
 
+import os
 import sqlite3
+import time
 from contextlib import closing
 from pathlib import Path
 
@@ -56,7 +58,7 @@ def create_admin(*args: str, stdin: str = PASSWORD + "\n") -> tuple[int, str]:
 
 
 def test_account_commands_need_a_migrated_database(data_dir: Path) -> None:
-    for args in (["create-admin"], ["reset-link", "admin"], ["seed-demo"]):
+    for args in (["create-admin"], ["reset-link", "admin"], ["seed-demo"], ["jobs", "cleanup"]):
         result = runner.invoke(main, args)
         assert result.exit_code == 1, args
         assert "run `mealmate db upgrade` first" in result.output
@@ -171,7 +173,7 @@ def test_link_commands_need_the_public_url(database: Path, monkeypatch: pytest.M
         assert "MEALMATE_PUBLIC_URL is not set" in result.output
 
 
-def test_seed_demo(database: Path) -> None:
+def test_seed_demo(database: Path, data_dir: Path) -> None:
     result = runner.invoke(main, ["seed-demo"])
 
     assert result.exit_code == 0, result.output
@@ -218,6 +220,37 @@ def test_seed_demo(database: Path) -> None:
     barcodes = [code for (code,) in query(database, "SELECT barcode FROM products")]
     assert all(normalize_barcode(code) == code for code in barcodes)
 
+    assert "Demo meals: 8" in result.output
+    meals = query(
+        database,
+        "SELECT u.username, m.name, m.photo_key, m.copied_from_meal_id IS NOT NULL, "
+        "(SELECT count(*) FROM meal_ingredients r WHERE r.meal_id = m.id), "
+        "(SELECT count(*) FROM meal_tags t WHERE t.meal_id = m.id) "
+        "FROM meals m JOIN users u ON u.id = m.owner_id ORDER BY 1, 2",
+    )
+    assert [(owner, name) for owner, name, *_ in meals] == [
+        ("admin", "Käsebrot"),
+        ("anna", "Pfannkuchen"),
+        ("anna", "Spaghetti Bolognese"),
+        ("ben", "Hähnchen-Reis-Pfanne"),
+        ("ben", "Tomatensalat"),
+        ("carl", "Ofenkartoffeln mit Kräuterjoghurt"),
+        ("carl", "Spaghetti Bolognese"),
+        ("carl", "Tofu-Gemüse-Curry"),
+    ]
+    assert all(rows > 0 and tags > 0 for *_, rows, tags in meals)
+    assert [name for _, name, _, copied, *_ in meals if copied] == ["Spaghetti Bolognese"]
+    keys = [str(key) for _, _, key, *_ in meals if key is not None]
+    assert len(keys) == len(set(keys)) == 4  # three photos and the copy's own copy
+    media = data_dir / "media"
+    assert {path.name for path in media.iterdir()} == {
+        name for key in keys for name in (f"{key}.webp", f"{key}-thumb.webp")
+    }
+    private = query(database, "SELECT username FROM users WHERE NOT meals_public")
+    assert private == [("carl",)]
+    units = {unit for (unit,) in query(database, "SELECT DISTINCT unit FROM meal_ingredients")}
+    assert units == {"g", "kg", "ml", "piece", "tbsp", None}
+
     again = runner.invoke(main, ["seed-demo"])
     assert again.exit_code == 1
     assert "Refusing to seed demo data" in again.output
@@ -235,7 +268,7 @@ def test_seed_demo_leaves_nothing_behind_when_it_fails(
     assert result.exit_code == 1
     assert isinstance(result.exception, IntegrityError)
     tables = ("users", "couples", "couple_members", "one_time_codes", "admin_events")
-    for table in (*tables, "ingredients", "products"):
+    for table in (*tables, "ingredients", "products", "tags", "meals", "meal_ingredients"):
         assert query(database, f"SELECT count(*) FROM {table}") == [(0,)], table  # noqa: S608
 
     again = runner.invoke(main, ["seed-demo"])
@@ -251,3 +284,22 @@ def test_create_admin_validates_the_display_name(database: Path) -> None:
     )
     assert result.exit_code == 1
     assert "display_name: too_short" in result.output
+
+
+def test_jobs_cleanup(database: Path, data_dir: Path) -> None:
+    assert runner.invoke(main, ["seed-demo"]).exit_code == 0
+    media = data_dir / "media"
+    photos = {path.name for path in media.iterdir()}
+    orphans = {"0" * 32 + ".webp", "0" * 32 + "-thumb.webp"}
+    for name in orphans:
+        (media / name).write_bytes(b"old")
+    an_hour_ago = time.time() - 3601
+    for path in media.iterdir():
+        os.utime(path, (an_hour_ago, an_hour_ago))
+
+    result = runner.invoke(main, ["jobs", "cleanup"])
+
+    assert result.exit_code == 0, result.output
+    assert "Removed 2 orphaned media files." in result.output
+    assert {path.name for path in media.iterdir()} == photos
+    assert "Removed 0 orphaned media files." in runner.invoke(main, ["jobs", "cleanup"]).output

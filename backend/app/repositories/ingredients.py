@@ -69,3 +69,11 @@ async def with_product_counts(
         select(Ingredient, _product_count()).where(Ingredient.id.in_(ids))
     )
     return {row[0].id: (row[0], row[1]) for row in result}
+
+
+async def by_ids(session: AsyncSession, ingredient_ids: Iterable[str]) -> dict[str, Ingredient]:
+    ids = set(ingredient_ids)
+    if not ids:
+        return {}
+    result = await session.execute(select(Ingredient).where(Ingredient.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}

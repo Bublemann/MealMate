@@ -6,6 +6,7 @@ import logging
 import secrets
 import sqlite3
 import sys
+import time
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import BuildInfo, Settings, get_settings
 from app.core.errors import ApiError
+from app.core.keys import KeyPurpose, derive_key
 from app.core.logging import configure_logging
 from app.core.passwords import hash_password
 from app.db.backup import IntegrityCheckError, backup_database
@@ -31,16 +33,25 @@ from app.db.migrations import (
 from app.db.session import Database
 from app.domain.accounts import username_norm
 from app.main import create_app
+from app.media.store import MediaStore
 from app.repositories import users as users_repo
-from app.services import accounts, codes
+from app.services import accounts, codes, jobs
 from app.services.context import AuthConfig
-from app.services.demo import DEMO_INGREDIENTS, DEMO_PRODUCTS, DemoRefusedError, seed_demo
+from app.services.demo import (
+    DEMO_INGREDIENTS,
+    DEMO_MEALS,
+    DEMO_PRODUCTS,
+    DemoRefusedError,
+    seed_demo,
+)
 
 main = typer.Typer(
     name="mealmate", help="MealMate command-line tools.", no_args_is_help=True, add_completion=False
 )
 db = typer.Typer(help="Database maintenance.", no_args_is_help=True)
 main.add_typer(db, name="db")
+jobs_app = typer.Typer(help="Background jobs, run by systemd timers.", no_args_is_help=True)
+main.add_typer(jobs_app, name="jobs")
 
 
 def _load_settings() -> Settings:
@@ -95,6 +106,12 @@ def _run[T](settings: Settings, work: Callable[[AsyncSession], Awaitable[T]]) ->
             await database.dispose()
 
     return asyncio.run(run())
+
+
+def _media(settings: Settings) -> MediaStore:
+    media = MediaStore(settings.media_dir, key=derive_key(settings.secret_key, KeyPurpose.MEDIA))
+    media.ensure_directory()
+    return media
 
 
 def _fail_with(exc: ApiError) -> typer.Exit:
@@ -185,14 +202,16 @@ def reset_link(
 
 @main.command("seed-demo")
 def seed_demo_command() -> None:
-    """Fill an empty installation with demo users (admin, anna + ben as a couple, carl), an
-    open invite, ingredients and products. Refuses to run if any user exists."""
+    """Fill an empty installation with demo users (admin, anna + ben as a couple, carl with
+    private meals), an open invite, ingredients, products and meals with photos. Refuses to run
+    if any user exists."""
     settings = _load_settings()
     _require_current_database(settings)
     _require_public_url(settings)
     config = AuthConfig.from_settings(settings)
+    media = _media(settings)
     try:
-        seed = _run(settings, lambda session: seed_demo(session, config, now=utcnow()))
+        seed = _run(settings, lambda session: seed_demo(session, config, media, now=utcnow()))
     except DemoRefusedError as exc:
         typer.echo(f"Refusing to seed demo data: {exc}.", err=True)
         raise typer.Exit(1) from None
@@ -200,6 +219,7 @@ def seed_demo_command() -> None:
     typer.echo(f"Demo password (all users): {seed.password}")
     typer.echo(f"Open invite: {seed.invite_url}")
     typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)}, products: {len(DEMO_PRODUCTS)}")
+    typer.echo(f"Demo meals: {len(DEMO_MEALS)}")
 
 
 @main.command("export-openapi")
@@ -246,6 +266,16 @@ def backup_db(
         typer.echo(f"Backup failed: {exc}", err=True)
         raise typer.Exit(1) from None
     typer.echo(f"Backup written to {path}")
+
+
+@jobs_app.command("cleanup")
+def jobs_cleanup() -> None:
+    """Delete orphaned media files: photos no meal refers to, older than an hour."""
+    settings = _load_settings()
+    _require_current_database(settings)
+    media = _media(settings)
+    removed = _run(settings, lambda session: jobs.cleanup(session, media, now=time.time()))
+    typer.echo(f"Removed {removed} orphaned media files.")
 
 
 @main.command("version")

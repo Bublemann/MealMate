@@ -22,6 +22,7 @@ from tests.catalog import (
     ref,
     unknown_nutrition,
 )
+from tests.meals import create_meal
 
 
 @pytest.fixture
@@ -585,31 +586,54 @@ async def test_delete(app: FastAPI, api: AsyncClient, anna: Account, admin: Acco
 
 
 async def test_ingredients_in_use_are_not_deleted(
-    app: FastAPI,
-    api: AsyncClient,
-    anna: Account,
-    admin: Account,
-    monkeypatch: pytest.MonkeyPatch,
+    app: FastAPI, api: AsyncClient, anna: Account, ben: Account, admin: Account
 ) -> None:
     pasta = await create_ingredient(api, anna, "Spaghetti")
     rice = await create_ingredient(api, anna, "Reis")
     await create_product(api, anna, pasta["id"], EAN_13)
     await create_product(api, anna, pasta["id"], EAN_8)
+    rows = [{"ingredient_id": rice["id"], "amount": 100, "unit": "g"}] * 2
+    await create_meal(api, anna, "Risotto", ingredients=rows)
+    await create_meal(api, ben, "Reispfanne", ingredients=rows[:1])
 
     response = await api.delete(f"/api/admin/ingredients/{pasta['id']}", headers=admin.headers)
     assert response.status_code == 409
     assert error(response) == "ingredient.in_use"
-    assert response.json()["params"] == {"products": 2}
+    assert response.json()["params"] == {"products": 2, "meals": 0}
 
-    async def ingredient_references(_session: object, ingredient_id: str) -> dict[str, int]:
-        return {"meals": 3} if ingredient_id == rice["id"] else {}
-
-    monkeypatch.setattr(hooks, "ingredient_references", ingredient_references)
     response = await api.delete(f"/api/admin/ingredients/{rice['id']}", headers=admin.headers)
     assert response.status_code == 409
-    assert response.json()["params"] == {"products": 0, "meals": 3}
+    assert response.json()["params"] == {"products": 0, "meals": 2}
     assert len(await scalars(app, select(Ingredient.id))) == 2
     assert await scalars(app, select(AdminEvent.id)) == []
+
+
+async def test_merging_moves_meal_rows(api: AsyncClient, anna: Account, admin: Account) -> None:
+    duplicate = await create_ingredient(api, anna, "Paradeiser")
+    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    salt = await create_ingredient(api, anna, "Salz")
+    meal = await create_meal(
+        api,
+        anna,
+        "Salat",
+        ingredients=[
+            {"ingredient_id": tomatoes["id"], "amount": 2, "unit": "piece"},
+            {"ingredient_id": salt["id"]},
+            {"ingredient_id": duplicate["id"], "amount": 200, "unit": "g"},
+        ],
+    )
+
+    assert (await merge(api, admin, duplicate["id"], tomatoes["id"])).status_code == 200
+
+    response = await api.get(f"/api/meals/{meal['id']}", headers=anna.headers)
+    rows = [(row["id"], row["ingredient"]["id"]) for row in response.json()["ingredients"]]
+    assert rows == [
+        (meal["ingredients"][0]["id"], tomatoes["id"]),
+        (meal["ingredients"][1]["id"], salt["id"]),
+        (meal["ingredients"][2]["id"], tomatoes["id"]),
+    ]
+    missing = await api.get(f"/api/ingredients/{duplicate['id']}", headers=anna.headers)
+    assert missing.status_code == 404
 
 
 @pytest.mark.parametrize(

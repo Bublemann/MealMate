@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from app.api import api_router, diagnostics
+from app.core.bodylimit import BodySizeLimitMiddleware
 from app.core.config import Settings, get_settings
 from app.core.error_handlers import ErrorEnvelopeMiddleware, install_exception_handlers
 from app.core.headers import SecurityHeadersMiddleware
@@ -14,6 +15,7 @@ from app.core.logging import RequestLogMiddleware, configure_logging
 from app.core.ratelimit import RateLimits
 from app.db.base import utcnow
 from app.db.session import Database
+from app.media.store import MediaStore
 from app.services.context import AuthConfig
 from app.web.static import add_frontend_route
 
@@ -30,6 +32,8 @@ def operation_id(route: APIRoute) -> str:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     database = Database.open(settings.data_dir)
+    media: MediaStore = app.state.media
+    media.ensure_directory()
     app.state.database = database
     try:
         yield
@@ -57,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.auth_config = AuthConfig.from_settings(settings)
+    app.state.media = MediaStore(settings.media_dir, key=app.state.auth_config.keys.media)
     app.state.rate_limits = RateLimits()
     app.state.clock = utcnow
 
@@ -67,7 +72,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.static_dir is not None:
         add_frontend_route(app, settings.static_dir)
 
-    # The last middleware added runs first: log -> security headers -> error envelope -> app.
+    # The last middleware added runs first:
+    # log -> security headers -> error envelope -> body size limit -> app.
+    app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(ErrorEnvelopeMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, docs_path=DOCS_URL if docs else None)
     app.add_middleware(RequestLogMiddleware)
