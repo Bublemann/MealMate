@@ -7,6 +7,9 @@ from playwright.sync_api import Page, expect
 
 from support.frontend import TEST_IDS
 
+# The screens need a signed-in user; the route guard itself is tested in test_accounts.py.
+pytestmark = pytest.mark.usefixtures("member_page")
+
 # (path, tab test ID, screen test ID)
 SCREENS = [
     ("/lists", TEST_IDS["tabLists"], TEST_IDS["screenLists"]),

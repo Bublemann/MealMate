@@ -24,6 +24,25 @@ cd e2e && uv run playwright install --with-deps chromium webkit   # once, for th
 - Failed tests leave a trace and a screenshot in `test-results/`
   (`uv run playwright show-trace test-results/<test>/trace.zip`).
 
+## Accounts
+
+Every route except `/login`, `/join` and `/reset` needs a signed-in user. The fixtures in
+`conftest.py` create accounts through the app itself (plan § 9); all tests of a run share one
+database, so names are made unique with `support.api.unique()`.
+
+- `admin`: created once per run with `docker exec <container> mealmate create-admin --username
+  admin --display-name Admin --language en --password-stdin` and a random password. With
+  `E2E_BASE_URL` there is no container: set `E2E_ADMIN_USERNAME` and `E2E_ADMIN_PASSWORD` to an
+  existing admin, otherwise every test that needs an account is skipped.
+- `invite_user(username, display_name)`: the admin creates an invite, the user joins with it (API).
+- `make_couple(a, b)`: a sends a couple request, b accepts (API).
+- `member` / `member_page`: a shared regular user, and `page` signed in as them, for tests that
+  only look around. `support.api.sign_in(context, account)` logs a browser context in by storing
+  the refresh cookie; `support.ui.log_in()` / `log_out()` go through the screens.
+- The app allows 10 requests per minute and IP to `/api/auth/join`, `/reset` and `/codes/check`.
+  `support.api.CODE_REQUESTS` counts the suite's own requests and waits when the next ones would
+  not fit; a test that opens an invite link in the browser reserves its requests first.
+
 ## Conventions
 
 - Find elements by role, accessible name or test ID, never by CSS classes (QA-05). Test IDs are

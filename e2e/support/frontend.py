@@ -33,3 +33,15 @@ def translations(language: str) -> Mapping[str, str]:
     """The flat i18n resource of `language` (e.g. "de": {"nav.lists": "Listen", …})."""
     path = FRONTEND_SRC / "i18n" / f"{language}.json"
     return MappingProxyType(json.loads(path.read_text(encoding="utf-8")))
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+
+def text(key: str, language: str = "en", **params: str) -> str:
+    """The UI string `key` with its `{{placeholders}}` filled in, as i18next renders it."""
+
+    def fill(match: re.Match[str]) -> str:
+        return params[match[1]]
+
+    return _PLACEHOLDER.sub(fill, translations(language)[key])

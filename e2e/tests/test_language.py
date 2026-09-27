@@ -1,8 +1,12 @@
-"""Language switch between German and English (I18N-02, QA-04 journey 10)."""
+"""Language switch between German and English (I18N-01, I18N-02, QA-04 journey 10)."""
 
-from playwright.sync_api import Page, expect
+from collections.abc import Callable
 
+from playwright.sync_api import BrowserContext, Page, expect
+
+from support.api import Account, Api, sign_in
 from support.frontend import TEST_IDS, translations
+from support.ui import log_in, log_out
 
 
 def expect_language(page: Page, language: str) -> None:
@@ -17,19 +21,47 @@ def expect_language(page: Page, language: str) -> None:
         expect(page.get_by_test_id(tab)).to_have_text(strings[key])
 
 
-def test_language_switch_changes_labels_and_persists(page: Page) -> None:
+def switch_language(page: Page, label: str) -> None:
+    """Picks `label` in Me and waits until the server has stored it."""
+    with page.expect_response(
+        lambda response: response.url.endswith("/api/me") and response.request.method == "PATCH"
+    ) as saved:
+        page.get_by_test_id(TEST_IDS["languageSelect"]).select_option(label=label)
+    assert saved.value.ok
+
+
+def test_language_is_kept_by_the_account(
+    page: Page,
+    new_context: Callable[..., BrowserContext],
+    api: Api,
+    invite_user: Callable[..., Account],
+) -> None:
+    user = invite_user(language="en")
+    sign_in(page.context, user)
     page.goto("/me")
     select = page.get_by_test_id(TEST_IDS["languageSelect"])
     expect_language(page, "en")
 
-    select.select_option(label="Deutsch")
+    switch_language(page, "Deutsch")
     expect_language(page, "de")
     page.reload()
     expect_language(page, "de")
     expect(select).to_have_value("de")
 
-    select.select_option(label="English")
-    expect_language(page, "en")
-    page.reload()
-    expect_language(page, "en")
-    expect(select).to_have_value("en")
+    log_out(page)
+
+    # Another device knows nothing of the choice until the user logs in there.
+    other = new_context().new_page()
+    other.goto("/login")
+    expect(other.locator("html")).to_have_attribute("lang", "en")
+    log_in(other, user)
+    expect_language(other, "de")
+    other.get_by_test_id(TEST_IDS["tabMe"]).click()
+    expect(other.get_by_test_id(TEST_IDS["languageSelect"])).to_have_value("de")
+
+    switch_language(other, "English")
+    expect_language(other, "en")
+    other.reload()
+    expect_language(other, "en")
+    me = api.call("GET", "/api/me", token=api.token(user))
+    assert me["language"] == "en"

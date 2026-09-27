@@ -7,6 +7,9 @@ from playwright.sync_api import BrowserContext, Page, expect
 
 from support.frontend import TEST_IDS
 
+# Both screens need a signed-in user.
+pytestmark = pytest.mark.usefixtures("member_page")
+
 DIAG_COOKIE = "mm_diag"
 WEBKIT_OFFLINE_SKIP = (
     "Playwright WebKit offline reload with service worker is broken upstream (plan O-11)"
