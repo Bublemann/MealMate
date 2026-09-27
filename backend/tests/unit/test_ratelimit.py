@@ -109,6 +109,8 @@ def test_rate_limits_share_the_clock(clock: Clock) -> None:
     assert limits.login.clock is clock
     assert limits.codes.clock is clock
     assert limits.codes.limit == 10
+    assert limits.backups.clock is clock
+    assert (limits.backups.limit, limits.backups.window) == (1, 60)
 
 
 def test_refund_takes_back_one_failure(clock: Clock) -> None:

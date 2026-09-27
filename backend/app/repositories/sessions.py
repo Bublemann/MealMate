@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuthSession, SessionToken, User
@@ -98,3 +98,22 @@ async def revoke_family(session: AsyncSession, auth_session: AuthSession, now: d
         .where(AuthSession.id.in_(family), AuthSession.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+
+
+async def delete_tokens_expired_before(session: AsyncSession, cutoff: datetime) -> int:
+    """Delete refresh tokens that expired before `cutoff`; returns how many."""
+    deleted = await session.scalars(
+        delete(SessionToken).where(SessionToken.expires_at < cutoff).returning(SessionToken.id)
+    )
+    return len(deleted.all())
+
+
+async def delete_ended_before(session: AsyncSession, cutoff: datetime) -> int:
+    """Delete sessions revoked or idle-expired before `cutoff` (their tokens go with them);
+    returns how many."""
+    deleted = await session.scalars(
+        delete(AuthSession)
+        .where(or_(AuthSession.revoked_at < cutoff, AuthSession.expires_at < cutoff))
+        .returning(AuthSession.id)
+    )
+    return len(deleted.all())

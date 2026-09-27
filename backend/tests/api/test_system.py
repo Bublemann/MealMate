@@ -7,8 +7,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.system import source_url
-from app.core.config import REPO_URL, Settings
+from app.core.config import REPO_URL, Settings, source_url
 from app.db.session import Database
 from app.main import create_app
 from tests.support import ClientFactory, SettingsFactory

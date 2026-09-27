@@ -6,7 +6,6 @@ import logging
 import secrets
 import sqlite3
 import sys
-import time
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -275,12 +274,17 @@ def backup_db(
 
 @jobs_app.command("cleanup")
 def jobs_cleanup() -> None:
-    """Delete orphaned media files: photos no meal refers to, older than an hour."""
+    """Delete what is no longer needed: orphaned media files, invites and reset links finished
+    over 30 days ago, expired refresh tokens, ended sessions and old processed ops."""
     settings = _load_settings()
     _require_current_database(settings)
     media = _media(settings)
-    removed = _run(settings, lambda session: jobs.cleanup(session, media, now=time.time()))
-    typer.echo(f"Removed {removed} orphaned media files.")
+    result = _run(settings, lambda session: jobs.cleanup(session, media, now=utcnow()))
+    typer.echo(f"Removed {result.media_files} orphaned media files.")
+    typer.echo(f"Removed {result.codes} finished invites and reset links.")
+    typer.echo(f"Removed {result.session_tokens} expired refresh tokens.")
+    typer.echo(f"Removed {result.sessions} ended sessions.")
+    typer.echo(f"Removed {result.processed_ops} processed shopping ops.")
 
 
 @jobs_app.command("off-refresh")

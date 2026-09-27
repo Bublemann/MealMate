@@ -1,5 +1,6 @@
 """Settings, read from `MEALMATE_*` environment variables (plan § 5.12)."""
 
+import re
 from functools import cache
 from pathlib import Path
 from typing import Literal, Self
@@ -11,9 +12,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 REPO_URL = "https://github.com/Bublemann/MealMate"
 DATABASE_FILENAME = "mealmate.db"
 MEDIA_DIRNAME = "media"
+# `<data dir>/status/`: files the app and the host hand over (the backup request, plan § 11.1).
+DATA_STATUS_DIRNAME = "status"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 # Open Food Facts' limit for product reads (BAR-08), for the app and the nightly job together.
 OFF_REQUESTS_PER_MINUTE = 10
+
+_COMMIT_SHA = re.compile(r"[0-9a-f]{7,40}")
 
 type LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -35,6 +40,11 @@ class Settings(BuildInfo):
     secret_key: SecretStr = Field(min_length=32)
     public_url: str | None = None
     data_dir: Path = Path("/data")
+    # The host's status files (`backup.json`, `disk.json`), mounted read-only (plan § 11.1).
+    status_dir: Path = Path("/status")
+    # The digest of the running image, if the host passes it in (shown on the admin page). The
+    # host passes its pin, `<repository>@sha256:…`; only the digest is kept.
+    image_digest: str | None = None
     static_dir: Path | None = None
     cookie_secure: bool = True
     api_docs_enabled: bool = False
@@ -63,6 +73,12 @@ class Settings(BuildInfo):
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise ValueError("must be an absolute http(s) URL")
         return value.rstrip("/")
+
+    @field_validator("image_digest")
+    @classmethod
+    def _digest_of_image_ref(cls, value: str | None) -> str | None:
+        # `ghcr.io/…/mealmate@sha256:…` (the IMAGE_REF pin) or a bare `sha256:…`; empty = unknown.
+        return (value or "").strip().rpartition("@")[2].strip() or None
 
     @field_validator("log_level", mode="before")
     @classmethod
@@ -97,6 +113,16 @@ class Settings(BuildInfo):
     def media_dir(self) -> Path:
         """Meal photos (plan § 5.10), outside any web root."""
         return self.data_dir / MEDIA_DIRNAME
+
+    @property
+    def data_status_dir(self) -> Path:
+        """Where the admin page leaves the backup request for the host (OPS-08)."""
+        return self.data_dir / DATA_STATUS_DIRNAME
+
+
+def source_url(commit: str) -> str:
+    """The source of the running build: the exact commit if known, else the repository."""
+    return f"{REPO_URL}/tree/{commit}" if _COMMIT_SHA.fullmatch(commit) else REPO_URL
 
 
 @cache

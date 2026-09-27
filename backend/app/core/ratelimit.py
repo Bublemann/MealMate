@@ -10,7 +10,8 @@ tests replace.
   checking the password (`app.services.auth.start_attempt`), so parallel requests cannot all pass
   the check; a success then clears the username key and takes the client's charge back.
 - `RequestRateLimit`: at most N requests per key in a sliding window (join, reset, code checks
-  per client IP; photo uploads per user).
+  per client IP; photo uploads per user; manual backup requests, one per minute for the whole
+  instance).
 - `SlidingWindow`: requests to Open Food Facts (BAR-08): at most N started in any 60 s window,
   shared by the lookups and background refreshes of the app process; the nightly job has its own
   with a smaller N, so that both together stay within Open Food Facts' 10 per minute. Callers
@@ -35,6 +36,7 @@ LOGIN_MAX_DELAY_SECONDS = 60
 CODE_REQUESTS_PER_MINUTE = 10
 UPLOADS_PER_WINDOW = 20
 UPLOAD_WINDOW_SECONDS = 10 * 60
+BACKUP_REQUESTS_PER_MINUTE = 1
 # Bounds on the memory an attacker can make us hold.
 _MAX_EVENTS_PER_KEY = 64
 _PRUNE_ABOVE_KEYS = 10_000
@@ -179,10 +181,14 @@ class RateLimits:
     login: LoginThrottle = field(init=False)
     codes: RequestRateLimit = field(init=False)
     uploads: RequestRateLimit = field(init=False)
+    backups: RequestRateLimit = field(init=False)
 
     def __post_init__(self) -> None:
         self.login = LoginThrottle(clock=self.clock)
         self.codes = RequestRateLimit(limit=CODE_REQUESTS_PER_MINUTE, window=60, clock=self.clock)
         self.uploads = RequestRateLimit(
             limit=UPLOADS_PER_WINDOW, window=UPLOAD_WINDOW_SECONDS, clock=self.clock
+        )
+        self.backups = RequestRateLimit(
+            limit=BACKUP_REQUESTS_PER_MINUTE, window=60, clock=self.clock
         )

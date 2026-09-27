@@ -1,15 +1,16 @@
-"""Admin section: users, invites, reset links and the activity log (ADM-01)."""
+"""Admin section: users, invites, reset links, the activity log and system info (ADM-01)."""
 
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, StringConstraints, field_validator
+from pydantic import AwareDatetime, BaseModel, Field, StringConstraints, field_validator
 
 from app.schemas.users import Role, UserRef
 
 InviteStatus = Literal["open", "used", "expired", "revoked"]
+BackupLabel = Literal["regular", "pre-update", "manual"]
 # A plain alias so the OpenAPI schema inlines the union.
 AdminEventDetail = str | int | bool | None
 
@@ -27,6 +28,7 @@ class AdminAction(StrEnum):
     CATEGORY_REORDER = "category.reorder"
     INGREDIENT_MERGE = "ingredient.merge"
     INGREDIENT_DELETE = "ingredient.delete"
+    SYSTEM_BACKUP_REQUEST = "system.backup_request"
 
 
 class AdminUser(BaseModel):
@@ -97,3 +99,34 @@ class AdminEvent(BaseModel):
     target: UserRef | None
     details: dict[str, AdminEventDetail]
     created_at: datetime
+
+
+class BackupStatus(BaseModel):
+    """The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01)."""
+
+    finished_at: AwareDatetime
+    label: BackupLabel
+    ok: bool
+    size_bytes: int | None = Field(ge=0)
+    message: str | None
+
+
+class DiskStatus(BaseModel):
+    """Free space on the Pi's root file system when the host last checked (`disk.json`)."""
+
+    checked_at: AwareDatetime
+    free_bytes: int = Field(ge=0)
+    total_bytes: int = Field(ge=0)
+    free_percent: float = Field(ge=0, le=100)
+
+
+class SystemInfo(BaseModel):
+    """What is running and how the host is doing (ADM-01). `backup` and `disk` are null
+    while the host has not written its status files (or they can't be read)."""
+
+    version: str
+    commit: str
+    source_url: str
+    image_digest: str | None
+    backup: BackupStatus | None
+    disk: DiskStatus | None
