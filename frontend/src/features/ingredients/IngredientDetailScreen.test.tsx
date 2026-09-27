@@ -90,6 +90,104 @@ describe('IngredientDetailScreen', () => {
     expect(rows[1]).toHaveTextContent('Product without a name');
   });
 
+  it('credits Open Food Facts on the products that come from there (BAR-09)', async () => {
+    renderDetail({
+      'GET /api/ingredients/ing-aepfel/products': [
+        product({ source: 'off', fetched_at: '2026-09-21T10:00:00Z', user_edited_fields: [] }),
+        product({ id: 'prod-2', barcode: '4000000000013' }),
+      ],
+    });
+
+    const [fromOff, manual] = await screen.findAllByTestId(testIds.productRow);
+    const link = within(fromOff as HTMLElement).getByRole('link', { name: /^Open Food Facts/ });
+    expect(link).toHaveAttribute('href', 'https://world.openfoodfacts.org');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(fromOff).toHaveTextContent('Nutrition data: Open Food Facts');
+    expect(within(manual as HTMLElement).queryByTestId(testIds.offAttribution)).toBeNull();
+  });
+
+  describe('newer values from Open Food Facts (BAR-06)', () => {
+    const PENDING = product({
+      source: 'off',
+      nutrients: { kcal: 165, protein: 0.3, carbs: null, sugar: null, fat: null },
+      pending_update: {
+        fields: [
+          { field: 'nutrients.kcal', current: 165, proposed: 158 },
+          { field: 'name', current: 'Elstar', proposed: 'Elstar Bio' },
+          { field: 'brand', current: 'Hofgut', proposed: null },
+          { field: 'pack_unit', current: 'kg', proposed: 'g' },
+        ],
+        off_last_modified_at: '2026-09-25T10:00:00Z',
+      },
+    });
+
+    it('shows them with units and applies them', async () => {
+      const { fetchMock, user } = renderDetail({
+        'GET /api/ingredients/ing-aepfel/products': [PENDING, PRODUCTS[1]],
+        'POST /api/products/prod-1/pending-update/apply': product({ source: 'off' }),
+      });
+
+      const hint = await screen.findByTestId(testIds.pendingUpdate);
+      expect(hint).toHaveTextContent('Open Food Facts has newer values:');
+      const changes = within(hint)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent);
+      expect(changes).toEqual([
+        'Calories: 165 kcal → 158 kcal',
+        'Product name: Elstar → Elstar Bio',
+        'Brand: Hofgut → empty',
+        'Unit of the contents: kg → g',
+      ]);
+      expect(screen.getAllByTestId(testIds.pendingUpdate)).toHaveLength(1);
+
+      await user.click(
+        within(hint).getByRole('button', { name: 'Apply the newer values for Elstar' }),
+      );
+
+      await waitFor(() =>
+        expect(
+          requestsTo(fetchMock, 'POST /api/products/prod-1/pending-update/apply'),
+        ).toHaveLength(1),
+      );
+      // The product and the ingredient's nutrition are loaded again.
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, 'GET /api/ingredients/ing-aepfel/products')).toHaveLength(2),
+      );
+    });
+
+    it('ignores them and says when there is nothing left to ignore', async () => {
+      const { fetchMock, user } = renderDetail({
+        'GET /api/ingredients/ing-aepfel/products': [PENDING],
+        'POST /api/products/prod-1/pending-update/ignore': errorResponse(
+          409,
+          'product.no_pending_update',
+        ),
+      });
+
+      const hint = await screen.findByTestId(testIds.pendingUpdate);
+      await user.click(
+        within(hint).getByRole('button', { name: 'Ignore the newer values for Elstar' }),
+      );
+
+      expect(await within(hint).findByRole('alert')).toHaveTextContent(
+        'There are no newer values for this product (any more).',
+      );
+      expect(requestsTo(fetchMock, 'POST /api/products/prod-1/pending-update/ignore')).toHaveLength(
+        1,
+      );
+    });
+
+    it('formats them in German', async () => {
+      await i18n.changeLanguage('de');
+      renderDetail({ 'GET /api/ingredients/ing-aepfel/products': [PENDING] });
+
+      const hint = await screen.findByTestId(testIds.pendingUpdate);
+      expect(hint).toHaveTextContent('Open Food Facts hat neuere Werte:');
+      expect(hint).toHaveTextContent('Kalorien: 165 kcal → 158 kcal');
+      expect(hint).toHaveTextContent('Marke: Hofgut → leer');
+    });
+  });
+
   it('adds a product entered by hand', async () => {
     const { fetchMock, user } = renderDetail({
       'POST /api/products': Response.json(product({ id: 'prod-3' }), { status: 201 }),
@@ -111,6 +209,7 @@ describe('IngredientDetailScreen', () => {
     await expect(requestsTo(fetchMock, 'POST /api/products')[0]?.json()).resolves.toEqual({
       barcode: '4000000000020',
       ingredient_id: 'ing-aepfel',
+      source: 'manual',
       brand: 'Bio',
       pack_quantity: 1.5,
       pack_unit: 'kg',

@@ -19,6 +19,11 @@ describe('formatNumber', () => {
     expect(formatNumber(1234.5, 'en')).toBe('1,234.5');
     expect(formatNumber(0.333, 'de', { maximumFractionDigits: 1 })).toBe('0,3');
   });
+
+  it('shows negative zero as 0', () => {
+    expect(formatNumber(-0, 'de')).toBe('0');
+    expect(formatNumber(-0, 'en', { useGrouping: false, maximumFractionDigits: 6 })).toBe('0');
+  });
 });
 
 describe('formatDate', () => {

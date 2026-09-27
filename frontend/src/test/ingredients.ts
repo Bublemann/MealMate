@@ -109,6 +109,7 @@ export function product(overrides: Partial<Schemas['Product']> = {}): Schemas['P
     source: 'manual',
     user_edited_fields: ['name', 'brand', 'nutrients.kcal', 'nutrients.protein'],
     fetched_at: null,
+    pending_update: null,
     created_by: BEN,
     updated_by: BEN,
     created_at: '2026-09-21T10:00:00Z',

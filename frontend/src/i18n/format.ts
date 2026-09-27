@@ -12,12 +12,13 @@ const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   year: 'numeric',
 };
 
+/** A number in the UI language; `-0` (which JSON can carry) is shown as `0`, never `-0`. */
 export function formatNumber(
   value: number,
   language: Language,
   options?: Intl.NumberFormatOptions,
 ): string {
-  return new Intl.NumberFormat(LOCALES[language], options).format(value);
+  return new Intl.NumberFormat(LOCALES[language], options).format(Object.is(value, -0) ? 0 : value);
 }
 
 /** `26.09.2026` (de) or `26/09/2026` (en), in the device's time zone. */

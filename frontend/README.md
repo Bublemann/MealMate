@@ -50,7 +50,7 @@ frontend/
 ├── index.html              # no inline scripts or styles (CSP)
 ├── public/                 # favicon.svg, apple-touch-icon.png, icons/ (PWA icons)
 ├── assets/icon.svg         # source artwork of the PNG icons
-├── scripts/                # generate-icons.mjs (re-renders the PNG icons)
+├── scripts/                # generate-icons.mjs, generate-barcode-fixtures.mjs (test images)
 └── src/
     ├── main.tsx            # entry: i18n, styles, service-worker registration, <App />
     ├── api/                # client.ts (openapi-fetch, timeouts, auth middleware), errors.ts
@@ -61,6 +61,7 @@ frontend/
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
+    │   ├── scanner/        # /scan and the meal form's scan dialog: camera, decoder, lookup flow
     │   ├── lists/          # Lists tab, draft/shopping/done views, history, polling, export text
     │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
@@ -182,6 +183,37 @@ with a lower `version` than the cached list. Check-off, finish and free-text ite
 (add, change, remove) go through `POST /lists/{id}/ops` (plan § 5.8), each with a UUIDv7 `op_id` and
 the time of the tap, made when the user acts (`stampOp()`) and kept when the same action is sent
 again, so it takes effect once.
+
+## Barcode scanner
+
+`/scan` (from the Ingredients tab) and the scan dialog of the meal form's ingredient picker share
+`features/scanner/ScanFlow.tsx` (BAR-01..03). Both are lazy-loaded chunks with the decoder, so the
+initial JavaScript stays small (PERF-03).
+
+- **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
+  `?url`, so it is part of the build (`dist/assets/zxing_reader-*.wasm`) and served by the app;
+  `prepareZXingModule({overrides: {locateFile}})` points the library at it (SEC-08, allowed by the
+  CSP's `'wasm-unsafe-eval'`). The `mealmate:self-hosted-decoder` plugin in `vite.config.ts`
+  removes the library's default CDN URL from the bundle and fails the build if any chunk still
+  names a CDN. The wasm file is not precached by the service worker (about 1 MB); the browser
+  caches it like any other asset. It is loaded only once the camera delivers a stream, not when
+  there is no camera or access is denied.
+- **Camera:** `getUserMedia({video: {facingMode: 'environment'}})`; a frame is decoded every
+  250 ms from a canvas, and every fourth frame without a result is also searched turned by 90°
+  (for the iOS 26 rotation issue, O-6). The light toggle appears when the track reports `torch`.
+  The camera stops when the scanner closes or the app goes to the background. If its track ends
+  while in use (unplugged, taken by another app), decoding stops and "No camera available" is
+  shown with a "Try again" button. Without a camera, or when access is denied, only the manual
+  input is shown; it is always there (`inputMode="numeric"`).
+- **Flow:** `GET /api/products/lookup` (25 s timeout; a timeout or `off.busy` shows "Open Food
+  Facts is slow"). A known barcode goes straight to its ingredient (or into the meal row). Otherwise
+  the Open Food Facts proposal is shown as text with the attribution, then "Which ingredient is
+  this?" (suggestions, search, "Create new ingredient" prefilled from the proposal), then the
+  product form prefilled with the proposal. It is saved with `source: "off"` and `edited_fields`
+  naming only the values the user changed (BAR-04).
+- **Tests:** `decoder.test.ts` decodes the PNGs in `features/scanner/fixtures/` with the real
+  decoder (made by `node scripts/generate-barcode-fixtures.mjs`, deterministic); the camera and
+  flow tests mock the decoder.
 
 ## Tests
 
@@ -372,5 +404,24 @@ order.
 | `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)     |
 | `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
 | `reopenList`             | `reopen-list`              | "Reopen" on a done list                     |
+| `scanBarcode`            | `scan-barcode`             | "Scan barcode" (Ingredients tab, meal form) |
+| `screenScan`             | `screen-scan`              | The scanner route `/scan`                   |
+| `scanDialog`             | `scan-dialog`              | The scanner opened from the meal form       |
+| `scannerVideo`           | `scanner-video`            | Live camera image of the scanner            |
+| `scannerTorch`           | `scanner-torch`            | Light toggle (when the camera has one)      |
+| `scannerCameraMessage`   | `scanner-camera-message`   | "No camera / access denied" message         |
+| `scannerCameraRetry`     | `scanner-camera-retry`     | "Try again" after the camera went away      |
+| `barcodeInput`           | `barcode-input`            | Manual barcode input                        |
+| `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode             |
+| `scanNotice`             | `scan-notice`              | "Not found" / "Open Food Facts is slow"     |
+| `scanProposal`           | `scan-proposal`            | The product proposed by Open Food Facts     |
+| `scanWhich`              | `scan-which`               | "Which ingredient is this?" step            |
+| `scanSuggestions`        | `scan-suggestions`         | Suggested ingredients for the product       |
+| `scanCreateIngredient`   | `scan-create-ingredient`   | "Create new ingredient" in the scan flow    |
+| `scanEnterManually`      | `scan-enter-manually`      | "Enter the values yourself"                 |
+| `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"    |
+| `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
+| `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |
+| `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint           |
 
 <!-- test-ids:end -->

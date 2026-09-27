@@ -8,6 +8,13 @@ import { testIds } from '@/testIds';
 
 const INGREDIENTS = [FLOUR, MILK, EGGS, SALT];
 
+// The scanner's decoder needs a browser; jsdom has no camera anyway, so the scanner shows its
+// manual input (see features/scanner for its own tests).
+vi.mock('@/features/scanner/decoder', () => ({
+  loadDecoder: () => Promise.resolve(),
+  decodeVideoFrame: () => Promise.resolve(null),
+}));
+
 function searchIngredients(request: Request) {
   const q = new URL(request.url).searchParams.get('q')?.toLowerCase() ?? '';
   return INGREDIENTS.filter((ingredient) => ingredient.name.toLowerCase().startsWith(q));
@@ -148,6 +155,34 @@ describe('MealFormScreen (create)', () => {
     expect(upload?.headers.get('content-type')).toMatch(/^multipart\/form-data; boundary=/);
     expect(upload?.headers.get('authorization')).toBe('Bearer test-access-token');
     expect(await upload?.text()).toMatch(/name="file"; filename="dish\.png"/);
+  });
+
+  it('adds the ingredient of a scanned product as a row (BAR-01)', async () => {
+    const { fetchMock, user } = renderForm('/meals/new', {
+      'GET /api/products/lookup': {
+        barcode: '4006381333931',
+        found_in: 'db',
+        product: null,
+        ingredient: MILK,
+        proposal: null,
+        suggestions: [],
+        off_unavailable: false,
+      },
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+    await user.type(within(form).getByLabelText('Name'), 'Kakao');
+
+    await user.click(within(form).getByRole('button', { name: 'Scan barcode' }));
+    const dialog = await screen.findByTestId(testIds.scanDialog);
+    expect(dialog).toHaveAccessibleName('Scan barcode');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Barcode' }), '4006381333931');
+    await user.click(within(dialog).getByRole('button', { name: 'Look up' }));
+
+    expect(await within(form).findByRole('listitem', { name: 'Ingredient Milch' })).toBeVisible();
+    await waitFor(() => expect(screen.queryByTestId(testIds.scanDialog)).not.toBeInTheDocument());
+    // The meal isn't saved by the scanner's form.
+    expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
+    expect(within(form).getByLabelText('Name')).toHaveValue('Kakao');
   });
 
   it('keeps servings between 1 and 99', async () => {

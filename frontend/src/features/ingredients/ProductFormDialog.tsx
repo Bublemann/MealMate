@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { isApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,8 @@ import {
   type NutrientValues,
   type Product,
   type ProductCreate,
+  type ProductField,
+  type ProductProposal,
   type ProductUpdate,
 } from './api';
 import {
@@ -55,10 +58,17 @@ const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   ...NUTRIENT_KEYS.map((key) => `nutrients.${key}`),
 ]);
 
+/** A new product from a barcode lookup (BAR-03): its barcode and Open Food Facts' proposal. */
+export interface LookedUpProduct {
+  barcode: string;
+  /** The values from Open Food Facts; null for a barcode it doesn't know (manual product). */
+  proposal: ProductProposal | null;
+}
+
 interface ProductFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  ingredient: Ingredient;
+  ingredient: Pick<Ingredient, 'id' | 'base_unit'>;
   /** Edit this product; without it the dialog adds a new one to `ingredient`. */
   product?: Product;
 }
@@ -88,35 +98,50 @@ export function ProductFormDialog({ open, onOpenChange, ...props }: ProductFormD
   );
 }
 
-type FormProps = Omit<ProductFormDialogProps, 'open' | 'onOpenChange'> & { onClose: () => void };
+type FormProps = Omit<ProductFormDialogProps, 'open' | 'onOpenChange'> & {
+  /** Prefills a new product from a barcode lookup (not together with `product`). */
+  lookedUp?: LookedUpProduct;
+  /** Called after saving, or when there was nothing to save. */
+  onClose: () => void;
+};
 
-function ProductForm({ ingredient, product, onClose }: FormProps) {
+/**
+ * The product fields (ING-04), in the dialog or inline in the scan flow. With a proposal from
+ * Open Food Facts the values start from it and the product is saved with `source` off; only
+ * the fields the user changed are named in `edited_fields` (BAR-04).
+ */
+export function ProductForm({ ingredient, product, lookedUp, onClose }: FormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const units = useUnits();
   const create = useCreateProduct();
   const update = useUpdateProduct(product?.id ?? '');
   const mutation = product ? update : create;
-  const basis = product?.nutrition_basis ?? ingredient.base_unit;
+  const proposal = lookedUp?.proposal ?? null;
+  // The values the form starts with: the product's, or the proposal's.
+  const initial = product ?? proposal;
+  const basis = product?.nutrition_basis ?? proposal?.nutrition_basis ?? ingredient.base_unit;
 
-  const [barcode, setBarcode] = useState(product?.barcode ?? '');
-  const [texts, setTexts] = useState<Record<TextField, string>>({
-    name: product?.name ?? '',
-    brand: product?.brand ?? '',
-    quantity_text: product?.quantity_text ?? '',
-  });
+  const [barcode, setBarcode] = useState(product?.barcode ?? lookedUp?.barcode ?? '');
+  const [initialTexts] = useState<Record<TextField, string>>(() => ({
+    name: initial?.name ?? '',
+    brand: initial?.brand ?? '',
+    quantity_text: initial?.quantity_text ?? '',
+  }));
+  const [texts, setTexts] = useState(initialTexts);
   // The number fields as the form opened with them. Only fields whose text was changed are
   // sent: a stored value with more decimals than shown would otherwise be cut and marked as
   // edited by a user (BAR-04) on every save.
-  const [initialPackQuantity] = useState(() => numberInputValue(product?.pack_quantity, language));
+  const [initialPackQuantity] = useState(() => numberInputValue(initial?.pack_quantity, language));
   const [initialNutrients] = useState(
     () =>
       Object.fromEntries(
-        NUTRIENT_KEYS.map((key) => [key, numberInputValue(product?.nutrients[key], language)]),
+        NUTRIENT_KEYS.map((key) => [key, numberInputValue(initial?.nutrients[key], language)]),
       ) as Record<NutrientKey, string>,
   );
   const [packQuantity, setPackQuantity] = useState(initialPackQuantity);
-  const [packUnit, setPackUnit] = useState<Unit | ''>(product?.pack_unit ?? '');
+  const initialPackUnit = initial?.pack_unit ?? '';
+  const [packUnit, setPackUnit] = useState<Unit | ''>(initialPackUnit);
   const [nutrients, setNutrients] = useState(initialNutrients);
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
@@ -145,9 +170,40 @@ function ProductForm({ ingredient, product, onClose }: FormProps) {
     ) as Record<TextField, string | null>;
     const unit = packUnit === '' ? null : packUnit;
 
+    if (!product && proposal) {
+      // Every value, as proposed or corrected; only the corrected ones count as user-edited.
+      const edited: ProductField[] = [];
+      for (const field of TEXT_FIELDS) {
+        if (texts[field].trim() !== initialTexts[field].trim()) edited.push(field);
+      }
+      if (packQuantity.trim() !== initialPackQuantity) edited.push('pack_quantity');
+      if (packUnit !== initialPackUnit) edited.push('pack_unit');
+      for (const key of NUTRIENT_KEYS) {
+        if (nutrients[key].trim() !== initialNutrients[key]) edited.push(`nutrients.${key}`);
+      }
+      const body: ProductCreate = {
+        barcode: barcode.trim(),
+        ingredient_id: ingredient.id,
+        source: 'off',
+        off_last_modified_at: proposal.off_last_modified_at,
+        edited_fields: edited,
+        ...trimmedTexts,
+        pack_quantity: quantity.value,
+        pack_unit: unit,
+        nutrients: values,
+      };
+      if (proposal.nutrition_basis !== null) body.nutrition_basis = proposal.nutrition_basis;
+      create.mutate(body, { onSuccess: onClose });
+      return;
+    }
+
     if (!product) {
       // Only what was filled in: the server records every given field as entered by a user.
-      const body: ProductCreate = { barcode: barcode.trim(), ingredient_id: ingredient.id };
+      const body: ProductCreate = {
+        barcode: barcode.trim(),
+        ingredient_id: ingredient.id,
+        source: 'manual',
+      };
       for (const field of TEXT_FIELDS) {
         const text = trimmedTexts[field];
         if (text !== null) body[field] = text;
@@ -184,6 +240,8 @@ function ProductForm({ ingredient, product, onClose }: FormProps) {
   }
 
   const showAlert = needsErrorAlert(serverFields, SHOWN_FIELDS);
+  const basisMismatch =
+    isApiError(mutation.error) && mutation.error.code === 'product.basis_mismatch';
 
   return (
     <form
@@ -205,6 +263,8 @@ function ProductForm({ ingredient, product, onClose }: FormProps) {
             autoComplete="off"
             required
             maxLength={20}
+            // A proposal belongs to the looked-up barcode.
+            readOnly={proposal !== null}
             value={barcode}
             onChange={(event) => setBarcode(event.target.value)}
           />
@@ -297,6 +357,14 @@ function ProductForm({ ingredient, product, onClose }: FormProps) {
       </fieldset>
       <ErrorAlert error={units.error} />
       {showAlert && <ErrorAlert error={mutation.error} />}
+      {basisMismatch && (
+        <p className="text-sm">
+          {t('ingredients.product.basisMismatchHint', {
+            product: unitLabel(t, basis),
+            ingredient: unitLabel(t, ingredient.base_unit),
+          })}
+        </p>
+      )}
       <DialogFooter>
         <Button type="submit" disabled={mutation.isPending || barcode.trim() === ''}>
           {product ? t('common.save') : t('ingredients.product.create')}

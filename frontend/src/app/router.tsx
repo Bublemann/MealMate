@@ -39,6 +39,13 @@ export const routes: RouteObject[] = [
           { path: 'meals/:id/edit', element: <MealFormScreen /> },
           { path: 'ingredients', element: <IngredientsScreen /> },
           { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
+          // The scanner and its decoder are a separate chunk, loaded when needed (PERF-03).
+          {
+            path: 'scan',
+            lazy: async () => ({
+              Component: (await import('@/features/scanner/ScanScreen')).ScanScreen,
+            }),
+          },
           { path: 'me', element: <MeScreen /> },
           {
             path: 'me/admin',
