@@ -3,7 +3,7 @@
 version: 2
 updates:
   - package-ecosystem: uv
-    directories: ["/backend", "/e2e"]
+    directories: ["/backend", "/e2e", "/deploy/tests"]
     schedule:
       interval: weekly
     cooldown:

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MealMate backup pull (OPS-03, plan § 11.3). install-backup-pull.sh fills in __HOME__ and
+     installs it to ~/Library/LaunchAgents. Hourly while the Mac is awake; launchd runs a missed
+     interval after sleep, and RunAtLoad starts one pull at login. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>de.mealmate.backup-pull</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__HOME__/.mealmate-backup/bin/pull.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.mealmate-backup/pull.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.mealmate-backup/pull.log</string>
+</dict>
+</plist>

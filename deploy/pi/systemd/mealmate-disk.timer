@@ -1,0 +1,10 @@
+# MealMate (plan § 11.2 step 8).
+[Unit]
+Description=MealMate hourly disk space check
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

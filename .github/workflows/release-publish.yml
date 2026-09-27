@@ -1,6 +1,7 @@
 # Publishes a release from release/X.Y (plan § 10.2): checks that CI passed on the branch head,
 # computes the version, pushes the tag with the release App (which starts build-image.yml),
-# creates the GitHub release with notes and the deploy bundle, and opens the back-merge PR.
+# creates the GitHub release with notes, the deploy bundle and setup.sh (plus its SHA-256), and
+# opens the back-merge PR.
 name: Release publish
 
 on:
@@ -87,9 +88,10 @@ jobs:
           mkdir -p release/assets
           git archive --format=tar.gz --prefix="mealmate-deploy-${VERSION}/" \
             --output="release/assets/mealmate-deploy-${VERSION}.tar.gz" "${GITHUB_SHA}:deploy"
-          if [ -f deploy/pi/setup.sh ]; then
-            cp deploy/pi/setup.sh release/assets/setup.sh
-          fi
+          # setup.sh bootstraps a fresh card (plan § 11.2); its checksum file serves
+          # `sha256sum -c`, the release notes list it as well.
+          cp deploy/pi/setup.sh release/assets/setup.sh
+          (cd release/assets && sha256sum setup.sh > setup.sh.sha256)
 
           range=${PREVIOUS:+${PREVIOUS}..}${GITHUB_SHA}
           uvx git-cliff@2.14.2 --config cliff.toml --ignore-tags '.*' --output release/changes.md "$range"
@@ -103,6 +105,16 @@ jobs:
             echo "## Image"
             echo
             echo "\`ghcr.io/bublemann/mealmate:${VERSION}\`, built from this tag with signed build provenance."
+            echo
+            echo "## Set up or restore a Pi"
+            echo
+            echo "On a freshly flashed card (see docs/operations.md):"
+            echo
+            echo '```bash'
+            echo "curl -fsSLO https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/setup.sh"
+            echo "sha256sum setup.sh   # must equal the setup.sh line below"
+            echo "sudo bash setup.sh --version ${VERSION} [--restore <snapshot-dir>]"
+            echo '```'
             echo
             echo "## Checksums (SHA-256)"
             echo

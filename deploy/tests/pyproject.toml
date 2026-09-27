@@ -1,0 +1,33 @@
+[project]
+name = "mealmate-deploy-tests"
+version = "0.0.0"
+description = "MealMate deploy tests: host scripts against the production image (plan § 9)"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+dependencies = ["pytest==9.1.1"]
+
+[dependency-groups]
+dev = ["ruff==0.16.9"]
+
+# Not a package: the suite runs from this directory with `uv run pytest`.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = ["-ra"]
+filterwarnings = ["error"]
+markers = [
+    "root: runs the host scripts, which need root",
+    "docker: needs root, Docker and the MealMate image (MEALMATE_TEST_IMAGE)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "RUF", "PT"]
+# The suite starts docker, bash and rsync with arguments it builds itself, uses /tmp paths, counts
+# rows of tables it lists from sqlite_master, and asserts related facts together.
+ignore = ["S101", "S108", "S603", "S607", "S608", "PT018"]

@@ -4,7 +4,8 @@ A self-hosted web app that turns saved meals into a category-sorted shopping lis
 
 > **Status: v2 rewrite in progress.** v1 is archived as the tag `v1-legacy`. What v2 does and how it gets built:
 > - [`docs/requirements.md`](docs/requirements.md): what v2 does (requirements with IDs such as `LIST-04`);
-> - [`docs/plan.md`](docs/plan.md): architecture, data model and milestones.
+> - [`docs/plan.md`](docs/plan.md): architecture, data model and milestones;
+> - [`docs/operations.md`](docs/operations.md): running it on the Pi: setup, backups, restore, updates.
 
 ## Features (v2)
 
@@ -21,7 +22,7 @@ A self-hosted web app that turns saved meals into a category-sorted shopping lis
 | `backend/` | FastAPI + SQLAlchemy + Alembic (Python 3.14, managed with `uv`) |
 | `frontend/` | React + TypeScript + Vite + Tailwind; see [`frontend/README.md`](frontend/README.md) |
 | `e2e/` | End-to-end tests (pytest-playwright) |
-| `deploy/` | Production compose file and Raspberry Pi / Mac scripts |
+| `deploy/` | Production compose file, Raspberry Pi / Mac scripts and their tests; see [`docs/operations.md`](docs/operations.md) |
 | `docs/` | Requirements, plan, runbooks |
 
 ## Development
@@ -34,6 +35,7 @@ make test       # backend + frontend tests
 make lint       # linters and type checks
 make openapi    # regenerate the frontend API types from the backend
 make e2e        # build the production image and run the end-to-end tests
+make test-deploy  # host scripts against the image (make image first; root and Docker)
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for conventions.

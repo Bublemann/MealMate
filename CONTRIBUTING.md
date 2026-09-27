@@ -26,6 +26,7 @@ What to build is defined in [`docs/requirements.md`](docs/requirements.md); how 
 3. **No user-facing text from the backend.** Errors are codes (`ErrorCode`) that the frontend translates (`error.<code>` in `de.json`/`en.json`).
 4. **Layers in the backend:** `api/` (HTTP only) → `services/` (rules, permissions, transactions) → `repositories/` (queries) → `models/`. `domain/` is pure Python without I/O.
 5. **Frontend conventions:** see [`frontend/README.md`](frontend/README.md): i18n keys for every string, API calls only through `src/api/`, test IDs from `src/testIds.ts`, UI building blocks in `src/components/ui/`.
+6. **Host scripts** (`deploy/`): bash with `set -euo pipefail`, shellcheck-clean (`make lint-deploy`), idempotent; Mac scripts stay bash 3.2 compatible. Never write through a path in the container-writable `data/`. Covered by `deploy/tests/` (`make test-deploy`); the owner's runbook is [`docs/operations.md`](docs/operations.md).
 
 ## Checklists for common extensions
 

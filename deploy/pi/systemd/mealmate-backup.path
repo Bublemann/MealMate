@@ -1,0 +1,11 @@
+# MealMate (plan § 11.2 step 8): the admin page's "Back up now" creates data/status/backup-request
+# (OPS-08). backup.sh --label manual removes it first with `rm -f`, so this does not retrigger.
+[Unit]
+Description=MealMate backup request from the admin page
+
+[Path]
+PathExists=/srv/mealmate/data/status/backup-request
+Unit=mealmate-backup-manual.service
+
+[Install]
+WantedBy=paths.target

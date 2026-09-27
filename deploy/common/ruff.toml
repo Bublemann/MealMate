@@ -1,0 +1,4 @@
+# prune.py also runs on the Pi's and Homebrew's python3 (3.9+): the deploy tests' rules, 3.9 syntax.
+# Linted from deploy/tests: `uv run ruff check . ../common && uv run ruff format --check . ../common`.
+extend = "../tests/pyproject.toml"
+target-version = "py39"

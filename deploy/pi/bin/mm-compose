@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# docker compose for the MealMate installation (plan § 11.1). Every script and unit uses it.
+# The paths are absolute because Compose resolves --env-file against the current directory and
+# systemd starts units in /. state/override.env holds the IMAGE_REF pin (empty = follow the tag).
+#
+#   sudo /srv/mealmate/bin/mm-compose ps | logs app | exec app mealmate ... | up -d
+set -euo pipefail
+
+root=${MEALMATE_ROOT:-/srv/mealmate}
+cd "$root"
+exec "${DOCKER:-docker}" compose --project-directory "$root" --env-file "$root/.env" \
+  --env-file "$root/state/override.env" "$@"
