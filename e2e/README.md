@@ -79,6 +79,21 @@ cd e2e && uv run python perf/list_p95.py --base-url https://mealmate.<tailnet>.t
 ## Fake Open Food Facts
 
 `fake_off/` is a small FastAPI stand-in for the Open Food Facts API v3 (`uv run uvicorn
-fake_off.app:app --port 18081`): it serves `fake_off/fixtures/<barcode>.json` and OFF's
-`product_not_found` envelope (404) for every other barcode. It is not wired into the app yet
-(milestone M7); fixture `2000000000015` is synthetic (GS1 prefix 2 is for in-store numbers).
+fake_off.app:app --port 18081`): it serves `fake_off/fixtures/<barcode>.json` at
+`/api/v3/product/…` and at pinned minor versions (`/api/v3.4/product/…`, what the app asks), and
+OFF's `product_not_found` envelope (404) for every other barcode. The fixtures are synthetic (GS1
+prefix 2 is for in-store numbers) and listed in `fake_off/app.py`: products with English and
+German names, one without nutrition data, a slow one (answered after 15 s, beyond the app's
+timeout), a hostile one with control and bidi characters and absurd nutrients, and one product per
+browser for journey 3.
+
+The suite serves it for the whole session (`support/fake_off.py`) and starts the app container
+with `MEALMATE_OFF_BASE_URL=http://host.docker.internal:<port>` and `--add-host
+host.docker.internal:<gateway>`, so the app reaches it through Docker's bridge. The stand-in
+listens only on that gateway address (the IPv4 `Gateway` of `docker network inspect
+bridge`, i.e. `docker0`, also on GitHub's Ubuntu runners); where it is not an address of the host
+(Docker Desktop, rootless Docker) it falls back to all interfaces and `host-gateway`. `tests/test_barcodes.py` (journey 3)
+types the barcodes into the scanner's manual input, since there is no camera in CI (BAR-01); it
+needs the `fake_off_app` fixture and is skipped with `E2E_BASE_URL`. Saving a product puts its
+barcode into the database, so Chromium, WebKit and Firefox each use their own fixture product
+(`PRODUCTS`); another browser fails with a clear message until it gets one.

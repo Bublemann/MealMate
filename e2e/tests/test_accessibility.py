@@ -51,6 +51,8 @@ SCREENS = [
         (TEST_IDS["ingredientNutrition"], TEST_IDS["productList"]),
     ),
     Screen("/meals/new", "member", (TEST_IDS["mealForm"], TEST_IDS["ingredientPicker"])),
+    # No camera in CI (denied or missing): the scanner shows its manual input (BAR-01).
+    Screen("/scan", "member", (TEST_IDS["screenScan"], TEST_IDS["barcodeInput"])),
     # A meal with a photo and ingredient rows is created in the test: /meals/<id>.
     Screen(
         "/meals/:id",

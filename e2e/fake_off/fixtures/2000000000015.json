@@ -3,6 +3,18 @@
   "errors": [],
   "product": {
     "brands": "MealMate Test Kitchen",
+    "categories_tags": [
+      "en:plant-based-foods-and-beverages",
+      "en:plant-based-foods",
+      "en:breakfasts",
+      "en:cereals-and-potatoes",
+      "en:cereals-and-their-products",
+      "en:breakfast-cereals",
+      "en:flakes",
+      "en:cereal-flakes",
+      "en:rolled-flakes",
+      "en:rolled-oats"
+    ],
     "code": "2000000000015",
     "generic_name": "Rolled oats",
     "lang": "en",

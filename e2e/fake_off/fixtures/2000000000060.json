@@ -1,0 +1,35 @@
+{
+  "code": "2000000000060",
+  "errors": [],
+  "product": {
+    "brands": "Evil Corp XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "categories_tags": [
+      "en:snacks",
+      42,
+      "\u202een:sweets"
+    ],
+    "code": "2000000000060",
+    "generic_name": "<script>alert(1)</script>",
+    "lang": "en",
+    "last_modified_t": "not a timestamp",
+    "nutriments": {
+      "carbohydrates_100g": "12.5",
+      "energy-kcal_100g": 99999,
+      "fat_100g": "NaN",
+      "proteins_100g": -5,
+      "sugars_100g": true
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "\u202eSnack\u0000 with\u0007 \u200bhidden\u2066 characters\n\t",
+    "product_quantity": -3,
+    "product_quantity_unit": "kg",
+    "quantity": "1\u202e00 g                                                                                                    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

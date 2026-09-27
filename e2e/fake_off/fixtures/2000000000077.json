@@ -1,0 +1,38 @@
+{
+  "code": "2000000000077",
+  "errors": [],
+  "product": {
+    "brands": "Käserei Testhof",
+    "categories_tags": [
+      "en:dairies",
+      "en:fermented-foods",
+      "en:fermented-milk-products",
+      "en:cheeses",
+      "en:goudas"
+    ],
+    "code": "2000000000077",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 0.1,
+      "energy-kcal_100g": 356,
+      "fat_100g": 28,
+      "proteins_100g": 24,
+      "sugars_100g": 0.1
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Young Gouda",
+    "product_name_de": "Junger Gouda",
+    "product_name_en": "Young Gouda",
+    "product_quantity": 400,
+    "product_quantity_unit": "g",
+    "quantity": "400 g"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

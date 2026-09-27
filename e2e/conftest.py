@@ -5,7 +5,9 @@ The app under test:
 - Otherwise the production image E2E_IMAGE (default `mealmate:e2e`, built by `make e2e`) is started
   on 127.0.0.1:E2E_PORT (default 18080) with an empty in-memory /data. It serves plain HTTP with
   MEALMATE_COOKIE_SECURE=false, because WebKit never stores Secure cookies over HTTP, not even on
-  localhost; the production cookie attributes are covered by the backend API tests.
+  localhost; the production cookie attributes are covered by the backend API tests. Its Open Food
+  Facts is the stand-in in fake_off/, served from the host for the whole session (plan § 9) on
+  Docker's bridge only (support/fake_off.py).
 
 Accounts (plan § 9, M2): `admin` is created with `mealmate create-admin` inside the container;
 `invite_user` and `make_couple` go through the API as that admin. With E2E_BASE_URL there is no
@@ -27,6 +29,7 @@ from playwright.sync_api import Page
 
 from support.api import Account, Api, new_password, sign_in, unique
 from support.container import AppContainer, save_logs, start_app, wait_until_healthy
+from support.fake_off import CONTAINER_HOST, serve_fake_off
 
 DEFAULT_DEVICE = "iPhone 15"
 DEFAULT_IMAGE = "mealmate:e2e"
@@ -44,23 +47,34 @@ def app_container(pytestconfig: pytest.Config) -> Iterator[AppContainer | None]:
 
     port = int(os.environ.get("E2E_PORT", DEFAULT_PORT))
     origin = f"http://127.0.0.1:{port}"
-    app = start_app(
-        os.environ.get("E2E_IMAGE", DEFAULT_IMAGE),
-        port,
-        {
-            "MEALMATE_SECRET_KEY": TEST_SECRET_KEY,
-            "MEALMATE_PUBLIC_URL": origin,
-            "MEALMATE_COOKIE_SECURE": "false",
-            "MEALMATE_DIAGNOSTICS_ENABLED": "true",
-        },
-    )
-    try:
-        wait_until_healthy(app)
-        yield app
-    finally:
-        output = Path(pytestconfig.getoption("--output"))
-        save_logs(app, output / "app-container.log")
-        app.stop()
+    with serve_fake_off() as fake_off:
+        app = start_app(
+            os.environ.get("E2E_IMAGE", DEFAULT_IMAGE),
+            port,
+            {
+                "MEALMATE_SECRET_KEY": TEST_SECRET_KEY,
+                "MEALMATE_PUBLIC_URL": origin,
+                "MEALMATE_COOKIE_SECURE": "false",
+                "MEALMATE_DIAGNOSTICS_ENABLED": "true",
+                "MEALMATE_OFF_BASE_URL": fake_off.url_in_container,
+            },
+            hosts={CONTAINER_HOST: fake_off.host_address},
+        )
+        try:
+            wait_until_healthy(app)
+            yield app
+        finally:
+            output = Path(pytestconfig.getoption("--output"))
+            save_logs(app, output / "app-container.log")
+            app.stop()
+
+
+@pytest.fixture(scope="session")
+def fake_off_app(app_container: AppContainer | None) -> AppContainer:
+    """The started container, whose Open Food Facts is fake_off/ (barcode lookups, M7)."""
+    if app_container is None:
+        pytest.skip("needs the fake Open Food Facts, which only the suite's own container uses")
+    return app_container
 
 
 @pytest.fixture(scope="session")

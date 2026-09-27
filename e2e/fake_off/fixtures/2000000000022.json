@@ -1,0 +1,38 @@
+{
+  "code": "2000000000022",
+  "errors": [],
+  "product": {
+    "brands": "Hof Sonnenschein",
+    "categories_tags": [
+      "en:dairies",
+      "en:milks",
+      "en:whole-milks"
+    ],
+    "code": "2000000000022",
+    "generic_name": "",
+    "lang": "de",
+    "last_modified_t": 1772323200,
+    "nutriments": {
+      "carbohydrates_100g": 4.8,
+      "energy-kcal_100g": 64,
+      "energy-kj_100g": 268,
+      "fat_100g": 3.5,
+      "proteins_100g": 3.4,
+      "salt_100g": 0.1,
+      "sugars_100g": 4.8
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Frische Vollmilch 3,5 %",
+    "product_name_de": "Frische Vollmilch 3,5 %",
+    "product_quantity": "1000",
+    "product_quantity_unit": "ml",
+    "quantity": "1 l"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

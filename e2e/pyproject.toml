@@ -39,3 +39,5 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "RUF", "PT"]
 "tests/**" = ["S101"]
 # Starts `docker` from PATH with arguments built by the suite; /tmp is the container's tmpfs.
 "support/container.py" = ["S108", "S603", "S607"]
+# Asks `docker` from PATH for the bridge's gateway address.
+"support/fake_off.py" = ["S607"]

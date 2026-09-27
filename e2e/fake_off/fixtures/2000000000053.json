@@ -1,0 +1,36 @@
+{
+  "code": "2000000000053",
+  "errors": [],
+  "product": {
+    "brands": "MealMate Test Kitchen",
+    "categories_tags": [
+      "en:plant-based-foods",
+      "en:legumes",
+      "en:lentils",
+      "en:red-lentils"
+    ],
+    "code": "2000000000053",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 48,
+      "energy-kcal_100g": 339,
+      "fat_100g": 1.6,
+      "proteins_100g": 26,
+      "sugars_100g": 2.1
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Rote Linsen",
+    "product_name_de": "Rote Linsen",
+    "product_quantity": 500,
+    "product_quantity_unit": "g",
+    "quantity": "500 g"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}
