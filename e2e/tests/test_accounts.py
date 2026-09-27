@@ -42,9 +42,12 @@ def test_register_with_invite_link(page: Page, api: Api, admin: Account) -> None
     expect(page.get_by_test_id(TEST_IDS["displayNameInput"])).to_have_value(display_name)
     expect(page.get_by_test_id(TEST_IDS["screenMe"])).to_contain_text(username)
 
-    # The link works once.
+    # Opening a link while signed in asks to log out first; after that the link is used up.
     CODE_REQUESTS.reserve()
     page.goto(link)
+    screen = page.get_by_test_id(TEST_IDS["screenJoin"])
+    expect(screen.get_by_role("status")).to_have_text(text("auth.link.signedIn", name=display_name))
+    screen.get_by_role("button", name=text("me.logout")).click()
     expect(page.get_by_test_id(TEST_IDS["linkInvalid"])).to_be_visible()
 
 
