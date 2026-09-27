@@ -2,7 +2,6 @@
 
 import logging
 import os
-import re
 from pathlib import Path
 
 from fastapi import APIRouter, status
@@ -11,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AppSettings
-from app.core.config import REPO_URL
+from app.core.config import source_url
 from app.core.errors import ApiError, ErrorCode
 from app.db.session import ReadSession
 from app.schemas.errors import ERROR_RESPONSES, ErrorResponse
@@ -20,13 +19,6 @@ from app.schemas.system import HealthStatus, VersionInfo
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["system"], responses=ERROR_RESPONSES)
-
-_COMMIT_SHA = re.compile(r"[0-9a-f]{7,40}")
-
-
-def source_url(commit: str) -> str:
-    """The source of the running build: the exact commit if known, else the repository."""
-    return f"{REPO_URL}/tree/{commit}" if _COMMIT_SHA.fullmatch(commit) else REPO_URL
 
 
 async def _database_ok(session: AsyncSession) -> bool:

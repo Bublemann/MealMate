@@ -21,6 +21,27 @@ export function formatNumber(
   return new Intl.NumberFormat(LOCALES[language], options).format(Object.is(value, -0) ? 0 : value);
 }
 
+const BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as const;
+
+/**
+ * `18.6 GB` (en) or `18,6 GB` (de), in decimal units as disks are labelled; one decimal below 10
+ * of a unit, none above.
+ */
+export function formatBytes(bytes: number, language: Language): string {
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1000 && unit < BYTE_UNITS.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  return formatNumber(value, language, {
+    style: 'unit',
+    unit: BYTE_UNITS[unit],
+    unitDisplay: 'short',
+    maximumFractionDigits: value < 10 ? 1 : 0,
+  });
+}
+
 /** `26.09.2026` (de) or `26/09/2026` (en), in the device's time zone. */
 export function formatDate(date: Date | number | string, language: Language): string {
   return new Intl.DateTimeFormat(LOCALES[language], DATE_OPTIONS).format(new Date(date));

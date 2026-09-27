@@ -358,7 +358,13 @@ def test_jobs_cleanup(database: Path, data_dir: Path) -> None:
     result = runner.invoke(main, ["jobs", "cleanup"])
 
     assert result.exit_code == 0, result.output
-    assert "Removed 2 orphaned media files." in result.output
+    assert result.output.splitlines() == [
+        "Removed 2 orphaned media files.",
+        "Removed 0 finished invites and reset links.",
+        "Removed 0 expired refresh tokens.",
+        "Removed 0 ended sessions.",
+        "Removed 0 processed shopping ops.",
+    ]
     assert {path.name for path in media.iterdir()} == photos
     assert "Removed 0 orphaned media files." in runner.invoke(main, ["jobs", "cleanup"]).output
 

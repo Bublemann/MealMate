@@ -1,8 +1,8 @@
-"""Admin section (ADM-01..04, ING-05). Every route needs an active admin."""
+"""Admin section (ADM-01..04, ING-05, OPS-08). Every route needs an active admin."""
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import Config, CurrentAdmin, Now
+from app.api.deps import AppSettings, Config, CurrentAdmin, Now, limit_backup_requests
 from app.db.session import ReadSession, WriteSession
 from app.schemas.admin import (
     AdminEvent,
@@ -12,11 +12,12 @@ from app.schemas.admin import (
     InviteCreate,
     InviteCreated,
     LinkCreated,
+    SystemInfo,
 )
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.ingredients import Ingredient, IngredientMerge
 from app.schemas.reference import Category, CategoryOrder
-from app.services import admin, codes, ingredients, reference
+from app.services import admin, codes, ingredients, reference, system
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], responses=ERROR_RESPONSES)
 
@@ -122,3 +123,27 @@ async def admin_delete_ingredient(
 ) -> None:
     """Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise)."""
     await ingredients.delete(session, principal, ingredient_id, now=now)
+
+
+@router.get("/system")
+async def admin_get_system(principal: CurrentAdmin, settings: AppSettings) -> SystemInfo:
+    """The running version and the host's last backup and free disk space, as the host last
+    wrote them to its read-only status files (null while there is none)."""
+    return await system.system_info(settings)
+
+
+@router.post(
+    "/backup",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_class=Response,
+    dependencies=[Depends(limit_backup_requests)],
+    responses={
+        status.HTTP_202_ACCEPTED: {"description": "Requested; the host starts the backup shortly"}
+    },
+)
+async def admin_request_backup(
+    principal: CurrentAdmin, session: WriteSession, settings: AppSettings, now: Now
+) -> None:
+    """Ask the host for a backup now (OPS-08), e.g. before an SD card swap; a request that is
+    already waiting stays as it is. At most one request per minute (429)."""
+    await system.request_backup(session, settings, principal, now=now)

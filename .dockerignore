@@ -19,6 +19,8 @@ data
 backend/data
 deploy/data
 deploy/state
+# The deploy tests run in CI, never on the Pi.
+deploy/tests
 
 # Dependencies, build output and caches (rebuilt inside the image)
 **/node_modules

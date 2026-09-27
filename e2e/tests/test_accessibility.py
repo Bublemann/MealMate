@@ -64,6 +64,12 @@ SCREENS = [
     Screen("/me/admin/invites", "admin", (TEST_IDS["inviteList"], TEST_IDS["shareLinkUrl"])),
     Screen("/me/admin/categories", "admin", (TEST_IDS["adminCategoryList"],)),
     Screen("/me/admin/events", "admin", (TEST_IDS["eventList"],)),
+    # No host status files in E2E: the backup and disk empty states are checked.
+    Screen(
+        "/me/admin/system",
+        "admin",
+        (TEST_IDS["systemVersion"], TEST_IDS["backupStatus"], TEST_IDS["diskStatus"]),
+    ),
 ]
 
 

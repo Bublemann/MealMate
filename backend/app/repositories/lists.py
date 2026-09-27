@@ -266,6 +266,14 @@ async def processed_op_ids(session: AsyncSession, user_id: str, op_ids: Iterable
 # --- lifecycle --------------------------------------------------------------------------------
 
 
+async def delete_processed_ops_before(session: AsyncSession, cutoff: datetime) -> int:
+    """Forget ops applied before `cutoff` (plan § 5.8); returns how many."""
+    deleted = await session.scalars(
+        delete(ProcessedOp).where(ProcessedOp.applied_at < cutoff).returning(ProcessedOp.op_id)
+    )
+    return len(deleted.all())
+
+
 async def unshare_all_of(session: AsyncSession, owner_ids: Collection[str], now: datetime) -> None:
     """Turn the share switch off on every list of the owners (CPL-05)."""
     result = await session.execute(

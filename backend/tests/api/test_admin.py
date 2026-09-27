@@ -53,6 +53,8 @@ ADMIN_ROUTES = [
     ("POST", "/api/admin/invites"),
     ("DELETE", "/api/admin/invites/{id}"),
     ("GET", "/api/admin/events"),
+    ("GET", "/api/admin/system"),
+    ("POST", "/api/admin/backup"),
 ]
 
 

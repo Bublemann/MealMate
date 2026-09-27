@@ -310,6 +310,10 @@ describe('MeScreen', () => {
       '/me/admin/categories',
     );
     expect(within(entry).getByRole('link', { name: 'Activity log' })).toBeVisible();
+    expect(within(entry).getByRole('link', { name: 'System' })).toHaveAttribute(
+      'href',
+      '/me/admin/system',
+    );
   });
 
   it('hides the admin entry from normal users', async () => {

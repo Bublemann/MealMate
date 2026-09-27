@@ -28,6 +28,9 @@ def test_defaults(secret_key: str) -> None:
     assert settings.public_url is None
     assert settings.data_dir == Path("/data")
     assert settings.database_path == Path("/data/mealmate.db")
+    assert settings.data_status_dir == Path("/data/status")
+    assert settings.status_dir == Path("/status")
+    assert settings.image_digest is None
     assert settings.static_dir is None
     assert settings.cookie_secure is True
     assert settings.api_docs_enabled is False
@@ -50,6 +53,8 @@ def test_reads_prefixed_environment(monkeypatch: pytest.MonkeyPatch, secret_key:
     monkeypatch.setenv("MEALMATE_LOG_LEVEL", "debug")
     monkeypatch.setenv("MEALMATE_VERSION", "2.0.0-alpha.1")
     monkeypatch.setenv("MEALMATE_COMMIT", "0123abc")
+    monkeypatch.setenv("MEALMATE_STATUS_DIR", "/srv/status")
+    monkeypatch.setenv("MEALMATE_IMAGE_DIGEST", " sha256:abc ")
     monkeypatch.setenv("SECRET_KEY", "unprefixed variables are ignored")
 
     settings = get_settings()
@@ -60,7 +65,29 @@ def test_reads_prefixed_environment(monkeypatch: pytest.MonkeyPatch, secret_key:
     assert settings.api_docs_enabled is True
     assert settings.log_level == "DEBUG"
     assert (settings.version, settings.commit) == ("2.0.0-alpha.1", "0123abc")
+    assert settings.status_dir == Path("/srv/status")
+    assert settings.image_digest == "sha256:abc"
     assert get_settings() is settings
+
+
+def test_empty_image_digest_is_none(secret_key: str) -> None:
+    assert Settings(secret_key=secret_key, image_digest=" ").image_digest is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (f"sha256:{'a' * 64}", f"sha256:{'a' * 64}"),
+        (f"ghcr.io/bublemann/mealmate@sha256:{'b' * 64}", f"sha256:{'b' * 64}"),
+        (f"127.0.0.1:18150/mealmate@sha256:{'c' * 64}\n", f"sha256:{'c' * 64}"),
+        ("ghcr.io/bublemann/mealmate@", None),
+    ],
+)
+def test_image_digest_accepts_the_host_pin(
+    secret_key: str, value: str, expected: str | None
+) -> None:
+    """compose.yml passes the IMAGE_REF pin (`repo@sha256:…`); the admin page shows the digest."""
+    assert Settings(secret_key=secret_key, image_digest=value).image_digest == expected
 
 
 def test_open_food_facts_rates_stay_within_its_limit(

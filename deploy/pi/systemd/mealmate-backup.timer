@@ -1,0 +1,10 @@
+# MealMate (plan § 11.2 step 8).
+[Unit]
+Description=MealMate backup every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

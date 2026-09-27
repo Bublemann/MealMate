@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import OneTimeCode
@@ -40,3 +40,19 @@ async def revoke_open_resets(session: AsyncSession, user_id: str, now: datetime)
         )
         .values(revoked_at=now)
     )
+
+
+async def delete_finished_before(session: AsyncSession, cutoff: datetime) -> int:
+    """Delete codes that expired, were used or were revoked before `cutoff`; returns how many."""
+    deleted = await session.scalars(
+        delete(OneTimeCode)
+        .where(
+            or_(
+                OneTimeCode.expires_at < cutoff,
+                OneTimeCode.used_at < cutoff,
+                OneTimeCode.revoked_at < cutoff,
+            )
+        )
+        .returning(OneTimeCode.id)
+    )
+    return len(deleted.all())

@@ -123,6 +123,8 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "admin_reorder_categories",
         "admin_merge_ingredient",
         "admin_delete_ingredient",
+        "admin_get_system",
+        "admin_request_backup",
     }
     error_ref = {"$ref": "#/components/schemas/ErrorResponse"}
     for operation in operations.values():

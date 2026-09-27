@@ -59,7 +59,7 @@ frontend/
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
-    │   ├── admin/          # users, invites, categories, activity log (lazy-loaded route chunk)
+    │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
     │   ├── scanner/        # /scan and the meal form's scan dialog: camera, decoder, lookup flow
     │   ├── lists/          # Lists tab, draft/shopping/done views, history, polling, export text
@@ -335,6 +335,11 @@ order.
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
 | `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
 | `saveCategoryOrder`      | `save-category-order`      | Admin: "Save order"                         |
+| `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                         |
+| `systemVersion`          | `system-version`           | Admin: running version (once loaded)        |
+| `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"      |
+| `backupNow`              | `backup-now`               | Admin: "Back up now"                        |
+| `diskStatus`             | `disk-status`              | Admin: free disk space, or "no check yet"   |
 | `mealSearch`             | `meal-search`              | Search field on Meals                       |
 | `newMeal`                | `new-meal`                 | "New meal" on Meals                         |
 | `mealUserChips`          | `meal-user-chips`          | User filter chips on Meals                  |

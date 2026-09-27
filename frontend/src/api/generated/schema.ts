@@ -4,6 +4,27 @@
  */
 
 export interface paths {
+    "/api/admin/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Request Backup
+         * @description Ask the host for a backup now (OPS-08), e.g. before an SD card swap; a request that is
+         *     already waiting stays as it is. At most one request per minute (429).
+         */
+        post: operations["admin_request_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/categories/order": {
         parameters: {
             query?: never;
@@ -124,6 +145,27 @@ export interface paths {
          * @description Revoke an invite so it can no longer be used.
          */
         delete: operations["admin_revoke_invite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/system": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Get System
+         * @description The running version and the host's last backup and free disk space, as the host last
+         *     wrote them to its read-only status files (null while there is none).
+         */
+        get: operations["admin_get_system"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1444,7 +1486,7 @@ export interface components {
          * @description What an admin (or the command line, with no actor) did.
          * @enum {string}
          */
-        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.reorder" | "ingredient.merge" | "ingredient.delete";
+        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.reorder" | "ingredient.merge" | "ingredient.delete" | "system.backup_request";
         /**
          * AdminEvent
          * @description `actor` is null for the command line or a deleted admin, `target` for a deleted user.
@@ -1497,6 +1539,28 @@ export interface components {
             is_active?: boolean | null;
             /** Role */
             role?: ("user" | "admin") | null;
+        };
+        /**
+         * BackupStatus
+         * @description The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).
+         */
+        BackupStatus: {
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "regular" | "pre-update" | "manual";
+            /** Message */
+            message: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Size Bytes */
+            size_bytes: number | null;
         };
         /** Body_upload_meal_photo */
         Body_upload_meal_photo: {
@@ -1599,6 +1663,23 @@ export interface components {
         DiagCookieCheck: {
             /** Present */
             present: boolean;
+        };
+        /**
+         * DiskStatus
+         * @description Free space on the Pi's root file system when the host last checked (`disk.json`).
+         */
+        DiskStatus: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Free Bytes */
+            free_bytes: number;
+            /** Free Percent */
+            free_percent: number;
+            /** Total Bytes */
+            total_bytes: number;
         };
         /**
          * DisplayAmountOut
@@ -2941,6 +3022,23 @@ export interface components {
             /** User Agent */
             user_agent: string | null;
         };
+        /**
+         * SystemInfo
+         * @description What is running and how the host is doing (ADM-01). `backup` and `disk` are null
+         *     while the host has not written its status files (or they can't be read).
+         */
+        SystemInfo: {
+            backup: components["schemas"]["BackupStatus"] | null;
+            /** Commit */
+            commit: string;
+            disk: components["schemas"]["DiskStatus"] | null;
+            /** Image Digest */
+            image_digest: string | null;
+            /** Source Url */
+            source_url: string;
+            /** Version */
+            version: string;
+        };
         /** Tag */
         Tag: {
             /** Id */
@@ -3000,6 +3098,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    admin_request_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Requested; the host starts the backup shortly */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     admin_reorder_categories: {
         parameters: {
             query?: never;
@@ -3205,6 +3330,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_get_system: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemInfo"];
+                };
             };
             /** @description Error envelope; `code` names the error */
             default: {

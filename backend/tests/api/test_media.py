@@ -3,6 +3,7 @@ MEAL-08, SEC-07, VIS-05, PERF-05)."""
 
 import os
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -485,9 +486,9 @@ async def test_cleanup_removes_old_orphans_only(
 
     database: Database = app.state.database
     async with database.write_sessions() as session:
-        removed = await jobs.cleanup(session, media, now=now)
+        removed = await jobs.cleanup(session, media, now=datetime.fromtimestamp(now, UTC))
 
-    assert removed == 3
+    assert removed.media_files == 3
     assert media_files(app) == files_of(kept) | files_of(new_orphan) | {"notes.txt"}
     # A missing directory is simply empty.
     assert MediaStore(media.directory / "missing", key=b"").remove_orphans(set(), now=now) == 0

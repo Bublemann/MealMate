@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatBytes,
   formatDate,
   formatDateTime,
   formatDayMonth,
@@ -23,6 +24,16 @@ describe('formatNumber', () => {
   it('shows negative zero as 0', () => {
     expect(formatNumber(-0, 'de')).toBe('0');
     expect(formatNumber(-0, 'en', { useGrouping: false, maximumFractionDigits: 6 })).toBe('0');
+  });
+});
+
+describe('formatBytes', () => {
+  it('uses decimal units with one decimal below 10', () => {
+    expect(formatBytes(512, 'en')).toBe('512 byte');
+    expect(formatBytes(1_500, 'en')).toBe('1.5 kB');
+    expect(formatBytes(18_634_000_000, 'en')).toBe('19 GB');
+    expect(formatBytes(8_634_000_000, 'de')).toBe('8,6\u00a0GB');
+    expect(formatBytes(2_000_000_000_000_000, 'en')).toBe('2,000 TB');
   });
 });
 

@@ -335,6 +335,14 @@ describe('AdminEventsScreen', () => {
         created_at: '2026-09-22T09:00:00Z',
       },
       {
+        id: 'e8',
+        actor: ADMIN_REF,
+        action: 'system.backup_request',
+        target: null,
+        details: {},
+        created_at: '2026-09-21T11:00:00Z',
+      },
+      {
         id: 'e7',
         actor: ADMIN_REF,
         // An action this app version doesn't know yet (e.g. from a newer backend).
@@ -355,6 +363,7 @@ describe('AdminEventsScreen', () => {
       'Admin created a password reset link for Deleted user',
       'Admin merged the ingredient Apfel into Äpfel',
       'Admin changed the order of the categories',
+      'Admin started a backup',
       'Action by Admin',
     ]);
     expect(within(rows[0] as HTMLElement).getByText(/26\/09\/2026/)).toHaveAttribute(

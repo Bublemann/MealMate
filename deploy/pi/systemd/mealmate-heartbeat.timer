@@ -1,0 +1,12 @@
+# MealMate (plan § 11.2 step 8).
+[Unit]
+Description=MealMate heartbeat every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

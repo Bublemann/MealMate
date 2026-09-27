@@ -19,6 +19,8 @@ from app.services.off_refresh import OffRefresher
 from app.services.principal import Principal
 
 UNKNOWN_CLIENT = "unknown"
+# Backup requests are limited for the instance as a whole: there is one host to back up.
+BACKUP_LIMIT_KEY = "instance"
 
 
 def get_app_settings(request: Request) -> Settings:
@@ -116,4 +118,11 @@ async def limit_code_requests(limits: Limits, client_ip: ClientIp) -> None:
 async def limit_uploads(limits: Limits, principal: CurrentUser) -> None:
     """Photo uploads: at most 20 per 10 minutes per user (SEC-07, PERF-05)."""
     if (retry_after := limits.uploads.hit(principal.user_id)) is not None:
+        raise rate_limited(retry_after)
+
+
+async def limit_backup_requests(limits: Limits, principal: CurrentAdmin) -> None:
+    """The "Back up now" button: at most one request per minute (OPS-08); admins only, checked
+    first."""
+    if (retry_after := limits.backups.hit(BACKUP_LIMIT_KEY)) is not None:
         raise rate_limited(retry_after)

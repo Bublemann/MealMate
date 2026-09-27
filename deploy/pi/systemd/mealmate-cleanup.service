@@ -1,0 +1,11 @@
+# MealMate (plan § 11.2 step 8). Installed by setup.sh from the running image.
+[Unit]
+Description=MealMate cleanup job
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/srv/mealmate/bin/mm-compose exec -T app mealmate jobs cleanup
+TimeoutStartSec=15min

@@ -7,10 +7,14 @@ export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
 export type Invite = components['schemas']['Invite'];
 export type AdminEvent = components['schemas']['AdminEvent'];
+export type SystemInfo = components['schemas']['SystemInfo'];
+export type BackupStatus = components['schemas']['BackupStatus'];
+export type DiskStatus = components['schemas']['DiskStatus'];
 
 const USERS_KEY = ['admin', 'users'] as const;
 const INVITES_KEY = ['admin', 'invites'] as const;
 const EVENTS_KEY = ['admin', 'events'] as const;
+const SYSTEM_KEY = ['admin', 'system'] as const;
 
 export function useAdminUsers() {
   return useQuery({
@@ -114,6 +118,26 @@ export function useReorderCategories() {
       unwrap(api.PUT('/api/admin/categories/order', { body: { category_ids: categoryIds } })),
     onSuccess: (categories) => {
       queryClient.setQueryData(CATEGORIES_KEY, categories);
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+    },
+  });
+}
+
+/** ADM-01: version, and the last backup and free disk space as the server last reported them. */
+export function useSystemInfo() {
+  return useQuery({
+    queryKey: SYSTEM_KEY,
+    queryFn: ({ signal }) => unwrap(api.GET('/api/admin/system', { signal })),
+  });
+}
+
+/** OPS-08: asks the server for a backup now; it starts within a minute. */
+export function useRequestBackup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/api/admin/backup')),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: SYSTEM_KEY });
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
     },
   });

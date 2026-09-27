@@ -1,0 +1,13 @@
+# MealMate (plan § 11.2 step 8). Installed by setup.sh from the running image.
+[Unit]
+Description=MealMate backup
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/srv/mealmate/bin/backup.sh
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=idle
