@@ -1,4 +1,4 @@
-"""Admin section (ADM-01..04). Every route needs an active admin."""
+"""Admin section (ADM-01..04, ING-05). Every route needs an active admin."""
 
 from fastapi import APIRouter, Response, status
 
@@ -14,7 +14,9 @@ from app.schemas.admin import (
     LinkCreated,
 )
 from app.schemas.errors import ERROR_RESPONSES
-from app.services import admin, codes
+from app.schemas.ingredients import Ingredient, IngredientMerge
+from app.schemas.reference import Category, CategoryOrder
+from app.services import admin, codes, ingredients, reference
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], responses=ERROR_RESPONSES)
 
@@ -87,3 +89,36 @@ async def admin_revoke_invite(
 async def admin_list_events(principal: CurrentAdmin, session: ReadSession) -> list[AdminEvent]:
     """The admin activity log, newest first (at most 200 entries)."""
     return await admin.list_events(session)
+
+
+@router.put("/categories/order")
+async def admin_reorder_categories(
+    body: CategoryOrder, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> list[Category]:
+    """Set the category order to the shop's walking order; every category exactly once."""
+    return await reference.reorder_categories(session, principal, body.category_ids, now=now)
+
+
+@router.post("/ingredients/{ingredient_id}/merge")
+async def admin_merge_ingredient(
+    ingredient_id: str,
+    body: IngredientMerge,
+    principal: CurrentAdmin,
+    session: WriteSession,
+    now: Now,
+) -> Ingredient:
+    """Merge a duplicate into `into_id`: its references move there and it is deleted
+    (ING-05). Returns the ingredient merged into."""
+    return await ingredients.merge(session, principal, ingredient_id, body.into_id, now=now)
+
+
+@router.delete(
+    "/ingredients/{ingredient_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def admin_delete_ingredient(
+    ingredient_id: str, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> None:
+    """Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise)."""
+    await ingredients.delete(session, principal, ingredient_id, now=now)

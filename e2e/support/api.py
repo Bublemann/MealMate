@@ -1,4 +1,4 @@
-"""Test setup through the app's own API: accounts, invites, couples (plan § 9, M2).
+"""Test setup through the app's own API: accounts, invites, couples, ingredients (plan § 9).
 
 The journeys drive the UI; everything they merely need to exist (an admin, invited users, a couple)
 is created here over HTTP, which is faster and keeps each test about one thing.
@@ -34,6 +34,13 @@ def unique(prefix: str) -> str:
 def new_password() -> str:
     """A random password that passes the rules (ACC-06); nothing secret is committed."""
     return f"e2e-{secrets.token_urlsafe(12)}"
+
+
+def new_barcode() -> str:
+    """A random EAN-13 with a valid check digit; prefix 20 is for in-store numbers (GS1)."""
+    body = "20" + "".join(str(secrets.randbelow(10)) for _ in range(10))
+    total = sum(int(digit) * (3 if index % 2 else 1) for index, digit in enumerate(body))
+    return body + str((10 - total % 10) % 10)
 
 
 def code_from_link(url: str) -> str:
@@ -173,6 +180,34 @@ class Api:
         )
         if (accepted["partner"] or {}).get("id") != a.id:
             raise ApiError(f"{b.username} is not a couple with {a.username}: {accepted}")
+
+    def categories(self, account: Account) -> list[dict[str, Any]]:
+        """GET /api/categories: every category in its walking order."""
+        return self.call("GET", "/api/categories", token=self.token(account))
+
+    def order_categories(self, admin: Account, category_ids: list[str]) -> None:
+        """PUT /api/admin/categories/order."""
+        self.call(
+            "PUT",
+            "/api/admin/categories/order",
+            token=self.token(admin),
+            json={"category_ids": category_ids},
+        )
+
+    def create_ingredient(
+        self, account: Account, name: str, *, category_key: str = "other", **fields: Any
+    ) -> dict[str, Any]:
+        """POST /api/ingredients in the category `category_key`; the created Ingredient."""
+        token = self.token(account)
+        categories = self.call("GET", "/api/categories", token=token)
+        [category_id] = [c["id"] for c in categories if c["key"] == category_key]
+        body = {"name": name, "category_id": category_id, **fields}
+        return self.call("POST", "/api/ingredients", token=token, json=body)
+
+    def create_product(self, account: Account, ingredient_id: str, **fields: Any) -> dict[str, Any]:
+        """POST /api/products with a new barcode; the created Product."""
+        body = {"barcode": new_barcode(), "ingredient_id": ingredient_id, **fields}
+        return self.call("POST", "/api/products", token=self.token(account), json=body)
 
 
 def sign_in(context: BrowserContext, account: Account) -> None:

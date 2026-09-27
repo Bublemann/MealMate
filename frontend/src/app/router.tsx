@@ -3,6 +3,7 @@ import { JoinScreen } from '@/features/auth/JoinScreen';
 import { LoginScreen } from '@/features/auth/LoginScreen';
 import { RequireAdmin, RequireAuth } from '@/features/auth/RequireAuth';
 import { ResetScreen } from '@/features/auth/ResetScreen';
+import { IngredientDetailScreen } from '@/features/ingredients/IngredientDetailScreen';
 import { IngredientsScreen } from '@/features/ingredients/IngredientsScreen';
 import { ListsScreen } from '@/features/lists/ListsScreen';
 import { MealsScreen } from '@/features/meals/MealsScreen';
@@ -28,6 +29,7 @@ export const routes: RouteObject[] = [
           { path: 'lists', element: <ListsScreen /> },
           { path: 'meals', element: <MealsScreen /> },
           { path: 'ingredients', element: <IngredientsScreen /> },
+          { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
           { path: 'me', element: <MeScreen /> },
           {
             path: 'me/admin',
@@ -46,6 +48,13 @@ export const routes: RouteObject[] = [
                 lazy: async () => ({
                   Component: (await import('@/features/admin/AdminInvitesScreen'))
                     .AdminInvitesScreen,
+                }),
+              },
+              {
+                path: 'categories',
+                lazy: async () => ({
+                  Component: (await import('@/features/admin/AdminCategoriesScreen'))
+                    .AdminCategoriesScreen,
                 }),
               },
               {

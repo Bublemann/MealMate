@@ -6,10 +6,13 @@ from pathlib import Path
 
 import bcrypt
 import pytest
+from sqlalchemy.exc import IntegrityError
 from typer.testing import CliRunner
 
 from app.cli import main
 from app.db.migrations import upgrade_database
+from app.domain.barcodes import normalize_barcode
+from app.services import demo
 
 runner = CliRunner()
 PUBLIC_URL = "https://mealmate.example.ts.net"
@@ -187,10 +190,56 @@ def test_seed_demo(database: Path) -> None:
     )
     assert members == [("anna",), ("ben",)]
     assert query(database, "SELECT kind, used_at FROM one_time_codes") == [("invite", None)]
+    assert "Demo ingredients: 29, products: 6" in result.output
+
+    ingredients = dict(
+        query(
+            database,
+            "SELECT i.name, count(p.id) FROM ingredients i "
+            "LEFT JOIN products p ON p.ingredient_id = i.id GROUP BY i.id",
+        )
+    )
+    assert len(ingredients) == 29
+    assert ingredients["Spaghetti"] == 2  # an average of two products
+    [(kcal, basis)] = query(
+        database,
+        "SELECT i.kcal, p.nutrition_basis FROM ingredients i "
+        "JOIN products p ON p.ingredient_id = i.id WHERE i.name = 'Milch'",
+    )
+    assert (kcal, basis) == (64, "ml")  # manual value plus a product (the hint)
+    categories = query(database, "SELECT count(DISTINCT category_id) FROM ingredients")
+    assert categories == [(15,)]
+    creators = query(
+        database,
+        "SELECT DISTINCT u.username FROM ingredients i JOIN users u ON u.id = i.created_by "
+        "ORDER BY 1",
+    )
+    assert creators == [("anna",), ("ben",), ("carl",)]
+    barcodes = [code for (code,) in query(database, "SELECT barcode FROM products")]
+    assert all(normalize_barcode(code) == code for code in barcodes)
 
     again = runner.invoke(main, ["seed-demo"])
     assert again.exit_code == 1
     assert "Refusing to seed demo data" in again.output
+    assert len(query(database, "SELECT id FROM users")) == 4
+
+
+def test_seed_demo_leaves_nothing_behind_when_it_fails(
+    database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Accounts and catalog are one transaction, so a failed run can simply be repeated."""
+    with monkeypatch.context() as patched:
+        # A product twice: its barcode is unique, so the catalog fails after the accounts.
+        patched.setattr(demo, "DEMO_PRODUCTS", (*demo.DEMO_PRODUCTS, demo.DEMO_PRODUCTS[0]))
+        result = runner.invoke(main, ["seed-demo"])
+    assert result.exit_code == 1
+    assert isinstance(result.exception, IntegrityError)
+    tables = ("users", "couples", "couple_members", "one_time_codes", "admin_events")
+    for table in (*tables, "ingredients", "products"):
+        assert query(database, f"SELECT count(*) FROM {table}") == [(0,)], table  # noqa: S608
+
+    again = runner.invoke(main, ["seed-demo"])
+    assert again.exit_code == 0, again.output
     assert len(query(database, "SELECT id FROM users")) == 4
 
 

@@ -50,6 +50,16 @@ class ErrorCode(StrEnum):
     ADMIN_LAST_ADMIN = "admin.last_admin"
     ADMIN_PUBLIC_URL_MISSING = "admin.public_url_missing"
 
+    # 409: the base unit cannot change while products are linked (ING-02).
+    INGREDIENT_BASE_UNIT_LOCKED = "ingredient.base_unit_locked"
+    # 409: the ingredient is still referenced; `params` counts the references per kind
+    # (`products`; meals and lists join in later milestones).
+    INGREDIENT_IN_USE = "ingredient.in_use"
+    # 409: merging would move products to an ingredient with another base unit.
+    INGREDIENT_MERGE_BASE_UNIT_MISMATCH = "ingredient.merge_base_unit_mismatch"
+    # 409: a product's nutrition basis must be its ingredient's base unit (ING-04).
+    PRODUCT_BASIS_MISMATCH = "product.basis_mismatch"
+
 
 class FieldErrorCode(StrEnum):
     """Why a single request field was rejected (`fields[].code` in the envelope)."""

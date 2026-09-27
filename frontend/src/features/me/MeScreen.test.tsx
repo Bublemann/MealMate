@@ -305,6 +305,10 @@ describe('MeScreen', () => {
       '/me/admin/users',
     );
     expect(within(entry).getByRole('link', { name: 'Invites' })).toBeVisible();
+    expect(within(entry).getByRole('link', { name: 'Categories' })).toHaveAttribute(
+      'href',
+      '/me/admin/categories',
+    );
     expect(within(entry).getByRole('link', { name: 'Activity log' })).toBeVisible();
   });
 

@@ -1,6 +1,15 @@
 """All permission checks in one place (plan § 5.5, SEC-04).
 
-M2 has users, couples and the admin section; meals and lists add their rules here in M4/M5a.
+| Object | View | Edit |
+|---|---|---|
+| Own account, couple | self | self |
+| Ingredient, product (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
+| Reference data (M3) | everyone | add a cuisine: everyone; reorder categories: admin |
+| Admin endpoints | active admin (`require_admin`) | same; never self-deactivation or deletion |
+
+Ingredients and products are a shared household wiki, so they need no per-object check; the
+admin-only actions go through `require_admin` (via the `CurrentAdmin` dependency). Meals and
+lists add their rules here in M4/M5a.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession

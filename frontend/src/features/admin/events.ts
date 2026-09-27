@@ -10,6 +10,9 @@ const ACTION_KEYS = {
   'user.deactivate': 'admin.events.action.userDeactivate',
   'user.reactivate': 'admin.events.action.userReactivate',
   'user.delete': 'admin.events.action.userDelete',
+  'category.reorder': 'admin.events.action.categoryReorder',
+  'ingredient.merge': 'admin.events.action.ingredientMerge',
+  'ingredient.delete': 'admin.events.action.ingredientDelete',
 } as const;
 
 function isKnownAction(action: string): action is keyof typeof ACTION_KEYS {
@@ -26,5 +29,16 @@ export function describeEvent(t: TFunction, event: AdminEvent): string {
     if (role === 'admin') return t('admin.events.action.userPromote', { actor, target });
     if (role === 'user') return t('admin.events.action.userDemote', { actor, target });
   }
-  return t(ACTION_KEYS[event.action], { actor, target });
+  // Ingredient events name the ingredients as they were called then (they may be gone now).
+  const text = (key: string) => {
+    const value = event.details[key];
+    return typeof value === 'string' ? value : '';
+  };
+  return t(ACTION_KEYS[event.action], {
+    actor,
+    target,
+    name: text('name'),
+    from: text('from_name'),
+    into: text('into_name'),
+  });
 }

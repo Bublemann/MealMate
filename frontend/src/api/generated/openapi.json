@@ -10,7 +10,10 @@
           "user.role_change",
           "user.deactivate",
           "user.reactivate",
-          "user.delete"
+          "user.delete",
+          "category.reorder",
+          "ingredient.merge",
+          "ingredient.delete"
         ],
         "title": "AdminAction",
         "type": "string"
@@ -171,6 +174,49 @@
         "title": "AdminUserUpdate",
         "type": "object"
       },
+      "Category": {
+        "description": "Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "sort_order"
+        ],
+        "title": "Category",
+        "type": "object"
+      },
+      "CategoryOrder": {
+        "description": "Every category id exactly once, in the new order.",
+        "properties": {
+          "category_ids": {
+            "items": {
+              "maxLength": 36,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Category Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category_ids"
+        ],
+        "title": "CategoryOrder",
+        "type": "object"
+      },
       "CodeCheckRequest": {
         "properties": {
           "code": {
@@ -316,6 +362,59 @@
         "title": "CoupleState",
         "type": "object"
       },
+      "Cuisine": {
+        "description": "Seeded cuisines have a `key` (translation `cuisine.<key>`), user-added ones a `name`.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name"
+        ],
+        "title": "Cuisine",
+        "type": "object"
+      },
+      "CuisineCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CuisineCreate",
+        "type": "object"
+      },
       "DiagCookieCheck": {
         "properties": {
           "present": {
@@ -354,7 +453,11 @@
           "couple.request_pending",
           "admin.self_forbidden",
           "admin.last_admin",
-          "admin.public_url_missing"
+          "admin.public_url_missing",
+          "ingredient.base_unit_locked",
+          "ingredient.in_use",
+          "ingredient.merge_base_unit_mismatch",
+          "product.basis_mismatch"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -486,6 +589,351 @@
           "status"
         ],
         "title": "HealthStatus",
+        "type": "object"
+      },
+      "Ingredient": {
+        "description": "An ingredient with its manual values and the resulting nutrition (NUT-02).\n\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
+        "properties": {
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "density_g_per_ml": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density G Per Ml"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manual": {
+            "$ref": "#/components/schemas/NutrientValues"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nutrition": {
+            "$ref": "#/components/schemas/IngredientNutrition"
+          },
+          "piece_weight_g": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piece Weight G"
+          },
+          "product_count": {
+            "title": "Product Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category_id",
+          "base_unit",
+          "piece_weight_g",
+          "density_g_per_ml",
+          "manual",
+          "nutrition",
+          "product_count",
+          "created_by",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Ingredient",
+        "type": "object"
+      },
+      "IngredientCreate": {
+        "description": "`category_id` defaults to the *Other* category, `base_unit` to g (ING-02).\n\n`piece_weight_g`: 0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5.",
+        "properties": {
+          "base_unit": {
+            "default": "g",
+            "enum": [
+              "g",
+              "ml"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "density_g_per_ml": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density G Per Ml"
+          },
+          "manual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "piece_weight_g": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piece Weight G"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "IngredientCreate",
+        "type": "object"
+      },
+      "IngredientMerge": {
+        "description": "Merge the ingredient into `into_id` (ING-05).",
+        "properties": {
+          "into_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Into Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "into_id"
+        ],
+        "title": "IngredientMerge",
+        "type": "object"
+      },
+      "IngredientNutrition": {
+        "description": "The ingredient's value per nutrient (NUT-02).",
+        "properties": {
+          "carbs": {
+            "$ref": "#/components/schemas/NutrientInfo"
+          },
+          "fat": {
+            "$ref": "#/components/schemas/NutrientInfo"
+          },
+          "kcal": {
+            "$ref": "#/components/schemas/NutrientInfo"
+          },
+          "protein": {
+            "$ref": "#/components/schemas/NutrientInfo"
+          },
+          "sugar": {
+            "$ref": "#/components/schemas/NutrientInfo"
+          }
+        },
+        "required": [
+          "kcal",
+          "protein",
+          "carbs",
+          "sugar",
+          "fat"
+        ],
+        "title": "IngredientNutrition",
+        "type": "object"
+      },
+      "IngredientSummary": {
+        "description": "A search result or list entry.",
+        "properties": {
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "product_count": {
+            "title": "Product Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category_id",
+          "base_unit",
+          "product_count"
+        ],
+        "title": "IngredientSummary",
+        "type": "object"
+      },
+      "IngredientUpdate": {
+        "description": "Only the fields that are sent change; an explicit null clears the piece weight or\ndensity, and is refused for the name, category and base unit (422 `invalid`). `manual`\nchanges only the nutrients it contains (null clears one).\n\nThe base unit cannot change while products are linked (409 `ingredient.base_unit_locked`).",
+        "properties": {
+          "base_unit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "g",
+                  "ml"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Unit"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "density_g_per_ml": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density G Per Ml"
+          },
+          "manual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "piece_weight_g": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piece Weight G"
+          }
+        },
+        "title": "IngredientUpdate",
         "type": "object"
       },
       "Invite": {
@@ -832,6 +1280,126 @@
         "title": "MeUpdate",
         "type": "object"
       },
+      "NutrientInfo": {
+        "description": "An ingredient's value for one nutrient, decided field by field (NUT-02): the manual\nvalue, else the average over its products that have one, else unknown (null, never 0).\n`products_mean` is that average (shown as a hint next to a manual value).",
+        "properties": {
+          "products_count": {
+            "title": "Products Count",
+            "type": "integer"
+          },
+          "products_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Products Mean"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "products",
+              "unknown"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "products_mean",
+          "products_count"
+        ],
+        "title": "NutrientInfo",
+        "type": "object"
+      },
+      "NutrientValues": {
+        "description": "Values per 100 g or 100 ml; null means unknown. In requests every value must be plausible: 0 up to the nutrient's maximum (900 kcal, 100 g for the others).",
+        "properties": {
+          "carbs": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          },
+          "kcal": {
+            "anyOf": [
+              {
+                "maximum": 900.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "sugar": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sugar"
+          }
+        },
+        "title": "NutrientValues",
+        "type": "object"
+      },
       "PasswordChange": {
         "properties": {
           "current_password": {
@@ -850,6 +1418,390 @@
           "new_password"
         ],
         "title": "PasswordChange",
+        "type": "object"
+      },
+      "Product": {
+        "description": "`nutrients` are per 100 g or 100 ml (`nutrition_basis`, always the ingredient's base\nunit). `user_edited_fields` names the fields a user typed or changed (`name`,\n`nutrients.kcal`, ...); Open Food Facts never overwrites them (BAR-04).",
+        "properties": {
+          "barcode": {
+            "title": "Barcode",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingredient_id": {
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "nutrients": {
+            "$ref": "#/components/schemas/NutrientValues"
+          },
+          "nutrition_basis": {
+            "enum": [
+              "g",
+              "ml"
+            ],
+            "title": "Nutrition Basis",
+            "type": "string"
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
+          },
+          "source": {
+            "enum": [
+              "off",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_edited_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "User Edited Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "barcode",
+          "ingredient_id",
+          "nutrition_basis",
+          "name",
+          "brand",
+          "quantity_text",
+          "pack_quantity",
+          "pack_unit",
+          "nutrients",
+          "source",
+          "user_edited_fields",
+          "fetched_at",
+          "created_by",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Product",
+        "type": "object"
+      },
+      "ProductCreate": {
+        "description": "A product entered by hand. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid\ncheck digit (spaces are ignored); it is stored as EAN-13 (UPC-A with a leading 0, UPC-E\nexpanded first), an EAN-8 as it is. `nutrition_basis` defaults to the ingredient's base unit\nand must match it (409 `product.basis_mismatch`).",
+        "properties": {
+          "barcode": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Barcode",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "ingredient_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "nutrients": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nutrition_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "g",
+                  "ml"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nutrition Basis"
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity_text": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
+          }
+        },
+        "required": [
+          "barcode",
+          "ingredient_id"
+        ],
+        "title": "ProductCreate",
+        "type": "object"
+      },
+      "ProductUpdate": {
+        "description": "Only the fields that are sent change (null clears an optional one; it is refused for\nthe barcode, ingredient and basis with 422 `invalid`); each becomes user-edited.\n`ingredient_id` moves the product to another ingredient, whose base unit must match the\nnutrition basis.",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "ingredient_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredient Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "nutrients": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nutrition_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "g",
+                  "ml"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nutrition Basis"
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity_text": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
+          }
+        },
+        "title": "ProductUpdate",
         "type": "object"
       },
       "RefreshRequest": {
@@ -974,6 +1926,64 @@
         "title": "SessionInfo",
         "type": "object"
       },
+      "Tag": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Tag",
+        "type": "object"
+      },
+      "Unit": {
+        "description": "The fixed units; the order is the display order.",
+        "enum": [
+          "g",
+          "kg",
+          "ml",
+          "l",
+          "piece",
+          "tbsp",
+          "tsp"
+        ],
+        "title": "Unit",
+        "type": "string"
+      },
+      "UnitInfo": {
+        "description": "A unit (translation `unit.<unit>`) and its kind.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/UnitKind"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/Unit"
+          }
+        },
+        "required": [
+          "unit",
+          "kind"
+        ],
+        "title": "UnitInfo",
+        "type": "object"
+      },
+      "UnitKind": {
+        "enum": [
+          "mass",
+          "volume",
+          "count"
+        ],
+        "title": "UnitKind",
+        "type": "string"
+      },
       "UserRef": {
         "description": "Another user as everyone sees them; deactivated users are shown with a note (ADM-02).",
         "properties": {
@@ -1041,6 +2051,57 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/categories/order": {
+      "put": {
+        "description": "Set the category order to the shop's walking order; every category exactly once.",
+        "operationId": "admin_reorder_categories",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryOrder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Category"
+                  },
+                  "title": "Response Admin Reorder Categories",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Reorder Categories",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/admin/events": {
       "get": {
         "description": "The admin activity log, newest first (at most 200 entries).",
@@ -1077,6 +2138,105 @@
           }
         ],
         "summary": "Admin List Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/ingredients/{ingredient_id}": {
+      "delete": {
+        "description": "Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise).",
+        "operationId": "admin_delete_ingredient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Delete Ingredient",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/ingredients/{ingredient_id}/merge": {
+      "post": {
+        "description": "Merge a duplicate into `into_id`: its references move there and it is deleted\n(ING-05). Returns the ingredient merged into.",
+        "operationId": "admin_merge_ingredient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngredientMerge"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ingredient"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Merge Ingredient",
         "tags": [
           "admin"
         ]
@@ -1794,6 +2954,47 @@
         ]
       }
     },
+    "/api/categories": {
+      "get": {
+        "description": "All categories in the shop's walking order.",
+        "operationId": "list_categories",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Category"
+                  },
+                  "title": "Response List Categories",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Categories",
+        "tags": [
+          "reference"
+        ]
+      }
+    },
     "/api/couple": {
       "delete": {
         "description": "End the couple (either partner, any time).",
@@ -2050,6 +3251,102 @@
         ]
       }
     },
+    "/api/cuisines": {
+      "get": {
+        "description": "Seeded cuisines in their fixed order, then the ones users added, by name.",
+        "operationId": "list_cuisines",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Cuisine"
+                  },
+                  "title": "Response List Cuisines",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cuisines",
+        "tags": [
+          "reference"
+        ]
+      },
+      "post": {
+        "description": "Add a cuisine as plain text (201), or get the existing one with that name (200).",
+        "operationId": "create_cuisine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CuisineCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cuisine"
+                }
+              }
+            },
+            "description": "A cuisine with this name (ignoring case and umlauts) exists already"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cuisine"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Cuisine",
+        "tags": [
+          "reference"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Checks that the database answers and the data directory is writable.",
@@ -2089,6 +3386,337 @@
         "summary": "Get Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/ingredients": {
+      "get": {
+        "description": "Search ignoring case, umlauts and accents (`q`), prefix matches first; without `q`,\nall ingredients by category order and name (at most 1000).",
+        "operationId": "list_ingredients",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IngredientSummary"
+                  },
+                  "title": "Response List Ingredients",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Ingredients",
+        "tags": [
+          "ingredients"
+        ]
+      },
+      "post": {
+        "description": "Add an ingredient; the name must be unique ignoring case and umlauts.",
+        "operationId": "create_ingredient",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngredientCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ingredient"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Ingredient",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
+    "/api/ingredients/similar": {
+      "get": {
+        "description": "Up to five ingredients with a similar name, for the \"similar ingredient exists\" hint.",
+        "operationId": "list_similar_ingredients",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IngredientSummary"
+                  },
+                  "title": "Response List Similar Ingredients",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Similar Ingredients",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
+    "/api/ingredients/{ingredient_id}": {
+      "get": {
+        "description": "An ingredient with its nutrition per nutrient and where each value comes from.",
+        "operationId": "get_ingredient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ingredient"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Ingredient",
+        "tags": [
+          "ingredients"
+        ]
+      },
+      "patch": {
+        "description": "Change an ingredient (anyone may); the base unit is locked while products are linked.",
+        "operationId": "update_ingredient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngredientUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ingredient"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Ingredient",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
+    "/api/ingredients/{ingredient_id}/products": {
+      "get": {
+        "description": "The ingredient's products, by name and barcode.",
+        "operationId": "list_ingredient_products",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  },
+                  "title": "Response List Ingredient Products",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Ingredient Products",
+        "tags": [
+          "ingredients"
         ]
       }
     },
@@ -2330,6 +3958,258 @@
         "summary": "Revoke Session",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/api/products": {
+      "post": {
+        "description": "Add a product by hand; its nutrition basis must be the ingredient's base unit.",
+        "operationId": "create_product",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Product",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/products/{product_id}": {
+      "get": {
+        "description": "One product.",
+        "operationId": "get_product",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Product",
+        "tags": [
+          "products"
+        ]
+      },
+      "patch": {
+        "description": "Change a product (anyone may); every field sent is marked user-edited.",
+        "operationId": "update_product",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "title": "Product Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Product",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "description": "Tags for autocomplete: at most 20 whose name contains `q`, prefix matches first.",
+        "operationId": "list_tags",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Tag"
+                  },
+                  "title": "Response List Tags",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Tags",
+        "tags": [
+          "reference"
+        ]
+      }
+    },
+    "/api/units": {
+      "get": {
+        "description": "All units in display order, with their kind.",
+        "operationId": "list_units",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnitInfo"
+                  },
+                  "title": "Response List Units",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Units",
+        "tags": [
+          "reference"
         ]
       }
     },

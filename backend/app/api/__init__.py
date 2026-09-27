@@ -8,8 +8,8 @@ route template from the matched route itself.
 
 from fastapi import APIRouter
 
-from app.api import admin, auth, couple, me, system, users
+from app.api import admin, auth, couple, ingredients, me, products, reference, system, users
 
 api_router = APIRouter()
-for module in (system, auth, me, couple, users, admin):
+for module in (system, auth, me, couple, users, reference, ingredients, products, admin):
     api_router.include_router(module.router)

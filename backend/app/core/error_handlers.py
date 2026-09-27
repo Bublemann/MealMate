@@ -38,6 +38,7 @@ _FIELD_ERROR_CODES = {
     "string_too_long": FieldErrorCode.TOO_LONG,
     "too_long": FieldErrorCode.TOO_LONG,
     "multiple_of": FieldErrorCode.OUT_OF_RANGE,
+    "finite_number": FieldErrorCode.OUT_OF_RANGE,  # NaN or Infinity in a JSON body
     "string_pattern_mismatch": FieldErrorCode.INVALID_FORMAT,
     "value_error": FieldErrorCode.INVALID_FORMAT,
 }

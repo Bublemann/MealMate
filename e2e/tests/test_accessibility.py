@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from support.a11y import serious_violations
-from support.api import CODE_REQUESTS, Account, Api, code_from_link, sign_in
+from support.api import CODE_REQUESTS, Account, Api, code_from_link, sign_in, unique
 from support.frontend import TEST_IDS, text
 
 Visitor = Literal["anonymous", "member", "admin"]
@@ -28,9 +28,16 @@ SCREENS = [
     Screen("/lists", "member", (TEST_IDS["screenLists"],)),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/ingredients", "member", (TEST_IDS["screenIngredients"],)),
+    # An ingredient with a product is created in the test: /ingredients/<id>.
+    Screen(
+        "/ingredients/:id",
+        "member",
+        (TEST_IDS["ingredientNutrition"], TEST_IDS["productList"]),
+    ),
     Screen("/me", "member", (TEST_IDS["appVersion"], TEST_IDS["sessionList"])),
     Screen("/me/admin/users", "admin", (TEST_IDS["adminUserList"],)),
     Screen("/me/admin/invites", "admin", (TEST_IDS["inviteList"], TEST_IDS["shareLinkUrl"])),
+    Screen("/me/admin/categories", "admin", (TEST_IDS["adminCategoryList"],)),
     Screen("/me/admin/events", "admin", (TEST_IDS["eventList"],)),
 ]
 
@@ -53,6 +60,11 @@ def test_no_serious_violations(
         link = api.create_invite(request.getfixturevalue("admin"))
         CODE_REQUESTS.reserve()  # the join screen checks the code
         path = f"/join#{code_from_link(link)}"
+    if path == "/ingredients/:id":
+        api = request.getfixturevalue("api")
+        ingredient = api.create_ingredient(account, unique("A11y"), manual={"kcal": 52})
+        api.create_product(account, ingredient["id"], name=unique("Product"))
+        path = f"/ingredients/{ingredient['id']}"
 
     page.goto(path)
     if screen.path == "/join":

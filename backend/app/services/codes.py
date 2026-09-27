@@ -98,32 +98,44 @@ async def create_invite(
     tailscale_share_url: str | None,
     now: datetime,
 ) -> InviteCreated:
+    async with session.begin():
+        return await insert_invite(
+            session, config, actor_id=actor_id, tailscale_share_url=tailscale_share_url, now=now
+        )
+
+
+async def insert_invite(
+    session: AsyncSession,
+    config: AuthConfig,
+    *,
+    actor_id: str | None,
+    tailscale_share_url: str | None,
+    now: datetime,
+) -> InviteCreated:
+    """`create_invite` inside the caller's transaction (the demo data adds one)."""
     public_url = require_public_url(config)
     code = random_token()
-    async with session.begin():
-        invite = OneTimeCode(
-            kind="invite",
-            code_hmac=config.code_hash(code),
-            created_by=actor_id,
-            expires_at=now + config.invite_ttl,
-            tailscale_share_url=tailscale_share_url,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(invite)
-        await session.flush()
-        events.record(
-            session,
-            actor_id=actor_id,
-            action=AdminAction.INVITE_CREATE,
-            target_user_id=None,
-            now=now,
-            details={"invite_id": invite.id},
-        )
-        refs = await user_refs(session, [actor_id])
-        return InviteCreated(
-            invite=_invite(invite, refs, now), url=f"{public_url}{JOIN_PATH}#{code}"
-        )
+    invite = OneTimeCode(
+        kind="invite",
+        code_hmac=config.code_hash(code),
+        created_by=actor_id,
+        expires_at=now + config.invite_ttl,
+        tailscale_share_url=tailscale_share_url,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(invite)
+    await session.flush()
+    events.record(
+        session,
+        actor_id=actor_id,
+        action=AdminAction.INVITE_CREATE,
+        target_user_id=None,
+        now=now,
+        details={"invite_id": invite.id},
+    )
+    refs = await user_refs(session, [actor_id])
+    return InviteCreated(invite=_invite(invite, refs, now), url=f"{public_url}{JOIN_PATH}#{code}")
 
 
 async def list_invites(session: AsyncSession, *, now: datetime) -> list[Invite]:

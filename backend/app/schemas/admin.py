@@ -24,6 +24,9 @@ class AdminAction(StrEnum):
     USER_DEACTIVATE = "user.deactivate"
     USER_REACTIVATE = "user.reactivate"
     USER_DELETE = "user.delete"
+    CATEGORY_REORDER = "category.reorder"
+    INGREDIENT_MERGE = "ingredient.merge"
+    INGREDIENT_DELETE = "ingredient.delete"
 
 
 class AdminUser(BaseModel):

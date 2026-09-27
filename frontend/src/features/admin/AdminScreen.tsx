@@ -9,6 +9,7 @@ import type { TestId } from '@/testIds';
 const SECTIONS = [
   { to: '/me/admin/users', label: 'admin.users.title' },
   { to: '/me/admin/invites', label: 'admin.invites.title' },
+  { to: '/me/admin/categories', label: 'admin.categories.title' },
   { to: '/me/admin/events', label: 'admin.events.title' },
 ] as const;
 

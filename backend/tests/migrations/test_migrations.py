@@ -1,4 +1,6 @@
+import asyncio
 import sqlite3
+import uuid
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -12,7 +14,9 @@ from sqlalchemy import Connection, Engine, event
 from typer.testing import CliRunner
 
 from app.cli import main
+from app.core.config import Settings
 from app.db import migrations
+from app.db.base import utcnow
 from app.db.migrations import (
     ForeignKeyViolationError,
     alembic_config,
@@ -22,11 +26,15 @@ from app.db.migrations import (
     head_revision,
     upgrade_database,
 )
+from app.db.session import Database
+from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS
 from app.models import Base
+from app.services import demo
+from app.services.context import AuthConfig
 from tests.support import TEST_SECRET_KEY
 
-HEAD = "0002"
-HEAD_TABLES = {
+HEAD = "0003"
+ACCOUNT_TABLES = {
     "alembic_version",
     "app_meta",
     "users",
@@ -37,6 +45,7 @@ HEAD_TABLES = {
     "couple_members",
     "admin_events",
 }
+HEAD_TABLES = ACCOUNT_TABLES | {"categories", "cuisines", "tags", "ingredients", "products"}
 
 
 @pytest.fixture
@@ -93,10 +102,34 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0001")
     assert tables(database_path) == {"alembic_version", "app_meta"}
     command.upgrade(config, "0002")
+    assert tables(database_path) == ACCOUNT_TABLES
+    command.upgrade(config, "0003")
     assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0002")
+    assert tables(database_path) == ACCOUNT_TABLES
     command.downgrade(config, "0001")
     assert tables(database_path) == {"alembic_version", "app_meta"}
     assert_clean(database_path)
+
+
+def query(path: Path, sql: str) -> list[tuple[object, ...]]:
+    with closing(sqlite3.connect(path)) as connection:
+        return connection.execute(sql).fetchall()
+
+
+def test_reference_data_is_seeded(config: Config, database_path: Path) -> None:
+    """The migration spells out the seeds; they agree with the domain constants, and a
+    downgrade and upgrade seeds them again."""
+    for _ in range(2):
+        command.upgrade(config, "head")
+        categories = query(database_path, "SELECT key, sort_order FROM categories ORDER BY 2")
+        assert categories == [(key, position) for position, key in enumerate(CATEGORY_KEYS)]
+        cuisines = query(database_path, "SELECT key, name, name_norm FROM cuisines ORDER BY id")
+        assert cuisines == [(key, None, key) for key in CUISINE_KEYS]
+        ids = query(database_path, "SELECT id FROM categories UNION ALL SELECT id FROM cuisines")
+        assert all(uuid.UUID(str(row_id)).version == 7 for (row_id,) in ids)
+        command.downgrade(config, "0002")
+        assert tables(database_path) == ACCOUNT_TABLES
 
 
 # --- populated databases (QA-02) -------------------------------------------------------------
@@ -128,6 +161,43 @@ def non_null_foreign_keys(path: Path) -> dict[str, int]:
     return counts
 
 
+def demo_settings(data_dir: Path) -> Settings:
+    return Settings(
+        secret_key=TEST_SECRET_KEY,
+        data_dir=data_dir,
+        public_url="https://mealmate.example.ts.net",
+        bcrypt_rounds=4,
+    )
+
+
+def seed_accounts(data_dir: Path) -> dict[str, str]:
+    """The M2 part of seed-demo, which works at revision 0002."""
+
+    async def run() -> dict[str, str]:
+        database = Database.open(data_dir)
+        try:
+            async with database.write_sessions() as session:
+                config = AuthConfig.from_settings(demo_settings(data_dir))
+                seed = await demo.seed_accounts(session, config, now=utcnow())
+                return seed.user_ids
+        finally:
+            await database.dispose()
+
+    return asyncio.run(run())
+
+
+def seed_catalog(data_dir: Path, user_ids: dict[str, str]) -> None:
+    async def run() -> None:
+        database = Database.open(data_dir)
+        try:
+            async with database.write_sessions() as session:
+                await demo.seed_catalog(session, user_ids, now=utcnow())
+        finally:
+            await database.dispose()
+
+    asyncio.run(run())
+
+
 def seed_demo(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEALMATE_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("MEALMATE_DATA_DIR", str(data_dir))
@@ -137,38 +207,67 @@ def seed_demo(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0, result.output
 
 
-def test_populated_database_survives_migrations(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """seed-demo data at head: a further upgrade keeps every row and reference, and stepping
-    back to the previous revision and up again leaves a clean database.
-
-    0001 has no user tables, so M2 cannot seed at the previous head yet; from 0003 on, this
-    test seeds at the previous head and upgrades to head.
-    """
+def test_populated_database_survives_migrations(tmp_path: Path) -> None:
+    """seed-demo data at the previous head (0002): upgrading keeps every row and reference;
+    then with the M3 demo data at head, stepping back to 0002 keeps the account data, and
+    upgrading again seeds the reference data anew."""
     data_dir = tmp_path / "data"
     path = data_dir / "mealmate.db"
-    upgrade_database(data_dir)
+    config = alembic_config(path)
+    data_dir.mkdir()
+    command.upgrade(config, "0002")
     with closing(sqlite3.connect(path)) as connection:
         connection.execute("INSERT INTO app_meta (key, value) VALUES ('sentinel', 'kept')")
         connection.commit()
-    seed_demo(data_dir, monkeypatch)
+    user_ids = seed_accounts(data_dir)
     counts, references = row_counts(path), non_null_foreign_keys(path)
     assert counts["users"] == 4
     assert counts["couple_members"] == 2
     assert references["one_time_codes.created_by"] == 1
 
-    command.upgrade(alembic_config(path), "head")
-    assert row_counts(path) == counts
-    assert non_null_foreign_keys(path) == references
+    command.upgrade(config, "head")
+    seeded = {"categories": 17, "cuisines": 13, "tags": 0, "ingredients": 0, "products": 0}
+    assert row_counts(path) == counts | seeded
+    assert non_null_foreign_keys(path) == references | {
+        "cuisines.created_by": 0,
+        "ingredients.created_by": 0,
+        "ingredients.updated_by": 0,
+        "products.created_by": 0,
+        "products.updated_by": 0,
+    }
     assert_clean(path)
 
-    command.downgrade(alembic_config(path), "0001")
-    assert row_counts(path) == {"app_meta": 1}
-    command.upgrade(alembic_config(path), "head")
+    seed_catalog(data_dir, user_ids)
+    at_head = row_counts(path)
+    assert at_head["ingredients"] == len(demo.DEMO_INGREDIENTS)
+    assert at_head["products"] == len(demo.DEMO_PRODUCTS)
+    command.downgrade(config, "0002")
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    command.upgrade(config, "head")
+    assert row_counts(path) == counts | seeded
     assert_clean(path)
     with closing(sqlite3.connect(path)) as connection:
         assert connection.execute("SELECT value FROM app_meta").fetchall() == [("kept",)]
+
+
+def test_full_demo_data_at_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`seed-demo` at head, then down to the base and up again leaves a clean database."""
+    data_dir = tmp_path / "data"
+    path = data_dir / "mealmate.db"
+    upgrade_database(data_dir)
+    seed_demo(data_dir, monkeypatch)
+    references = non_null_foreign_keys(path)
+    assert references["ingredients.created_by"] == len(demo.DEMO_INGREDIENTS)
+    assert references["products.created_by"] == len(demo.DEMO_PRODUCTS)
+    assert_clean(path)
+
+    command.upgrade(alembic_config(path), "head")
+    assert non_null_foreign_keys(path) == references
+    command.downgrade(alembic_config(path), "base")
+    command.upgrade(alembic_config(path), "head")
+    assert_clean(path)
+    assert row_counts(path)["categories"] == len(CATEGORY_KEYS)
 
 
 def test_models_match_migrations(config: Config, database_path: Path) -> None:

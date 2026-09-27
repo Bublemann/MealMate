@@ -1,7 +1,8 @@
 """Lifecycle hooks for data that later milestones add (plan § 6, deletion and lifecycle rules).
 
-Meals (M4) and shopping lists (M5a) do not exist yet. The account rules already call these
-hooks at the right point of their write transaction, so those milestones only fill them in.
+Meals (M4) and shopping lists (M5a) do not exist yet. The account and ingredient rules already
+call these hooks at the right point of their write transaction, so those milestones only fill
+them in.
 Each hook runs inside the caller's transaction and must not commit.
 """
 
@@ -44,4 +45,28 @@ async def before_user_deleted(session: AsyncSession, user_id: str) -> None:
       that just moved.
     Their own meals, remaining lists and sessions then go by `ON DELETE CASCADE`; media files
     are removed by the cleanup job (M8).
+    """
+
+
+async def ingredient_references(session: AsyncSession, ingredient_id: str) -> dict[str, int]:
+    """References to an ingredient other than its products, counted per kind; any of them
+    blocks deleting it (ING-05) and is reported in the `ingredient.in_use` params.
+
+    To be filled in:
+    - M4: `meals`, the meals with rows (`meal_ingredients`) of this ingredient;
+    - M5a: `lists`, the lists with frozen rows (`list_meal_ingredients`) or linked extra items
+      (`list_extra_items`) of this ingredient.
+    """
+    return {}
+
+
+async def on_ingredients_merged(session: AsyncSession, from_id: str, into_id: str) -> None:
+    """Runs when an admin merges ingredient `from_id` into `into_id` (ING-05), after the
+    products moved and before `from_id` is deleted.
+
+    To be filled in:
+    - M4: repoint `meal_ingredients`;
+    - M5a: repoint `list_meal_ingredients` and `list_extra_items`, and rewrite
+      `list_line_states.line_key` from `i:<from_id>` to `i:<into_id>`, merging the check states
+      (checked only if both were checked).
     """
