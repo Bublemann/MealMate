@@ -75,13 +75,18 @@ def test_export_list_as_text(
 
     # 4 servings of a meal for 2: onions 1 x 2 = 2 pieces, flour 200 g x 2 + 1.1 kg = 1.5 kg,
     # salt without an amount; the candles keep their own amount, the pepper was removed.
-    def line(name: str, amount: str) -> str:
-        return text("lists.export.line", language, name=name, amount=amount)
+    def line(name: str, amount: str | None = None) -> str:
+        item = (
+            name
+            if amount is None
+            else text("lists.export.item", language, name=name, amount=amount)
+        )
+        return text("lists.export.open", language, item=item)
 
     lines = {
         "fruit_vegetables": [line(onions["name"], f"2 {text('unit.piece', language)}")],
         "baking": [line(flour["name"], f"1{DECIMAL_SEPARATORS[language]}5 kg")],
-        "sauces_spices_oils": [text("lists.export.lineNoAmount", language, name=salt["name"])],
+        "sauces_spices_oils": [line(salt["name"])],
         "other": [line(candles, "2 Packungen")],
     }
     categories = [c["key"] for c in api.categories(anna) if c["key"] in lines]

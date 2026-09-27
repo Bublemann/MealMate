@@ -6,8 +6,10 @@ is created here over HTTP, which is faster and keeps each test about one thing.
 
 import secrets
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -269,6 +271,51 @@ class Api:
         return self.call(
             "POST", f"/api/lists/{list_id}/lines/{line_key}/hide", token=self.token(account)
         )
+
+    def set_list_meal_servings(
+        self, account: Account, list_id: str, list_meal_id: str, servings: int
+    ) -> dict[str, Any]:
+        """PATCH /api/lists/{id}/meals/{list_meal_id} (LIST-04); the ListDetail."""
+        return self.call(
+            "PATCH",
+            f"/api/lists/{list_id}/meals/{list_meal_id}",
+            token=self.token(account),
+            json={"servings": servings},
+        )
+
+    def start_shopping(self, account: Account, list_id: str) -> dict[str, Any]:
+        """POST /api/lists/{id}/start-shopping (LIST-11); the ListDetail."""
+        return self.call("POST", f"/api/lists/{list_id}/start-shopping", token=self.token(account))
+
+    def send_ops(
+        self, account: Account, list_id: str, *ops: tuple[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        """POST /api/lists/{id}/ops with `(type, payload)` pairs, each with a new id and the
+        current time (plan § 5.8); the OpsResponse. Every op must be applied."""
+        at = datetime.now(UTC).isoformat()
+        body = {
+            "ops": [
+                {"op_id": str(uuid.uuid4()), "at": at, "type": kind, "payload": payload}
+                for kind, payload in ops
+            ]
+        }
+        response = self.call(
+            "POST", f"/api/lists/{list_id}/ops", token=self.token(account), json=body
+        )
+        if any(result["status"] != "applied" for result in response["results"]):
+            raise ApiError(f"POST /api/lists/{list_id}/ops: {response['results']}")
+        return response
+
+    def check_line(self, account: Account, list_id: str, line_key: str) -> dict[str, Any]:
+        """Checks the line `line_key` off (SHOP-01); the ListDetail."""
+        ops = self.send_ops(
+            account, list_id, ("line.check", {"line_key": line_key, "checked": True})
+        )
+        return ops["list"]
+
+    def finish_list(self, account: Account, list_id: str) -> dict[str, Any]:
+        """Finishes shopping (SHOP-04, the `list.finish` op); the ListDetail."""
+        return self.send_ops(account, list_id, ("list.finish", {}))["list"]
 
 
 def sign_in(context: BrowserContext, account: Account) -> None:

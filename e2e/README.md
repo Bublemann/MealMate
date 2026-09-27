@@ -53,6 +53,29 @@ database, so names are made unique with `support.api.unique()`.
 - Reloading offline with a service worker is broken in Playwright WebKit (plan O-11), so that
   test is skipped there. Recheck it on every Playwright upgrade.
 
+## Performance (PERF-02)
+
+`perf/list_p95.py` measures a big list under polling against a running instance, as an
+existing user (plan § 9; the M5b gate runs it against the Pi):
+
+```bash
+cd e2e && uv run python perf/list_p95.py --base-url https://mealmate.<tailnet>.ts.net \
+    --username anna --password-file ~/.mealmate-perf
+```
+
+- It creates 20 meals whose rows cover 150 ingredients and a list with all of them (about 155
+  lines) and starts shopping (`--draft` polls a draft). Then, for `--rounds` rounds (default
+  24), `--interval` seconds apart (default 5), three phones send `GET /api/lists/{id}` with
+  `If-None-Match` and a fourth sends a cold GET, one after another spread over the interval
+  like independent phones; `--burst` sends all four at the same moment (the worst case). Every
+  `--change-every` rounds (default 2) a check-off op changes the list first, so the pollers
+  see 200s as well as 304s.
+- It prints count, p50, p95 and max for the 200s, the 304s and the ops, and exits with 1 if a
+  p95 is above `--threshold-ms` (default 300).
+- The list and the meals are deleted afterwards (`--keep` keeps them). The 150 ingredients
+  `Perf 000` … `Perf 149` stay in the ingredient wiki (users cannot delete ingredients) and are
+  reused by the next run; an admin can delete them.
+
 ## Fake Open Food Facts
 
 `fake_off/` is a small FastAPI stand-in for the Open Food Facts API v3 (`uv run uvicorn
