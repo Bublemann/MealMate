@@ -19,3 +19,34 @@ export function fieldErrorMessages(t: TFunction, error: unknown): Partial<Record
   }
   return messages;
 }
+
+/**
+ * Like fieldErrorMessages, but keyed by the whole path below the body, so nested fields keep
+ * their own message: `{"loc": ["body", "manual", "kcal"]}` becomes `manual.kcal`.
+ */
+export function fieldErrorMessagesByPath(
+  t: TFunction,
+  error: unknown,
+): Partial<Record<string, string>> {
+  const messages: Partial<Record<string, string>> = {};
+  if (!isApiError(error)) return messages;
+  for (const { loc, code } of error.fields) {
+    const path = (loc[0] === 'body' ? loc.slice(1) : loc).join('.');
+    if (path in messages) continue;
+    const key = `error.field.${code}` as const;
+    messages[path] = i18n.exists(key) ? t(key) : t('error.field.invalid');
+  }
+  return messages;
+}
+
+/**
+ * Whether a form needs its general error alert: the error has no field problems, or one for a
+ * path the form shows no input for (e.g. `ingredient_id`), which would otherwise go unseen.
+ */
+export function needsErrorAlert(
+  fieldMessages: Partial<Record<string, string>>,
+  shownPaths: ReadonlySet<string>,
+): boolean {
+  const paths = Object.keys(fieldMessages);
+  return paths.length === 0 || paths.some((path) => !shownPaths.has(path));
+}

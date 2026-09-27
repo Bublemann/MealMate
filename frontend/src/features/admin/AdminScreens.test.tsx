@@ -321,11 +321,27 @@ describe('AdminEventsScreen', () => {
       {
         id: 'e5',
         actor: ADMIN_REF,
-        // An action this app version doesn't know yet (e.g. from a newer backend).
-        action: 'ingredient.merge' as AdminEvent['action'],
+        action: 'ingredient.merge',
+        target: null,
+        details: { from_name: 'Apfel', into_name: 'Äpfel' },
+        created_at: '2026-09-22T10:00:00Z',
+      },
+      {
+        id: 'e6',
+        actor: ADMIN_REF,
+        action: 'category.reorder',
         target: null,
         details: {},
-        created_at: '2026-09-22T10:00:00Z',
+        created_at: '2026-09-22T09:00:00Z',
+      },
+      {
+        id: 'e7',
+        actor: ADMIN_REF,
+        // An action this app version doesn't know yet (e.g. from a newer backend).
+        action: 'meal.delete' as AdminEvent['action'],
+        target: null,
+        details: {},
+        created_at: '2026-09-21T10:00:00Z',
       },
     ];
     renderAdmin('/me/admin/events', { 'GET /api/admin/events': events });
@@ -337,6 +353,8 @@ describe('AdminEventsScreen', () => {
       'Admin deactivated Carl (deactivated)',
       'Deleted user created an invite',
       'Admin created a password reset link for Deleted user',
+      'Admin merged the ingredient Apfel into Äpfel',
+      'Admin changed the order of the categories',
       'Action by Admin',
     ]);
     expect(within(rows[0] as HTMLElement).getByText(/26\/09\/2026/)).toHaveAttribute(

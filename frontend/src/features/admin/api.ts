@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
+import { CATEGORIES_KEY } from '@/features/reference/api';
 
 export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
@@ -102,5 +103,18 @@ export function useAdminEvents() {
   return useQuery({
     queryKey: EVENTS_KEY,
     queryFn: ({ signal }) => unwrap(api.GET('/api/admin/events', { signal })),
+  });
+}
+
+/** REF-01: the store's walking order; the answer is the new order of every category. */
+export function useReorderCategories() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (categoryIds: string[]) =>
+      unwrap(api.PUT('/api/admin/categories/order', { body: { category_ids: categoryIds } })),
+    onSuccess: (categories) => {
+      queryClient.setQueryData(CATEGORIES_KEY, categories);
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+    },
   });
 }

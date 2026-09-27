@@ -59,7 +59,9 @@ frontend/
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
-    │   ├── admin/          # users, invites, activity log (lazy-loaded route chunk)
+    │   ├── admin/          # users, invites, categories, activity log (lazy-loaded route chunk)
+    │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
+    │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks
     ├── components/         # shared app components (Screen, FormField, ShareLink, ConfirmDialog, …)
@@ -190,6 +192,13 @@ translation test fails if a key is missing in one file, if a translation is empt
 has no `error.<code>` translation. German texts are written as a German would say them, not
 translated word for word.
 
+**Seeded reference data** is translated by key (I18N-04): `category.<key>`, `cuisine.<key>`,
+`unit.<unit>`, `nutrient.<key>` and `nutrientUnit.<key>`; `features/reference/labels.ts` shows an
+unknown key as it is. **Adding a nutrient** (MNT-06), frontend side: after `make openapi`, `tsc`
+fails until the key is added to `NUTRIENT_KEYS` in `features/ingredients/nutrients.ts`; then add
+`nutrient.<key>` and `nutrientUnit.<key>` to both files. A new category or cuisine only needs its
+translations.
+
 **Adding a language** (I18N-01):
 
 1. copy `src/i18n/en.json` to `src/i18n/<lang>.json` and translate every value;
@@ -211,47 +220,67 @@ order.
 
 <!-- test-ids:start -->
 
-| Key in `testIds`       | `data-testid`            | Element                                     |
-| ---------------------- | ------------------------ | ------------------------------------------- |
-| `tabLists`             | `tab-lists`              | Tab bar link to Lists                       |
-| `tabMeals`             | `tab-meals`              | Tab bar link to Meals                       |
-| `tabIngredients`       | `tab-ingredients`        | Tab bar link to Ingredients                 |
-| `tabMe`                | `tab-me`                 | Tab bar link to Me                          |
-| `screenLists`          | `screen-lists`           | Lists screen                                |
-| `screenMeals`          | `screen-meals`           | Meals screen                                |
-| `screenIngredients`    | `screen-ingredients`     | Ingredients screen                          |
-| `screenMe`             | `screen-me`              | Me screen                                   |
-| `languageSelect`       | `language-select`        | Language select on Me                       |
-| `appVersion`           | `app-version`            | Running version on Me (once loaded)         |
-| `sourceLink`           | `source-link`            | "Source code (AGPL-3.0)" link on Me         |
-| `updatePrompt`         | `update-prompt`          | "New version available" prompt              |
-| `screenLogin`          | `screen-login`           | Login screen                                |
-| `loginReason`          | `login-reason`           | Why the user was logged out (on Login)      |
-| `screenJoin`           | `screen-join`            | Registration screen (invite link)           |
-| `screenReset`          | `screen-reset`           | New password screen (reset link)            |
-| `linkInvalid`          | `link-invalid`           | "Link invalid or expired" on Join/Reset     |
-| `displayNameInput`     | `display-name-input`     | Display name field on Me                    |
-| `mealsPublicSwitch`    | `meals-public-switch`    | "Meals public" switch on Me                 |
-| `listsPublicSwitch`    | `lists-public-switch`    | "Lists public" switch on Me                 |
-| `coupleSection`        | `couple-section`         | Couple card on Me                           |
-| `couplePartner`        | `couple-partner`         | Partner name (and since when) on Me         |
-| `couplePicker`         | `couple-picker`          | User picker for a couple request            |
-| `securityNotice`       | `security-notice`        | "Password reset by …" notice on Me          |
-| `changePasswordButton` | `change-password-button` | Opens the change-password dialog            |
-| `sessionList`          | `session-list`           | List of the user's sessions on Me           |
-| `logoutAllButton`      | `logout-all-button`      | "Log out on all devices" on Me              |
-| `adminEntry`           | `admin-entry`            | Administration card on Me (admins)          |
-| `logoutButton`         | `logout-button`          | "Log out" on Me                             |
-| `screenAdminUsers`     | `screen-admin-users`     | Admin: users screen                         |
-| `adminUserList`        | `admin-user-list`        | Admin: list of users                        |
-| `screenAdminInvites`   | `screen-admin-invites`   | Admin: invites screen                       |
-| `createInviteButton`   | `create-invite-button`   | Admin: "Create invite"                      |
-| `inviteList`           | `invite-list`            | Admin: list of invites                      |
-| `screenAdminEvents`    | `screen-admin-events`    | Admin: activity log screen                  |
-| `eventList`            | `event-list`             | Admin: activity log entries                 |
-| `shareLinkUrl`         | `share-link-url`         | Created invite/reset link (read-only field) |
-| `shareButton`          | `share-button`           | Share (or Copy) for a created link          |
-| `hintHomeScreen`       | `hint-home-screen`       | First-login hint "Add to Home Screen"       |
-| `hintTailscale`        | `hint-tailscale`         | First-login hint "Keep Tailscale on"        |
+| Key in `testIds`         | `data-testid`              | Element                                     |
+| ------------------------ | -------------------------- | ------------------------------------------- |
+| `tabLists`               | `tab-lists`                | Tab bar link to Lists                       |
+| `tabMeals`               | `tab-meals`                | Tab bar link to Meals                       |
+| `tabIngredients`         | `tab-ingredients`          | Tab bar link to Ingredients                 |
+| `tabMe`                  | `tab-me`                   | Tab bar link to Me                          |
+| `screenLists`            | `screen-lists`             | Lists screen                                |
+| `screenMeals`            | `screen-meals`             | Meals screen                                |
+| `screenIngredients`      | `screen-ingredients`       | Ingredients screen                          |
+| `screenMe`               | `screen-me`                | Me screen                                   |
+| `languageSelect`         | `language-select`          | Language select on Me                       |
+| `appVersion`             | `app-version`              | Running version on Me (once loaded)         |
+| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Me         |
+| `updatePrompt`           | `update-prompt`            | "New version available" prompt              |
+| `screenLogin`            | `screen-login`             | Login screen                                |
+| `loginReason`            | `login-reason`             | Why the user was logged out (on Login)      |
+| `screenJoin`             | `screen-join`              | Registration screen (invite link)           |
+| `screenReset`            | `screen-reset`             | New password screen (reset link)            |
+| `linkInvalid`            | `link-invalid`             | "Link invalid or expired" on Join/Reset     |
+| `displayNameInput`       | `display-name-input`       | Display name field on Me                    |
+| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Me                 |
+| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Me                 |
+| `coupleSection`          | `couple-section`           | Couple card on Me                           |
+| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Me         |
+| `couplePicker`           | `couple-picker`            | User picker for a couple request            |
+| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Me          |
+| `changePasswordButton`   | `change-password-button`   | Opens the change-password dialog            |
+| `sessionList`            | `session-list`             | List of the user's sessions on Me           |
+| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Me              |
+| `adminEntry`             | `admin-entry`              | Administration card on Me (admins)          |
+| `logoutButton`           | `logout-button`            | "Log out" on Me                             |
+| `screenAdminUsers`       | `screen-admin-users`       | Admin: users screen                         |
+| `adminUserList`          | `admin-user-list`          | Admin: list of users                        |
+| `screenAdminInvites`     | `screen-admin-invites`     | Admin: invites screen                       |
+| `createInviteButton`     | `create-invite-button`     | Admin: "Create invite"                      |
+| `inviteList`             | `invite-list`              | Admin: list of invites                      |
+| `screenAdminEvents`      | `screen-admin-events`      | Admin: activity log screen                  |
+| `eventList`              | `event-list`               | Admin: activity log entries                 |
+| `shareLinkUrl`           | `share-link-url`           | Created invite/reset link (read-only field) |
+| `shareButton`            | `share-button`             | Share (or Copy) for a created link          |
+| `hintHomeScreen`         | `hint-home-screen`         | First-login hint "Add to Home Screen"       |
+| `hintTailscale`          | `hint-tailscale`           | First-login hint "Keep Tailscale on"        |
+| `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                    |
+| `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                 |
+| `newIngredient`          | `new-ingredient`           | "New ingredient" on Ingredients             |
+| `ingredientList`         | `ingredient-list`          | Ingredients grouped by category             |
+| `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
+| `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
+| `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
+| `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
+| `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
+| `productList`            | `product-list`             | Products of an ingredient                   |
+| `productRow`             | `product-row`              | One product of an ingredient                |
+| `addProduct`             | `add-product`              | "Add product" on the ingredient detail      |
+| `productForm`            | `product-form`             | Create/edit product form                    |
+| `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
+| `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
+| `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |
+| `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |
+| `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
+| `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
+| `saveCategoryOrder`      | `save-category-order`      | Admin: "Save order"                         |
 
 <!-- test-ids:end -->

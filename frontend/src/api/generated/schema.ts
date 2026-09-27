@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/admin/categories/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Admin Reorder Categories
+         * @description Set the category order to the shop's walking order; every category exactly once.
+         */
+        put: operations["admin_reorder_categories"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/events": {
         parameters: {
             query?: never;
@@ -18,6 +38,47 @@ export interface paths {
         get: operations["admin_list_events"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ingredients/{ingredient_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin Delete Ingredient
+         * @description Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise).
+         */
+        delete: operations["admin_delete_ingredient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ingredients/{ingredient_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Merge Ingredient
+         * @description Merge a duplicate into `into_id`: its references move there and it is deleted
+         *     (ING-05). Returns the ingredient merged into.
+         */
+        post: operations["admin_merge_ingredient"];
         delete?: never;
         options?: never;
         head?: never;
@@ -315,6 +376,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Categories
+         * @description All categories in the shop's walking order.
+         */
+        get: operations["list_categories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/couple": {
         parameters: {
             query?: never;
@@ -419,6 +500,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cuisines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cuisines
+         * @description Seeded cuisines in their fixed order, then the ones users added, by name.
+         */
+        get: operations["list_cuisines"];
+        put?: never;
+        /**
+         * Create Cuisine
+         * @description Add a cuisine as plain text (201), or get the existing one with that name (200).
+         */
+        post: operations["create_cuisine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -431,6 +536,95 @@ export interface paths {
          * @description Checks that the database answers and the data directory is writable.
          */
         get: operations["get_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingredients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ingredients
+         * @description Search ignoring case, umlauts and accents (`q`), prefix matches first; without `q`,
+         *     all ingredients by category order and name (at most 1000).
+         */
+        get: operations["list_ingredients"];
+        put?: never;
+        /**
+         * Create Ingredient
+         * @description Add an ingredient; the name must be unique ignoring case and umlauts.
+         */
+        post: operations["create_ingredient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingredients/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Similar Ingredients
+         * @description Up to five ingredients with a similar name, for the "similar ingredient exists" hint.
+         */
+        get: operations["list_similar_ingredients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingredients/{ingredient_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ingredient
+         * @description An ingredient with its nutrition per nutrient and where each value comes from.
+         */
+        get: operations["get_ingredient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Ingredient
+         * @description Change an ingredient (anyone may); the base unit is locked while products are linked.
+         */
+        patch: operations["update_ingredient"];
+        trace?: never;
+    };
+    "/api/ingredients/{ingredient_id}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ingredient Products
+         * @description The ingredient's products, by name and barcode.
+         */
+        get: operations["list_ingredient_products"];
         put?: never;
         post?: never;
         delete?: never;
@@ -543,6 +737,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Product
+         * @description Add a product by hand; its nutrition basis must be the ingredient's base unit.
+         */
+        post: operations["create_product"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Product
+         * @description One product.
+         */
+        get: operations["get_product"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Product
+         * @description Change a product (anyone may); every field sent is marked user-edited.
+         */
+        patch: operations["update_product"];
+        trace?: never;
+    };
+    "/api/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tags
+         * @description Tags for autocomplete: at most 20 whose name contains `q`, prefix matches first.
+         */
+        get: operations["list_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Units
+         * @description All units in display order, with their kind.
+         */
+        get: operations["list_units"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -613,7 +891,7 @@ export interface components {
          * @description What an admin (or the command line, with no actor) did.
          * @enum {string}
          */
-        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete";
+        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.reorder" | "ingredient.merge" | "ingredient.delete";
         /**
          * AdminEvent
          * @description `actor` is null for the command line or a deleted admin, `target` for a deleted user.
@@ -667,6 +945,26 @@ export interface components {
             /** Role */
             role?: ("user" | "admin") | null;
         };
+        /**
+         * Category
+         * @description Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).
+         */
+        Category: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /**
+         * CategoryOrder
+         * @description Every category id exactly once, in the new order.
+         */
+        CategoryOrder: {
+            /** Category Ids */
+            category_ids: string[];
+        };
         /** CodeCheckRequest */
         CodeCheckRequest: {
             /** Code */
@@ -719,6 +1017,23 @@ export interface components {
             /** Since */
             since: string | null;
         };
+        /**
+         * Cuisine
+         * @description Seeded cuisines have a `key` (translation `cuisine.<key>`), user-added ones a `name`.
+         */
+        Cuisine: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string | null;
+            /** Name */
+            name: string | null;
+        };
+        /** CuisineCreate */
+        CuisineCreate: {
+            /** Name */
+            name: string;
+        };
         /** DiagCookieCheck */
         DiagCookieCheck: {
             /** Present */
@@ -729,7 +1044,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -775,6 +1090,127 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /**
+         * Ingredient
+         * @description An ingredient with its manual values and the resulting nutrition (NUT-02).
+         *
+         *     `created_by` / `updated_by` are null for a deleted user (ING-06).
+         */
+        Ingredient: {
+            /**
+             * Base Unit
+             * @enum {string}
+             */
+            base_unit: "g" | "ml";
+            /** Category Id */
+            category_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["UserRef"] | null;
+            /** Density G Per Ml */
+            density_g_per_ml: number | null;
+            /** Id */
+            id: string;
+            manual: components["schemas"]["NutrientValues"];
+            /** Name */
+            name: string;
+            nutrition: components["schemas"]["IngredientNutrition"];
+            /** Piece Weight G */
+            piece_weight_g: number | null;
+            /** Product Count */
+            product_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            updated_by: components["schemas"]["UserRef"] | null;
+        };
+        /**
+         * IngredientCreate
+         * @description `category_id` defaults to the *Other* category, `base_unit` to g (ING-02).
+         *
+         *     `piece_weight_g`: 0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5.
+         */
+        IngredientCreate: {
+            /**
+             * Base Unit
+             * @default g
+             * @enum {string}
+             */
+            base_unit: "g" | "ml";
+            /** Category Id */
+            category_id?: string | null;
+            /** Density G Per Ml */
+            density_g_per_ml?: number | null;
+            manual?: components["schemas"]["NutrientValues"] | null;
+            /** Name */
+            name: string;
+            /** Piece Weight G */
+            piece_weight_g?: number | null;
+        };
+        /**
+         * IngredientMerge
+         * @description Merge the ingredient into `into_id` (ING-05).
+         */
+        IngredientMerge: {
+            /** Into Id */
+            into_id: string;
+        };
+        /**
+         * IngredientNutrition
+         * @description The ingredient's value per nutrient (NUT-02).
+         */
+        IngredientNutrition: {
+            carbs: components["schemas"]["NutrientInfo"];
+            fat: components["schemas"]["NutrientInfo"];
+            kcal: components["schemas"]["NutrientInfo"];
+            protein: components["schemas"]["NutrientInfo"];
+            sugar: components["schemas"]["NutrientInfo"];
+        };
+        /**
+         * IngredientSummary
+         * @description A search result or list entry.
+         */
+        IngredientSummary: {
+            /**
+             * Base Unit
+             * @enum {string}
+             */
+            base_unit: "g" | "ml";
+            /** Category Id */
+            category_id: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Product Count */
+            product_count: number;
+        };
+        /**
+         * IngredientUpdate
+         * @description Only the fields that are sent change; an explicit null clears the piece weight or
+         *     density, and is refused for the name, category and base unit (422 `invalid`). `manual`
+         *     changes only the nutrients it contains (null clears one).
+         *
+         *     The base unit cannot change while products are linked (409 `ingredient.base_unit_locked`).
+         */
+        IngredientUpdate: {
+            /** Base Unit */
+            base_unit?: ("g" | "ml") | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Density G Per Ml */
+            density_g_per_ml?: number | null;
+            manual?: components["schemas"]["NutrientValues"] | null;
+            /** Name */
+            name?: string | null;
+            /** Piece Weight G */
+            piece_weight_g?: number | null;
         };
         /** Invite */
         Invite: {
@@ -911,12 +1347,147 @@ export interface components {
             /** Meals Public */
             meals_public?: boolean | null;
         };
+        /**
+         * NutrientInfo
+         * @description An ingredient's value for one nutrient, decided field by field (NUT-02): the manual
+         *     value, else the average over its products that have one, else unknown (null, never 0).
+         *     `products_mean` is that average (shown as a hint next to a manual value).
+         */
+        NutrientInfo: {
+            /** Products Count */
+            products_count: number;
+            /** Products Mean */
+            products_mean: number | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "products" | "unknown";
+            /** Value */
+            value: number | null;
+        };
+        /**
+         * NutrientValues
+         * @description Values per 100 g or 100 ml; null means unknown. In requests every value must be plausible: 0 up to the nutrient's maximum (900 kcal, 100 g for the others).
+         */
+        NutrientValues: {
+            /** Carbs */
+            carbs?: number | null;
+            /** Fat */
+            fat?: number | null;
+            /** Kcal */
+            kcal?: number | null;
+            /** Protein */
+            protein?: number | null;
+            /** Sugar */
+            sugar?: number | null;
+        };
         /** PasswordChange */
         PasswordChange: {
             /** Current Password */
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * Product
+         * @description `nutrients` are per 100 g or 100 ml (`nutrition_basis`, always the ingredient's base
+         *     unit). `user_edited_fields` names the fields a user typed or changed (`name`,
+         *     `nutrients.kcal`, ...); Open Food Facts never overwrites them (BAR-04).
+         */
+        Product: {
+            /** Barcode */
+            barcode: string;
+            /** Brand */
+            brand: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["UserRef"] | null;
+            /** Fetched At */
+            fetched_at: string | null;
+            /** Id */
+            id: string;
+            /** Ingredient Id */
+            ingredient_id: string;
+            /** Name */
+            name: string | null;
+            nutrients: components["schemas"]["NutrientValues"];
+            /**
+             * Nutrition Basis
+             * @enum {string}
+             */
+            nutrition_basis: "g" | "ml";
+            /** Pack Quantity */
+            pack_quantity: number | null;
+            pack_unit: components["schemas"]["Unit"] | null;
+            /** Quantity Text */
+            quantity_text: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "off" | "manual";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            updated_by: components["schemas"]["UserRef"] | null;
+            /** User Edited Fields */
+            user_edited_fields: string[];
+        };
+        /**
+         * ProductCreate
+         * @description A product entered by hand. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid
+         *     check digit (spaces are ignored); it is stored as EAN-13 (UPC-A with a leading 0, UPC-E
+         *     expanded first), an EAN-8 as it is. `nutrition_basis` defaults to the ingredient's base unit
+         *     and must match it (409 `product.basis_mismatch`).
+         */
+        ProductCreate: {
+            /** Barcode */
+            barcode: string;
+            /** Brand */
+            brand?: string | null;
+            /** Ingredient Id */
+            ingredient_id: string;
+            /** Name */
+            name?: string | null;
+            nutrients?: components["schemas"]["NutrientValues"] | null;
+            /** Nutrition Basis */
+            nutrition_basis?: ("g" | "ml") | null;
+            /** Pack Quantity */
+            pack_quantity?: number | null;
+            pack_unit?: components["schemas"]["Unit"] | null;
+            /** Quantity Text */
+            quantity_text?: string | null;
+        };
+        /**
+         * ProductUpdate
+         * @description Only the fields that are sent change (null clears an optional one; it is refused for
+         *     the barcode, ingredient and basis with 422 `invalid`); each becomes user-edited.
+         *     `ingredient_id` moves the product to another ingredient, whose base unit must match the
+         *     nutrition basis.
+         */
+        ProductUpdate: {
+            /** Barcode */
+            barcode?: string | null;
+            /** Brand */
+            brand?: string | null;
+            /** Ingredient Id */
+            ingredient_id?: string | null;
+            /** Name */
+            name?: string | null;
+            nutrients?: components["schemas"]["NutrientValues"] | null;
+            /** Nutrition Basis */
+            nutrition_basis?: ("g" | "ml") | null;
+            /** Pack Quantity */
+            pack_quantity?: number | null;
+            pack_unit?: components["schemas"]["Unit"] | null;
+            /** Quantity Text */
+            quantity_text?: string | null;
         };
         /**
          * RefreshRequest
@@ -971,6 +1542,32 @@ export interface components {
             /** User Agent */
             user_agent: string | null;
         };
+        /** Tag */
+        Tag: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * Unit
+         * @description The fixed units; the order is the display order.
+         * @enum {string}
+         */
+        Unit: "g" | "kg" | "ml" | "l" | "piece" | "tbsp" | "tsp";
+        /**
+         * UnitInfo
+         * @description A unit (translation `unit.<unit>`) and its kind.
+         */
+        UnitInfo: {
+            kind: components["schemas"]["UnitKind"];
+            unit: components["schemas"]["Unit"];
+        };
+        /**
+         * UnitKind
+         * @enum {string}
+         */
+        UnitKind: "mass" | "volume" | "count";
         /**
          * UserRef
          * @description Another user as everyone sees them; deactivated users are shown with a note (ADM-02).
@@ -1004,6 +1601,39 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    admin_reorder_categories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     admin_list_events: {
         parameters: {
             query?: never;
@@ -1020,6 +1650,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminEvent"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_delete_ingredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_merge_ingredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngredientMerge"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1531,6 +2225,35 @@ export interface operations {
             };
         };
     };
+    list_categories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_couple: {
         parameters: {
             query?: never;
@@ -1713,6 +2436,77 @@ export interface operations {
             };
         };
     };
+    list_cuisines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cuisine"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_cuisine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CuisineCreate"];
+            };
+        };
+        responses: {
+            /** @description A cuisine with this name (ignoring case and umlauts) exists already */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cuisine"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cuisine"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_health: {
         parameters: {
             query?: never;
@@ -1738,6 +2532,199 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_ingredients: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                category_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngredientSummary"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_ingredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngredientCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_similar_ingredients: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngredientSummary"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_ingredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_ingredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngredientUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_ingredient_products: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"][];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -1919,6 +2906,165 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_tags: {
+        parameters: {
+            query?: {
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_units: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitInfo"][];
+                };
             };
             /** @description Error envelope; `code` names the error */
             default: {
