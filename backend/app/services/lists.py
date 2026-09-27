@@ -14,7 +14,7 @@ only in a draft (409 `list.not_draft`).
 """
 
 import secrets
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import datetime
 from typing import cast
 
@@ -38,6 +38,7 @@ from app.domain.lists import (
 )
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.units import Unit
+from app.media import urls as media_urls
 from app.media.store import MediaStore
 from app.models import ListExtraItem, ListLineState, ListMeal, ShoppingList
 from app.models import Meal as MealRow
@@ -63,6 +64,7 @@ from app.schemas.lists import (
 from app.schemas.users import UserRef
 from app.services import access, aggregation, detach, shopping
 from app.services.access import ListRights
+from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
 from app.services.users import user_refs
 
@@ -276,6 +278,54 @@ async def list_history(session: AsyncSession, principal: Principal) -> list[List
         partner = await access.partner_id(session, principal.user_id)
         rows = await lists_repo.history(session, principal.user_id, partner, HISTORY_LIMIT)
         return await _summaries(session, principal, partner, rows)
+
+
+def _detail_json(
+    session: AsyncSession,
+    media: MediaStore,
+    viewer_id: str,
+    shopping_list: ShoppingList,
+    rights: ListRights,
+    *,
+    now: datetime,
+) -> Callable[[], Awaitable[bytes]]:
+    """A build of the list's response body for the list cache."""
+
+    async def build() -> bytes:
+        detail = await list_detail(session, media, viewer_id, shopping_list, rights, now=now)
+        return detail.model_dump_json().encode()
+
+    return build
+
+
+async def sync_lists(
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    cache: ListCache,
+    generation: int,
+    *,
+    now: datetime,
+) -> list[CachedList]:
+    """The local copy for offline use (SYNC-02): the response bodies of `GET /api/lists/{id}`
+    of every list the principal can edit that is a draft or being shopped (their own and those
+    their partner shares with them, CPL-02), most recently edited first. Each body comes from
+    the list cache (`generation` read before this starts), so the copy costs one detail build
+    per list that changed since the last poll or sync of it."""
+    async with session.begin():
+        partner = await access.partner_id(session, principal.user_id)
+        rows = await lists_repo.mine(session, principal.user_id, partner, DEFAULT_STATUSES)
+        entries: list[CachedList] = []
+        for row in rows:
+            rights = ListRights(
+                is_owner=row.owner_id == principal.user_id,
+                can_edit=True,
+                viewer_partner_id=partner,
+            )
+            build = _detail_json(session, media, principal.user_id, row, rights, now=now)
+            key = (row.id, principal.user_id, media_urls.expiry(now))
+            entries.append(await cache.get_or_build(key, generation, build))
+        return entries
 
 
 async def _new_list(

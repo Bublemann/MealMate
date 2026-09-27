@@ -193,7 +193,9 @@ async def refresh(
                 now=now,
                 fork=fork,
             )
-            if not user.is_active and outcome is not RefreshOutcome.EXPIRED:
+            if not user.is_active:
+                # Deactivated beats expired, as a revoked session does (SYNC-10: the phone
+                # deletes its copy of the user's lists).
                 outcome = RefreshOutcome.REVOKED
             if outcome in (RefreshOutcome.ROTATE, RefreshOutcome.GRACE):
                 if outcome is RefreshOutcome.ROTATE:

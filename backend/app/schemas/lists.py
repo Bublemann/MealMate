@@ -422,3 +422,14 @@ class OpsResponse(BaseModel):
 
     results: list[OpResult]
     list: ListDetail
+
+
+class ListsSync(BaseModel):
+    """The local copy for offline use (SYNC-02): every list the viewer can edit that is a
+    draft or being shopped (their own and those their partner shares with them), each exactly
+    as `GET /api/lists/{id}` shows it, most recently edited first. A list that is missing from
+    it is gone from the copy (deleted, done, or access lost; SYNC-10). `generated_at` is the
+    server time of the answer; it is not part of the `ETag`, which covers `lists` only."""
+
+    lists: list[ListDetail]
+    generated_at: datetime

@@ -43,6 +43,9 @@ class ErrorCode(StrEnum):
     CODE_INVALID = "auth.code_invalid"
     # 403: the current password given to change it is wrong.
     PASSWORD_INCORRECT = "auth.password_incorrect"  # noqa: S105 -- an error code
+    # 409: the request names another user than the one signed in (`X-MealMate-User` of the
+    # ops): the phone's session changed hands while ops waited; they stay queued (SYNC-10).
+    USER_MISMATCH = "auth.user_mismatch"
 
     COUPLE_ALREADY_IN_COUPLE = "couple.already_in_couple"
     COUPLE_TARGET_IN_COUPLE = "couple.target_in_couple"
