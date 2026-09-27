@@ -664,7 +664,7 @@ async def test_delete(
 ) -> None:
     calls: list[str] = []
 
-    async def on_meal_deleted(_session: object, meal_id: str) -> None:
+    async def on_meal_deleted(_session: object, meal_id: str, **_: object) -> None:
         calls.append(meal_id)
 
     monkeypatch.setattr(hooks, "on_meal_deleted", on_meal_deleted)

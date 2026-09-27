@@ -1,4 +1,4 @@
-"""Test setup through the app's own API: accounts, couples, ingredients, meals (plan § 9).
+"""Test setup through the app's own API: accounts, couples, ingredients, meals, lists (plan § 9).
 
 The journeys drive the UI; everything they merely need to exist (an admin, invited users, a couple)
 is created here over HTTP, which is faster and keeps each test about one thing.
@@ -236,6 +236,39 @@ class Api:
                 f"PUT /api/meals/{meal_id}/photo: {response.status_code} {response.text}"
             )
         return response.json()
+
+    def create_list(self, account: Account, name: str | None = None) -> dict[str, Any]:
+        """POST /api/lists: a new draft of `account` (shared with a partner, CPL-02); ListDetail."""
+        body = {} if name is None else {"name": name}
+        return self.call("POST", "/api/lists", token=self.token(account), json=body)
+
+    def get_list(self, account: Account, list_id: str) -> dict[str, Any]:
+        """GET /api/lists/{id} as `account` sees it (ListDetail)."""
+        return self.call("GET", f"/api/lists/{list_id}", token=self.token(account))
+
+    def add_list_meal(
+        self, account: Account, list_id: str, meal_id: str, *, servings: int | None = None
+    ) -> dict[str, Any]:
+        """POST /api/lists/{id}/meals (default servings: the meal's own); the ListDetail."""
+        body: dict[str, Any] = {"meal_id": meal_id}
+        if servings is not None:
+            body["servings"] = servings
+        return self.call(
+            "POST", f"/api/lists/{list_id}/meals", token=self.token(account), json=body
+        )
+
+    def add_extra_item(self, account: Account, list_id: str, **fields: Any) -> dict[str, Any]:
+        """POST /api/lists/{id}/extra-items, e.g. `ingredient_id=…, amount=450, unit="g"` or
+        `text="Kerzen"`; the ListDetail."""
+        return self.call(
+            "POST", f"/api/lists/{list_id}/extra-items", token=self.token(account), json=fields
+        )
+
+    def hide_line(self, account: Account, list_id: str, line_key: str) -> dict[str, Any]:
+        """POST /api/lists/{id}/lines/{key}/hide (LIST-07); the ListDetail."""
+        return self.call(
+            "POST", f"/api/lists/{list_id}/lines/{line_key}/hide", token=self.token(account)
+        )
 
 
 def sign_in(context: BrowserContext, account: Account) -> None:

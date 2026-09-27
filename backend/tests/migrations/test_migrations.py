@@ -34,7 +34,7 @@ from app.services import demo
 from app.services.context import AuthConfig
 from tests.support import TEST_SECRET_KEY
 
-HEAD = "0004"
+HEAD = "0005"
 ACCOUNT_TABLES = {
     "alembic_version",
     "app_meta",
@@ -47,7 +47,15 @@ ACCOUNT_TABLES = {
     "admin_events",
 }
 CATALOG_TABLES = ACCOUNT_TABLES | {"categories", "cuisines", "tags", "ingredients", "products"}
-HEAD_TABLES = CATALOG_TABLES | {"meals", "meal_ingredients", "meal_tags"}
+MEAL_TABLES = CATALOG_TABLES | {"meals", "meal_ingredients", "meal_tags"}
+LIST_TABLES = {
+    "shopping_lists",
+    "list_meals",
+    "list_meal_ingredients",
+    "list_extra_items",
+    "list_line_states",
+}
+HEAD_TABLES = MEAL_TABLES | LIST_TABLES
 
 
 @pytest.fixture
@@ -108,7 +116,11 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0003")
     assert tables(database_path) == CATALOG_TABLES
     command.upgrade(config, "0004")
+    assert tables(database_path) == MEAL_TABLES
+    command.upgrade(config, "0005")
     assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0004")
+    assert tables(database_path) == MEAL_TABLES
     command.downgrade(config, "0003")
     assert tables(database_path) == CATALOG_TABLES
     command.downgrade(config, "0002")
@@ -218,6 +230,18 @@ def seed_meals(data_dir: Path, user_ids: dict[str, str]) -> None:
     asyncio.run(run())
 
 
+def seed_lists(data_dir: Path, user_ids: dict[str, str]) -> None:
+    async def run() -> None:
+        database = Database.open(data_dir)
+        try:
+            async with database.write_sessions() as session:
+                await demo.seed_lists(session, user_ids, now=utcnow())
+        finally:
+            await database.dispose()
+
+    asyncio.run(run())
+
+
 def seed_demo(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEALMATE_SECRET_KEY", TEST_SECRET_KEY)
     monkeypatch.setenv("MEALMATE_DATA_DIR", str(data_dir))
@@ -232,7 +256,8 @@ def test_populated_database_survives_migrations(tmp_path: Path) -> None:
     stepping back keeps the older data.
 
     0002 (accounts) → 0003 seeds the reference data; 0003 (with the catalog) → 0004 adds the
-    empty meal tables; with the meals at head, stepping back to 0003 keeps the catalog."""
+    empty meal tables; 0004 (with the meals) → 0005 adds the empty list tables; with the lists
+    at head, stepping back to 0004 keeps the meals."""
     data_dir = tmp_path / "data"
     path = data_dir / "mealmate.db"
     config = alembic_config(path)
@@ -269,7 +294,7 @@ def test_populated_database_survives_migrations(tmp_path: Path) -> None:
     assert counts["products"] == len(demo.DEMO_PRODUCTS)
     assert references["products.created_by"] == len(demo.DEMO_PRODUCTS)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0004")
     assert row_counts(path) == counts | {"meals": 0, "meal_ingredients": 0, "meal_tags": 0}
     assert non_null_foreign_keys(path) == references | {
         "meals.cuisine_id": 0,
@@ -278,19 +303,46 @@ def test_populated_database_survives_migrations(tmp_path: Path) -> None:
     assert_clean(path)
 
     seed_meals(data_dir, user_ids)
-    at_head = row_counts(path)
+    with_meals, meal_references = row_counts(path), non_null_foreign_keys(path)
+    assert with_meals["meals"] == len(demo.DEMO_MEALS)
+    assert with_meals["tags"] > 0
+    assert meal_references["meals.copied_from_meal_id"] == 1
+
+    command.upgrade(config, "head")
+    assert row_counts(path) == with_meals | dict.fromkeys(LIST_TABLES, 0)
+    assert non_null_foreign_keys(path) == meal_references | {
+        "list_meals.meal_id": 0,
+        "list_meals.meal_owner_id_snapshot": 0,
+        "list_meals.added_by": 0,
+        "list_extra_items.ingredient_id": 0,
+        "list_extra_items.category_id": 0,
+        "list_extra_items.added_by": 0,
+        "list_line_states.checked_by": 0,
+    }
+    assert_clean(path)
+
+    seed_lists(data_dir, user_ids)
+    at_head, list_references = row_counts(path), non_null_foreign_keys(path)
+    assert at_head["shopping_lists"] == len(demo.DEMO_LISTS)
+    assert at_head["list_meal_ingredients"] > 0  # the deleted meal's frozen rows
     assert at_head["meals"] == len(demo.DEMO_MEALS)
-    assert at_head["tags"] > 0
-    assert non_null_foreign_keys(path)["meals.copied_from_meal_id"] == 1
+    # One list meal lost its meal (detached); the others keep theirs.
+    assert list_references["list_meals.meal_id"] == at_head["list_meals"] - 1
+    assert list_references["list_meals.added_by"] == at_head["list_meals"]
+    assert list_references["list_extra_items.category_id"] == 2  # the free-text items
+    command.downgrade(config, "0004")
+    assert row_counts(path) == with_meals
+    assert non_null_foreign_keys(path) == meal_references
     command.downgrade(config, "0003")
-    assert row_counts(path) == counts | {"tags": at_head["tags"]}
+    assert row_counts(path) == counts | {"tags": with_meals["tags"]}
     assert non_null_foreign_keys(path) == references
     command.upgrade(config, "head")
     assert row_counts(path) == counts | {
-        "tags": at_head["tags"],
+        "tags": with_meals["tags"],
         "meals": 0,
         "meal_ingredients": 0,
         "meal_tags": 0,
+        **dict.fromkeys(LIST_TABLES, 0),
     }
     assert_clean(path)
     with closing(sqlite3.connect(path)) as connection:
@@ -308,6 +360,8 @@ def test_full_demo_data_at_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert references["products.created_by"] == len(demo.DEMO_PRODUCTS)
     assert references["meals.cuisine_id"] == len(demo.DEMO_MEALS)
     assert references["meals.copied_from_meal_id"] == 1
+    assert references["list_meals.meal_id"] > 0
+    assert references["list_extra_items.ingredient_id"] > 0
     assert_clean(path)
 
     command.upgrade(alembic_config(path), "head")

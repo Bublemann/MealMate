@@ -50,6 +50,7 @@ async def cancel_couple_request(
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-async def end_couple(principal: CurrentUser, session: WriteSession) -> None:
-    """End the couple (either partner, any time)."""
-    await couples.end(session, principal)
+async def end_couple(principal: CurrentUser, session: WriteSession, now: Now) -> None:
+    """End the couple (either partner, any time). The share switch goes off on all lists of
+    both, and each one's private meals leave the other's lists ("no longer available")."""
+    await couples.end(session, principal, now=now)

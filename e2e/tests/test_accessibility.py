@@ -26,7 +26,14 @@ SCREENS = [
     Screen("/login", "anonymous", (TEST_IDS["screenLogin"],)),
     # The invite code is appended in the test: /join#<code>.
     Screen("/join", "anonymous", (TEST_IDS["screenJoin"],)),
-    Screen("/lists", "member", (TEST_IDS["screenLists"],)),
+    # A draft of the member's and another user's public list are created in the test.
+    Screen("/lists", "member", (TEST_IDS["listDrafts"], TEST_IDS["othersLists"])),
+    # A list with meals, lines and a removed line is created in the test: /lists/<id>.
+    Screen(
+        "/lists/:id",
+        "member",
+        (TEST_IDS["listMeals"], TEST_IDS["listLines"], TEST_IDS["hiddenLines"]),
+    ),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/ingredients", "member", (TEST_IDS["screenIngredients"],)),
     # An ingredient with a product is created in the test: /ingredients/<id>.
@@ -90,6 +97,33 @@ def test_no_serious_violations(
         api.upload_meal_photo(account, meal["id"], png())
         path = f"/meals/{meal['id']}"
 
+    if path == "/lists":
+        api = request.getfixturevalue("api")
+        api.create_list(account, unique("A11y list"))
+        # The admin's lists are public: one of them shows under Others' lists.
+        api.create_list(request.getfixturevalue("admin"), unique("A11y others"))
+    if path == "/lists/:id":
+        api = request.getfixturevalue("api")
+        onions = api.create_ingredient(
+            account, unique("A11y onions"), category_key="fruit_vegetables", piece_weight_g=80
+        )
+        flour = api.create_ingredient(account, unique("A11y flour"))
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            ingredients=[
+                {"ingredient_id": onions["id"], "amount": 1, "unit": "piece"},
+                {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
+            ],
+        )
+        api.upload_meal_photo(account, meal["id"], png())
+        draft = api.create_list(account, unique("A11y list"))
+        api.add_list_meal(account, draft["id"], meal["id"], servings=3)
+        api.add_extra_item(account, draft["id"], text=unique("A11y item"), amount_text="2")
+        api.hide_line(account, draft["id"], f"i:{onions['id']}")
+        path = f"/lists/{draft['id']}"
+
     page.goto(path)
     if screen.path == "/join":
         # The form appears once the code has been checked.
@@ -99,5 +133,10 @@ def test_no_serious_violations(
         page.get_by_test_id(TEST_IDS["createInviteButton"]).click()
     for test_id in screen.ready:
         expect(page.get_by_test_id(test_id)).to_be_visible()
+    if screen.path == "/lists/:id":
+        # Also check the removed line with its restore button.
+        removed = page.get_by_test_id(TEST_IDS["hiddenLines"])
+        removed.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
+        expect(removed.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
 
     assert serious_violations(page) == []

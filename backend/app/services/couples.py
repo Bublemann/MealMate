@@ -145,16 +145,16 @@ async def cancel(session: AsyncSession, principal: Principal, request_id: str) -
         return await _state(session, principal.user_id)
 
 
-async def end_couple(session: AsyncSession, couple: Couple) -> None:
+async def end_couple(session: AsyncSession, couple: Couple, *, now: datetime) -> None:
     """End a couple inside the caller's transaction (CPL-05): hook first, then the rows."""
-    await hooks.on_couple_ended(session, couple.requester_id, couple.addressee_id)
+    await hooks.on_couple_ended(session, couple.requester_id, couple.addressee_id, now=now)
     await couples_repo.delete_couple(session, couple)
 
 
-async def end(session: AsyncSession, principal: Principal) -> None:
+async def end(session: AsyncSession, principal: Principal, *, now: datetime) -> None:
     """Either partner ends the couple, also when the other one is deactivated (CPL-05/07)."""
     async with session.begin():
         couple = await couples_repo.accepted_for(session, principal.user_id)
         if couple is None:
             raise not_found()
-        await end_couple(session, couple)
+        await end_couple(session, couple, now=now)

@@ -59,11 +59,11 @@ async def update_me(
             user.language = update.language
         if update.meals_public is not None:
             if user.meals_public and not update.meals_public:
-                await hooks.on_meals_made_private(session, user.id)
+                await hooks.on_meals_made_private(session, user.id, now=now)
             user.meals_public = update.meals_public
         if update.lists_public is not None:
             if user.lists_public and not update.lists_public:
-                await hooks.on_lists_made_private(session, user.id)
+                await hooks.on_lists_made_private(session, user.id, now=now)
             user.lists_public = update.lists_public
         if update.filter_hidden is not None:
             user.filter_hidden = _filter_hidden(update.filter_hidden)

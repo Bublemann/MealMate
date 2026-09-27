@@ -173,7 +173,7 @@ async def test_end_couple(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    async def on_couple_ended(_session: object, user_a: str, user_b: str) -> None:
+    async def on_couple_ended(_session: object, user_a: str, user_b: str, **_: object) -> None:
         calls.append((user_a, user_b))
 
     monkeypatch.setattr(hooks, "on_couple_ended", on_couple_ended)

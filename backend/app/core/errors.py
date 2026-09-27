@@ -55,12 +55,15 @@ class ErrorCode(StrEnum):
     # 409: the base unit cannot change while products are linked (ING-02).
     INGREDIENT_BASE_UNIT_LOCKED = "ingredient.base_unit_locked"
     # 409: the ingredient is still referenced; `params` counts the references per kind
-    # (`products`, `meals`; lists join in M5a).
+    # (`products`, `meals`, `lists`).
     INGREDIENT_IN_USE = "ingredient.in_use"
     # 409: merging would move products to an ingredient with another base unit.
     INGREDIENT_MERGE_BASE_UNIT_MISMATCH = "ingredient.merge_base_unit_mismatch"
     # 409: a product's nutrition basis must be its ingredient's base unit (ING-04).
     PRODUCT_BASIS_MISMATCH = "product.basis_mismatch"
+
+    # 409: the action is only possible while the list is a draft (e.g. hiding a line, LIST-07).
+    LIST_NOT_DRAFT = "list.not_draft"
 
     # 413: an uploaded photo is larger than 10 MB (SEC-07).
     MEDIA_TOO_LARGE = "media.too_large"

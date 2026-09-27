@@ -12,6 +12,13 @@ from app.models.ingredient import Ingredient, Product
 from app.models.meal import Meal, MealIngredient, MealTag
 from app.models.one_time_code import OneTimeCode
 from app.models.reference import Category, Cuisine, Tag
+from app.models.shopping_list import (
+    ListExtraItem,
+    ListLineState,
+    ListMeal,
+    ListMealIngredient,
+    ShoppingList,
+)
 from app.models.user import User
 
 __all__ = [
@@ -24,12 +31,17 @@ __all__ = [
     "CoupleMember",
     "Cuisine",
     "Ingredient",
+    "ListExtraItem",
+    "ListLineState",
+    "ListMeal",
+    "ListMealIngredient",
     "Meal",
     "MealIngredient",
     "MealTag",
     "OneTimeCode",
     "Product",
     "SessionToken",
+    "ShoppingList",
     "Tag",
     "User",
 ]

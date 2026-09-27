@@ -13,6 +13,7 @@ from app.api import (
     auth,
     couple,
     ingredients,
+    lists,
     me,
     meals,
     media,
@@ -33,6 +34,7 @@ for module in (
     ingredients,
     products,
     meals,
+    lists,
     media,
     admin,
 ):

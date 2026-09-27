@@ -18,6 +18,14 @@ async def get(session: AsyncSession, meal_id: str) -> Meal | None:
     return await session.get(Meal, meal_id)
 
 
+async def by_ids(session: AsyncSession, meal_ids: Iterable[str | None]) -> dict[str, Meal]:
+    ids = {meal_id for meal_id in meal_ids if meal_id is not None}
+    if not ids:
+        return {}
+    result = await session.execute(select(Meal).where(Meal.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}
+
+
 async def search(
     session: AsyncSession,
     *,

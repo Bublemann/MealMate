@@ -502,7 +502,9 @@ async def test_merge(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    async def on_ingredients_merged(_session: object, from_id: str, into_id: str) -> None:
+    async def on_ingredients_merged(
+        _session: object, from_id: str, into_id: str, **_: object
+    ) -> None:
         calls.append((from_id, into_id))
 
     monkeypatch.setattr(hooks, "on_ingredients_merged", on_ingredients_merged)
@@ -599,11 +601,11 @@ async def test_ingredients_in_use_are_not_deleted(
     response = await api.delete(f"/api/admin/ingredients/{pasta['id']}", headers=admin.headers)
     assert response.status_code == 409
     assert error(response) == "ingredient.in_use"
-    assert response.json()["params"] == {"products": 2, "meals": 0}
+    assert response.json()["params"] == {"products": 2, "meals": 0, "lists": 0}
 
     response = await api.delete(f"/api/admin/ingredients/{rice['id']}", headers=admin.headers)
     assert response.status_code == 409
-    assert response.json()["params"] == {"products": 0, "meals": 2}
+    assert response.json()["params"] == {"products": 0, "meals": 2, "lists": 0}
     assert len(await scalars(app, select(Ingredient.id))) == 2
     assert await scalars(app, select(AdminEvent.id)) == []
 

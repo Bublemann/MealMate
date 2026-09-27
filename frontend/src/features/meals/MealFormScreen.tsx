@@ -1,15 +1,18 @@
 import { ChevronLeft } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAddListMeal } from '@/features/lists/api';
+import type { ListViewState } from '@/features/lists/ListScreen';
 import { useLanguage } from '@/i18n';
 import { errorMessage, fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
+import { isUuid } from '@/lib/uuid';
 import { testIds } from '@/testIds';
 import {
   useCreateMeal,
@@ -35,7 +38,12 @@ import { IngredientRows } from './IngredientRows';
 /** `/meals/new` and `/meals/:id/edit`: a screen of its own, not a dialog (plan § 8). */
 export function MealFormScreen() {
   const { id } = useParams();
-  return id ? <EditMeal key={id} id={id} /> : <MealFormView />;
+  const [params] = useSearchParams();
+  const addToList = params.get('addToList');
+  if (id) return <EditMeal key={id} id={id} />;
+  // From the meal picker (LIST-03): the new meal goes onto that list, and back there. Only a list
+  // id goes into the paths; anything else in the URL is ignored.
+  return addToList && isUuid(addToList) ? <MealFormView addToList={addToList} /> : <MealFormView />;
 }
 
 function EditMeal({ id }: { id: string }) {
@@ -61,7 +69,7 @@ function EditMeal({ id }: { id: string }) {
   return <MealFormView meal={meal.data} />;
 }
 
-function MealFormView({ meal }: { meal?: Meal }) {
+function MealFormView({ meal, addToList = '' }: { meal?: Meal; addToList?: string }) {
   const { t } = useTranslation();
   const language = useLanguage();
   const navigate = useNavigate();
@@ -69,13 +77,14 @@ function MealFormView({ meal }: { meal?: Meal }) {
   const update = useUpdateMeal(meal?.id ?? '');
   const upload = useUploadMealPhoto();
   const deletePhoto = useDeleteMealPhoto();
+  const addToListMeal = useAddListMeal(addToList);
   const mutation = meal ? update : create;
   const [values, setValues] = useState<FormValues>(() => initialValues(meal, language));
   const [photo, setPhoto] = useState<PhotoChange>({ kind: 'keep' });
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const title = meal ? t('meals.form.editTitle', { name: meal.name }) : t('meals.form.createTitle');
-  const back = meal ? `/meals/${meal.id}` : '/meals';
+  const back = meal ? `/meals/${meal.id}` : addToList ? `/lists/${addToList}` : '/meals';
 
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const shown = new Set(Object.keys(serverFields).filter(isShownPath));
@@ -103,6 +112,17 @@ function MealFormView({ meal }: { meal?: Meal }) {
     }
   }
 
+  /** The new meal is on the list once it is saved; the list says if adding it failed. */
+  async function addToTheList(saved: Meal, photoError: string | undefined) {
+    const state: ListViewState = photoError ? { photoError } : {};
+    try {
+      await addToListMeal.mutateAsync({ mealId: saved.id });
+    } catch (error) {
+      state.addMealError = errorMessage(t, error);
+    }
+    void navigate(`/lists/${addToList}`, { replace: true, state });
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     // Submit events of dialogs opened from here (e.g. a new ingredient) bubble up through the
@@ -122,6 +142,10 @@ function MealFormView({ meal }: { meal?: Meal }) {
         saved = await create.mutateAsync(createBody(values, checked));
       }
       const photoError = await savePhoto(saved);
+      if (!meal && addToList) {
+        await addToTheList(saved, photoError);
+        return;
+      }
       const state: MealDetailState = photoError ? { photoError } : {};
       void navigate(`/meals/${saved.id}`, { replace: true, state });
     } catch {
@@ -138,7 +162,7 @@ function MealFormView({ meal }: { meal?: Meal }) {
         className="-mt-3 inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
       >
         <ChevronLeft aria-hidden="true" className="size-5" />
-        {meal ? meal.name : t('meals.detail.back')}
+        {meal ? meal.name : addToList ? t('meals.form.backToList') : t('meals.detail.back')}
       </Link>
       <form
         onSubmit={(event) => void onSubmit(event)}
