@@ -20,6 +20,7 @@ from app.models import (
     ListMealIngredient,
     Meal,
     MealIngredient,
+    ProcessedOp,
     ShoppingList,
 )
 
@@ -66,6 +67,26 @@ async def of_others(
         )
     result = await session.execute(
         statement.order_by(ShoppingList.updated_at.desc(), ShoppingList.id.desc())
+    )
+    return result.scalars().all()
+
+
+async def history(
+    session: AsyncSession, user_id: str, partner_id: str | None, limit: int
+) -> Sequence[ShoppingList]:
+    """The done lists of the user and those their partner shares with them, most recently
+    finished first (SHOP-05)."""
+    condition = ShoppingList.owner_id == user_id
+    if partner_id is not None:
+        condition = or_(
+            condition,
+            (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
+        )
+    result = await session.execute(
+        select(ShoppingList)
+        .where(condition, ShoppingList.status == "done")
+        .order_by(ShoppingList.finished_at.desc(), ShoppingList.id.desc())
+        .limit(limit)
     )
     return result.scalars().all()
 
@@ -228,6 +249,18 @@ async def states_for(
 
 async def get_state(session: AsyncSession, list_id: str, line_key: str) -> ListLineState | None:
     return await session.get(ListLineState, (list_id, line_key))
+
+
+# --- ops ------------------------------------------------------------------------------------
+
+
+async def processed_op_ids(session: AsyncSession, user_id: str, op_ids: Iterable[str]) -> set[str]:
+    """Those of the user's op ids that were applied before (on any list; SYNC-05)."""
+    ids = set(op_ids)
+    result = await session.execute(
+        select(ProcessedOp.op_id).where(ProcessedOp.user_id == user_id, ProcessedOp.op_id.in_(ids))
+    )
+    return set(result.scalars())
 
 
 # --- lifecycle --------------------------------------------------------------------------------

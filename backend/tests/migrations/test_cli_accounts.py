@@ -251,26 +251,48 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     units = {unit for (unit,) in query(database, "SELECT DISTINCT unit FROM meal_ingredients")}
     assert units == {"g", "kg", "ml", "piece", "tbsp", None}
 
-    assert "Demo lists: 3" in result.output
+    assert "Demo lists: 6" in result.output
     lists = query(
         database,
         "SELECT u.username, l.name, l.shared_with_partner, l.status, l.reminder_seed, "
         "(SELECT count(*) FROM list_meals m WHERE m.list_id = l.id), "
         "(SELECT count(*) FROM list_extra_items e WHERE e.list_id = l.id), "
         "(SELECT count(*) FROM list_line_states s WHERE s.list_id = l.id AND s.hidden) "
-        "FROM shopping_lists l JOIN users u ON u.id = l.owner_id ORDER BY 1",
+        "FROM shopping_lists l JOIN users u ON u.id = l.owner_id ORDER BY 1, 2",
     )
     assert lists == [
+        ("anna", "Salatabend", 1, "done", 4, 1, 1, 0),
+        ("anna", "Wocheneinkauf", 1, "shopping", 21, 2, 3, 0),
         ("anna", "Wochenende", 1, "draft", 3, 2, 3, 1),
         ("ben", None, 0, "draft", 7, 2, 0, 0),
         ("carl", "Grillabend", 0, "draft", 12, 2, 1, 0),
+        ("carl", "Vorrat", 0, "done", 58, 1, 1, 0),
     ]
+    checks = query(
+        database,
+        "SELECT l.name, u.username, count(*) FROM list_line_states s "
+        "JOIN shopping_lists l ON l.id = s.list_id JOIN users u ON u.id = s.checked_by "
+        "WHERE s.checked GROUP BY 1, 2 ORDER BY 1, 2",
+    )
+    assert checks == [
+        ("Salatabend", "anna", 3),
+        ("Salatabend", "ben", 2),
+        ("Vorrat", "carl", 6),
+        ("Wocheneinkauf", "anna", 3),
+        ("Wocheneinkauf", "ben", 1),
+    ]
+    # Shopping froze the meals, which keep their meal (LIST-11).
+    frozen = query(
+        database,
+        "SELECT count(*) FROM list_meals WHERE frozen_at IS NOT NULL AND meal_id IS NOT NULL",
+    )
+    assert frozen == [(4,)]
     # The meal ben deleted stays on his draft, detached with its frozen rows (LIST-15).
     detached = query(
         database,
         "SELECT meal_id, meal_name_snapshot, detached_reason, "
         "(SELECT count(*) FROM list_meal_ingredients r WHERE r.list_meal_id = m.id) "
-        "FROM list_meals m WHERE frozen_at IS NOT NULL",
+        "FROM list_meals m WHERE detached_reason IS NOT NULL",
     )
     assert detached == [(None, "Kartoffelsuppe", "deleted", 4)]
     assert query(database, "SELECT count(*) FROM meals WHERE name = 'Kartoffelsuppe'") == [(0,)]

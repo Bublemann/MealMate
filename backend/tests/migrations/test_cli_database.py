@@ -11,7 +11,7 @@ from app.cli import main
 from app.db.migrations import alembic_config, current_revision, upgrade_database
 
 runner = CliRunner()
-HEAD = "0005"
+HEAD = "0006"
 
 
 @pytest.fixture(autouse=True)

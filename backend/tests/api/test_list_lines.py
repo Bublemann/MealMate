@@ -9,7 +9,7 @@ from httpx import AsyncClient
 
 from tests.accounts import Account, make_user
 from tests.catalog import category_ids, create_ingredient, ref
-from tests.lists import added, create_list, detail, extra_added, line, lines
+from tests.lists import UNCHECKED, added, create_list, detail, extra_added, line, lines
 from tests.meals import create_meal
 
 
@@ -139,6 +139,7 @@ async def test_meals_are_scaled_merged_and_sorted(
                 "amount_text": None,
             },
         ],
+        **UNCHECKED,
     }
     # Two rows of one meal are one source.
     assert [source["list_meal_id"] for source in line(body, "Öl")["sources"]] == [entry_b["id"]]
@@ -211,6 +212,7 @@ async def test_extra_items(
                 "amount_text": "1 Packung",
             }
         ],
+        **UNCHECKED,
     }
     assert line(body, "Grillkohle")["category_id"] == coal["category_id"]
     assert candles["added_by"] == ref(anna)

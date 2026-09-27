@@ -1,29 +1,49 @@
-"""The aggregation service: the lines of a list from its meals and extra items (AGG, LIST-05..08,
-LIST-15, plan § 5.6 steps 1-8).
+"""The aggregation service: the lines of a list from its meals and extra items, with their
+check state (AGG, LIST-05..08, LIST-11/12, LIST-15, plan §§ 5.6 and 5.7).
 
 It only turns the list's content into `Part`s and lets `domain.aggregation` group, total, round
-and sort them; no amounts are calculated here or in the frontend (AGG-01).
+and sort them and tell whether a checked line needs more; no amounts are calculated here or in
+the frontend (AGG-01).
 
 1. A live list meal (`frozen_at` null) contributes the meal's current rows with the live
    ingredient attributes; a frozen or detached one its `list_meal_ingredients` with the
    attributes captured then. Each row is scaled by `servings ÷ meal servings` (LIST-04).
-2. A linked extra item contributes to its ingredient's line with the live attributes (in a
-   draft; M5b uses `attrs_snapshot` once shopping started). A free-text item is a line of its
-   own, `x:<id>`, without amounts: its `amount_text` is shown as it is.
-3. An ingredient line shows the live ingredient's name and category, a free-text line its
-   text and category. Lines are sorted by category order, then normalised name, then key
-   (AGG-05), and carry their hidden state (LIST-07).
+2. A linked extra item contributes to its ingredient's line with its `attrs_snapshot` once it
+   has one (taken when shopping starts or when it is added while shopping), else with the live
+   attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
+   `amount_text` is shown as it is.
+3. In a draft, an ingredient line shows the live ingredient's name and category; once shopping
+   started, those of the first of its parts with a snapshot (frozen rows in the order of the
+   meals, then extra items), so ingredient edits no longer change the list (LIST-11). A
+   free-text line shows its text and category. Lines are sorted by category order, then
+   normalised name, then key (AGG-05), and carry their hidden state (LIST-07).
+4. Outside a draft, lines carry their check state (plan § 5.7): a line without a stored state
+   is `new` while shopping; a checked line that needs more since it was checked (or a free-text
+   item that was edited) is reported unchecked, with the reason (LIST-12). Nothing is stored
+   for that: checking it again replaces its snapshot.
 
 Everything is loaded in batches for any number of lists (`load`), so reading a list or the
 summaries of many takes a fixed number of queries.
 """
 
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.aggregation import Part, SourceRef, aggregate
+from app.domain.aggregation import (
+    CheckSnapshot,
+    Line,
+    LineTotals,
+    Part,
+    SourceRef,
+    aggregate,
+    grown_display,
+    needs_more,
+    text_changed,
+)
 from app.domain.lists import INGREDIENT_KEY_PREFIX, TEXT_KEY_PREFIX, ingredient_key, text_key
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.text import normalize
@@ -43,19 +63,22 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.schemas.lists import DisplayAmountOut, LineSource, ListLine
+from app.schemas.lists import DisplayAmountOut, LineNeedsMore, LineSource, ListLine
+from app.schemas.users import UserRef
 
 
 @dataclass(frozen=True)
 class ListContent:
     """Everything the lines of some lists are computed from.
 
-    `meals`, `extras` (not deleted) and `states` are per list id; `live_meals` and `meal_rows`
-    per meal id (live list meals only); `frozen_rows` per list meal id.
+    `meals`, `extras` (not deleted) and `states` are per list id; `linked_meals` per meal id
+    (the meals list meals still link to, frozen or not); `meal_rows` per meal id (live list
+    meals only); `frozen_rows` per list meal id; `ingredients` only those whose live data is
+    used (see `load`).
     """
 
     meals: dict[str, list[ListMeal]]
-    live_meals: dict[str, Meal]
+    linked_meals: dict[str, Meal]
     meal_rows: dict[str, list[MealIngredient]]
     frozen_rows: dict[str, list[ListMealIngredient]]
     extras: dict[str, list[ListExtraItem]]
@@ -65,9 +88,13 @@ class ListContent:
 
     def live_meal(self, list_meal: ListMeal) -> Meal | None:
         """The meal a live list meal takes its rows from; None once it is frozen."""
-        if list_meal.frozen_at is not None or list_meal.meal_id is None:
+        if list_meal.frozen_at is not None:
             return None
-        return self.live_meals.get(list_meal.meal_id)
+        return self.linked_meal(list_meal)
+
+    def linked_meal(self, list_meal: ListMeal) -> Meal | None:
+        """The meal a list meal still links to (live or frozen); None once it is detached."""
+        return None if list_meal.meal_id is None else self.linked_meals.get(list_meal.meal_id)
 
     def other_category_id(self) -> str:
         return next(row.id for row in self.categories.values() if row.key == OTHER_CATEGORY)
@@ -77,22 +104,41 @@ def is_live(list_meal: ListMeal) -> bool:
     return list_meal.frozen_at is None and list_meal.meal_id is not None
 
 
-async def load(session: AsyncSession, list_ids: Iterable[str]) -> ListContent:
-    """The content of the given lists, in eight queries whatever their size."""
-    ids = set(list_ids)
+async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListContent:
+    """The content of the given lists, in eight queries whatever their size.
+
+    Ingredients are loaded only where their live data is shown: for live meals, linked extra
+    items without a snapshot, and the frozen rows of drafts (a detached meal's line shows the
+    live name there); a list that is shopped or done needs none of them (LIST-11).
+    """
+    lists = list(lists)
+    ids = {row.id for row in lists}
+    drafts = {row.id for row in lists if row.status == "draft"}
     meals = await lists_repo.meals_for(session, ids)
     list_meals = [list_meal for group in meals.values() for list_meal in group]
+    linked_meals = await meals_repo.by_ids(session, (row.meal_id for row in list_meals))
     live_ids = {list_meal.meal_id for list_meal in list_meals if is_live(list_meal)}
-    live_meals = await meals_repo.by_ids(session, live_ids)
-    meal_rows = await meals_repo.rows_for(session, live_meals)
+    meal_rows = await meals_repo.rows_for(
+        session, (meal_id for meal_id in linked_meals if meal_id in live_ids)
+    )
     frozen_rows = await lists_repo.frozen_rows_for(
         session, (list_meal.id for list_meal in list_meals if not is_live(list_meal))
     )
     extras = await lists_repo.extras_for(session, ids)
     ingredient_ids = {
         *(row.ingredient_id for rows in meal_rows.values() for row in rows),
-        *(row.ingredient_id for rows in frozen_rows.values() for row in rows),
-        *(extra.ingredient_id for group in extras.values() for extra in group),
+        *(
+            row.ingredient_id
+            for list_meal in list_meals
+            if list_meal.list_id in drafts
+            for row in frozen_rows.get(list_meal.id, [])
+        ),
+        *(
+            extra.ingredient_id
+            for group in extras.values()
+            for extra in group
+            if extra.attrs_snapshot is None
+        ),
     }
     ingredients = await ingredients_repo.by_ids(
         session, (ingredient_id for ingredient_id in ingredient_ids if ingredient_id is not None)
@@ -101,7 +147,7 @@ async def load(session: AsyncSession, list_ids: Iterable[str]) -> ListContent:
     states = await lists_repo.states_for(session, ids)
     return ListContent(
         meals=meals,
-        live_meals=live_meals,
+        linked_meals=linked_meals,
         meal_rows=meal_rows,
         frozen_rows=frozen_rows,
         extras=extras,
@@ -125,6 +171,29 @@ def _snapshot_attrs(row: ListMealIngredient) -> IngredientAttrs:
         piece_weight_g=row.piece_weight_g_snapshot,
         density_g_per_ml=row.density_snapshot,
     )
+
+
+def attrs_snapshot(ingredient: Ingredient) -> dict[str, Any]:
+    """What a linked extra item keeps of its ingredient once shopping started (LIST-11):
+    `{name, base_unit, piece_weight_g, density_g_per_ml, category_id}`."""
+    return {
+        "name": ingredient.name,
+        "base_unit": ingredient.base_unit,
+        "piece_weight_g": ingredient.piece_weight_g,
+        "density_g_per_ml": ingredient.density_g_per_ml,
+        "category_id": ingredient.category_id,
+    }
+
+
+def _extra_attrs(content: ListContent, extra: ListExtraItem) -> IngredientAttrs:
+    """A linked extra item's attributes: its snapshot once it has one, else the live ones."""
+    if (snapshot := extra.attrs_snapshot) is not None:
+        return IngredientAttrs(
+            base_unit=BaseUnit(snapshot["base_unit"]),
+            piece_weight_g=snapshot["piece_weight_g"],
+            density_g_per_ml=snapshot["density_g_per_ml"],
+        )
+    return live_attrs(content.ingredients[str(extra.ingredient_id)])
 
 
 def _part(
@@ -170,7 +239,7 @@ def _extra_part(content: ListContent, extra: ListExtraItem) -> Part:
     source = SourceRef("extra", extra.id)
     if extra.ingredient_id is None:
         return Part(line_key=text_key(extra.id), amount=None, unit=None, attrs=None, source=source)
-    attrs = live_attrs(content.ingredients[extra.ingredient_id])
+    attrs = _extra_attrs(content, extra)
     return _part(extra.ingredient_id, extra.amount, extra.unit, attrs, source)
 
 
@@ -204,18 +273,128 @@ def meal_name(content: ListContent, list_meal: ListMeal) -> str:
     return list_meal.meal_name_snapshot if meal is None else meal.name
 
 
+def _snapshot_labels(
+    content: ListContent, shopping_list: ShoppingList
+) -> dict[str, tuple[str, str]]:
+    """The name and category id of each ingredient line from the first of its parts with a
+    snapshot: frozen rows in the order of the meals, then linked extra items (LIST-11)."""
+    labels: dict[str, tuple[str, str]] = {}
+    for list_meal in content.meals.get(shopping_list.id, []):
+        for row in content.frozen_rows.get(list_meal.id, []):
+            labels.setdefault(
+                ingredient_key(row.ingredient_id),
+                (row.ingredient_name_snapshot, row.category_id_snapshot),
+            )
+    for extra in content.extras.get(shopping_list.id, []):
+        if extra.ingredient_id is not None and (snapshot := extra.attrs_snapshot) is not None:
+            labels.setdefault(
+                ingredient_key(extra.ingredient_id), (snapshot["name"], snapshot["category_id"])
+            )
+    return labels
+
+
+def _by_key(_line_key: str) -> tuple[()]:
+    return ()
+
+
+def current_lines(content: ListContent, shopping_list: ShoppingList) -> dict[str, Line]:
+    """The lines of a list as they are now, by key (unsorted: for check-off snapshots)."""
+    return {line.line_key: line for line in aggregate(parts(content, shopping_list), _by_key)}
+
+
+def check_snapshot(line: Line | None, text_extra: ListExtraItem | None) -> dict[str, Any]:
+    """What is stored when a line is checked off (plan § 5.7): its totals (none for a key
+    without a line right now), and for a free-text line its text and amount."""
+    totals = line.totals if line is not None else LineTotals({}, False, False)
+    snapshot = CheckSnapshot.of(totals).to_json()
+    if text_extra is not None:
+        snapshot |= {"text": text_extra.text, "amount_text": text_extra.amount_text}
+    return snapshot
+
+
+@dataclass(frozen=True)
+class _CheckState:
+    checked: bool = False
+    checked_at: datetime | None = None
+    checked_by: UserRef | None = None
+    new: bool = False
+    needs_more: LineNeedsMore | None = None
+
+
+def _needs_more(
+    state: ListLineState, line: Line, text_extra: ListExtraItem | None
+) -> LineNeedsMore | None:
+    """Why a checked line needs more since it was checked, if it does (LIST-12)."""
+    snapshot = state.checked_snapshot or {}
+    if text_extra is not None:
+        changed = text_changed(
+            snapshot.get("text", ""),
+            snapshot.get("amount_text"),
+            text_extra.text or "",
+            text_extra.amount_text,
+        )
+        if not changed:
+            return None
+        return LineNeedsMore(grown=[], new_unit=False, new_unspecified=False, changed=True)
+    checked = CheckSnapshot.from_json(snapshot)
+    result = needs_more(checked, line.totals)
+    if not result.needed:
+        return None
+    return LineNeedsMore(
+        grown=[
+            DisplayAmountOut(value=item.value, unit=item.unit)
+            for item in grown_display(result, checked, line.totals)
+        ],
+        new_unit=bool(result.new_segments),
+        new_unspecified=result.new_unspecified,
+        changed=False,
+    )
+
+
+def _check_state(
+    shopping_list: ShoppingList,
+    state: ListLineState | None,
+    line: Line,
+    text_extra: ListExtraItem | None,
+    refs: Mapping[str, UserRef],
+) -> _CheckState:
+    """The check state a line is shown with (plan § 5.7); a draft has none."""
+    if shopping_list.status == "draft":
+        return _CheckState()
+    if state is None:
+        return _CheckState(new=shopping_list.status == "shopping")
+    if not state.checked:
+        return _CheckState()
+    if (reason := _needs_more(state, line, text_extra)) is not None:
+        return _CheckState(needs_more=reason)
+    return _CheckState(
+        checked=True,
+        checked_at=state.checked_at,
+        checked_by=None if state.checked_by is None else refs.get(state.checked_by),
+    )
+
+
 def lines(
-    content: ListContent, shopping_list: ShoppingList, *, private_meals: Collection[str]
+    content: ListContent,
+    shopping_list: ShoppingList,
+    *,
+    private_meals: Collection[str],
+    refs: Mapping[str, UserRef],
 ) -> list[ListLine]:
-    """The aggregated lines of a list, sorted (AGG-05). Sources from the list meals in
-    `private_meals` (ids) show no meal name (VIS-06)."""
+    """The aggregated lines of a list, sorted (AGG-05), with their check state. Sources from
+    the list meals in `private_meals` (ids) show no meal name (VIS-06); `refs` has the users
+    who checked lines off."""
     list_meals = {row.id: row for row in content.meals.get(shopping_list.id, [])}
     extras = {row.id: row for row in content.extras.get(shopping_list.id, [])}
+    states = content.states.get(shopping_list.id, {})
     other_category_id = content.other_category_id()
+    labels = {} if shopping_list.status == "draft" else _snapshot_labels(content, shopping_list)
 
     def describe(line_key: str) -> tuple[str, str]:
         """The name and category id of a line."""
         if line_key.startswith(INGREDIENT_KEY_PREFIX):
+            if (label := labels.get(line_key)) is not None:
+                return label
             ingredient = content.ingredients[line_key.removeprefix(INGREDIENT_KEY_PREFIX)]
             return ingredient.name, ingredient.category_id
         extra = extras[line_key.removeprefix(TEXT_KEY_PREFIX)]
@@ -259,6 +438,7 @@ def lines(
         name, category_id = describe(line.line_key)
         is_ingredient = line.line_key.startswith(INGREDIENT_KEY_PREFIX)
         text_extra = None if is_ingredient else extras[line.line_key.removeprefix(TEXT_KEY_PREFIX)]
+        check = _check_state(shopping_list, states.get(line.line_key), line, text_extra, refs)
         result.append(
             ListLine(
                 key=line.line_key,
@@ -275,6 +455,11 @@ def lines(
                 amount_text=None if text_extra is None else text_extra.amount_text,
                 hidden=line.line_key in hidden,
                 sources=[source(ref) for ref in line.sources],
+                checked=check.checked,
+                checked_at=check.checked_at,
+                checked_by=check.checked_by,
+                new=check.new,
+                needs_more=check.needs_more,
             )
         )
     return result

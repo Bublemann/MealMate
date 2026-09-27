@@ -1,5 +1,7 @@
 """Helpers for tests of shopping lists."""
 
+import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI
@@ -8,7 +10,16 @@ from sqlalchemy import update
 
 from app.db.session import Database
 from app.models import ShoppingList
-from tests.accounts import Account
+from tests.accounts import START, Account
+
+# The check state of every line of a draft (and of unchecked lines while shopping).
+UNCHECKED = {
+    "checked": False,
+    "checked_at": None,
+    "checked_by": None,
+    "new": False,
+    "needs_more": None,
+}
 
 
 async def create_list(api: AsyncClient, user: Account, name: str | None = None) -> Any:
@@ -83,3 +94,51 @@ async def set_status(app: FastAPI, list_id: str, status: str) -> None:
         await session.execute(
             update(ShoppingList).where(ShoppingList.id == list_id).values(status=status)
         )
+
+
+# --- shopping mode ------------------------------------------------------------------------
+
+
+async def start_shopping(api: AsyncClient, user: Account, list_id: str) -> Any:
+    response = await api.post(f"/api/lists/{list_id}/start-shopping", headers=user.headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def op(op_type: str, *, at: datetime = START, op_id: str | None = None, **payload: Any) -> Any:
+    """An op for `POST /api/lists/{id}/ops`, with a new UUIDv7 unless `op_id` is given."""
+    return {
+        "op_id": op_id or str(uuid.uuid7()),
+        "type": op_type,
+        "at": at.isoformat(),
+        "payload": payload,
+    }
+
+
+def check(line_key: str, checked: bool = True, **options: Any) -> Any:
+    return op("line.check", line_key=line_key, checked=checked, **options)
+
+
+async def send_ops(api: AsyncClient, user: Account, list_id: str, *ops: Any) -> Response:
+    return await api.post(
+        f"/api/lists/{list_id}/ops", json={"ops": list(ops)}, headers=user.headers
+    )
+
+
+async def applied(api: AsyncClient, user: Account, list_id: str, *ops: Any) -> Any:
+    """Send ops that must all be applied; the list afterwards."""
+    response = await send_ops(api, user, list_id, *ops)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [result["status"] for result in body["results"]] == ["applied"] * len(ops), body
+    return body["list"]
+
+
+def results(response: Response) -> list[tuple[str, str | None]]:
+    """Per op: its status and code."""
+    assert response.status_code == 200, response.text
+    return [(item["status"], item["code"]) for item in response.json()["results"]]
+
+
+def by_key(list_detail: Any, key: str) -> Any:
+    return next(item for item in list_detail["lines"] if item["key"] == key)

@@ -195,3 +195,21 @@ class ListLineState(Base):
     )
     checked_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ProcessedOp(Base):
+    """An op of shopping mode that was applied (plan § 5.8): the same user sending it again
+    changes nothing (SYNC-05). Op ids are the clients', so they are unique per user only.
+    Rejected ops are not recorded, since they may succeed later. Rows older than 30 days are
+    pruned by the cleanup job."""
+
+    __tablename__ = "processed_ops"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    op_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    list_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("shopping_lists.id", ondelete="CASCADE"), index=True
+    )
+    applied_at: Mapped[datetime] = mapped_column(UTCDateTime())

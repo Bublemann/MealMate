@@ -64,6 +64,15 @@ class ErrorCode(StrEnum):
 
     # 409: the action is only possible while the list is a draft (e.g. hiding a line, LIST-07).
     LIST_NOT_DRAFT = "list.not_draft"
+    # 409: the list is done and read-only (LIST-10); reopen it first (SHOP-06). Also the result
+    # of a check-off op made after the list was finished (SYNC-06).
+    LIST_DONE = "list.done"
+    # 409: only a done list can be reopened or shopped again (SHOP-06).
+    LIST_NOT_DONE = "list.not_done"
+    # 409: only while shopping (or done): check-off and finish, not in a draft (LIST-10).
+    LIST_NOT_SHOPPING = "list.not_shopping"
+    # 409, only as an op result: the client's extra item id is already used on another list.
+    EXTRA_ID_TAKEN = "extra.id_taken"
 
     # 413: an uploaded photo is larger than 10 MB (SEC-07).
     MEDIA_TOO_LARGE = "media.too_large"

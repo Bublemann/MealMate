@@ -330,6 +330,32 @@ def needs_more(snapshot: CheckSnapshot, current: LineTotals) -> NeedsMore:
     )
 
 
+def grown_display(
+    result: NeedsMore, snapshot: CheckSnapshot, current: LineTotals
+) -> list[DisplayAmount]:
+    """The differences of a line that needs more, rounded like any amount (AGG-04): "+300 g",
+    "+2 Stk.". Compared in the base unit, the difference is shown in the line's own unit when
+    the snapshot and the line have amounts of one and the same kind only ("3 Stk." checked at
+    "2 Stk." is "+1 Stk." even with a piece weight); otherwise in the base unit. A grown volume
+    of a line made of spoons only is shown in tbsp."""
+    grown = result.grown
+    if (
+        grown
+        and len(snapshot.segments) == 1
+        and snapshot.segments.keys() == current.segments.keys()
+    ):
+        [(kind, before)] = snapshot.segments.items()
+        if _grew(before, after := current.segments[kind]):
+            grown = {kind: after - before}
+    return display(
+        LineTotals(
+            segments={kind: grown[kind] for kind in _KIND_ORDER if kind in grown},
+            has_unspecified=False,
+            spoons_only=current.spoons_only,
+        )
+    )
+
+
 def text_changed(
     old_text: str, old_amount_text: str | None, new_text: str, new_amount_text: str | None
 ) -> bool:

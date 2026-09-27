@@ -5,21 +5,36 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, Request
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import DATABASE_FILENAME
 from app.db.engine import create_read_engine, create_write_engine
 
 
 class Database:
-    """Both engines of one database file, created at app startup and disposed at shutdown."""
+    """Both engines of one database file, created at app startup and disposed at shutdown.
+
+    `write_generation` counts the transactions committed through `write_sessions` in this
+    process; it goes up only after the commit, so whatever is read after seeing a new value
+    includes the write. Response caches compare it to know whether anything may have changed
+    (`app.services.list_cache`). Read sessions never change it."""
 
     def __init__(self, database_path: Path) -> None:
         self.path = database_path
         self.write_engine = create_write_engine(database_path)
         self.read_engine = create_read_engine(database_path)
-        self.write_sessions = async_sessionmaker(self.write_engine, expire_on_commit=False)
+        self.write_generation = 0
+        committed_writes = sessionmaker()
+        event.listen(committed_writes, "after_commit", self._committed)
+        self.write_sessions = async_sessionmaker(
+            self.write_engine, expire_on_commit=False, sync_session_class=committed_writes
+        )
         self.read_sessions = async_sessionmaker(self.read_engine, expire_on_commit=False)
+
+    def _committed(self, _session: Session) -> None:
+        self.write_generation += 1
 
     @classmethod
     def open(cls, data_dir: Path) -> Database:
