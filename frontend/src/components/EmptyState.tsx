@@ -8,6 +8,8 @@ interface EmptyStateProps {
   title: string;
   text: string;
   actionLabel: string;
+  /** The action's icon (default: a plus). */
+  actionIcon?: LucideIcon;
   /** The screen's main action; the button stays disabled until the feature exists. */
   onAction?: () => void;
   /** The action's test ID, when it is the same action as a button shown with content. */
@@ -20,6 +22,7 @@ export function EmptyState({
   title,
   text,
   actionLabel,
+  actionIcon: ActionIcon = Plus,
   onAction,
   actionTestId,
 }: EmptyStateProps) {
@@ -33,7 +36,7 @@ export function EmptyState({
         <p className="text-muted-foreground">{text}</p>
       </div>
       <Button data-testid={actionTestId} onClick={onAction} disabled={!onAction}>
-        <Plus aria-hidden="true" />
+        <ActionIcon aria-hidden="true" />
         {actionLabel}
       </Button>
     </Card>

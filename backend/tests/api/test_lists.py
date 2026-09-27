@@ -15,11 +15,13 @@ from sqlalchemy import Connection, event, select
 
 from app.db.session import Database
 from app.models import ListExtraItem, ListLineState, ListMeal, ShoppingList
+from app.services.list_cache import ListCache
 from tests.accounts import (
     Account,
     FakeClock,
     error,
     fields,
+    login,
     make_couple,
     make_user,
     scalars,
@@ -114,6 +116,8 @@ async def test_create_an_empty_draft(api: AsyncClient, anna: Account) -> None:
         "version": 0,
         "created_at": "2026-09-27T12:00:00Z",
         "updated_at": "2026-09-27T12:00:00Z",
+        "shopping_started_at": None,
+        "finished_at": None,
         "owner": ref(anna),
         "is_owner": True,
         "can_edit": True,
@@ -386,6 +390,7 @@ async def test_summaries(
         "status": "draft",
         "created_at": "2026-09-27T12:00:00Z",
         "updated_at": "2026-09-27T12:04:00Z",
+        "finished_at": None,
         "owner": ref(anna),
         "is_owner": True,
         "can_edit": True,
@@ -873,41 +878,47 @@ async def test_line_keys_are_checked(api: AsyncClient, anna: Account, key: str) 
     assert list(fields(response).values()) in (["invalid_format"], ["too_long"])
 
 
-# --- only in drafts (LIST-10) ---------------------------------------------------------------
+# --- what each state allows (LIST-10) ------------------------------------------------------
 
 
-async def test_the_content_of_other_states_is_not_changed_here(
+async def test_done_lists_are_read_only_and_lines_are_hidden_in_drafts(
     app: FastAPI, api: AsyncClient, anna: Account, flour: Any
 ) -> None:
-    """Shopping mode (M5b) has its own rules; until then only drafts change content."""
+    """Shopping mode (test_shopping.py) keeps meals and extra items editable (LIST-12); a done
+    list is read-only; lines are hidden and restored only in a draft (LIST-07)."""
     meal = await create_meal(api, anna, "Brot")
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     [entry] = (await added(api, anna, list_id, meal["id"]))["meals"]
     [item] = (await extra_added(api, anna, list_id, text="Kerzen"))["extra_items"]
     key = f"i:{flour['id']}"
+    content = (
+        ("POST", "meals", {"meal_id": meal["id"]}),
+        ("PATCH", f"meals/{entry['id']}", {"servings": 2}),
+        ("DELETE", f"meals/{entry['id']}", None),
+        ("POST", "extra-items", {"text": "x"}),
+        ("PATCH", f"extra-items/{item['id']}", {"text": "y"}),
+        ("DELETE", f"extra-items/{item['id']}", None),
+        ("PATCH", "", {"name": "Neu"}),
+        ("PATCH", "", {"shared_with_partner": False}),
+    )
+    lines = (("POST", f"lines/{key}/hide", None), ("POST", f"lines/{key}/unhide", None))
 
     for status in ("shopping", "done"):
         await set_status(app, list_id, status)
-        for method, path, body in (
-            ("POST", "meals", {"meal_id": meal["id"]}),
-            ("PATCH", f"meals/{entry['id']}", {"servings": 2}),
-            ("DELETE", f"meals/{entry['id']}", None),
-            ("POST", "extra-items", {"text": "x"}),
-            ("PATCH", f"extra-items/{item['id']}", {"text": "y"}),
-            ("DELETE", f"extra-items/{item['id']}", None),
-            ("POST", f"lines/{key}/hide", None),
-            ("POST", f"lines/{key}/unhide", None),
-        ):
+        requests = [(request, "list.not_draft") for request in lines]
+        if status == "done":
+            requests += [(request, "list.done") for request in content]
+        for (method, path, body), code in requests:
             response = await api.request(
-                method, f"/api/lists/{list_id}/{path}", json=body, headers=anna.headers
+                method, f"/api/lists/{list_id}/{path}".rstrip("/"), json=body, headers=anna.headers
             )
             assert response.status_code == 409, (status, method, path)
-            assert error(response) == "list.not_draft"
-        # Renaming, copying and deleting work in any state.
-        assert (await patch(api, anna, list_id, name=status)).json()["status"] == status
+            assert error(response) == code
+        # Copying and deleting work in any state.
         copied = await api.post(f"/api/lists/{list_id}/copy", headers=anna.headers)
         assert copied.json()["list"]["status"] == "draft"
+    assert (await detail(api, anna, list_id))["name"] is None
     assert (await api.delete(f"/api/lists/{list_id}", headers=anna.headers)).status_code == 204
 
 
@@ -1141,6 +1152,155 @@ async def test_a_list_takes_a_fixed_number_of_queries(
     with counted_queries(app) as summary_queries:
         assert len(await summaries(api, carl, scope="others")) == 2
 
-    # Authentication, access, the eight content queries, visibility and users (two BEGINs).
-    assert len(big_detail) == len(small_detail) <= 17
+    # Authentication, access (the couple once), the eight content queries, visibility and
+    # users (two BEGINs).
+    assert len(big_detail) == len(small_detail) <= 16
     assert len(summary_queries) <= 17
+
+
+# --- the polling cache (PERF-02, SYNC-08) ---------------------------------------------------
+
+# What a poll answered from the cache still reads: the authentication.
+CACHED_POLL = ["BEGIN", "SELECT"]
+
+
+def kinds(statements: list[str]) -> list[str]:
+    return [statement.split()[0] for statement in statements]
+
+
+async def poll(
+    app: FastAPI, api: AsyncClient, user: Account, list_id: str, etag: str | None = None
+) -> tuple[Any, list[str]]:
+    """A GET of the list (with `If-None-Match` if given) and the statements it ran."""
+    headers = user.headers if etag is None else user.headers | {"If-None-Match": etag}
+    with counted_queries(app) as statements:
+        response = await api.get(f"/api/lists/{list_id}", headers=headers)
+    assert response.status_code in (200, 304), response.text
+    return response, kinds(statements)
+
+
+async def test_polls_are_answered_from_the_cache(
+    app: FastAPI, api: AsyncClient, anna: Account, flour: Any
+) -> None:
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    await extra_added(api, anna, list_id, ingredient_id=flour["id"], amount=500, unit="g")
+    database: Database = app.state.database
+    generation = database.write_generation
+
+    first, statements = await poll(app, api, anna, list_id)
+    assert len(statements) > len(CACHED_POLL)
+    etag = first.headers["etag"]
+    again, statements = await poll(app, api, anna, list_id)
+    assert statements == CACHED_POLL  # the principal is still checked
+    assert (again.status_code, again.content, again.headers["etag"]) == (200, first.content, etag)
+    assert again.headers["cache-control"] == "no-cache"
+    unchanged, statements = await poll(app, api, anna, list_id, etag)
+    assert (unchanged.status_code, unchanged.content, statements) == (304, b"", CACHED_POLL)
+    assert unchanged.headers["etag"] == etag
+    # Reading changes nothing; a refused write neither.
+    assert database.write_generation == generation
+    response = await patch(api, anna, str(uuid.uuid4()), name="Anders")
+    assert response.status_code == 404
+    assert (await poll(app, api, anna, list_id))[1] == CACHED_POLL
+    # A session that is no longer valid gets no list from the cache.
+    await api.post("/api/auth/logout", headers=anna.headers)
+    response = await api.get(f"/api/lists/{list_id}", headers=anna.headers)
+    assert response.status_code == 401
+
+
+async def test_any_write_empties_the_cache(
+    app: FastAPI, api: AsyncClient, anna: Account, carl: Account
+) -> None:
+    """Whatever is written may change what someone sees: another list, a privacy switch."""
+    meal = await create_meal(api, anna, "Pfannkuchen")
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    await added(api, anna, list_id, meal["id"])
+    before, _ = await poll(app, api, carl, list_id)
+    assert before.json()["meals"][0]["private"] is False
+
+    await create_list(api, carl)
+    response, statements = await poll(app, api, carl, list_id, before.headers["etag"])
+    assert response.status_code == 304
+    assert statements != CACHED_POLL  # built again, with the same result
+    await set_privacy(api, anna, meals_public=False)
+    response, _ = await poll(app, api, carl, list_id, before.headers["etag"])
+    assert response.status_code == 200
+    assert response.json()["meals"][0]["private"] is True
+    assert (await poll(app, api, carl, list_id))[1] == CACHED_POLL
+
+
+async def test_cached_lists_expire_after_a_minute(
+    app: FastAPI, api: AsyncClient, anna: Account, clock: FakeClock
+) -> None:
+    """Writes of other processes (CLI commands) do not count, so entries are kept briefly."""
+    shopping_list = await create_list(api, anna)
+    clock.advance(minutes=1)  # 12:01, the photo URLs of this hour last until 14:00
+    await poll(app, api, anna, shopping_list["id"])
+    clock.advance(seconds=59)
+    assert (await poll(app, api, anna, shopping_list["id"]))[1] == CACHED_POLL
+    clock.advance(seconds=1)
+    assert (await poll(app, api, anna, shopping_list["id"]))[1] != CACHED_POLL
+    assert (await poll(app, api, anna, shopping_list["id"]))[1] == CACHED_POLL
+
+
+async def test_each_viewer_has_their_own_cached_list(
+    app: FastAPI, api: AsyncClient, anna: Account, ben: Account, carl: Account
+) -> None:
+    await make_couple(api, anna, ben)
+    await set_privacy(api, anna, meals_public=False)
+    meal = await create_meal(api, anna, "Geheim")
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    await added(api, anna, list_id, meal["id"])
+
+    responses = {}
+    for user in (anna, ben, carl, anna, ben, carl):
+        response, statements = await poll(app, api, user, list_id)
+        assert (statements == CACHED_POLL) is (user.username in responses)
+        responses[user.username] = response.json()
+    assert [
+        (body["is_owner"], body["can_edit"], body["meals"][0]["private"])
+        for body in responses.values()
+    ] == [(True, True, False), (False, True, False), (False, False, True)]
+    # carl's tag is not anna's.
+    response, _ = await poll(
+        app, api, carl, list_id, (await poll(app, api, anna, list_id))[0].headers["etag"]
+    )
+    assert response.status_code == 200
+    assert response.json()["meals"][0]["private"] is True
+
+
+async def test_cached_lists_change_with_the_hour_of_their_photo_urls(
+    app: FastAPI, api: AsyncClient, anna: Account, clock: FakeClock
+) -> None:
+    meal = await create_meal(api, anna, "Pfannkuchen")
+    await upload(api, anna, meal["id"], jpeg())
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    await added(api, anna, list_id, meal["id"])
+    clock.advance(minutes=59, seconds=50)  # 12:59:50
+    await login(api, anna)
+    before, _ = await poll(app, api, anna, list_id)
+
+    clock.advance(seconds=20)  # 13:00:10: the URLs last an hour longer
+    after, statements = await poll(app, api, anna, list_id, before.headers["etag"])
+
+    assert (after.status_code, statements != CACHED_POLL) == (200, True)
+    old_url, new_url = (item.json()["meals"][0]["thumb_url"] for item in (before, after))
+    assert old_url.split("?")[0] == new_url.split("?")[0]
+    assert old_url != new_url
+
+
+async def test_the_cache_keeps_the_most_recently_used_lists(
+    app: FastAPI, api: AsyncClient, anna: Account, clock: FakeClock
+) -> None:
+    app.state.list_cache = ListCache(clock=clock.monotonic, max_entries=2)
+    first, second, third = [(await create_list(api, anna))["id"] for _ in range(3)]
+    for list_id in (first, second, first, third):
+        await poll(app, api, anna, list_id)
+    assert (await poll(app, api, anna, first))[1] == CACHED_POLL
+    assert (await poll(app, api, anna, third))[1] == CACHED_POLL
+    assert (await poll(app, api, anna, second))[1] != CACHED_POLL
+    assert len(app.state.list_cache) == 2

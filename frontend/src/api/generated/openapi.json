@@ -493,6 +493,10 @@
           "ingredient.merge_base_unit_mismatch",
           "product.basis_mismatch",
           "list.not_draft",
+          "list.done",
+          "list.not_done",
+          "list.not_shopping",
+          "extra.id_taken",
           "media.too_large",
           "media.unsupported_type",
           "media.too_many_pixels"
@@ -540,6 +544,128 @@
           "fields"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "ExtraAddOp": {
+        "description": "In a draft or while shopping (`list.done` otherwise). An `extra_id` already on this list\nis a `duplicate`; one on another list is rejected (`extra.id_taken`).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExtraAddPayload"
+          },
+          "type": {
+            "const": "extra.add",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "ExtraAddOp",
+        "type": "object"
+      },
+      "ExtraAddPayload": {
+        "description": "Add a free-text extra item with the client's id (UUID). `category_key` is a category's\n`key`; left out or unknown: *Other*.",
+        "properties": {
+          "amount_text": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "category_key": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Key"
+          },
+          "extra_id": {
+            "maxLength": 45,
+            "title": "Extra Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extra_id",
+          "text"
+        ],
+        "title": "ExtraAddPayload",
+        "type": "object"
+      },
+      "ExtraDeleteOp": {
+        "description": "In a draft or while shopping; an item that is already deleted: applied without\neffect.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExtraDeletePayload"
+          },
+          "type": {
+            "const": "extra.delete",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "ExtraDeleteOp",
+        "type": "object"
+      },
+      "ExtraDeletePayload": {
+        "properties": {
+          "extra_id": {
+            "maxLength": 45,
+            "title": "Extra Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extra_id"
+        ],
+        "title": "ExtraDeletePayload",
         "type": "object"
       },
       "ExtraItem": {
@@ -816,6 +942,71 @@
           }
         },
         "title": "ExtraItemUpdate",
+        "type": "object"
+      },
+      "ExtraUpdateOp": {
+        "description": "In a draft or while shopping. A deleted item stays deleted (applied without effect,\ndelete wins); an unknown id is rejected (`common.not_found`), a linked item too\n(`common.validation`).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExtraUpdatePayload"
+          },
+          "type": {
+            "const": "extra.update",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "ExtraUpdateOp",
+        "type": "object"
+      },
+      "ExtraUpdatePayload": {
+        "description": "Change a free-text extra item's text, and its `amount_text` if sent (null clears it).",
+        "properties": {
+          "amount_text": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Text"
+          },
+          "extra_id": {
+            "maxLength": 45,
+            "title": "Extra Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extra_id",
+          "text"
+        ],
+        "title": "ExtraUpdatePayload",
         "type": "object"
       },
       "FieldError": {
@@ -1403,6 +1594,89 @@
         "title": "JoinRequest",
         "type": "object"
       },
+      "LineCheckOp": {
+        "description": "Last write wins by `at` (clamped to at most 5 minutes after the server's time), ties by\nthe higher `op_id`; a losing op is `applied` without effect. While shopping; on a done list\nonly if `at` is not after `finished_at` (else `list.done`); not in a draft, nor with an `at`\nmore than 5 minutes before `shopping_started_at` (`list.not_shopping`). An `at` that is out\nof range in UTC is rejected (`common.validation`).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LineCheckPayload"
+          },
+          "type": {
+            "const": "line.check",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "LineCheckOp",
+        "type": "object"
+      },
+      "LineCheckPayload": {
+        "description": "Check a line off or uncheck it. `line_key` as in `ListLine.key`; a key in another\nformat is rejected (`common.validation`), a key without a line right now is accepted.",
+        "properties": {
+          "checked": {
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "line_key": {
+            "maxLength": 80,
+            "title": "Line Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line_key",
+          "checked"
+        ],
+        "title": "LineCheckPayload",
+        "type": "object"
+      },
+      "LineNeedsMore": {
+        "description": "Why a line that was checked off is unchecked again (LIST-12): `grown` holds the\ndifferences, rounded for display (\"+300 g\", \"+2 Stk.\"); `new_unit`: an amount in a unit\nof another kind appeared; `new_unspecified`: a part without an amount appeared (\"+ some\");\n`changed`: the free-text item's text or amount was edited.",
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "grown": {
+            "items": {
+              "$ref": "#/components/schemas/DisplayAmountOut"
+            },
+            "title": "Grown",
+            "type": "array"
+          },
+          "new_unit": {
+            "title": "New Unit",
+            "type": "boolean"
+          },
+          "new_unspecified": {
+            "title": "New Unspecified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "grown",
+          "new_unit",
+          "new_unspecified",
+          "changed"
+        ],
+        "title": "LineNeedsMore",
+        "type": "object"
+      },
       "LineSource": {
         "description": "Where a line comes from (LIST-08): a meal on the list (`list_meal_id`, its `servings`;\n`meal_name` null and `private` if the viewer may not see it, VIS-06) or an extra item\n(`extra_id`, with its own amount and unit, or its free-text `amount_text`).",
         "properties": {
@@ -1530,7 +1804,7 @@
         "type": "object"
       },
       "ListCopyResult": {
-        "description": "The new draft, and how many meals were left out because they no longer exist or the\ncopier may not see them (VIS-03/06).",
+        "description": "The new draft, and how many meals were left out because they no longer exist or the\ncopier may not see them (VIS-03/06, SHOP-06).",
         "properties": {
           "left_out": {
             "title": "Left Out",
@@ -1567,7 +1841,7 @@
         "type": "object"
       },
       "ListDetail": {
-        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is\n`reminder.<reminder_seed % 10 + 1>` (LIST-14).",
+        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is\n`reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`\nare set once shopping started and while the list is done (LIST-10).",
         "properties": {
           "can_edit": {
             "title": "Can Edit",
@@ -1584,6 +1858,18 @@
             },
             "title": "Extra Items",
             "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
           },
           "id": {
             "title": "Id",
@@ -1629,6 +1915,18 @@
             "title": "Shared With Partner",
             "type": "boolean"
           },
+          "shopping_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shopping Started At"
+          },
           "status": {
             "enum": [
               "draft",
@@ -1655,6 +1953,8 @@
           "version",
           "created_at",
           "updated_at",
+          "shopping_started_at",
+          "finished_at",
           "owner",
           "is_owner",
           "can_edit",
@@ -1667,8 +1967,45 @@
         "title": "ListDetail",
         "type": "object"
       },
+      "ListFinishOp": {
+        "description": "Finish shopping (SHOP-04): the list is done, `finished_at` is `at` (but not before\n`shopping_started_at` nor after the server's time). Already done: applied without effect;\na draft: `list.not_shopping`; an `at` out of range in UTC: `common.validation`.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ListFinishPayload"
+          },
+          "type": {
+            "const": "list.finish",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "ListFinishOp",
+        "type": "object"
+      },
+      "ListFinishPayload": {
+        "description": "No fields.",
+        "properties": {},
+        "title": "ListFinishPayload",
+        "type": "object"
+      },
       "ListLine": {
-        "description": "An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,\n`x:<extra_id>` for a free-text item.\n\n`amounts` are the display amounts, shown joined (\"500 g + 2 Stk.\"); `has_unspecified` means\na part without an amount (\"+ some\", or \"some\" alone). A free-text line has no amounts and\nshows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and\nbelong in the collapsed \"Removed\" section. `category_id` groups the lines; they come\nsorted by category order and name (AGG-05).",
+        "description": "An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,\n`x:<extra_id>` for a free-text item.\n\n`amounts` are the display amounts, shown joined (\"500 g + 2 Stk.\"); `has_unspecified` means\na part without an amount (\"+ some\", or \"some\" alone). A free-text line has no amounts and\nshows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and\nbelong in the collapsed \"Removed\" section. `category_id` groups the lines; they come\nsorted by category order and name (AGG-05).\n\nCheck state (shopping and done lists; always unchecked in a draft): `checked` with the\ntime of the tap (`checked_at`) and who checked it (`checked_by`, SHOP-01). A checked line\nthat needs more since is reported unchecked, with `needs_more` saying why (LIST-12). `new`:\nthe line appeared after shopping started (LIST-12).",
         "properties": {
           "amount_text": {
             "anyOf": [
@@ -1691,6 +2028,32 @@
           "category_id": {
             "title": "Category Id",
             "type": "string"
+          },
+          "checked": {
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "checked_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "has_unspecified": {
             "title": "Has Unspecified",
@@ -1727,6 +2090,20 @@
             "title": "Name",
             "type": "string"
           },
+          "needs_more": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineNeedsMore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "new": {
+            "title": "New",
+            "type": "boolean"
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/LineSource"
@@ -1745,7 +2122,12 @@
           "has_unspecified",
           "amount_text",
           "hidden",
-          "sources"
+          "sources",
+          "checked",
+          "checked_at",
+          "checked_by",
+          "new",
+          "needs_more"
         ],
         "title": "ListLine",
         "type": "object"
@@ -1887,7 +2269,7 @@
         "type": "object"
       },
       "ListSummary": {
-        "description": "A list on the Lists home (UI-02); `line_count` counts the lines that are not hidden.",
+        "description": "A list on the Lists home (UI-02) or in the history (SHOP-05, by `finished_at`);\n`line_count` counts the lines that are not hidden.",
         "properties": {
           "can_edit": {
             "title": "Can Edit",
@@ -1897,6 +2279,18 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
           },
           "id": {
             "title": "Id",
@@ -1953,6 +2347,7 @@
           "status",
           "created_at",
           "updated_at",
+          "finished_at",
           "owner",
           "is_owner",
           "can_edit",
@@ -2876,6 +3271,112 @@
           }
         },
         "title": "NutrientValues",
+        "type": "object"
+      },
+      "Op": {
+        "description": "One action of shopping mode, by `type`, with its typed `payload`.",
+        "discriminator": {
+          "mapping": {
+            "extra.add": "#/components/schemas/ExtraAddOp",
+            "extra.delete": "#/components/schemas/ExtraDeleteOp",
+            "extra.update": "#/components/schemas/ExtraUpdateOp",
+            "line.check": "#/components/schemas/LineCheckOp",
+            "list.finish": "#/components/schemas/ListFinishOp"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LineCheckOp"
+          },
+          {
+            "$ref": "#/components/schemas/ExtraAddOp"
+          },
+          {
+            "$ref": "#/components/schemas/ExtraUpdateOp"
+          },
+          {
+            "$ref": "#/components/schemas/ExtraDeleteOp"
+          },
+          {
+            "$ref": "#/components/schemas/ListFinishOp"
+          }
+        ],
+        "title": "Op"
+      },
+      "OpResult": {
+        "description": "What became of an op: `applied` (also when it had no effect, e.g. an older check-off\nthan the stored one), `duplicate` (already processed; nothing happened again) or `rejected`\nwith an error `code` (the op may succeed later, e.g. after the list is reopened).",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "op_id": {
+            "title": "Op Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "duplicate",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "status",
+          "code"
+        ],
+        "title": "OpResult",
+        "type": "object"
+      },
+      "OpsRequest": {
+        "description": "1 to 100 ops, applied in this order in one transaction.",
+        "properties": {
+          "ops": {
+            "items": {
+              "$ref": "#/components/schemas/Op"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ops",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ops"
+        ],
+        "title": "OpsRequest",
+        "type": "object"
+      },
+      "OpsResponse": {
+        "description": "One result per op, in order, and the list afterwards.",
+        "properties": {
+          "list": {
+            "$ref": "#/components/schemas/ListDetail"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/OpResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "list"
+        ],
+        "title": "OpsResponse",
         "type": "object"
       },
       "PasswordChange": {
@@ -5321,6 +5822,47 @@
         ]
       }
     },
+    "/api/lists/history": {
+      "get": {
+        "description": "The done lists of your history, most recently finished first (at most 200): your own\nand those your partner shares with you (SHOP-05, CPL-02). Group them by the week of\n`finished_at` in your time zone.",
+        "operationId": "list_history",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListSummary"
+                  },
+                  "title": "Response List History",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List History",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/api/lists/{list_id}": {
       "delete": {
         "description": "Delete your list, whatever its state.",
@@ -5362,7 +5904,7 @@
         ]
       },
       "get": {
-        "description": "A list you can see (404 otherwise), with a weak `ETag` over the response as you see it;\nsend it back as `If-None-Match` to get a 304 without a body while nothing changed.",
+        "description": "A list you can see (404 otherwise), with a weak `ETag` over the response as you see it;\nsend it back as `If-None-Match` to get a 304 without a body while nothing changed. Polls\nare answered from a cache until something is written (PERF-02).",
         "operationId": "get_list",
         "parameters": [
           {
@@ -5428,7 +5970,7 @@
         ]
       },
       "patch": {
-        "description": "Rename a list you may edit; switch sharing with your partner on your own list.",
+        "description": "Rename a list you may edit; switch sharing with your partner on your own list. Not once\nit is done (409 `list.done`).",
         "operationId": "update_list",
         "parameters": [
           {
@@ -5534,7 +6076,7 @@
     },
     "/api/lists/{list_id}/extra-items": {
       "post": {
-        "description": "Add an extra item: linked to an ingredient or free text. With an `id` already on this\nlist nothing changes and the answer is 200 (safe to retry).",
+        "description": "Add an extra item: linked to an ingredient or free text. With an `id` already on this\nlist nothing changes and the answer is 200 (safe to retry). While shopping, the item is\n`new` on the list.",
         "operationId": "add_extra_item",
         "parameters": [
           {
@@ -5846,7 +6388,7 @@
     },
     "/api/lists/{list_id}/meals": {
       "post": {
-        "description": "Add a meal you can see; if it is already on the list, its servings rise instead.",
+        "description": "Add a meal you can see; if it is already on the list, its servings rise instead. In a\ndraft or while shopping (a meal added while shopping is frozen at once); 409 `list.done`\nonce the list is done, like every change of its meals and extra items.",
         "operationId": "add_list_meal",
         "parameters": [
           {
@@ -6019,6 +6561,208 @@
           }
         ],
         "summary": "Update List Meal",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/ops": {
+      "post": {
+        "description": "Apply the actions of shopping mode in order, in one transaction (plan § 5.8): check\noff, add, rename and delete free-text items, finish. Each op is applied once, however often\nit is sent (SYNC-05); the result of each and the list afterwards come back. The list must\nbe one you may edit (404, 403 otherwise).",
+        "operationId": "apply_list_ops",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply List Ops",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/reopen": {
+      "post": {
+        "description": "Back to shopping, for a done list you may edit (409 `list.not_done` otherwise;\nSHOP-06).",
+        "operationId": "reopen_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reopen List",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/shop-again": {
+      "post": {
+        "description": "A new draft of yours from a done list you can see (409 `list.not_done` otherwise): the\ncurrent versions of its meals with their servings, and its extra items, all unchecked;\nmeals that no longer exist or that you cannot see are left out and counted (SHOP-06).",
+        "operationId": "shop_again",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListCopyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Shop Again",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/start-shopping": {
+      "post": {
+        "description": "Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'\ningredients are frozen, so later changes of meals and ingredients no longer affect it\n(LIST-11), and lines can be checked off.",
+        "operationId": "start_shopping",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Shopping",
         "tags": [
           "lists"
         ]

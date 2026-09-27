@@ -14,22 +14,28 @@
   unshared draft without a name, with a meal he deleted afterwards (detached, "no longer
   available", through the real hook); carl's public "Grillabend" with one of his private
   meals, which others see as "Private meal (N servings)" (VIS-06).
+- M5b: shopping and history (`seed_lists`, through the rules of `services.shopping`): anna's
+  shared "Wocheneinkauf" being shopped, with lines checked off by anna and one by ben, a line
+  that needs more (ben's meal got more servings after the onions were checked) and a new
+  line (coffee, added while shopping); two done lists in different weeks for the history:
+  anna's shared "Salatabend" (one line not bought) and carl's "Vorrat".
 
-Later milestones add shopping and history. The content is fixed; only ids, the password, the
-invite code and the photo keys differ between runs.
+The content is fixed; only ids, the password, the invite code and the photo keys differ
+between runs; the times of shopping and finishing are relative to the time of seeding.
 """
 
 import io
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PIL import Image, ImageDraw
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passwords import hash_password
-from app.domain.lists import ingredient_key
+from app.db.ids import new_id
+from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
 from app.domain.units import Unit
@@ -53,7 +59,7 @@ from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
-from app.services import accounts, codes, hooks
+from app.services import accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
 from app.services.products import DATA_FIELDS
 
@@ -316,6 +322,27 @@ class DemoExtra:
 
 
 @dataclass(frozen=True)
+class DemoCheck:
+    """A line checked off by `user`: an ingredient's name or a free-text item's text."""
+
+    line: str
+    user: str
+
+
+@dataclass(frozen=True)
+class DemoShopping:
+    """Shopping mode for a demo list: started `started_hours_ago`, lines checked off one
+    minute apart, then meals with new servings (owner, meal, servings) and extra items added
+    while shopping; `finished_days_ago` makes it done (it was shopped that day)."""
+
+    started_hours_ago: int
+    checks: tuple[DemoCheck, ...] = ()
+    new_servings: tuple[tuple[str, str, int], ...] = ()
+    added: tuple[DemoExtra, ...] = ()
+    finished_days_ago: int | None = None
+
+
+@dataclass(frozen=True)
 class DemoList:
     owner: str
     name: str | None
@@ -325,6 +352,7 @@ class DemoList:
     extras: tuple[DemoExtra, ...] = ()
     # Ingredient lines removed for this list (LIST-07).
     hidden: tuple[str, ...] = ()
+    shopping: DemoShopping | None = None
 
 
 DEMO_LISTS: tuple[DemoList, ...] = (
@@ -355,6 +383,62 @@ DEMO_LISTS: tuple[DemoList, ...] = (
             DemoListMeal("anna", "Spaghetti Bolognese", 2),
         ),
         extras=(DemoExtra(text="Grillkohle", amount_text="2 Säcke"),),
+    ),
+    DemoList(
+        "anna", "Wocheneinkauf", reminder_seed=21, shared=True,
+        meals=(
+            DemoListMeal("anna", "Spaghetti Bolognese", 4),
+            DemoListMeal("ben", "Hähnchen-Reis-Pfanne", 2),
+        ),
+        extras=(
+            DemoExtra(ingredient="Milch", amount=1, unit=Unit.L),
+            DemoExtra(text="Küchenrolle"),
+        ),
+        shopping=DemoShopping(
+            started_hours_ago=1,
+            checks=(
+                DemoCheck("Spaghetti", "anna"),
+                DemoCheck("Milch", "anna"),
+                DemoCheck("Zwiebeln", "anna"),
+                DemoCheck("Hackfleisch", "ben"),
+            ),
+            # Two onions were checked; now three are needed ("+1 Stk.").
+            new_servings=(("ben", "Hähnchen-Reis-Pfanne", 4),),
+            added=(DemoExtra(ingredient="Kaffee", amount=500, unit=Unit.G),),
+        ),
+    ),
+    DemoList(
+        "anna", "Salatabend", reminder_seed=4, shared=True,
+        meals=(DemoListMeal("ben", "Tomatensalat", 4),),
+        extras=(DemoExtra(ingredient="Brot", amount=1, unit=Unit.PIECE),),
+        shopping=DemoShopping(
+            started_hours_ago=2,
+            checks=(
+                DemoCheck("Tomaten", "ben"),
+                DemoCheck("Zwiebeln", "ben"),
+                DemoCheck("Olivenöl", "anna"),
+                DemoCheck("Brot", "anna"),
+                DemoCheck("Salz", "anna"),
+            ),  # Pfeffer was not bought.
+            finished_days_ago=2,
+        ),
+    ),
+    DemoList(
+        "carl", "Vorrat", reminder_seed=58,
+        meals=(DemoListMeal("carl", "Tofu-Gemüse-Curry", 2),),
+        extras=(DemoExtra(text="Spülmittel", amount_text="1 Flasche"),),
+        shopping=DemoShopping(
+            started_hours_ago=1,
+            checks=(
+                DemoCheck("Tofu", "carl"),
+                DemoCheck("Karotten", "carl"),
+                DemoCheck("Zwiebeln", "carl"),
+                DemoCheck("Reis", "carl"),
+                DemoCheck("Olivenöl", "carl"),
+                DemoCheck("Spülmittel", "carl"),
+            ),
+            finished_days_ago=9,
+        ),
     ),
 )  # fmt: skip
 
@@ -596,6 +680,86 @@ async def _insert_deleted_meal(
     return meal
 
 
+def _extra_item(
+    shopping_list: ShoppingList,
+    extra: DemoExtra,
+    added_by: str,
+    ingredient_ids: Mapping[str, str],
+    categories: Mapping[str, str],
+    *,
+    now: datetime,
+) -> ListExtraItem:
+    return ListExtraItem(
+        list_id=shopping_list.id,
+        ingredient_id=(
+            None if extra.ingredient is None else ingredient_ids[normalize(extra.ingredient)]
+        ),
+        text=extra.text,
+        amount=extra.amount,
+        unit=None if extra.unit is None else extra.unit.value,
+        amount_text=extra.amount_text,
+        category_id=None if extra.text is None else categories["other"],
+        added_by=added_by,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def _shop(
+    session: AsyncSession,
+    shopping_list: ShoppingList,
+    demo: DemoShopping,
+    user_ids: Mapping[str, str],
+    ingredient_ids: Mapping[str, str],
+    *,
+    now: datetime,
+) -> None:
+    """Start shopping a demo list, check lines off, change it while shopping and finish it,
+    with the rules of shopping mode (plan § 5.7)."""
+    day = now - timedelta(days=demo.finished_days_ago or 0)
+    started = day - timedelta(hours=demo.started_hours_ago)
+    shopping_list.created_at = started - timedelta(days=1)
+    await shopping.start(session, shopping_list, now=started)
+    content = await aggregation.load(session, [shopping_list])
+    current = aggregation.current_lines(content, shopping_list)
+    extras = {row.text: row for row in content.extras.get(shopping_list.id, []) if row.text}
+    for minute, check in enumerate(demo.checks, start=1):
+        text_extra = extras.get(check.line)
+        line_key = (
+            ingredient_key(ingredient_ids[normalize(check.line)])
+            if text_extra is None
+            else text_key(text_extra.id)
+        )
+        await shopping.set_checked(
+            session,
+            shopping_list,
+            line_key,
+            checked=True,
+            snapshot=aggregation.check_snapshot(current[line_key], text_extra),
+            user_id=user_ids[check.user],
+            at=started + timedelta(minutes=minute),
+            op_id=new_id(),
+        )
+    list_meals = {
+        (row.meal_owner_id_snapshot, row.meal_name_snapshot): row
+        for row in content.meals.get(shopping_list.id, [])
+    }
+    for owner, meal, servings in demo.new_servings:
+        list_meals[(user_ids[owner], meal)].servings = servings
+    categories = {row.key: row.id for row in content.categories.values()}
+    added = [
+        _extra_item(
+            shopping_list, extra, shopping_list.owner_id, ingredient_ids, categories, now=day
+        )
+        for extra in demo.added
+    ]
+    session.add_all(added)
+    await shopping.snapshot_extras(session, added)
+    if demo.finished_days_ago is not None:
+        shopping.finish(shopping_list, at=day, now=day)
+    await session.flush()
+
+
 async def _insert_lists(
     session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime
 ) -> None:
@@ -642,22 +806,7 @@ async def _insert_lists(
             )
         for extra in demo.extras:
             session.add(
-                ListExtraItem(
-                    list_id=shopping_list.id,
-                    ingredient_id=(
-                        None
-                        if extra.ingredient is None
-                        else ingredient_ids[normalize(extra.ingredient)]
-                    ),
-                    text=extra.text,
-                    amount=extra.amount,
-                    unit=None if extra.unit is None else extra.unit.value,
-                    amount_text=extra.amount_text,
-                    category_id=None if extra.text is None else categories["other"],
-                    added_by=owner_id,
-                    created_at=now,
-                    updated_at=now,
-                )
+                _extra_item(shopping_list, extra, owner_id, ingredient_ids, categories, now=now)
             )
         session.add_all(
             ListLineState(
@@ -668,6 +817,9 @@ async def _insert_lists(
             )
             for name in demo.hidden
         )
+        await session.flush()
+        if demo.shopping is not None:
+            await _shop(session, shopping_list, demo.shopping, user_ids, ingredient_ids, now=now)
     await session.flush()
     await hooks.on_meal_deleted(session, deleted.id, now=now)
     await session.delete(deleted)

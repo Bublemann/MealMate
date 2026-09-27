@@ -6,6 +6,7 @@
 | Meal (M4) | owner · partner · everyone if *meals public* (VIS-02, CPL-04) | owner (VIS-04) |
 | Meal photo (M4) | as its meal; signed URLs only after the view check (VIS-05) | owner |
 | List (M5a) | owner · partner (CPL-04) · all if *lists public* | owner · partner if shared |
+| Shopping (M5b) | shop again: whoever sees the done list | start, ops, reopen: list editors |
 | Meal on a list (M5a) | details if its meal is visible, else "Private meal" (VIS-06) | n/a |
 | Ingredient, product (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
 | Reference data (M3) | everyone | add a cuisine: everyone; reorder categories: admin |
@@ -59,9 +60,16 @@ async def visible_owner_ids(
 ) -> set[str]:
     """Whose meals (or lists) the viewer may see: their own, their partner's (always, CPL-04),
     and those of users whose *meals public* (*lists public*) switch is on (VIS-02)."""
+    return await owners_visible_to(session, viewer_id, await partner_id(session, viewer_id), scope)
+
+
+async def owners_visible_to(
+    session: AsyncSession, viewer_id: str, viewer_partner_id: str | None, scope: VisibilityScope
+) -> set[str]:
+    """`visible_owner_ids` for a viewer whose partner is known already."""
     owners = {viewer_id}
-    if (partner := await partner_id(session, viewer_id)) is not None:
-        owners.add(partner)
+    if viewer_partner_id is not None:
+        owners.add(viewer_partner_id)
     owners.update(user.id for user in await users_repo.with_public(session, meals=scope == "meals"))
     return owners
 
@@ -91,10 +99,12 @@ async def require_meal_owner(session: AsyncSession, principal: Principal, meal_i
 
 @dataclass(frozen=True)
 class ListRights:
-    """What a viewer may do with a list they can see (CPL-02/03, VIS-03)."""
+    """What a viewer may do with a list they can see (CPL-02/03, VIS-03), and the viewer's
+    partner they were decided with (which meals on it the viewer may see follows from it)."""
 
     is_owner: bool
     can_edit: bool
+    viewer_partner_id: str | None
 
 
 def list_rights(
@@ -105,11 +115,15 @@ def list_rights(
     (CPL-02/04); everyone else only sees the lists of owners whose *lists public* switch is on
     (VIS-02/03)."""
     if shopping_list.owner_id == viewer_id:
-        return ListRights(is_owner=True, can_edit=True)
+        return ListRights(is_owner=True, can_edit=True, viewer_partner_id=viewer_partner_id)
     if shopping_list.owner_id == viewer_partner_id:
-        return ListRights(is_owner=False, can_edit=shopping_list.shared_with_partner)
+        return ListRights(
+            is_owner=False,
+            can_edit=shopping_list.shared_with_partner,
+            viewer_partner_id=viewer_partner_id,
+        )
     if owner_public:
-        return ListRights(is_owner=False, can_edit=False)
+        return ListRights(is_owner=False, can_edit=False, viewer_partner_id=viewer_partner_id)
     return None
 
 

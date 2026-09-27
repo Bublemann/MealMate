@@ -61,7 +61,7 @@ frontend/
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
-    │   ├── lists/          # Lists tab, list view (meals, extra items, lines, sources), export text
+    │   ├── lists/          # Lists tab, draft/shopping/done views, history, polling, export text
     │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
@@ -121,9 +121,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Service worker:** precaches the built app shell and serves navigations from it; it never
   caches or answers `/api` (`src/sw/navigation.ts`). The app also checks for a new version when it
   returns to the foreground; a new version waits until the user taps "Reload" in the update prompt.
-- **Queries always send their request** (`networkMode: 'always'` in `src/app/queryClient.ts`), also
-  when the browser reports being offline, so a screen shows "can't reach MealMate" instead of
-  waiting.
+- **Queries and changes always send their request** (`networkMode: 'always'` in
+  `src/app/queryClient.ts`), also when the browser reports being offline, so a screen shows "can't
+  reach MealMate" instead of waiting, and a change fails at once and is undone on screen (until the
+  outbox of M6).
 
 ## Sign-in and sessions
 
@@ -170,6 +171,17 @@ A list's "Share as text" (EXP-01/02) works the same way with one tap: `exportTex
 `features/lists/exportText.ts` builds the text synchronously from the list already on screen, in
 the user's language, from the display values the server rounded; the click handler passes it to
 `shareText` right away.
+
+## Live list updates
+
+A list on screen is loaded again every 5 s while the app is visible, and at once when it comes
+back to the foreground (SYNC-08; `useList` in `features/lists/api.ts`). Each load sends the ETag
+of the cached copy as `If-None-Match`; a 304 keeps the copy. Answers that could undo a change on
+screen are ignored: those arriving while a change of the list still waits for its answer, and those
+with a lower `version` than the cached list. Check-off, finish and free-text items while shopping
+(add, change, remove) go through `POST /lists/{id}/ops` (plan § 5.8), each with a UUIDv7 `op_id` and
+the time of the tap, made when the user acts (`stampOp()`) and kept when the same action is sent
+again, so it takes effect once.
 
 ## Tests
 
@@ -338,5 +350,27 @@ order.
 | `lineSources`            | `line-sources`             | Sources dialog of a line                    |
 | `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
 | `listReminder`           | `list-reminder`            | Reminder in the last row of a list          |
+| `continueShopping`       | `continue-shopping`        | "Continue shopping" card on Lists           |
+| `historyLink`            | `history-link`             | Entry to the history on Lists               |
+| `screenHistory`          | `screen-history`           | History screen (done lists)                 |
+| `historyWeek`            | `history-week`             | One week of done lists in the history       |
+| `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
+| `syncStatus`             | `sync-status`              | "Saved" / "Can't reach MealMate" line       |
+| `refreshList`            | `refresh-list`             | "Refresh" on the shopping view              |
+| `shoppingMeals`          | `shopping-meals`           | Collapsed meals section while shopping      |
+| `shoppingLines`          | `shopping-lines`           | Lines still to buy, by category             |
+| `shoppingLine`           | `shopping-line`            | One line with its check box                 |
+| `lineNew`                | `line-new`                 | "new" badge of a line                       |
+| `lineNeedsMore`          | `line-needs-more`          | "+300 g" / "changed" badges of a line       |
+| `inTheCart`              | `in-the-cart`              | Collapsed "In the cart (N)" section         |
+| `lineCheckedBy`          | `line-checked-by`          | Initial of who checked a line               |
+| `editShoppingItem`       | `edit-shopping-item`       | Edit button of an extra item while shopping |
+| `shoppingAnnouncement`   | `shopping-announcement`    | Live region: "Mehl is in the cart"          |
+| `finishShopping`         | `finish-shopping`          | "Finish shopping" button                    |
+| `finishDialog`           | `finish-dialog`            | Finish dialog (reminder, not checked)       |
+| `listDone`               | `list-done`                | "Bought on …" note of a done list           |
+| `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)     |
+| `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
+| `reopenList`             | `reopen-list`              | "Reopen" on a done list                     |
 
 <!-- test-ids:end -->

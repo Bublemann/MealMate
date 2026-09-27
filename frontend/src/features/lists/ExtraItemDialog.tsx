@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
@@ -17,10 +17,12 @@ import { fieldErrorMessages } from '@/i18n/errors';
 import { formatNumber, parseAmount } from '@/i18n/format';
 import { useLanguage } from '@/i18n';
 import {
+  stampOp,
   useRemoveExtraItem,
   useUpdateExtraItem,
   type ExtraItem,
   type ExtraItemUpdate,
+  type OpStamp,
 } from './api';
 import { AmountFields, FreeTextFields } from './ExtraItemFields';
 import { otherCategoryId } from './format';
@@ -31,11 +33,19 @@ interface ExtraItemDialogProps {
   item: ExtraItem | null;
   /** The item's name as the list shows it (the ingredient's name for a linked item). */
   name: string;
+  /** While shopping, free-text items change through the ops (LIST-12), keeping their category. */
+  shopping?: boolean;
   onClose: () => void;
 }
 
 /** Edit or remove an extra item (editors, LIST-06); its kind (linked or free text) stays. */
-export function ExtraItemDialog({ listId, item, name, onClose }: ExtraItemDialogProps) {
+export function ExtraItemDialog({
+  listId,
+  item,
+  name,
+  shopping = false,
+  onClose,
+}: ExtraItemDialogProps) {
   const { t } = useTranslation();
 
   return (
@@ -45,7 +55,14 @@ export function ExtraItemDialog({ listId, item, name, onClose }: ExtraItemDialog
           <DialogTitle>{t('lists.item.editTitle')}</DialogTitle>
         </DialogHeader>
         {item && (
-          <ItemForm key={item.id} listId={listId} item={item} name={name} onDone={onClose} />
+          <ItemForm
+            key={item.id}
+            listId={listId}
+            item={item}
+            name={name}
+            shopping={shopping}
+            onDone={onClose}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -56,10 +73,16 @@ interface ItemFormProps {
   listId: string;
   item: ExtraItem;
   name: string;
+  shopping: boolean;
   onDone: () => void;
 }
 
-function ItemForm({ listId, item, name, onDone }: ItemFormProps) {
+/**
+ * The fields of the item's kind. While shopping, a free-text item is saved and removed with ops,
+ * as offline (M6): each keeps its stamp while it is tried again, and saving gets a new one once the
+ * fields change.
+ */
+function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const categories = useCategories();
@@ -77,6 +100,14 @@ function ItemForm({ listId, item, name, onDone }: ItemFormProps) {
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, update.error);
   const busy = update.isPending || remove.isPending;
+  const byOps = shopping && !linked;
+  const saveStamp = useRef<OpStamp | null>(null);
+  const removeStamp = useRef<OpStamp | null>(null);
+
+  /** The fields changed: saving them is a new action. */
+  function edited() {
+    saveStamp.current = null;
+  }
 
   function body(): ExtraItemUpdate | null {
     if (linked) {
@@ -97,7 +128,23 @@ function ItemForm({ listId, item, name, onDone }: ItemFormProps) {
     if (busy) return;
     const changes = body();
     setAmountInvalid(changes === null);
-    if (changes) update.mutate({ extraId: item.id, body: changes }, { onSuccess: onDone });
+    if (!changes) return;
+    if (byOps) {
+      saveStamp.current ??= stampOp();
+      const op = { extra_id: item.id, text: text.trim(), amount_text: amountText.trim() || null };
+      update.mutate({ op, ...saveStamp.current }, { onSuccess: onDone });
+    } else {
+      update.mutate({ extraId: item.id, body: changes }, { onSuccess: onDone });
+    }
+  }
+
+  function onRemove() {
+    if (byOps) {
+      removeStamp.current ??= stampOp();
+      remove.mutate({ extraId: item.id, ...removeStamp.current }, { onSuccess: onDone });
+    } else {
+      remove.mutate(item.id, { onSuccess: onDone });
+    }
   }
 
   return (
@@ -128,17 +175,24 @@ function ItemForm({ listId, item, name, onDone }: ItemFormProps) {
                 required
                 maxLength={80}
                 value={text}
-                onChange={(event) => setText(event.target.value)}
+                onChange={(event) => {
+                  edited();
+                  setText(event.target.value);
+                }}
               />
             )}
           </FormField>
           <FreeTextFields
             amountText={amountText}
             categoryId={chosenCategory}
-            onAmountTextChange={setAmountText}
+            onAmountTextChange={(value) => {
+              edited();
+              setAmountText(value);
+            }}
             onCategoryChange={setCategoryId}
             amountTextError={serverFields.amount_text}
             categoryError={serverFields.category_id}
+            withoutCategory={byOps}
           />
         </>
       )}
@@ -150,7 +204,7 @@ function ItemForm({ listId, item, name, onDone }: ItemFormProps) {
           variant="outline"
           aria-label={t('lists.item.removeLabel', { name })}
           disabled={busy}
-          onClick={() => remove.mutate(item.id, { onSuccess: onDone })}
+          onClick={onRemove}
         >
           <Trash2 aria-hidden="true" />
           {t('lists.item.remove')}

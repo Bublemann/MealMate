@@ -16,6 +16,7 @@ from app.domain.aggregation import (
     SourceRef,
     aggregate,
     display,
+    grown_display,
     needs_more,
     text_changed,
     totals,
@@ -29,6 +30,8 @@ OIL = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=0.92)
 MILK = IngredientAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=1.03)
 APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=180, density_g_per_ml=None)
 APPLES_ML = IngredientAttrs(BaseUnit.ML, piece_weight_g=180, density_g_per_ml=1.0)
+HEAVY_APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=200, density_g_per_ml=None)
+HONEY = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=1.4)
 MEAL = SourceRef("meal", "m1")
 
 
@@ -385,6 +388,66 @@ def test_snapshot_json() -> None:
     assert CheckSnapshot.from_json({"count": 2, "base_total": None, "base_unit": "g"}) == (
         CheckSnapshot({COUNT: 2}, False)
     )
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "shown"),
+    [
+        # "+300 g", "+2 Stk.": the differences, rounded like any amount (AGG-04).
+        (totals([part(300, Unit.G)]), totals([part(0.6, Unit.KG)]), [(300, Unit.G)]),
+        (
+            totals([part(1, Unit.PIECE)]),
+            totals([part(2.2, Unit.PIECE)]),
+            [(2, Unit.PIECE)],
+        ),
+        (
+            totals([part(500, Unit.G), part(2, Unit.PIECE)]),
+            totals([part(1.5, Unit.KG), part(3, Unit.PIECE)]),
+            [(1, Unit.KG), (1, Unit.PIECE)],
+        ),
+        # Spoons stay spoons, pieces stay pieces, also when compared in the base unit.
+        (totals([part(1, Unit.TBSP, OIL)]), totals([part(2, Unit.TBSP, OIL)]), [(1, Unit.TBSP)]),
+        (apples((2, Unit.PIECE)), apples((3, Unit.PIECE)), [(1, Unit.PIECE)]),
+        (
+            totals([part(2, Unit.PIECE, ONION)]),
+            totals([part(3, Unit.PIECE, ONION)]),
+            [(1, Unit.PIECE)],
+        ),
+        (
+            totals([part(2, Unit.TBSP, HONEY)]),
+            totals([part(2, Unit.TBSP, HONEY), part(1, Unit.TSP, HONEY)]),
+            [(0.5, Unit.TBSP)],
+        ),
+        (
+            totals([part(1, Unit.TBSP, OIL), part(92, Unit.G, OIL)]),
+            totals([part(0.2, Unit.L, OIL)]),
+            [(85, Unit.ML)],
+        ),
+        # Of different kinds, the difference is in the base unit.
+        (apples((2, Unit.PIECE)), apples((2, Unit.PIECE), (100, Unit.G)), [(100, Unit.G)]),
+        (
+            apples((2, Unit.PIECE), (100, Unit.G)),
+            apples((3, Unit.PIECE)),
+            [(80, Unit.G)],
+        ),
+        # The same number of pieces, but heavier ones (frozen at another time): in grams.
+        (
+            apples((2, Unit.PIECE)),
+            totals([part(1, Unit.PIECE, APPLES), part(1, Unit.PIECE, HEAVY_APPLES)]),
+            [(20, Unit.G)],
+        ),
+        # Nothing grew.
+        (totals([part(300, Unit.G)]), totals([part(300, Unit.G), part(None, None)]), []),
+    ],
+)
+def test_grown_display(
+    before: LineTotals, after: LineTotals, shown: list[tuple[float, Unit]]
+) -> None:
+    snapshot = CheckSnapshot.of(before)
+    result = needs_more(snapshot, after)
+    assert grown_display(result, snapshot, after) == [
+        DisplayAmount(value, unit) for value, unit in shown
+    ]
 
 
 @pytest.mark.parametrize(

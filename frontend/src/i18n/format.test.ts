@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatList, formatNumber, parseAmount } from './format';
+import {
+  formatDate,
+  formatDateTime,
+  formatDayMonth,
+  formatList,
+  formatNumber,
+  parseAmount,
+} from './format';
 
 describe('formatNumber', () => {
   it('uses the decimal separator of the UI language', () => {
@@ -26,6 +33,19 @@ describe('formatDate', () => {
   it('accepts timestamps and ISO strings', () => {
     expect(formatDate(date.getTime(), 'de')).toBe('26.09.2026');
     expect(formatDate(date.toISOString(), 'en')).toBe('26/09/2026');
+  });
+});
+
+describe('formatDayMonth', () => {
+  it('formats day and month only, day first', () => {
+    const date = new Date(2026, 8, 26, 12, 0);
+    expect(formatDayMonth(date, 'de')).toBe('26.09.');
+    expect(formatDayMonth(date, 'en')).toBe('26/09');
+  });
+
+  it('uses the given time zone', () => {
+    expect(formatDayMonth('2026-09-21', 'de', 'UTC')).toBe('21.09.');
+    expect(formatDayMonth('2026-09-26T23:30:00Z', 'en', 'Europe/Berlin')).toBe('27/09');
   });
 });
 

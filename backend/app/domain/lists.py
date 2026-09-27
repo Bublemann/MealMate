@@ -18,6 +18,10 @@ LINE_KEY_MAX_LENGTH = 80
 REMINDER_SEED_MAX = 9_999
 # The meal picker shows this many "recently used" meals first (MEAL-09).
 RECENT_MEALS_LIMIT = 10
+# At most this many ops per request (plan § 5.8).
+OPS_MAX = 100
+# The history shows at most this many done lists (SHOP-05).
+HISTORY_LIMIT = 200
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
 ListStatus = Literal["draft", "shopping", "done"]

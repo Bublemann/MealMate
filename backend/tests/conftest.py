@@ -12,6 +12,7 @@ from app.core.config import DATABASE_FILENAME, Settings, get_settings
 from app.core.ratelimit import RateLimits
 from app.db.migrations import upgrade_database
 from app.main import create_app
+from app.services.list_cache import ListCache
 from tests.accounts import FakeClock
 from tests.support import TEST_SECRET_KEY, ClientFactory, SettingsFactory, serve
 
@@ -75,6 +76,7 @@ def clock(app: FastAPI) -> FakeClock:
     fake = FakeClock()
     app.state.clock = fake
     app.state.rate_limits = RateLimits(clock=fake.monotonic)
+    app.state.list_cache = ListCache(clock=fake.monotonic)
     return fake
 
 

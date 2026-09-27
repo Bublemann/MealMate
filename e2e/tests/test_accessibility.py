@@ -34,6 +34,14 @@ SCREENS = [
         "member",
         (TEST_IDS["listMeals"], TEST_IDS["listLines"], TEST_IDS["hiddenLines"]),
     ),
+    # A list being shopped with a checked, a new and a needs-more line: /lists/<id>.
+    Screen(
+        "/lists/:id/shopping",
+        "member",
+        (TEST_IDS["syncStatus"], TEST_IDS["shoppingLines"], TEST_IDS["inTheCart"]),
+    ),
+    # A done list of the member's is created in the test; its week is awaited there.
+    Screen("/lists/history", "member", (TEST_IDS["screenHistory"],)),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/ingredients", "member", (TEST_IDS["screenIngredients"],)),
     # An ingredient with a product is created in the test: /ingredients/<id>.
@@ -67,6 +75,7 @@ def test_no_serious_violations(
 ) -> None:
     page.emulate_media(color_scheme=color_scheme)
     path = screen.path
+    history_list = ""  # the name of the done list created for the history screen
     if screen.visitor != "anonymous":
         account: Account = request.getfixturevalue(screen.visitor)
         sign_in(page.context, account)
@@ -123,6 +132,39 @@ def test_no_serious_violations(
         api.add_extra_item(account, draft["id"], text=unique("A11y item"), amount_text="2")
         api.hide_line(account, draft["id"], f"i:{onions['id']}")
         path = f"/lists/{draft['id']}"
+    if path == "/lists/:id/shopping":
+        api = request.getfixturevalue("api")
+        flour = api.create_ingredient(account, unique("A11y flour"))
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            ingredients=[{"ingredient_id": flour["id"], "amount": 200, "unit": "g"}],
+        )
+        shopping = api.create_list(account, unique("A11y shopping"))
+        entry = api.add_list_meal(account, shopping["id"], meal["id"])["meals"][0]
+        candles = api.add_extra_item(account, shopping["id"], text=unique("A11y candles"))
+        api.start_shopping(account, shopping["id"])
+        api.check_line(account, shopping["id"], f"x:{candles['extra_items'][0]['id']}")
+        api.check_line(account, shopping["id"], f"i:{flour['id']}")
+        # More servings: the checked flour needs more (LIST-12); a new free-text line.
+        api.set_list_meal_servings(account, shopping["id"], entry["id"], 3)
+        api.add_extra_item(account, shopping["id"], text=unique("A11y item"), amount_text="2")
+        path = f"/lists/{shopping['id']}"
+    if path == "/lists/history":
+        api = request.getfixturevalue("api")
+        ingredient = api.create_ingredient(account, unique("A11y rice"))
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            ingredients=[{"ingredient_id": ingredient["id"], "amount": 150, "unit": "g"}],
+        )
+        done = api.create_list(account, unique("A11y done"))
+        api.add_list_meal(account, done["id"], meal["id"])
+        api.start_shopping(account, done["id"])
+        api.finish_list(account, done["id"])
+        history_list = done["name"]
 
     page.goto(path)
     if screen.path == "/join":
@@ -138,5 +180,18 @@ def test_no_serious_violations(
         removed = page.get_by_test_id(TEST_IDS["hiddenLines"])
         removed.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
         expect(removed.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
+    if screen.path == "/lists/history":
+        # The member's done lists of all runs are there, maybe in two weeks (the light and the
+        # dark run can straddle Sunday midnight): wait for the week with this run's list.
+        weeks = page.get_by_test_id(TEST_IDS["historyWeek"])
+        expect(weeks.filter(has_text=history_list).get_by_role("heading", level=2)).to_be_visible()
+    if screen.path == "/lists/:id/shopping":
+        # The new and the needs-more line, and the checked one in the opened cart.
+        lines = page.get_by_test_id(TEST_IDS["shoppingLines"])
+        expect(lines.get_by_test_id(TEST_IDS["lineNew"])).to_be_visible()
+        expect(lines.get_by_test_id(TEST_IDS["lineNeedsMore"])).to_be_visible()
+        cart = page.get_by_test_id(TEST_IDS["inTheCart"])
+        cart.get_by_text(text("lists.shop.cart", count="1"), exact=True).click()
+        expect(cart.get_by_test_id(TEST_IDS["lineCheckedBy"])).to_be_visible()
 
     assert serious_violations(page) == []

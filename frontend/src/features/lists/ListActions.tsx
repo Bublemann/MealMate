@@ -40,7 +40,8 @@ interface ListActionsProps {
 /**
  * What can be done with the list as a whole: export (everyone, EXP-01), rename (editors,
  * LIST-02), delete and the share switch (owner, LIST-13, CPL-02), or, on someone else's list,
- * "Copy to my lists" (VIS-03). The server says who may do what (`can_edit`, `is_owner`).
+ * "Copy to my lists" (VIS-03). The server says who may do what (`can_edit`, `is_owner`); a done
+ * list can't be renamed or shared differently any more (LIST-10).
  */
 export function ListActions({ list, categoryKeys }: ListActionsProps) {
   const { t } = useTranslation();
@@ -87,7 +88,7 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
           <Share aria-hidden="true" />
           {canShare() ? t('lists.detail.export') : t('lists.detail.exportCopy')}
         </Button>
-        {list.can_edit && <RenameDialog list={list} />}
+        {list.can_edit && list.status !== 'done' && <RenameDialog list={list} />}
         {list.is_owner && (
           <ConfirmDialog
             trigger={
@@ -117,7 +118,7 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
         {exported === 'copied' && t('lists.detail.exportCopied')}
         {exported === 'failed' && t('lists.detail.exportFailed')}
       </p>
-      {list.is_owner && <ShareSwitch list={list} />}
+      {list.is_owner && list.status !== 'done' && <ShareSwitch list={list} />}
       <ErrorAlert error={remove.error ?? copy.error} />
     </div>
   );

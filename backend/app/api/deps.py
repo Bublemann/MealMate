@@ -10,10 +10,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.config import Settings
 from app.core.errors import ApiError, ErrorCode, rate_limited
 from app.core.ratelimit import RateLimits
-from app.db.session import ReadSession
+from app.db.session import Database, ReadSession, get_database
 from app.media.store import MediaStore
 from app.services import access, auth
 from app.services.context import AuthConfig
+from app.services.list_cache import ListCache
 from app.services.principal import Principal
 
 UNKNOWN_CLIENT = "unknown"
@@ -39,6 +40,11 @@ def get_media(request: Request) -> MediaStore:
     return media
 
 
+def get_list_cache(request: Request) -> ListCache:
+    cache: ListCache = request.app.state.list_cache
+    return cache
+
+
 def get_now(request: Request) -> datetime:
     """The current time from the app's clock (`app.state.clock`), which tests can move."""
     clock: Callable[[], datetime] = request.app.state.clock
@@ -59,6 +65,8 @@ AppSettings = Annotated[Settings, Depends(get_app_settings)]
 Config = Annotated[AuthConfig, Depends(get_auth_config)]
 Limits = Annotated[RateLimits, Depends(get_rate_limits)]
 Media = Annotated[MediaStore, Depends(get_media)]
+Db = Annotated[Database, Depends(get_database)]
+ListResponses = Annotated[ListCache, Depends(get_list_cache)]
 Now = Annotated[datetime, Depends(get_now)]
 ClientIp = Annotated[str, Depends(get_client_ip)]
 UserAgent = Annotated[str | None, Depends(get_user_agent)]

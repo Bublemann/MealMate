@@ -17,6 +17,7 @@ from app.models.shopping_list import (
     ListLineState,
     ListMeal,
     ListMealIngredient,
+    ProcessedOp,
     ShoppingList,
 )
 from app.models.user import User
@@ -39,6 +40,7 @@ __all__ = [
     "MealIngredient",
     "MealTag",
     "OneTimeCode",
+    "ProcessedOp",
     "Product",
     "SessionToken",
     "ShoppingList",

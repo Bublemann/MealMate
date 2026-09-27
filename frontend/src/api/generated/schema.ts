@@ -661,6 +661,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lists/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List History
+         * @description The done lists of your history, most recently finished first (at most 200): your own
+         *     and those your partner shares with you (SHOP-05, CPL-02). Group them by the week of
+         *     `finished_at` in your time zone.
+         */
+        get: operations["list_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lists/{list_id}": {
         parameters: {
             query?: never;
@@ -671,7 +693,8 @@ export interface paths {
         /**
          * Get List
          * @description A list you can see (404 otherwise), with a weak `ETag` over the response as you see it;
-         *     send it back as `If-None-Match` to get a 304 without a body while nothing changed.
+         *     send it back as `If-None-Match` to get a 304 without a body while nothing changed. Polls
+         *     are answered from a cache until something is written (PERF-02).
          */
         get: operations["get_list"];
         put?: never;
@@ -685,7 +708,8 @@ export interface paths {
         head?: never;
         /**
          * Update List
-         * @description Rename a list you may edit; switch sharing with your partner on your own list.
+         * @description Rename a list you may edit; switch sharing with your partner on your own list. Not once
+         *     it is done (409 `list.done`).
          */
         patch: operations["update_list"];
         trace?: never;
@@ -723,7 +747,8 @@ export interface paths {
         /**
          * Add Extra Item
          * @description Add an extra item: linked to an ingredient or free text. With an `id` already on this
-         *     list nothing changes and the answer is 200 (safe to retry).
+         *     list nothing changes and the answer is 200 (safe to retry). While shopping, the item is
+         *     `new` on the list.
          */
         post: operations["add_extra_item"];
         delete?: never;
@@ -807,7 +832,9 @@ export interface paths {
         put?: never;
         /**
          * Add List Meal
-         * @description Add a meal you can see; if it is already on the list, its servings rise instead.
+         * @description Add a meal you can see; if it is already on the list, its servings rise instead. In a
+         *     draft or while shopping (a meal added while shopping is frozen at once); 409 `list.done`
+         *     once the list is done, like every change of its meals and extra items.
          */
         post: operations["add_list_meal"];
         delete?: never;
@@ -838,6 +865,94 @@ export interface paths {
          * @description Set the servings of a meal on the list.
          */
         patch: operations["update_list_meal"];
+        trace?: never;
+    };
+    "/api/lists/{list_id}/ops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply List Ops
+         * @description Apply the actions of shopping mode in order, in one transaction (plan § 5.8): check
+         *     off, add, rename and delete free-text items, finish. Each op is applied once, however often
+         *     it is sent (SYNC-05); the result of each and the list afterwards come back. The list must
+         *     be one you may edit (404, 403 otherwise).
+         */
+        post: operations["apply_list_ops"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen List
+         * @description Back to shopping, for a done list you may edit (409 `list.not_done` otherwise;
+         *     SHOP-06).
+         */
+        post: operations["reopen_list"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/shop-again": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shop Again
+         * @description A new draft of yours from a done list you can see (409 `list.not_done` otherwise): the
+         *     current versions of its meals with their servings, and its extra items, all unchecked;
+         *     meals that no longer exist or that you cannot see are left out and counted (SHOP-06).
+         */
+        post: operations["shop_again"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/start-shopping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Shopping
+         * @description Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'
+         *     ingredients are frozen, so later changes of meals and ingredients no longer affect it
+         *     (LIST-11), and lines can be checked off.
+         */
+        post: operations["start_shopping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me": {
@@ -1433,7 +1548,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "list.not_draft" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.base_unit_locked" | "ingredient.in_use" | "ingredient.merge_base_unit_mismatch" | "product.basis_mismatch" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -1446,6 +1561,66 @@ export interface components {
             params: {
                 [key: string]: string | number | boolean;
             };
+        };
+        /**
+         * ExtraAddOp
+         * @description In a draft or while shopping (`list.done` otherwise). An `extra_id` already on this list
+         *     is a `duplicate`; one on another list is rejected (`extra.id_taken`).
+         */
+        ExtraAddOp: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Op Id */
+            op_id: string;
+            payload: components["schemas"]["ExtraAddPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "extra.add";
+        };
+        /**
+         * ExtraAddPayload
+         * @description Add a free-text extra item with the client's id (UUID). `category_key` is a category's
+         *     `key`; left out or unknown: *Other*.
+         */
+        ExtraAddPayload: {
+            /** Amount Text */
+            amount_text?: string | null;
+            /** Category Key */
+            category_key?: string | null;
+            /** Extra Id */
+            extra_id: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * ExtraDeleteOp
+         * @description In a draft or while shopping; an item that is already deleted: applied without
+         *     effect.
+         */
+        ExtraDeleteOp: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Op Id */
+            op_id: string;
+            payload: components["schemas"]["ExtraDeletePayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "extra.delete";
+        };
+        /** ExtraDeletePayload */
+        ExtraDeletePayload: {
+            /** Extra Id */
+            extra_id: string;
         };
         /**
          * ExtraItem
@@ -1518,6 +1693,39 @@ export interface components {
             /** Text */
             text?: string | null;
             unit?: components["schemas"]["Unit"] | null;
+        };
+        /**
+         * ExtraUpdateOp
+         * @description In a draft or while shopping. A deleted item stays deleted (applied without effect,
+         *     delete wins); an unknown id is rejected (`common.not_found`), a linked item too
+         *     (`common.validation`).
+         */
+        ExtraUpdateOp: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Op Id */
+            op_id: string;
+            payload: components["schemas"]["ExtraUpdatePayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "extra.update";
+        };
+        /**
+         * ExtraUpdatePayload
+         * @description Change a free-text extra item's text, and its `amount_text` if sent (null clears it).
+         */
+        ExtraUpdatePayload: {
+            /** Amount Text */
+            amount_text?: string | null;
+            /** Extra Id */
+            extra_id: string;
+            /** Text */
+            text: string;
         };
         /**
          * FieldError
@@ -1734,6 +1942,57 @@ export interface components {
             username: string;
         };
         /**
+         * LineCheckOp
+         * @description Last write wins by `at` (clamped to at most 5 minutes after the server's time), ties by
+         *     the higher `op_id`; a losing op is `applied` without effect. While shopping; on a done list
+         *     only if `at` is not after `finished_at` (else `list.done`); not in a draft, nor with an `at`
+         *     more than 5 minutes before `shopping_started_at` (`list.not_shopping`). An `at` that is out
+         *     of range in UTC is rejected (`common.validation`).
+         */
+        LineCheckOp: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Op Id */
+            op_id: string;
+            payload: components["schemas"]["LineCheckPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "line.check";
+        };
+        /**
+         * LineCheckPayload
+         * @description Check a line off or uncheck it. `line_key` as in `ListLine.key`; a key in another
+         *     format is rejected (`common.validation`), a key without a line right now is accepted.
+         */
+        LineCheckPayload: {
+            /** Checked */
+            checked: boolean;
+            /** Line Key */
+            line_key: string;
+        };
+        /**
+         * LineNeedsMore
+         * @description Why a line that was checked off is unchecked again (LIST-12): `grown` holds the
+         *     differences, rounded for display ("+300 g", "+2 Stk."); `new_unit`: an amount in a unit
+         *     of another kind appeared; `new_unspecified`: a part without an amount appeared ("+ some");
+         *     `changed`: the free-text item's text or amount was edited.
+         */
+        LineNeedsMore: {
+            /** Changed */
+            changed: boolean;
+            /** Grown */
+            grown: components["schemas"]["DisplayAmountOut"][];
+            /** New Unit */
+            new_unit: boolean;
+            /** New Unspecified */
+            new_unspecified: boolean;
+        };
+        /**
          * LineSource
          * @description Where a line comes from (LIST-08): a meal on the list (`list_meal_id`, its `servings`;
          *     `meal_name` null and `private` if the viewer may not see it, VIS-06) or an extra item
@@ -1777,7 +2036,7 @@ export interface components {
         /**
          * ListCopyResult
          * @description The new draft, and how many meals were left out because they no longer exist or the
-         *     copier may not see them (VIS-03/06).
+         *     copier may not see them (VIS-03/06, SHOP-06).
          */
         ListCopyResult: {
             /** Left Out */
@@ -1798,7 +2057,8 @@ export interface components {
          *     editors change the name, meals, servings, extra items and hidden lines; only the owner
          *     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
          *     `<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is
-         *     `reminder.<reminder_seed % 10 + 1>` (LIST-14).
+         *     `reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`
+         *     are set once shopping started and while the list is done (LIST-10).
          */
         ListDetail: {
             /** Can Edit */
@@ -1810,6 +2070,8 @@ export interface components {
             created_at: string;
             /** Extra Items */
             extra_items: components["schemas"]["ExtraItem"][];
+            /** Finished At */
+            finished_at: string | null;
             /** Id */
             id: string;
             /** Is Owner */
@@ -1825,6 +2087,8 @@ export interface components {
             reminder_seed: number;
             /** Shared With Partner */
             shared_with_partner: boolean;
+            /** Shopping Started At */
+            shopping_started_at: string | null;
             /**
              * Status
              * @enum {string}
@@ -1839,6 +2103,32 @@ export interface components {
             version: number;
         };
         /**
+         * ListFinishOp
+         * @description Finish shopping (SHOP-04): the list is done, `finished_at` is `at` (but not before
+         *     `shopping_started_at` nor after the server's time). Already done: applied without effect;
+         *     a draft: `list.not_shopping`; an `at` out of range in UTC: `common.validation`.
+         */
+        ListFinishOp: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Op Id */
+            op_id: string;
+            payload: components["schemas"]["ListFinishPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "list.finish";
+        };
+        /**
+         * ListFinishPayload
+         * @description No fields.
+         */
+        ListFinishPayload: Record<string, never>;
+        /**
          * ListLine
          * @description An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,
          *     `x:<extra_id>` for a free-text item.
@@ -1848,6 +2138,11 @@ export interface components {
          *     shows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and
          *     belong in the collapsed "Removed" section. `category_id` groups the lines; they come
          *     sorted by category order and name (AGG-05).
+         *
+         *     Check state (shopping and done lists; always unchecked in a draft): `checked` with the
+         *     time of the tap (`checked_at`) and who checked it (`checked_by`, SHOP-01). A checked line
+         *     that needs more since is reported unchecked, with `needs_more` saying why (LIST-12). `new`:
+         *     the line appeared after shopping started (LIST-12).
          */
         ListLine: {
             /** Amount Text */
@@ -1856,6 +2151,11 @@ export interface components {
             amounts: components["schemas"]["DisplayAmountOut"][];
             /** Category Id */
             category_id: string;
+            /** Checked */
+            checked: boolean;
+            /** Checked At */
+            checked_at: string | null;
+            checked_by: components["schemas"]["UserRef"] | null;
             /** Has Unspecified */
             has_unspecified: boolean;
             /** Hidden */
@@ -1871,6 +2171,9 @@ export interface components {
             kind: "ingredient" | "text";
             /** Name */
             name: string;
+            needs_more: components["schemas"]["LineNeedsMore"] | null;
+            /** New */
+            new: boolean;
             /** Sources */
             sources: components["schemas"]["LineSource"][];
         };
@@ -1922,7 +2225,8 @@ export interface components {
         };
         /**
          * ListSummary
-         * @description A list on the Lists home (UI-02); `line_count` counts the lines that are not hidden.
+         * @description A list on the Lists home (UI-02) or in the history (SHOP-05, by `finished_at`);
+         *     `line_count` counts the lines that are not hidden.
          */
         ListSummary: {
             /** Can Edit */
@@ -1932,6 +2236,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Finished At */
+            finished_at: string | null;
             /** Id */
             id: string;
             /** Is Owner */
@@ -2265,6 +2571,44 @@ export interface components {
             protein?: number | null;
             /** Sugar */
             sugar?: number | null;
+        };
+        /**
+         * Op
+         * @description One action of shopping mode, by `type`, with its typed `payload`.
+         */
+        Op: components["schemas"]["LineCheckOp"] | components["schemas"]["ExtraAddOp"] | components["schemas"]["ExtraUpdateOp"] | components["schemas"]["ExtraDeleteOp"] | components["schemas"]["ListFinishOp"];
+        /**
+         * OpResult
+         * @description What became of an op: `applied` (also when it had no effect, e.g. an older check-off
+         *     than the stored one), `duplicate` (already processed; nothing happened again) or `rejected`
+         *     with an error `code` (the op may succeed later, e.g. after the list is reopened).
+         */
+        OpResult: {
+            code: components["schemas"]["ErrorCode"] | null;
+            /** Op Id */
+            op_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "applied" | "duplicate" | "rejected";
+        };
+        /**
+         * OpsRequest
+         * @description 1 to 100 ops, applied in this order in one transaction.
+         */
+        OpsRequest: {
+            /** Ops */
+            ops: components["schemas"]["Op"][];
+        };
+        /**
+         * OpsResponse
+         * @description One result per op, in order, and the list afterwards.
+         */
+        OpsResponse: {
+            list: components["schemas"]["ListDetail"];
+            /** Results */
+            results: components["schemas"]["OpResult"][];
         };
         /** PasswordChange */
         PasswordChange: {
@@ -3687,6 +4031,35 @@ export interface operations {
             };
         };
     };
+    list_history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSummary"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_list: {
         parameters: {
             query?: never;
@@ -4082,6 +4455,134 @@ export interface operations {
                 "application/json": components["schemas"]["ListMealUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_list_ops: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsResponse"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reopen_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    shop_again: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListCopyResult"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    start_shopping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

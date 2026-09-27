@@ -4,8 +4,10 @@ import { CATEGORIES } from '@/test/ingredients';
 import { LINES } from '@/test/lists';
 import {
   groupByCategory,
+  initialOf,
   lineAmount,
   listDisplayName,
+  needsMoreTexts,
   otherCategoryId,
   reminderText,
   sourceAmount,
@@ -116,5 +118,42 @@ describe('otherCategoryId', () => {
   it('finds the category Other', () => {
     expect(otherCategoryId(CATEGORIES)).toBe('cat-other');
     expect(otherCategoryId(undefined)).toBe('');
+  });
+});
+
+describe('needsMoreTexts (LIST-12)', () => {
+  const none = { grown: [], new_unit: false, new_unspecified: false, changed: false };
+
+  it('says how much more per grown amount, formatted per language', () => {
+    const grown = {
+      ...none,
+      grown: [
+        { value: 300, unit: 'g' as const },
+        { value: 1.5, unit: 'l' as const },
+        { value: 2, unit: 'piece' as const },
+      ],
+    };
+    expect(needsMoreTexts(en, 'en', grown)).toEqual(['+300 g', '+1.5 l', '+2 pcs']);
+    expect(needsMoreTexts(de, 'de', grown)).toEqual(['+300 g', '+1,5 l', '+2 Stk.']);
+  });
+
+  it('names a new unit, a part without an amount and a changed free-text item', () => {
+    expect(
+      needsMoreTexts(en, 'en', { ...none, new_unit: true, new_unspecified: true, changed: true }),
+    ).toEqual(['new unit', '+ some', 'changed']);
+    expect(needsMoreTexts(de, 'de', { ...none, new_unspecified: true, changed: true })).toEqual([
+      '+ etwas',
+      'geändert',
+    ]);
+    expect(needsMoreTexts(en, 'en', none)).toEqual([]);
+  });
+});
+
+describe('initialOf (SHOP-01)', () => {
+  it('is the first letter, upper case', () => {
+    expect(initialOf('ben')).toBe('B');
+    expect(initialOf(' Anna ')).toBe('A');
+    expect(initialOf('Özlem')).toBe('Ö');
+    expect(initialOf('')).toBe('?');
   });
 });

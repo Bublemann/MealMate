@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
 import { CATEGORIES } from '@/test/ingredients';
-import { DETACHED_MEAL, listDetail, listMeal, PRIVATE_MEAL } from '@/test/lists';
+import {
+  DETACHED_MEAL,
+  doneList,
+  listDetail,
+  listMeal,
+  PRIVATE_MEAL,
+  shoppingList,
+  UNCHECKED,
+} from '@/test/lists';
 import { exportText } from './exportText';
 
 const categoryKeys = new Map(CATEGORIES.map((category) => [category.id, category.key]));
@@ -80,6 +88,7 @@ describe('exportText', () => {
           amount_text: null,
           hidden: false,
           sources: [],
+          ...UNCHECKED,
         },
         {
           key: 'x:0190c0de-0000-7000-8000-0000000000c2',
@@ -92,6 +101,7 @@ describe('exportText', () => {
           amount_text: null,
           hidden: false,
           sources: [],
+          ...UNCHECKED,
         },
       ],
     });
@@ -131,5 +141,44 @@ describe('exportText', () => {
     const list = listDetail({ meals: [PRIVATE_MEAL, DETACHED_MEAL] });
 
     expect(exported('en', list)).toContain('3× Private meal\n2× Alter Eintopf');
+  });
+
+  it('lists what is still to buy first, then the checked lines marked ✓ (EXP-02)', () => {
+    const lines = [
+      'Fruit & vegetables',
+      '- Zwiebeln: 2 pcs',
+      '',
+      'Dairy & eggs',
+      '✓ Milch: 1.5 l',
+      '',
+      'Other',
+      '- Geburtstagskerzen: 2 Packungen',
+      '- Mehl: 850 g',
+      '✓ Salz',
+    ].join('\n');
+
+    expect(exported('en', shoppingList())).toContain(`4× Pfannkuchen\n3× Private meal`);
+    expect(exported('en', shoppingList())).toContain(lines);
+    expect(exported('de', shoppingList())).toContain('Milchprodukte & Eier\n✓ Milch: 1,5 l');
+  });
+
+  it('says which lines were not bought on a done list', () => {
+    expect(exported('en', doneList())).toContain(
+      [
+        'Fruit & vegetables',
+        '- (not bought) Zwiebeln: 2 pcs',
+        '',
+        'Dairy & eggs',
+        '✓ Milch: 1.5 l',
+        '',
+        'Other',
+        '- (not bought) Geburtstagskerzen: 2 Packungen',
+        '- (not bought) Mehl: 850 g',
+        '✓ Salz',
+      ].join('\n'),
+    );
+    expect(exported('de', doneList())).toContain(
+      'Sonstiges\n- (nicht gekauft) Geburtstagskerzen: 2 Packungen\n- (nicht gekauft) Mehl: 850 g\n✓ Salz',
+    );
   });
 });
