@@ -216,6 +216,7 @@
   "meals.field.photoChange": "Change photo",
   "meals.field.photoRemove": "Remove photo",
   "meals.field.photoPreview": "Photo of the meal",
+  "meals.field.photoChosen": "Photo chosen. The preview isn't available in this browser.",
   "meals.row.label": "Ingredient {{name}}",
   "meals.row.amount": "Amount",
   "meals.row.unit": "Unit",

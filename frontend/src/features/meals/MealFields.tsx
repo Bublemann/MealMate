@@ -20,7 +20,7 @@ import {
   parseServings,
   withTag,
 } from './form';
-import { PHOTO_ACCEPT } from './photo';
+import { fitWithin, PHOTO_ACCEPT } from './photo';
 
 interface ServingsFieldProps {
   value: string;
@@ -288,45 +288,82 @@ interface PhotoFieldProps {
   onChange: (change: PhotoChange) => void;
 }
 
+/** The long edge of the preview of a newly chosen photo. */
+const PREVIEW_EDGE = 800;
+
+const PREVIEW_CLASS = 'aspect-[4/3] w-full max-w-sm rounded-lg bg-muted object-cover';
+
+/**
+ * A newly chosen photo, drawn onto a canvas. The file never becomes a URL on the page, so
+ * nothing the user picked is ever put into an attribute the browser interprets (SEC-13). If the
+ * browser can't decode it here, a short note says a photo is chosen; the server checks and
+ * re-encodes it anyway.
+ */
+function ChosenPhotoPreview({ file, label }: { file: File; label: string }) {
+  const { t } = useTranslation();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // The file whose preview failed; a newly chosen file gets a new try.
+  const [failedFile, setFailedFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function draw() {
+      try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        try {
+          const canvas = canvasRef.current;
+          const context = canvas?.getContext('2d');
+          if (cancelled || !canvas || !context) return;
+          const size = fitWithin(bitmap.width, bitmap.height, PREVIEW_EDGE);
+          canvas.width = size.width;
+          canvas.height = size.height;
+          context.drawImage(bitmap, 0, 0, size.width, size.height);
+        } finally {
+          bitmap.close();
+        }
+      } catch {
+        if (!cancelled) setFailedFile(file);
+      }
+    }
+    void draw();
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
+
+  if (failedFile === file) {
+    return <p className="text-sm text-muted-foreground">{t('meals.field.photoChosen')}</p>;
+  }
+  return <canvas ref={canvasRef} role="img" aria-label={label} className={PREVIEW_CLASS} />;
+}
+
 /** One photo from the camera or the library, with a preview (MEAL-04). */
 export function PhotoField({ current, mealName, change, onChange }: PhotoFieldProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const hintId = useId();
-  const [preview, setPreview] = useState<string | null>(null);
-
-  // The preview URL belongs to this field: freed when it changes or the form closes.
-  useEffect(() => {
-    if (!preview) return;
-    return () => URL.revokeObjectURL(preview);
-  }, [preview]);
 
   function onFileChange(files: FileList | null) {
     const file = files?.[0];
     if (!file) return;
-    setPreview(URL.createObjectURL(file));
     onChange({ kind: 'new', file });
     // The same file can be chosen again after removing it.
     if (inputRef.current) inputRef.current.value = '';
   }
 
   function remove() {
-    setPreview(null);
     onChange(current ? { kind: 'remove' } : { kind: 'keep' });
   }
 
-  const shown = change.kind === 'new' ? preview : change.kind === 'keep' ? current : null;
+  const label = mealName.trim() || t('meals.field.photoPreview');
+  const currentShown = change.kind === 'keep' ? current : null;
+  const shown = change.kind === 'new' || currentShown !== null;
 
   return (
     <fieldset className="flex flex-col gap-3" aria-describedby={hintId}>
       <legend className="mb-2 text-sm leading-none font-medium">{t('meals.field.photo')}</legend>
-      {shown && (
-        <img
-          src={shown}
-          alt={mealName.trim() || t('meals.field.photoPreview')}
-          className="aspect-[4/3] w-full max-w-sm rounded-lg bg-muted object-cover"
-        />
-      )}
+      {change.kind === 'new' && <ChosenPhotoPreview file={change.file} label={label} />}
+      {currentShown && <img src={currentShown} alt={label} className={PREVIEW_CLASS} />}
       <input
         ref={inputRef}
         type="file"

@@ -216,6 +216,7 @@
   "meals.field.photoChange": "Foto ändern",
   "meals.field.photoRemove": "Foto entfernen",
   "meals.field.photoPreview": "Foto des Gerichts",
+  "meals.field.photoChosen": "Foto ausgewählt. Die Vorschau ist in diesem Browser nicht verfügbar.",
   "meals.row.label": "Zutat {{name}}",
   "meals.row.amount": "Menge",
   "meals.row.unit": "Einheit",

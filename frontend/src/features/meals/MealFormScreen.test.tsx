@@ -28,10 +28,19 @@ async function bodyOf(fetchMock: ReturnType<typeof mockApi>, route: string, inde
   return (await request.json()) as unknown;
 }
 
+/** Draw calls of the photo preview canvas. */
+let drawImage: ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
-  // jsdom has no object URLs (photo preview).
-  URL.createObjectURL = vi.fn(() => 'blob:preview');
-  URL.revokeObjectURL = vi.fn();
+  // jsdom can't decode images or draw on a canvas: the photo preview gets fakes of both.
+  drawImage = vi.fn();
+  vi.stubGlobal(
+    'createImageBitmap',
+    vi.fn().mockResolvedValue({ width: 1600, height: 1200, close: vi.fn() }),
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+    () => ({ drawImage }) as unknown as CanvasRenderingContext2D,
+  );
 });
 
 /** A photo the (stubbed) FormData can send; see nodeFormClasses. */
@@ -110,10 +119,11 @@ describe('MealFormScreen (create)', () => {
     await user.type(within(form).getByLabelText('Source link'), 'https://example.org/p');
     const photo = await photoFile('dish.png', 'image/png');
     await user.upload(within(form).getByTestId(testIds.mealPhotoInput), photo);
-    expect(within(form).getByRole('img', { name: 'Pfannkuchen' })).toHaveAttribute(
-      'src',
-      'blob:preview',
-    );
+    // The preview is drawn onto a canvas; the file never becomes a URL on the page.
+    const preview = within(form).getByRole('img', { name: 'Pfannkuchen' });
+    expect(preview.tagName).toBe('CANVAS');
+    expect(preview).not.toHaveAttribute('src');
+    await waitFor(() => expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 800, 600));
 
     await user.click(within(form).getByRole('button', { name: 'Create meal' }));
 
@@ -310,6 +320,23 @@ describe('MealFormScreen (create)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       "The meal is saved, but the photo wasn't: The photo is too big (at most 10 MB).",
     );
+  });
+
+  it('says a photo is chosen when the browser cannot show a preview', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new DOMException('bad')));
+    const { user } = renderForm('/meals/new', {});
+    const form = await screen.findByTestId(testIds.mealForm);
+
+    await user.upload(
+      within(form).getByTestId(testIds.mealPhotoInput),
+      await photoFile('odd.webp', 'image/webp'),
+    );
+
+    expect(
+      await within(form).findByText("Photo chosen. The preview isn't available in this browser."),
+    ).toBeInTheDocument();
+    expect(within(form).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(form).getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
   });
 });
 
