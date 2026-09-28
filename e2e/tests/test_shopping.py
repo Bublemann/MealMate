@@ -2,7 +2,8 @@
 
 LIST-11/12, SHOP-01/04/05/06, SYNC-06/08 (plan § 12, M5b). The partners use two browser contexts,
 like two phones; changes of the other one arrive through polling (every 5 s), never a reload.
-All tests of a run share one database, so names get a unique tag.
+All tests of a run share one database, so names get a unique tag. Two brands of the same thing
+are separate lines (owner decision 2026-09-28).
 """
 
 import re
@@ -13,7 +14,7 @@ from zoneinfo import ZoneInfo
 from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, text
+from support.frontend import TEST_IDS, ingredient_label, text
 
 # One polling interval (5 s) plus the time a request and a render take.
 POLLED = 10_000
@@ -210,3 +211,52 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     expect(
         page.get_by_test_id(TEST_IDS["continueShopping"]).filter(has_text=done["name"])
     ).to_be_visible()
+
+
+def test_two_brands_are_two_lines(
+    page: Page, api: Api, invite_user: Callable[..., Account]
+) -> None:
+    """Two brands of the same thing are different ingredients: separate lines, named with their
+    brand, on the draft and while shopping (owner decision 2026-09-28)."""
+    tag = unique("e2e")
+    anna = invite_user(unique("anna"), unique("Anna"))
+    name = f"Milch {tag}"
+    brands = ("Weidehof", "Alpenhof")
+    milks = [
+        api.create_ingredient(anna, name, brand=brand, category_key="dairy_eggs", base_unit="ml")
+        for brand in brands
+    ]
+    meals = [
+        api.create_meal(
+            anna,
+            f"{meal} {tag}",
+            servings=2,
+            ingredients=[{"ingredient_id": milk["id"], "amount": amount, "unit": "ml"}],
+        )
+        for meal, milk, amount in (("Pfannkuchen", milks[0], 300), ("Grießbrei", milks[1], 500))
+    ]
+    draft = api.create_list(anna, f"Einkauf {tag}")
+    for meal in meals:
+        api.add_list_meal(anna, draft["id"], meal["id"])
+    labels = [ingredient_label(name, brand) for brand in brands]
+
+    sign_in(page.context, anna)
+    page.goto(f"/lists/{draft['id']}")
+    lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
+    expect(lines.filter(has_text=name)).to_have_count(2)
+    for label, amount in zip(labels, ("300 ml", "500 ml"), strict=True):
+        expect(lines.filter(has_text=label)).to_contain_text(amount)
+
+    # While shopping each brand is checked off on its own.
+    page.get_by_test_id(TEST_IDS["startShopping"]).click()
+    weidehof, alpenhof = labels
+    shopping_line(page, weidehof).get_by_role(
+        "checkbox", name=text("lists.shop.check", name=weidehof)
+    ).click()
+    open_cart(page, 1)
+    expect(cart_line(page, weidehof)).to_have_count(1)
+    expect(
+        shopping_line(page, alpenhof).get_by_role(
+            "checkbox", name=text("lists.shop.check", name=alpenhof)
+        )
+    ).not_to_be_checked()

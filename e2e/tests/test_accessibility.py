@@ -7,7 +7,15 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from support.a11y import serious_violations
-from support.api import CODE_REQUESTS, Account, Api, code_from_link, sign_in, unique
+from support.api import (
+    CODE_REQUESTS,
+    Account,
+    Api,
+    code_from_link,
+    new_barcode,
+    sign_in,
+    unique,
+)
 from support.frontend import TEST_IDS, text
 from support.images import png
 
@@ -50,15 +58,15 @@ SCREENS = [
     Screen("/lists/history", "member", (TEST_IDS["screenHistory"],)),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/ingredients", "member", (TEST_IDS["screenIngredients"],)),
-    # An ingredient with a product is created in the test: /ingredients/<id>.
-    Screen(
-        "/ingredients/:id",
-        "member",
-        (TEST_IDS["ingredientNutrition"], TEST_IDS["productList"]),
-    ),
+    # An ingredient with brand, barcode and package is created in the test: /ingredients/<id>.
+    Screen("/ingredients/:id", "member", (TEST_IDS["ingredientNutrition"],)),
+    # The ingredient form of "New ingredient", with "More" (the package) opened in the test.
+    Screen("/ingredients/new", "member", (TEST_IDS["ingredientForm"],)),
     Screen("/meals/new", "member", (TEST_IDS["mealForm"], TEST_IDS["ingredientPicker"])),
     # No camera in CI (denied or missing): the scanner shows its manual input (BAR-01).
     Screen("/scan", "member", (TEST_IDS["screenScan"], TEST_IDS["barcodeInput"])),
+    # A barcode nobody knows is typed in the test: the notice and the form with the barcode.
+    Screen("/scan/new", "member", (TEST_IDS["scanNotice"], TEST_IDS["ingredientForm"])),
     # A meal with a photo and ingredient rows is created in the test: /meals/<id>.
     Screen(
         "/meals/:id",
@@ -100,12 +108,22 @@ def test_no_serious_violations(
         path = f"/join#{code_from_link(link)}"
     if path == "/ingredients/:id":
         api = request.getfixturevalue("api")
-        ingredient = api.create_ingredient(account, unique("A11y"), manual={"kcal": 52})
-        api.create_product(account, ingredient["id"], name=unique("Product"))
+        ingredient = api.create_ingredient(
+            account,
+            unique("A11y"),
+            brand=unique("Brand"),
+            barcode=new_barcode(),
+            quantity_text="1 kg",
+            nutrients={"kcal": 52},
+        )
         path = f"/ingredients/{ingredient['id']}"
+    if path == "/ingredients/new":
+        path = "/ingredients"
+    if path == "/scan/new":
+        path = "/scan"
     if path == "/meals/:id":
         api = request.getfixturevalue("api")
-        ingredient = api.create_ingredient(account, unique("A11y"), manual={"kcal": 52})
+        ingredient = api.create_ingredient(account, unique("A11y"), nutrients={"kcal": 52})
         meal = api.create_meal(
             account,
             unique("A11y meal"),
@@ -204,6 +222,16 @@ def test_no_serious_violations(
     if screen.path == "/join":
         # The form appears once the code has been checked.
         expect(page.get_by_role("button", name=text("auth.join.submit"))).to_be_visible()
+    if screen.path == "/ingredients/new":
+        page.get_by_test_id(TEST_IDS["newIngredient"]).or_(
+            page.get_by_role("button", name=text("ingredients.empty.action"))
+        ).click()
+        form = page.get_by_test_id(TEST_IDS["ingredientForm"])
+        form.get_by_text(text("ingredients.form.more"), exact=True).click()
+        expect(form.get_by_label(text("ingredients.field.packUnit"), exact=True)).to_be_visible()
+    if screen.path == "/scan/new":
+        page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(new_barcode())
+        page.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
     if screen.path == "/me/admin/invites":
         # Also check the created link with its share button.
         page.get_by_test_id(TEST_IDS["createInviteButton"]).click()
