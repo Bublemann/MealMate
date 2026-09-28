@@ -100,7 +100,7 @@ export function ScanFlow({ onIngredient }: ScanFlowProps) {
   if (isOffSlow(lookup.error)) {
     return (
       <div className="flex flex-col gap-3">
-        <Notice text={t('scanner.offUnavailable')} />
+        <Notice text={t('scanner.offUnavailable', { barcode })} />
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => lookUp(barcode)}>
             <RotateCcw aria-hidden="true" />
@@ -113,6 +113,7 @@ export function ScanFlow({ onIngredient }: ScanFlowProps) {
           >
             {t('scanner.enterManually')}
           </Button>
+          <ScanAgainButton onClick={restart} />
         </div>
       </div>
     );
@@ -147,6 +148,22 @@ function unavailableLookup(barcode: string): ProductLookup {
   };
 }
 
+/**
+ * Back to the scanner, next to a notice that names the barcode: a misread code shows there, and
+ * the next scan is one tap away.
+ */
+function ScanAgainButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
+
+  return (
+    <Button variant="outline" data-testid={testIds.scanAgain} onClick={onClick}>
+      <ScanBarcode aria-hidden="true" />
+      {t('scanner.scanAgain')}
+    </Button>
+  );
+}
+
+/** "Not found" or "Open Food Facts is slow", with the barcode looked up. */
 function Notice({ text }: { text: string }) {
   return (
     <Alert data-testid={testIds.scanNotice}>
@@ -196,14 +213,19 @@ function WhichIngredient({
       ) : (
         <div className="flex flex-col gap-3">
           <Notice
-            text={t(lookup.off_unavailable ? 'scanner.offUnavailable' : 'scanner.notFound')}
+            text={t(lookup.off_unavailable ? 'scanner.offUnavailable' : 'scanner.notFound', {
+              barcode: lookup.barcode,
+            })}
           />
-          {lookup.off_unavailable && (
-            <Button variant="outline" className="self-start" disabled={retrying} onClick={onRetry}>
-              <RotateCcw aria-hidden="true" />
-              {t('common.retry')}
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {lookup.off_unavailable && (
+              <Button variant="outline" disabled={retrying} onClick={onRetry}>
+                <RotateCcw aria-hidden="true" />
+                {t('common.retry')}
+              </Button>
+            )}
+            <ScanAgainButton onClick={onRestart} />
+          </div>
           <ErrorAlert error={retryError} />
         </div>
       )}
@@ -259,10 +281,13 @@ function WhichIngredient({
           {t('scanner.which.create')}
         </Button>
       </section>
-      <Button variant="ghost" className="self-start" onClick={onRestart}>
-        <ScanBarcode aria-hidden="true" />
-        {t('scanner.scanAnother')}
-      </Button>
+      {/* Without a proposal, the notice at the top has "Scan again" already. */}
+      {proposal && (
+        <Button variant="ghost" className="self-start" onClick={onRestart}>
+          <ScanBarcode aria-hidden="true" />
+          {t('scanner.scanAnother')}
+        </Button>
+      )}
       <IngredientFormDialog
         open={creating}
         onOpenChange={setCreating}

@@ -88,6 +88,8 @@ def unlimited_rate() -> SlidingWindow:
 
 
 def client(rate_limit: SlidingWindow | None = None, **options: Any) -> OffClient:
+    """A client for the mocked OFF_URL; a lookup's second try follows without a pause."""
+    options = {"retry_pause": 0.0} | options
     return OffClient(OFF_URL, USER_AGENT, rate_limit=rate_limit or unlimited_rate(), **options)
 
 

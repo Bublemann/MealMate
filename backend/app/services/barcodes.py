@@ -62,8 +62,9 @@ async def lookup(
     session: AsyncSession, off: OffClient, principal: Principal, text: str
 ) -> ProductLookup:
     """Look a barcode up (422 `invalid_format` if it is not a valid EAN/UPC code): a product
-    of ours, else Open Food Facts' proposal with suggestions, else nothing. While too many
-    lookups wait for Open Food Facts: 503 `off.busy`."""
+    of ours, else Open Food Facts' proposal with suggestions, else nothing (after a transient
+    failure, Open Food Facts gets a second try before that, see `OffClient.fetch`). While too
+    many lookups wait for Open Food Facts: 503 `off.busy`."""
     barcode = normalize_barcode(text)
     if barcode is None:
         raise validation_error([FieldProblem(("query", "barcode"), FieldErrorCode.INVALID_FORMAT)])
@@ -85,7 +86,8 @@ async def lookup(
         user = await users_repo.get(session, principal.user_id)
         language = user.language if user is not None else DEFAULT_LANGUAGE
 
-    response = await off.fetch(barcode, max_wait=LOOKUP_MAX_WAIT_SECONDS)
+    # The user waits for this answer: a transient failure gets a second try, "not found" none.
+    response = await off.fetch(barcode, max_wait=LOOKUP_MAX_WAIT_SECONDS, retry=True)
     if response.status == "busy":
         raise ApiError(ErrorCode.OFF_BUSY, status_code=503)
     if response.product is None:

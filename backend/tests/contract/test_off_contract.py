@@ -7,6 +7,8 @@ the recorded fixtures assume. A failure means the fixtures or the client need a 
 block anything.
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
 
 from app.core.config import REPO_URL
@@ -20,17 +22,19 @@ pytestmark = pytest.mark.off_contract
 KNOWN_BARCODE = "3017620422003"
 
 
-def client() -> OffClient:
-    return OffClient(
+@pytest.fixture
+async def off() -> AsyncIterator[OffClient]:
+    """The real client, closed after the test (it keeps a connection pool)."""
+    client = OffClient(
         "https://world.openfoodfacts.org",
         f"MealMate/contract-check ({REPO_URL})",
         rate_limit=SlidingWindow(1),  # one request per test
     )
+    yield client
+    await client.aclose()
 
 
-async def test_a_known_product_has_the_expected_shape() -> None:
-    off = client()
-
+async def test_a_known_product_has_the_expected_shape(off: OffClient) -> None:
     response = await off.fetch(KNOWN_BARCODE, max_wait=None)
 
     assert response.status == "found"
@@ -47,9 +51,7 @@ async def test_a_known_product_has_the_expected_shape() -> None:
     assert product.last_modified_at is not None
 
 
-async def test_an_unknown_product_is_not_found() -> None:
-    off = client()
-
+async def test_an_unknown_product_is_not_found(off: OffClient) -> None:
     # A valid EAN-13 with a GS1 prefix that is reserved (140-199), so no product has it.
     response = await off.fetch("1400000000007", max_wait=None)
 

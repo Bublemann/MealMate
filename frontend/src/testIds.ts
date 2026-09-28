@@ -159,6 +159,7 @@ export const testIds = {
   scanSuggestions: 'scan-suggestions',
   scanCreateIngredient: 'scan-create-ingredient',
   scanEnterManually: 'scan-enter-manually',
+  scanAgain: 'scan-again',
   offAttribution: 'off-attribution',
   pendingUpdate: 'pending-update',
   applyPendingUpdate: 'apply-pending-update',

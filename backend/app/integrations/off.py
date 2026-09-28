@@ -16,10 +16,29 @@ The client never raises to its caller. Every request:
 - gives up after 10 s in total, and on a body over 1 MiB, read as a stream and abandoned. A
   compressed body is inflated step by step, never more than the rest of the 1 MiB at a time,
   so a small "decompression bomb" cannot make it hold more;
-- answers `found` (with the validated product), `not_found` (HTTP 404, OFF's
-  `product_not_found`, or a redirect to another product type such as cosmetics), or
-  `unavailable` (network error, timeout, any other status, a body too large or not the expected
-  JSON).
+- answers `found` (with the validated product), `not_found` (OFF's `product_not_found` body,
+  with HTTP 404 or 200, or a redirect), or `unavailable` (network error, timeout, a body too
+  large or not the expected JSON, any other status). OFF redirects a product of another product
+  type, such as cosmetics, to that database's site: no food product has the barcode, so a
+  redirect is `not_found` (logged with the host it points to, never followed). A 404 without
+  OFF's body comes from something in front of OFF (a proxy, a CDN's error page): it says
+  nothing about the product, so it is `unavailable`;
+- is logged at INFO with its barcode, outcome and HTTP status (no personal data).
+
+The client keeps one connection pool (`httpx.AsyncClient`), opened on first use, so that
+consecutive lookups reuse the connection instead of paying for a new TLS handshake each time.
+Whoever owns the client closes it (`aclose`): the app's lifespan and the nightly job.
+
+A lookup the user waits for (`retry`) gets one more try when the first failed for a transient
+reason: a network error, a timeout, a 5xx, or a 404 without OFF's JSON body. These may come
+out differently a moment later, and a user who scans a product then gets its data instead of a
+form to fill in. Everything else is final: OFF's `product_not_found` is deterministic, a
+redirect points elsewhere every time, and a 429 or another 4xx would only be repeated. Retrying
+those would cost a place under the rate limit per scan of an unknown product, and a few such
+scans would leave the next lookup `busy`. The retry waits `RETRY_PAUSE_SECONDS`, takes its own
+place under the rate limit, but only one it gets within the time the lookup was given anyway
+(`max_wait` plus the timeout); otherwise the first answer stands. Background and nightly
+refreshes never retry: they try again later anyway.
 
 Everything in a response is untrusted (BAR-10, SEC-13): `OffProduct` keeps only what it can
 validate. Texts lose control and bidi characters and are cut to the product field lengths,
@@ -31,10 +50,12 @@ import json
 import logging
 import math
 import zlib
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated, Any, Literal, get_args
+from urllib.parse import urlsplit
 
 import anyio
 import httpx
@@ -82,6 +103,11 @@ MAX_RESPONSE_BYTES = 1024 * 1024
 # How long a lookup waits for its turn under the rate limit (BAR-08): with the timeout, a
 # lookup is answered within about 15 s.
 LOOKUP_MAX_WAIT_SECONDS = 5.0
+# The pause before a lookup's second try: long enough for a hiccup to pass, short enough not to
+# be noticed next to the lookup itself.
+RETRY_PAUSE_SECONDS = 0.75
+# The second try is only made when at least this much of the lookup's time is left for it.
+RETRY_MIN_SECONDS = 2.0
 # Content encodings inflated with zlib (gzip or zlib headers, detected by `_ZLIB_AUTO_WBITS`).
 _ZLIB_ENCODINGS = frozenset({"gzip", "x-gzip", "deflate"})
 _ZLIB_AUTO_WBITS = zlib.MAX_WBITS | 32
@@ -271,13 +297,35 @@ class _TooLargeError(Exception):
     pass
 
 
+@dataclass
+class _Exchange:
+    """What one request got as far as it went, for the log."""
+
+    http_status: int | None = None
+
+
+@dataclass(frozen=True)
+class _Answer:
+    """One request's answer, and whether it is `transient`: a failure that says nothing about
+    the product (the network, a timeout, OFF's servers or something in front of them) and may
+    come out differently a moment later. Only a transient answer is worth a lookup's second
+    try (see the module docstring)."""
+
+    response: OffResponse
+    transient: bool = False
+
+
+_NOT_FOUND_ANSWER = _Answer(NOT_FOUND)
+
+
 def user_agent(settings: Settings) -> str:
     """`MealMate/<version> (<contact>)`, as OFF asks of API clients (BAR-08)."""
     return f"MealMate/{settings.version} ({settings.off_user_agent_contact})"
 
 
 class OffClient:
-    """Reads products from Open Food Facts at `base_url`, under the `rate_limit`."""
+    """Reads products from Open Food Facts at `base_url`, under the `rate_limit`. Owns a
+    connection pool once used: close it with `aclose`."""
 
     def __init__(
         self,
@@ -287,12 +335,15 @@ class OffClient:
         rate_limit: SlidingWindow,
         timeout: float = TIMEOUT_SECONDS,
         max_bytes: int = MAX_RESPONSE_BYTES,
+        retry_pause: float = RETRY_PAUSE_SECONDS,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
         self.rate_limit = rate_limit
         self.timeout = timeout
         self.max_bytes = max_bytes
+        self.retry_pause = retry_pause
+        self._client: httpx.AsyncClient | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings, *, job: bool = False) -> OffClient:
@@ -303,51 +354,112 @@ class OffClient:
             settings.off_base_url, user_agent(settings), rate_limit=SlidingWindow(per_minute)
         )
 
-    async def fetch(self, barcode: str, *, max_wait: float | None) -> OffResponse:
-        """The product with this (canonical) barcode. Waits at most `max_wait` seconds for its
-        turn under the rate limit (None: as long as needed), else answers `busy`."""
-        if not await self.rate_limit.acquire(max_wait):
-            logger.info("open food facts: busy, lookup refused")
-            return BUSY
-        try:
-            with anyio.fail_after(self.timeout):
-                return await self._get(barcode)
-        except TimeoutError:
-            reason = "timeout"
-        except httpx.HTTPError as exc:
-            reason = type(exc).__name__
-        except _TooLargeError:
-            reason = "response too large"
-        except Exception:
-            logger.exception("open food facts: unexpected error")
-            return UNAVAILABLE
-        logger.warning("open food facts unavailable", extra={"reason": reason})
-        return UNAVAILABLE
+    @property
+    def is_open(self) -> bool:
+        """Whether the connection pool is open (it opens on the first request)."""
+        return self._client is not None
 
-    async def _get(self, barcode: str) -> OffResponse:
-        async with (
-            httpx.AsyncClient(
+    def _http(self) -> httpx.AsyncClient:
+        """The connection pool, opened on first use: inside the event loop that uses it, which
+        for the app is only running once the lifespan has started. Never follows redirects."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=httpx.Timeout(self.timeout),
+                follow_redirects=False,
                 headers={
                     "User-Agent": self.user_agent,
                     "Accept": "application/json",
                     "Accept-Encoding": "identity",
                 },
-            ) as client,
-            client.stream(
-                "GET", PRODUCT_PATH.format(barcode=barcode), params={"fields": FIELDS}
-            ) as response,
-        ):
-            if response.status_code == httpx.codes.NOT_FOUND or response.is_redirect:
-                return NOT_FOUND
-            if response.status_code != httpx.codes.OK:
-                logger.warning(
-                    "open food facts unavailable", extra={"status": response.status_code}
+            )
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close the connection pool; a later request opens a new one."""
+        # A request that arrives while this awaits may open a new pool that nobody closes. That
+        # is harmless for the app: uvicorn stops taking requests and lets the running ones
+        # finish before the lifespan's shutdown calls this, and the process exits right after.
+        client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
+
+    async def fetch(
+        self, barcode: str, *, max_wait: float | None, retry: bool = False
+    ) -> OffResponse:
+        """The product with this (canonical) barcode. Waits at most `max_wait` seconds for its
+        turn under the rate limit (None: as long as needed), else answers `busy`. With `retry`
+        (a lookup the user waits for), a transient failure gets one more try within `max_wait`
+        plus the timeout (see the module docstring)."""
+        started = anyio.current_time()
+        if not await self.rate_limit.acquire(max_wait):
+            _log_outcome(barcode, _Answer(BUSY), _Exchange(), attempt=1)
+            return BUSY
+        first = await self._request(barcode, time_limit=self.timeout, attempt=1)
+        if not retry or not first.transient:
+            return first.response
+        return await self._retry(barcode, first.response, max_wait=max_wait, started=started)
+
+    async def _retry(
+        self, barcode: str, first: OffResponse, *, max_wait: float | None, started: float
+    ) -> OffResponse:
+        """The second try of a lookup, if it fits into the lookup's time and gets a place under
+        the rate limit; else the first answer. An `unavailable` second answer never replaces
+        the first one: it cannot say more."""
+        deadline = started + (max_wait or 0.0) + self.timeout
+        await anyio.sleep(self.retry_pause)
+        left = deadline - anyio.current_time()
+        if left < RETRY_MIN_SECONDS:
+            logger.info("open food facts: no time left to retry", extra={"barcode": barcode})
+            return first
+        wait_limit = left - RETRY_MIN_SECONDS
+        wait = self.rate_limit.reserve(
+            wait_limit if max_wait is None else min(max_wait, wait_limit)
+        )
+        if wait is None:
+            logger.info("open food facts: busy, no retry", extra={"barcode": barcode})
+            return first
+        if wait > 0:
+            await self.rate_limit.sleep(wait)
+        second = await self._request(barcode, time_limit=min(self.timeout, left - wait), attempt=2)
+        return first if second.response.status == "unavailable" else second.response
+
+    async def _request(self, barcode: str, *, time_limit: float, attempt: int) -> _Answer:
+        """One request, never raising; its outcome is logged."""
+        exchange = _Exchange()
+        try:
+            with anyio.fail_after(time_limit):
+                answer = await self._get(barcode, exchange)
+        except TimeoutError:
+            answer = _unavailable("timeout", transient=True)
+        except httpx.TransportError as exc:  # connecting, reading, the protocol, a proxy
+            answer = _unavailable(type(exc).__name__, transient=True)
+        except httpx.HTTPError as exc:  # a body that cannot be decoded: the same next time
+            answer = _unavailable(type(exc).__name__)
+        except _TooLargeError:
+            answer = _unavailable("response too large")
+        except Exception:
+            logger.exception("open food facts: unexpected error")
+            answer = _Answer(UNAVAILABLE)
+        _log_outcome(barcode, answer, exchange, attempt=attempt)
+        return answer
+
+    async def _get(self, barcode: str, exchange: _Exchange) -> _Answer:
+        async with self._http().stream(
+            "GET", PRODUCT_PATH.format(barcode=barcode), params={"fields": FIELDS}
+        ) as response:
+            status = exchange.http_status = response.status_code
+            if httpx.codes.is_redirect(status):  # any 3xx, with a Location or not
+                return _redirected(status, response.headers.get("location"))
+            if status not in (httpx.codes.OK, httpx.codes.NOT_FOUND):
+                # OFF's servers failing may pass; a 429 or another 4xx would only be repeated.
+                return _unavailable(
+                    "unexpected status",
+                    status=status,
+                    transient=httpx.codes.is_server_error(status),
                 )
-                return UNAVAILABLE
             body = await self._read(response)
-        return self._parse(body)
+        return self._parse(body, status)
 
     async def _read(self, response: httpx.Response) -> bytes:
         """The (inflated) body, or `_TooLargeError` as soon as it, or what was received,
@@ -390,24 +502,66 @@ class OffClient:
             raise _TooLargeError
 
     @staticmethod
-    def _parse(body: bytes) -> OffResponse:
+    def _parse(body: bytes, http_status: int) -> _Answer:
+        """The answer in a 200 or 404 body: `not_found` only for OFF's own `product_not_found`,
+        a product only with 200. A 404 whose body is not a JSON object is no answer from OFF but
+        an error page in front of it (a proxy, a CDN): transient."""
+        in_front = http_status == httpx.codes.NOT_FOUND
         try:
             document: Any = json.loads(body)
         except ValueError:
-            logger.warning("open food facts unavailable", extra={"reason": "invalid JSON"})
-            return UNAVAILABLE
+            return _unavailable("invalid JSON", status=http_status, transient=in_front)
         if not isinstance(document, dict):
-            logger.warning("open food facts unavailable", extra={"reason": "unexpected JSON"})
-            return UNAVAILABLE
+            return _unavailable("unexpected JSON", status=http_status, transient=in_front)
         status = document.get("status")
         result = document.get("result")
         if status == "failure":
             if isinstance(result, dict) and result.get("id") == "product_not_found":
-                return NOT_FOUND
-        elif status in _SUCCESS and isinstance(document.get("product"), dict):
+                return _NOT_FOUND_ANSWER
+        elif (
+            http_status == httpx.codes.OK
+            and status in _SUCCESS
+            and isinstance(document.get("product"), dict)
+        ):
             try:
-                return OffResponse("found", OffProduct.model_validate(document["product"]))
+                return _Answer(OffResponse("found", OffProduct.model_validate(document["product"])))
             except ValidationError:  # pragma: no cover -- every field validator is lenient
                 pass
-        logger.warning("open food facts unavailable", extra={"reason": "unexpected JSON"})
-        return UNAVAILABLE
+        return _unavailable("unexpected JSON", status=http_status)
+
+
+def _unavailable(reason: str, *, status: int | None = None, transient: bool = False) -> _Answer:
+    """`unavailable`, with a warning that says why."""
+    extra: dict[str, object] = {"reason": reason, "transient": transient}
+    if status is not None:
+        extra["status"] = status
+    logger.warning("open food facts unavailable", extra=extra)
+    return _Answer(UNAVAILABLE, transient=transient)
+
+
+def _redirected(status: int, location: str | None) -> _Answer:
+    """`not_found` for a redirect: OFF sends one for a product of another product type (such as
+    cosmetics) to that database's site, so no food product has this barcode. Logged with the
+    host it points to (a relative or broken Location has none), to tell such a redirect from an
+    unexpected one."""
+    host: str | None = None
+    with suppress(ValueError):  # e.g. an unclosed IPv6 bracket
+        host = urlsplit(location or "").hostname
+    logger.info(
+        "open food facts: redirected, not found",
+        extra={"reason": "redirect", "status": status, "location_host": host},
+    )
+    return _NOT_FOUND_ANSWER
+
+
+def _log_outcome(barcode: str, answer: _Answer, exchange: _Exchange, *, attempt: int) -> None:
+    logger.info(
+        "open food facts lookup",
+        extra={
+            "barcode": barcode,
+            "outcome": answer.response.status,
+            "http_status": exchange.http_status,
+            "attempt": attempt,
+            "transient": answer.transient,
+        },
+    )

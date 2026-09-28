@@ -500,6 +500,7 @@ order.
 | `scanSuggestions`        | `scan-suggestions`         | Suggested ingredients for the product       |
 | `scanCreateIngredient`   | `scan-create-ingredient`   | "Create new ingredient" in the scan flow    |
 | `scanEnterManually`      | `scan-enter-manually`      | "Enter the values yourself"                 |
+| `scanAgain`              | `scan-again`               | "Scan again" next to the notice             |
 | `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"    |
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |
