@@ -464,6 +464,7 @@ order.
 | `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
 | `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |
 | `offlineNotice`          | `offline-notice`           | "This page needs a connection" message      |
+| `loadingState`           | `loading-state`            | Placeholder while a tab's first load runs   |
 | `waitingBanner`          | `waiting-banner`           | "Waiting for more than an hour" banner      |
 | `noStorageBanner`        | `no-storage-banner`        | "Can't store anything on this device" note  |
 | `syncToast`              | `sync-toast`               | Message about changes that weren't saved    |
