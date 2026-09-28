@@ -1,6 +1,8 @@
 # Builds the release image for a pushed tag vX.Y.Z[-pre] (plan § 10.2): natively on amd64 and
-# arm64, pushed by digest, merged into one multi-arch manifest on ghcr.io and given signed build
-# provenance. The Pi only installs images with a valid attestation from this workflow (SEC-12).
+# arm64, pushed by digest, merged into one multi-arch manifest on ghcr.io (tagged with the exact
+# version only) and given signed build provenance. The Pi only installs images with a valid
+# attestation from this workflow (SEC-12), and it follows the moving tags (X.Y, X.Y-pre), so
+# those are added last, once the attestation exists.
 name: Build image
 
 on:
@@ -94,15 +96,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: read # list the release tags
-      packages: write # push the multi-arch manifest and its tags
+      packages: write # push the multi-arch manifest and its version tag
     outputs:
       digest: ${{ steps.manifest.outputs.digest }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: .github/scripts
-          persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: digest-*
@@ -118,25 +115,15 @@ jobs:
         id: manifest
         working-directory: ${{ runner.temp }}/digests
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.verify.outputs.version }}
-          LINE: ${{ needs.verify.outputs.line }}
-          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
           COMMIT: ${{ needs.verify.outputs.commit }}
         run: |
-          # X.Y.Z or X.Y.Z-pre.N, plus X.Y / latest / X.Y-pre only while this is the newest release
-          # for them. Decided from the tags as they are now, right before pushing, so a slower or
-          # re-run build of an older release never moves them back.
-          release_tags=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate \
-            --jq '.[].ref | sub("^refs/tags/"; "")')
-          image_tags=$("${GITHUB_WORKSPACE}/.github/scripts/image-tags.sh" \
-            "$VERSION" "$LINE" "$PRERELEASE" <<< "$release_tags")
-          mapfile -t names <<< "$image_tags"
-          tags=()
-          for name in "${names[@]}"; do tags+=(--tag "${IMAGE}:${name}"); done
+          # Only the exact version tag (X.Y.Z or X.Y.Z-pre.N), which nothing on the Pi follows by
+          # itself: the moving tags come in the tags job, after the attest job, so update.sh never
+          # sees a digest on X.Y or X.Y-pre before its provenance exists.
           sources=()
           for digest in *; do sources+=("${IMAGE}@sha256:${digest}"); done
-          docker buildx imagetools create "${tags[@]}" \
+          docker buildx imagetools create --tag "${IMAGE}:${VERSION}" \
             --annotation "index:org.opencontainers.image.title=MealMate" \
             --annotation "index:org.opencontainers.image.description=Self-hosted app that turns saved meals into a category-sorted shopping list" \
             --annotation "index:org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
@@ -145,8 +132,9 @@ jobs:
             --annotation "index:org.opencontainers.image.revision=${COMMIT}" \
             "${sources[@]}"
           digest=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r .digest)
+          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::unexpected digest '${digest}'"; exit 1; }
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-          echo "Pushed \`${IMAGE}@${digest}\` as: ${names[*]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed \`${IMAGE}@${digest}\` as: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
   attest:
     name: Attest build provenance
@@ -169,3 +157,60 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ needs.merge.outputs.digest }}
           push-to-registry: true
+
+  tags:
+    name: Release tags
+    needs: [verify, merge, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # list the release tags
+      packages: write # add the moving tags to the attested manifest list
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add the moving tags to the attested digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          LINE: ${{ needs.verify.outputs.line }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          DIGEST: ${{ needs.merge.outputs.digest }}
+        run: |
+          # X.Y / latest / X.Y-pre only while this is the newest release for them. Decided from
+          # the tags as they are now, right before pushing, so a slower or re-run build of an
+          # older release never moves them back.
+          release_tags=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate \
+            --jq '.[].ref | sub("^refs/tags/"; "")')
+          image_tags=$("${GITHUB_WORKSPACE}/.github/scripts/image-tags.sh" \
+            "$VERSION" "$LINE" "$PRERELEASE" <<< "$release_tags")
+          mapfile -t names <<< "$image_tags"
+          moving=()
+          tags=()
+          for name in "${names[@]}"; do
+            [ "$name" != "$VERSION" ] || continue # set by the merge job
+            moving+=("$name")
+            tags+=(--tag "${IMAGE}:${name}")
+          done
+          if [ "${#moving[@]}" -eq 0 ]; then
+            echo "\`${IMAGE}@${DIGEST}\` gets no moving tag: newer releases hold them." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # The attested manifest list itself, tagged again (no rebuild, the same digest).
+          docker buildx imagetools create "${tags[@]}" "${IMAGE}@${DIGEST}"
+          for name in "${moving[@]}"; do
+            got=$(docker buildx imagetools inspect "${IMAGE}:${name}" --format '{{json .Manifest}}' | jq -r .digest)
+            if [ "$got" != "$DIGEST" ]; then
+              echo "::error::${IMAGE}:${name} points to ${got}, not the attested ${DIGEST}"
+              exit 1
+            fi
+          done
+          echo "Tagged \`${IMAGE}@${DIGEST}\` as: ${moving[*]}" >> "$GITHUB_STEP_SUMMARY"

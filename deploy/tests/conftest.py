@@ -178,6 +178,9 @@ COSIGN_DEFINITE_ERROR = (
     "none of the attestations matched the predicate type: https://slsa.dev/provenance/v1, "
     "found: https://spdx.dev/Document"
 )
+# What cosign v3 prints for an image without any attestation (no bundle, no .att tag): the
+# list of failed attestations after the colon is empty. Also the case while a release is signed.
+COSIGN_UNSIGNED_ERROR = "no matching attestations: "
 COSIGN_NETWORK_ERROR = (
     'getting trusted root: Get "https://tuf-repo-cdn.sigstore.dev/timestamp.json": '
     "dial tcp: lookup tuf-repo-cdn.sigstore.dev: i/o timeout"
