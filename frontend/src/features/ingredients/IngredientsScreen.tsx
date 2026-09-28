@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -54,7 +55,14 @@ export function IngredientsScreen() {
 
   return (
     <Screen title={t('nav.ingredients')} testId={testIds.screenIngredients}>
-      {noIngredientsAtAll ? (
+      {!groups ? (
+        // Until the first answer it is unknown whether there are ingredients at all (UI-03).
+        ingredients.error || categories.error ? (
+          <LoadError error={ingredients.error ?? categories.error} />
+        ) : (
+          <LoadingState />
+        )
+      ) : noIngredientsAtAll ? (
         <EmptyState
           icon={Carrot}
           title={t('ingredients.empty.title')}
@@ -95,11 +103,8 @@ export function IngredientsScreen() {
               </div>
             </div>
           </div>
-          {(ingredients.isPending || categories.isPending) && (
-            <p className="text-muted-foreground">{t('common.loading')}</p>
-          )}
           <LoadError error={ingredients.error ?? categories.error} />
-          {groups && groups.length === 0 && debounced !== '' && (
+          {groups.length === 0 && debounced !== '' && (
             <Card className="items-start gap-3 px-5">
               <p aria-live="polite">{t('ingredients.noResults', { query: debounced })}</p>
               <Button variant="outline" onClick={() => setCreating(true)}>
@@ -108,7 +113,7 @@ export function IngredientsScreen() {
               </Button>
             </Card>
           )}
-          {groups && groups.length > 0 && <IngredientGroups groups={groups} />}
+          {groups.length > 0 && <IngredientGroups groups={groups} />}
         </>
       )}
       <IngredientFormDialog

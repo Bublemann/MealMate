@@ -4,6 +4,7 @@ import {
   BEN,
   CARL,
   errorResponse,
+  heldRoute,
   mockApi,
   requestsTo,
   slowFilterSaves,
@@ -41,6 +42,34 @@ function queries(fetchMock: ReturnType<typeof mockApi>) {
 }
 
 describe('MealsScreen', () => {
+  it('shows only a quiet placeholder until it knows whether there are meals (UI-03)', async () => {
+    const meals = heldRoute();
+    renderMeals({ 'GET /api/meals': meals.route });
+
+    // While loading, nothing of the filled screen shows: no search, no filters, no button …
+    expect(await screen.findByText('Loading…')).toBeVisible();
+    expect(screen.getByTestId(testIds.loadingState)).toHaveAttribute('role', 'status');
+    expect(screen.queryByLabelText('Search meals')).toBeNull();
+    expect(screen.queryByTestId(testIds.newMeal)).toBeNull();
+
+    // … so an empty answer goes straight to the empty state, without a jump in between.
+    await meals.answer([]);
+    expect(await screen.findByText('No meals yet')).toBeVisible();
+    expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+    expect(screen.queryByLabelText('Search meals')).toBeNull();
+  });
+
+  it('shows search and filters with the first meals', async () => {
+    const meals = heldRoute();
+    renderMeals({ 'GET /api/meals': meals.route });
+    await screen.findByTestId(testIds.loadingState);
+
+    await meals.answer(ALL);
+    expect(await screen.findByTestId(testIds.mealList)).toBeVisible();
+    expect(screen.getByLabelText('Search meals')).toBeVisible();
+    expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+  });
+
   it('lists the meals with thumbnail, owner (if not me) and cuisine', async () => {
     renderMeals();
 

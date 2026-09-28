@@ -4,6 +4,7 @@ import {
   BEN,
   CARL,
   errorResponse,
+  heldRoute,
   mockApi,
   requestsTo,
   slowFilterSaves,
@@ -28,6 +29,19 @@ function othersRequests(fetchMock: ReturnType<typeof mockApi>) {
 }
 
 describe('ListsScreen', () => {
+  it('shows only a quiet placeholder until it knows whether I have lists (UI-03)', async () => {
+    const lists = heldRoute();
+    renderLists({ 'GET /api/lists?scope=mine': lists.route });
+
+    expect(await screen.findByText('Loading…')).toBeVisible();
+    expect(screen.queryByTestId(testIds.newList)).toBeNull();
+    expect(screen.queryByRole('heading', { level: 2, name: 'My lists' })).toBeNull();
+
+    await lists.answer([]);
+    expect(await screen.findByText('No shopping lists yet')).toBeVisible();
+    expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+  });
+
   it('shows my drafts with name, date, counts and who they are shared with (UI-02)', async () => {
     renderLists();
 

@@ -128,6 +128,22 @@ export function slowFilterSaves() {
   return { route, answer };
 }
 
+/**
+ * A route that answers only when the test says so: `answer(body)` answers every request waiting
+ * so far with `body` (JSON), e.g. to look at a screen while its first load is still running.
+ */
+export function heldRoute() {
+  const waiting: ((body: unknown) => void)[] = [];
+  const route = () => new Promise<unknown>((resolve) => waiting.push(resolve));
+  const answer = async (body: unknown) => {
+    await waitFor(() => expect(waiting.length).toBeGreaterThan(0));
+    act(() => {
+      for (const resolve of waiting.splice(0)) resolve(body);
+    });
+  };
+  return { route, answer };
+}
+
 interface NodeProcess {
   getBuiltinModule(id: 'node:buffer'): { File: typeof File };
 }

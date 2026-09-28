@@ -123,6 +123,7 @@ export const testIds = {
   syncStatus: 'sync-status',
   offlineBanner: 'offline-banner',
   offlineNotice: 'offline-notice',
+  loadingState: 'loading-state',
   waitingBanner: 'waiting-banner',
   noStorageBanner: 'no-storage-banner',
   syncToast: 'sync-toast',
