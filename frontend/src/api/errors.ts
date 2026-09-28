@@ -57,6 +57,14 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+/**
+ * Whether a failed request means the server couldn't be reached (SYNC-07/09): no answer (timeout,
+ * network failure) or a server error. Anything that isn't an ApiError counts too.
+ */
+export function isUnreachable(error: unknown): boolean {
+  return !isApiError(error) || error.status === 0 || error.status >= 500;
+}
+
 /** The translation key for an error of any kind; non-API errors map to the generic message. */
 export function errorKey(error: unknown): `error.${ApiErrorCode}` {
   return `error.${isApiError(error) ? error.code : FALLBACK_CODE}`;

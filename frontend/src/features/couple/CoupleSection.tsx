@@ -3,6 +3,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -34,7 +35,7 @@ export function CoupleSection() {
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {couple.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-        <ErrorAlert error={couple.error} />
+        <LoadError error={couple.error} />
         {couple.data && <CoupleContent state={couple.data} />}
       </CardContent>
     </Card>

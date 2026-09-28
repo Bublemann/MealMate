@@ -40,6 +40,12 @@ SCREENS = [
         "member",
         (TEST_IDS["syncStatus"], TEST_IDS["shoppingLines"], TEST_IDS["inTheCart"]),
     ),
+    # The same while offline (SYNC-03/07): the offline banner and a line waiting to be sent.
+    Screen(
+        "/lists/:id/offline",
+        "member",
+        (TEST_IDS["offlineBanner"], TEST_IDS["linePending"], TEST_IDS["syncStatus"]),
+    ),
     # A done list of the member's is created in the test; its week is awaited there.
     Screen("/lists/history", "member", (TEST_IDS["screenHistory"],)),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
@@ -159,6 +165,26 @@ def test_no_serious_violations(
         api.set_list_meal_servings(account, shopping["id"], entry["id"], 3)
         api.add_extra_item(account, shopping["id"], text=unique("A11y item"), amount_text="2")
         path = f"/lists/{shopping['id']}"
+    offline_line = ""  # the line checked off offline on "/lists/:id/offline"
+    if path == "/lists/:id/offline":
+        api = request.getfixturevalue("api")
+        onions = api.create_ingredient(account, unique("A11y onions"))
+        # A second line: checking off the last one would offer to finish.
+        flour = api.create_ingredient(account, unique("A11y flour"))
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            ingredients=[
+                {"ingredient_id": onions["id"], "amount": 1, "unit": "piece"},
+                {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
+            ],
+        )
+        offline = api.create_list(account, unique("A11y offline"))
+        api.add_list_meal(account, offline["id"], meal["id"])
+        api.start_shopping(account, offline["id"])
+        offline_line = onions["name"]
+        path = f"/lists/{offline['id']}"
     if path == "/lists/history":
         api = request.getfixturevalue("api")
         ingredient = api.create_ingredient(account, unique("A11y rice"))
@@ -181,6 +207,15 @@ def test_no_serious_violations(
     if screen.path == "/me/admin/invites":
         # Also check the created link with its share button.
         page.get_by_test_id(TEST_IDS["createInviteButton"]).click()
+    if screen.path == "/lists/:id/offline":
+        # Offline, a check-off waits in the outbox (faded, "not sent yet").
+        check = page.get_by_role("checkbox", name=text("lists.shop.check", name=offline_line))
+        expect(check).to_be_visible()
+        page.context.set_offline(True)
+        check.click()
+        page.get_by_test_id(TEST_IDS["inTheCart"]).get_by_text(
+            text("lists.shop.cart", count="1"), exact=True
+        ).click()
     for test_id in screen.ready:
         expect(page.get_by_test_id(test_id)).to_be_visible()
     if screen.path == "/lists/:id":

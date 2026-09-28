@@ -130,6 +130,32 @@ async def test_ops_need_a_list_you_may_edit(
     assert error(await send_ops(api, ben, shared["id"], finish)) == "common.not_found"
 
 
+async def test_ops_of_another_user_are_refused(
+    api: AsyncClient, anna: Account, ben: Account, shopping: Any, flour: Any
+) -> None:
+    """SYNC-10 backstop: ops that name their user (`X-MealMate-User`) are only applied with
+    that user's session; a phone whose session changed hands keeps them queued."""
+    await make_couple(api, anna, ben)
+    list_id = shopping["id"]
+    queued = check(key(flour), op_id=op_id(1))
+
+    response = await api.post(
+        f"/api/lists/{list_id}/ops",
+        json={"ops": [queued]},
+        headers={**anna.headers, "X-MealMate-User": ben.id},
+    )
+
+    assert (response.status_code, error(response)) == (409, "auth.user_mismatch")
+    assert state(await detail(api, anna, list_id), key(flour)) == (False, None, None)
+    # The right user's header (or none) is applied as before.
+    response = await api.post(
+        f"/api/lists/{list_id}/ops",
+        json={"ops": [queued]},
+        headers={**anna.headers, "X-MealMate-User": anna.id},
+    )
+    assert results(response) == [APPLIED]
+
+
 def first(*loc: str) -> tuple[str | int, ...]:
     """Where a problem of the first op is reported."""
     return ("body", "ops", 0, *loc)
@@ -426,6 +452,42 @@ async def test_ops_take_effect_once(
     }
 
 
+async def test_the_partners_op_with_the_same_id_is_their_own(
+    app: FastAPI, api: AsyncClient, anna: Account, ben: Account, shopping: Any, flour: Any
+) -> None:
+    """Op ids are unique per user (`processed_ops` is keyed by user and op id): the partner
+    sending an op with an id anna used on the same list is applied as ben's own op, and the
+    rules of each type keep it from doing anything twice."""
+    await make_couple(api, anna, ben)
+    await api.patch(
+        f"/api/lists/{shopping['id']}", json={"shared_with_partner": True}, headers=anna.headers
+    )
+    list_id = shopping["id"]
+    ops = [
+        check(key(flour), op_id=op_id(1)),
+        op("extra.add", op_id=op_id(2), extra_id=op_id(20), text="Kerzen"),
+        op("extra.delete", op_id=op_id(3), extra_id=op_id(20)),
+    ]
+    first = await applied(api, anna, list_id, *ops)
+
+    response = await send_ops(api, ben, list_id, *ops)
+
+    # The check-off ties with itself and loses; the item is already on the list (and stays
+    # deleted).
+    assert results(response) == [APPLIED, DUPLICATE, APPLIED]
+    body = response.json()["list"]
+    assert body["version"] == first["version"]
+    assert state(body, key(flour)) == (True, "2026-09-27T12:00:00Z", "Anna")
+    assert [item["id"] for item in body["extra_items"]] == [
+        item["id"] for item in first["extra_items"]
+    ]
+    rows = await scalars(app, select(ProcessedOp).where(ProcessedOp.list_id == list_id))
+    assert sorted((row.user_id, row.op_id) for row in rows) == sorted(
+        [(anna.id, op_id(n)) for n in (1, 2, 3)] + [(ben.id, op_id(1)), (ben.id, op_id(3))]
+    )
+    assert results(await send_ops(api, ben, list_id, *ops)) == [DUPLICATE] * 3
+
+
 # --- extra items ----------------------------------------------------------------------------
 
 
@@ -568,6 +630,61 @@ async def test_update_and_delete_free_text_items(
         op("extra.delete", extra_id=candles),
     )
     assert results(response) == [("rejected", "list.done")] * 2
+
+
+async def test_delete_wins_over_an_update(
+    api: AsyncClient, anna: Account, ben: Account, shopping: Any
+) -> None:
+    """SYNC-06: one phone renames a free-text item, the other deletes it; whichever arrives
+    first, and whatever the taps' times, it ends up deleted."""
+    await make_couple(api, anna, ben)
+    await api.patch(
+        f"/api/lists/{shopping['id']}", json={"shared_with_partner": True}, headers=anna.headers
+    )
+    list_id = shopping["id"]
+    first, second = op_id(1), op_id(2)
+    await applied(
+        api,
+        anna,
+        list_id,
+        op("extra.add", extra_id=first, text="Kerzen"),
+        op("extra.add", extra_id=second, text="Servietten"),
+    )
+    later = START + timedelta(minutes=1)
+
+    # The delete arrives first; the later rename changes nothing.
+    await applied(api, ben, list_id, op("extra.delete", extra_id=first))
+    body = await applied(
+        api, anna, list_id, op("extra.update", extra_id=first, text="Teelichter", at=later)
+    )
+    # The rename arrives first; the delete still wins.
+    await applied(api, anna, list_id, op("extra.update", extra_id=second, text="Tücher"))
+    body = await applied(api, ben, list_id, op("extra.delete", extra_id=second, at=START))
+
+    assert [item["name"] for item in body["lines"]] == ["Mehl", "Salz"]
+    assert {item["id"] for item in body["extra_items"]}.isdisjoint({first, second})
+
+
+async def test_items_added_on_two_phones_are_not_merged(
+    api: AsyncClient, anna: Account, ben: Account, shopping: Any
+) -> None:
+    """SYNC-06: the same text added on two phones (each with its own id) is two items."""
+    await make_couple(api, anna, ben)
+    await api.patch(
+        f"/api/lists/{shopping['id']}", json={"shared_with_partner": True}, headers=anna.headers
+    )
+    list_id = shopping["id"]
+    await applied(api, anna, list_id, op("extra.add", extra_id=op_id(1), text="Milch"))
+
+    body = await applied(api, ben, list_id, op("extra.add", extra_id=op_id(2), text="Milch"))
+
+    milk = [item for item in body["lines"] if item["name"] == "Milch"]
+    assert [item["key"] for item in milk] == [f"x:{op_id(1)}", f"x:{op_id(2)}"]
+    assert [
+        (item["id"], item["added_by"]["display_name"])
+        for item in body["extra_items"]
+        if item["text"] == "Milch"
+    ] == [(op_id(1), "Anna"), (op_id(2), "Ben")]
 
 
 async def test_checking_after_editing_in_one_request(

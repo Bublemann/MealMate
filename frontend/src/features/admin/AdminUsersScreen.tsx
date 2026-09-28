@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { ShareLink } from '@/components/ShareLink';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,7 @@ export function AdminUsersScreen() {
   return (
     <AdminScreen title={t('admin.users.title')} testId={testIds.screenAdminUsers}>
       {users.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={users.error} />
+      <LoadError error={users.error} />
       {users.data && (
         <ul data-testid={testIds.adminUserList} className="flex flex-col gap-4">
           {users.data.map((user) => (

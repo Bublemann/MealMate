@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, connectAuth, unwrap } from '@/api/client';
+import { api, connectAuth, READ_TIMEOUT_MS, unwrap } from '@/api/client';
 import i18n from '@/i18n';
 import {
   errorResponse,
@@ -85,6 +85,72 @@ describe('auth session start-up', () => {
       user: TEST_USER,
     });
     expect(session.accessToken()).toBeNull();
+  });
+
+  it('shows the cached profile at once, while the start-up refresh runs (SYNC-09)', async () => {
+    let answer: (() => void) | undefined;
+    mockApi({
+      'POST /api/auth/refresh': () =>
+        new Promise((resolve) => {
+          answer = () => resolve(loginResponse());
+        }),
+    });
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(TEST_USER));
+    const session = createAuthSession();
+
+    const started = session.start();
+
+    expect(session.getState()).toMatchObject({
+      status: 'authenticated',
+      offline: true,
+      user: TEST_USER,
+    });
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    answer?.();
+    await started;
+    expect(session.getState()).toMatchObject({ status: 'authenticated', offline: false });
+    expect(session.accessToken()).toBe('fresh-access-token');
+  });
+
+  it('gives the start-up refresh the read timeout, not the write one', async () => {
+    vi.useFakeTimers();
+    try {
+      // An answer that never comes: rejects once the client gives up and aborts the request.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_request: Request, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () =>
+                reject(new DOMException('aborted', 'AbortError')),
+              );
+            }),
+        ),
+      );
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(TEST_USER));
+      const session = createAuthSession();
+      const started = session.start();
+
+      await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS);
+      await started;
+
+      expect(session.getState()).toMatchObject({ status: 'authenticated', offline: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ends a cached profile the server says has expired, telling who it was', async () => {
+    mockApi({ 'POST /api/auth/refresh': errorResponse(401, 'auth.session_expired') });
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(TEST_USER));
+    const session = createAuthSession();
+    const onEnd = vi.fn();
+    session.onEnd(onEnd);
+
+    await session.start();
+
+    expect(session.getState()).toMatchObject({ status: 'anonymous', reason: 'expired' });
+    expect(onEnd).toHaveBeenCalledWith({ reason: 'expired', userId: TEST_USER.id });
   });
 
   it('reports "unreachable" without a cached profile and can try again', async () => {
@@ -220,7 +286,7 @@ describe('session end (SYNC-10)', () => {
       reason: 'revoked',
     });
     expect(session.accessToken()).toBeNull();
-    expect(onEnd).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledExactlyOnceWith({ reason: 'revoked', userId: TEST_USER.id });
     expect(localStorage.getItem(PROFILE_STORAGE_KEY)).toBeNull();
     expect(localStorage.getItem('mm.user.something')).toBeNull();
     // Device settings stay.
@@ -237,7 +303,7 @@ describe('session end (SYNC-10)', () => {
 
     session.signIn(loginResponse(ben));
 
-    expect(onEnd).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledExactlyOnceWith({ reason: null, userId: TEST_USER.id });
     expect(localStorage.getItem('mm.user.something')).toBeNull();
     expect(JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? 'null')).toEqual(ben);
     expect(session.getState()).toMatchObject({ status: 'authenticated', user: ben, reason: null });

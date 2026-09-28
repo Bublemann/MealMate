@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,7 +37,7 @@ export function IngredientDetailScreen() {
         {t('ingredients.detail.back')}
       </Link>
       {ingredient.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={ingredient.error} />
+      <LoadError error={ingredient.error} />
       {ingredient.data && (
         <>
           <PropertiesCard ingredient={ingredient.data} />

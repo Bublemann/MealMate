@@ -124,8 +124,11 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   returns to the foreground; a new version waits until the user taps "Reload" in the update prompt.
 - **Queries and changes always send their request** (`networkMode: 'always'` in
   `src/app/queryClient.ts`), also when the browser reports being offline, so a screen shows "can't
-  reach MealMate" instead of waiting, and a change fails at once and is undone on screen (until the
-  outbox of M6).
+  reach MealMate" instead of waiting, and a change fails at once and is undone on screen. The
+  shopping actions don't fail offline: they go through the outbox (see "Offline and sync").
+- **Load errors of a screen** go through `LoadError`: no answer at all (offline, lie-fi timeout)
+  shows the friendly "You're offline. This page needs a connection." (SYNC-09), anything else the
+  translated error.
 
 ## Sign-in and sessions
 
@@ -134,13 +137,14 @@ How the app stays signed in (plan § 5.4, § 8):
 - **Tokens.** The access token lives only in memory (`features/auth/session.ts`). The refresh token
   is the `HttpOnly` cookie `mm_refresh`, which JavaScript never sees. Login, join and reset return
   `{access_token, expires_in, user}`.
-- **Start-up.** `AuthProvider` calls `POST /api/auth/refresh` once (status `loading` until then; no
-  other request goes out before it settles). The first start as a Home Screen app
+- **Start-up.** `AuthProvider` calls `POST /api/auth/refresh` once (read deadline, 8 s; status
+  `loading` until then unless a profile is cached; no other request goes out before it settles). The first start as a Home Screen app
   (`display-mode: standalone` or `navigator.standalone`) without the localStorage marker
   `mm.standalone.initialized` sends `{"fork": true}`, which gives the Home Screen app its own
   session, then sets the marker. `auth.login_required` (fork refused) shows the login screen once.
-  If the server can't be reached, the cached profile (`mm.user.profile`) is shown, or a "can't
-  reach MealMate" screen with Retry.
+  With a cached profile (`mm.user.profile`) that profile is shown at once while the refresh runs
+  (`offline: true` until the server confirms it); without one, a "can't reach MealMate" screen
+  with Retry if the server can't be reached.
 - **Single-flight refresh.** All refreshes share one promise in the tab and run under
   `navigator.locks.request('mm-refresh')` (when available), so tabs never rotate the same cookie
   at once.
@@ -180,9 +184,74 @@ back to the foreground (SYNC-08; `useList` in `features/lists/api.ts`). Each loa
 of the cached copy as `If-None-Match`; a 304 keeps the copy. Answers that could undo a change on
 screen are ignored: those arriving while a change of the list still waits for its answer, and those
 with a lower `version` than the cached list. Check-off, finish and free-text items while shopping
-(add, change, remove) go through `POST /lists/{id}/ops` (plan § 5.8), each with a UUIDv7 `op_id` and
-the time of the tap, made when the user acts (`stampOp()`) and kept when the same action is sent
-again, so it takes effect once.
+(add, change, remove) are ops of the outbox (next section), each with a UUIDv7 `op_id` and the
+time of the tap, made when the user acts (`stampOp()`) and kept when the op is sent again, so it
+takes effect once.
+
+## Offline and sync
+
+`features/sync/` (plan § 8, SYNC-01..10). One `SyncEngine` per app, created by `SyncProvider`
+inside the `AuthProvider`; components use the hooks in `features/sync/context.ts`.
+
+- **Storage** (`storage.ts`): IndexedDB `mealmate` v1 with the stores `lists` (the local copy, by
+  list id, tagged with the user), `outbox` (auto-increment `seq`, index `byUser`) and `meta`
+  (`etag:<user>`, `lastSync:<user>`, `categories:<user>`; the first two go whenever that user's
+  copy is deleted, so a stale ETag can't leave a new copy empty). Opening gives up after 3 s (an
+  upgrade blocked by an old tab) and each read or write after 5 s. A failed read or write (e.g.
+  iOS dropping the connection while the app was in the background; the `terminated` handler) closes
+  the connection, opens it again and tries once more; `blocking` closes it so a newer app version
+  can upgrade. Only when that fails too — or IndexedDB is missing or refuses (private browsing,
+  blocked) — memory takes over for the rest of the visit, starting with the ops and lists the
+  engine knows (new ops numbered after them), and `status.persistent` turns false, which shows the
+  "can't store anything" note while changes wait. The app works online as before. Wipes that
+  couldn't reach IndexedDB are noted in `localStorage` (`mm.sync.wipe.<user>`) and done at the
+  next start. Persistent storage (`navigator.storage.persist()`) is asked for once per user on
+  the device, after the server confirmed them (`mm.sync.persisted.<user>`).
+- **Local copy** (SYNC-02): `GET /api/lists/sync` (with its ETag) replaces the user's copy at
+  start, when the app comes to the foreground, when the connection returns and a second after any
+  successful change; lists that are no longer returned disappear. Lists opened on screen and the
+  categories are kept too. The copy seeds the query cache (`initialData` of `useList` and of my
+  lists on the Lists home), so they show at once and stay when the server can't be reached.
+- **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
+  queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
+  user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush
+  sends consecutive ops of a list in batches of up to 100, in order, under
+  `navigator.locks.request('mm-outbox')` across tabs, and only with a session the server confirmed
+  for the ops' user (SYNC-10): the request's fetch checks right before each attempt (also the
+  retry after a token refresh, which may have signed in someone else) that the session and its
+  token are still that user's, and the request names the user in `X-MealMate-User`, which the
+  server checks (409 `auth.user_mismatch`); either way the ops stay. A 2xx removes the batch
+  (applied, duplicate or rejected; a rejected op is shown once as a message). Only the app's own
+  answers drop ops: 400/422 with the error envelope drops the batch; 403 `common.forbidden` /
+  404 `common.not_found` drops the list's ops with one message, after loading the list once
+  confirms it (sharing toggled off and on again keeps them). A 401 stops (the ops stay, SYNC-05);
+  timeouts, network errors, 5xx, 429 and every other 4xx (a proxy's 403/404, 408, 413, …) stop
+  and keep everything for later. It runs after each queued op, at start, on `visibilitychange`,
+  on `online`, when the server answers again after a failure (iOS fires no `online` when
+  Tailscale comes back) and every 30 s while visible and something waits. The outbox read inside
+  the lock replaces this tab's view of it, and tabs tell each other about changes on the
+  `BroadcastChannel('mm-outbox')` (when available), so another tab's flush leaves nothing stale.
+  A tap is never kept waiting: `enqueue` resolves once the op is stored (in memory if IndexedDB
+  doesn't answer), and to false with a message when nobody is signed in.
+- **Status** (SYNC-07): `useSyncStatus()` gives the waiting count, the oldest waiting time,
+  `navigator.onLine`, whether the last request reached the server (`onReachability` in
+  `api/client.ts`: a network error, a timeout or a 5xx without the app's error envelope says no;
+  an app error such as 503 `off.busy` says yes; the timeout of a long-deadline request made with
+  `withLongTimeout`, i.e. a photo upload or an Open Food Facts lookup, says nothing) and whether
+  ops are being sent. `SyncIndicator` shows "Saved", "Saving…", "Offline – N changes waiting" or
+  "Can't reach MealMate …"; `SyncBanners` the "waiting for more than an hour" banner and the
+  "can't store anything" note. Offline, the list views show a banner and disable (not hide)
+  everything that needs a connection, and the Lists home disables "+ New list"; export still
+  works.
+- **Lifecycle** (SYNC-05/10), from the session's end events: logging out (after a confirmation
+  when changes wait, on Me and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
+  and keeps only this user's outbox; an expired one keeps both until the same user is back; a
+  different user signing in removes the previous copy, and the previous user's ops are never sent
+  with the new session.
+- **Start-up**: with a cached profile the app shows it (and the copy) at once while the start-up
+  refresh runs in the background (8 s deadline), so nothing waits on the network (SYNC-09).
+- **Tests**: `fake-indexeddb/auto` in the sync tests; component tests without it use the memory
+  fallback.
 
 ## Barcode scanner
 
@@ -392,7 +461,13 @@ order.
 | `screenHistory`          | `screen-history`           | History screen (done lists)                 |
 | `historyWeek`            | `history-week`             | One week of done lists in the history       |
 | `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
-| `syncStatus`             | `sync-status`              | "Saved" / "Can't reach MealMate" line       |
+| `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
+| `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |
+| `offlineNotice`          | `offline-notice`           | "This page needs a connection" message      |
+| `waitingBanner`          | `waiting-banner`           | "Waiting for more than an hour" banner      |
+| `noStorageBanner`        | `no-storage-banner`        | "Can't store anything on this device" note  |
+| `syncToast`              | `sync-toast`               | Message about changes that weren't saved    |
+| `linePending`            | `line-pending`             | "not sent yet" hint of a waiting line       |
 | `refreshList`            | `refresh-list`             | "Refresh" on the shopping view              |
 | `shoppingMeals`          | `shopping-meals`           | Collapsed meals section while shopping      |
 | `shoppingLines`          | `shopping-lines`           | Lines still to buy, by category             |

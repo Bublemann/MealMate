@@ -3,7 +3,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
-import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -98,7 +98,7 @@ export function IngredientsScreen() {
           {(ingredients.isPending || categories.isPending) && (
             <p className="text-muted-foreground">{t('common.loading')}</p>
           )}
-          <ErrorAlert error={ingredients.error ?? categories.error} />
+          <LoadError error={ingredients.error ?? categories.error} />
           {groups && groups.length === 0 && debounced !== '' && (
             <Card className="items-start gap-3 px-5">
               <p aria-live="polite">{t('ingredients.noResults', { query: debounced })}</p>

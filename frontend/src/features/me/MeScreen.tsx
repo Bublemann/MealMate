@@ -1,6 +1,8 @@
 import { ChevronRight, LogOut } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
 import { Screen } from '@/components/Screen';
@@ -10,6 +12,7 @@ import { useLogout } from '@/features/auth/api';
 import { useCurrentUser } from '@/features/auth/context';
 import { CoupleSection } from '@/features/couple/CoupleSection';
 import { OffAttribution } from '@/features/ingredients/OffAttribution';
+import { useSyncEngine, useSyncStatus } from '@/features/sync/context';
 import { errorMessage } from '@/i18n/errors';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
@@ -72,9 +75,22 @@ function AdminEntry() {
   );
 }
 
+/**
+ * Log out. With changes still waiting to be sent it asks first: logging out deletes them with the
+ * local copy (SYNC-05, SYNC-10). The outbox is read before deciding, so a tap right after the
+ * start can't skip the question.
+ */
 function LogoutCard() {
   const { t } = useTranslation();
   const logout = useLogout();
+  const engine = useSyncEngine();
+  const { pending } = useSyncStatus();
+  const [confirming, setConfirming] = useState(false);
+
+  async function onLogout() {
+    if ((await engine.waitingCount()) > 0) setConfirming(true);
+    else logout.mutate();
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -82,11 +98,20 @@ function LogoutCard() {
         variant="outline"
         data-testid={testIds.logoutButton}
         disabled={logout.isPending}
-        onClick={() => logout.mutate()}
+        onClick={() => void onLogout()}
       >
         <LogOut aria-hidden="true" />
         {t('me.logout')}
       </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t('me.logoutPending.title', { count: pending })}
+        description={t('me.logoutPending.text')}
+        confirmLabel={t('me.logoutPending.confirm')}
+        destructive
+        onConfirm={() => logout.mutate()}
+      />
       <ErrorAlert error={logout.error} />
     </div>
   );

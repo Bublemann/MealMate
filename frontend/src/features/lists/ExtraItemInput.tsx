@@ -8,19 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useIngredients, type IngredientSummary } from '@/features/ingredients/api';
 import { useCategories, type Unit } from '@/features/reference/api';
+import { useConnected, useQueueOp } from '@/features/sync/context';
 import { categoryName, unitLabel } from '@/features/reference/labels';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { parseAmount } from '@/i18n/format';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { uuidv7 } from '@/lib/uuid';
 import { testIds } from '@/testIds';
-import {
-  stampOp,
-  useAddExtraItem,
-  type ExtraAddPayload,
-  type ExtraItemCreate,
-  type OpStamp,
-} from './api';
+import { shoppingOps, stampOp, useAddExtraItem, type ExtraItemCreate } from './api';
 import { AmountFields, FreeTextFields } from './ExtraItemFields';
 import { otherCategoryId } from './format';
 
@@ -37,7 +32,9 @@ const MAX_TEXT_LENGTH = 80;
  *
  * The item keeps its id until it is added or changed, so sending it again after an error (e.g. a
  * timeout whose request did reach the server) doesn't add it twice. While shopping (SHOP-02) a
- * free-text item is sent as an op, with its category's key and a stamp it keeps along with the id.
+ * free-text item is an op of the outbox with its category's key, which works offline too
+ * (SYNC-03); linked items need a connection, so the suggestions are off while offline. On a draft
+ * nothing can be added offline: the form is disabled.
  */
 export function ExtraItemInput({
   listId,
@@ -57,14 +54,17 @@ export function ExtraItemInput({
   const [amountText, setAmountText] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [amountInvalid, setAmountInvalid] = useState(false);
-  /** The id of the item as it is typed (and its op's stamp); null until it is first sent. */
+  /** The id of the item as it is typed; null until it is first sent. */
   const pendingId = useRef<string | null>(null);
-  const pendingStamp = useRef<OpStamp | null>(null);
+  /** A free-text item is being stored in the outbox (SHOP-02). */
+  const queuing = useRef(false);
   const add = useAddExtraItem(listId);
+  const queue = useQueueOp(listId);
+  const connected = useConnected();
   const categories = useCategories();
   const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
   const debounced = useDebouncedValue(text.trim());
-  const searching = debounced !== '' && !picked;
+  const searching = debounced !== '' && !picked && connected;
   const suggestions = useIngredients(debounced, { enabled: searching });
   const matches = searching ? (suggestions.data ?? []).slice(0, MAX_SUGGESTIONS) : [];
   const typed = text.trim();
@@ -79,7 +79,6 @@ export function ExtraItemInput({
   /** The item changed: a new id the next time it is sent. */
   function edited() {
     pendingId.current = null;
-    pendingStamp.current = null;
   }
 
   function pick(ingredient: IngredientSummary) {
@@ -115,26 +114,13 @@ export function ExtraItemInput({
     return pendingId.current;
   }
 
-  function body(): ExtraItemCreate | ({ op: ExtraAddPayload } & OpStamp) | null {
+  function body(): ExtraItemCreate | null {
     if (picked) {
       const trimmed = amount.trim();
       if (trimmed === '') return { id: itemId(), ingredient_id: picked.id };
       const value = parseAmount(trimmed);
       if (value === null) return null;
       return { id: itemId(), ingredient_id: picked.id, amount: value, unit };
-    }
-    if (shopping) {
-      const categoryKey = categoryKeys.get(chosenCategory);
-      pendingStamp.current ??= stampOp();
-      return {
-        ...pendingStamp.current,
-        op: {
-          extra_id: itemId(),
-          text: typed,
-          ...(amountText.trim() ? { amount_text: amountText.trim() } : {}),
-          ...(categoryKey ? { category_key: categoryKey } : {}),
-        },
-      };
     }
     return {
       id: itemId(),
@@ -144,9 +130,36 @@ export function ExtraItemInput({
     };
   }
 
+  /**
+   * SHOP-02: stored in the outbox at once, sent when there is a connection. What was typed is
+   * cleared only once the item is queued, so nothing is lost if it can't be (a message says so).
+   */
+  async function queueFreeText() {
+    // A second Enter while the first is being stored must not add the item twice.
+    if (queuing.current) return;
+    queuing.current = true;
+    const categoryKey = categoryKeys.get(chosenCategory);
+    const payload = {
+      extra_id: uuidv7(),
+      text: typed,
+      ...(amountText.trim() ? { amount_text: amountText.trim() } : {}),
+      ...(categoryKey ? { category_key: categoryKey } : {}),
+    };
+    try {
+      if (await queue(shoppingOps.addExtra(payload, stampOp()))) clear();
+    } finally {
+      queuing.current = false;
+    }
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (add.isPending || (!picked && !typed)) return;
+    if (shopping && !picked) {
+      void queueFreeText();
+      return;
+    }
+    if (!connected) return;
     const item = body();
     setAmountInvalid(item === null);
     if (item) add.mutate(item, { onSuccess: clear });
@@ -157,119 +170,125 @@ export function ExtraItemInput({
       onSubmit={onSubmit}
       noValidate
       aria-label={t('lists.extra.label')}
-      className="flex flex-col gap-3 rounded-xl border bg-card p-4"
+      className="rounded-xl border bg-card p-4"
     >
-      <div className="flex flex-col gap-2">
-        {picked ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <RemovableChip
-              removeLabel={t('lists.extra.unpick', { name: picked.name })}
-              onRemove={unpick}
-            >
-              {picked.name}
-            </RemovableChip>
-            <span className="text-sm text-muted-foreground">
-              {categoryName(t, categoryKeys.get(picked.category_id) ?? 'other')}
-            </span>
-          </div>
-        ) : (
-          <>
-            <Label htmlFor={inputId}>{t('lists.extra.label')}</Label>
-            <Input
-              ref={inputRef}
-              id={inputId}
-              data-testid={testIds.extraItemInput}
-              autoComplete="off"
-              enterKeyHint="done"
-              maxLength={MAX_TEXT_LENGTH}
-              aria-describedby={hintId}
-              aria-invalid={serverFields.text ? true : undefined}
-              value={text}
-              onChange={(event) => {
-                add.reset();
-                edited();
-                setText(event.target.value);
-              }}
-            />
-            <p id={hintId} className="text-sm text-muted-foreground">
-              {serverFields.text ?? t('lists.extra.hint')}
-            </p>
-          </>
-        )}
-      </div>
-      {matches.length > 0 && (
-        <ul
-          aria-label={t('lists.extra.suggestions')}
-          className="flex flex-col divide-y rounded-lg border"
-        >
-          {matches.map((ingredient) => {
-            const key = categoryKeys.get(ingredient.category_id);
-            return (
-              <li key={ingredient.id}>
-                <button
-                  type="button"
-                  onClick={() => pick(ingredient)}
-                  className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-                >
-                  <span className="font-medium">{ingredient.name}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {key ? `${categoryName(t, key)} · ` : ''}
-                    {unitLabel(t, ingredient.base_unit)}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <ErrorAlert error={suggestions.error} />
-      {picked && (
-        <AmountFields
-          amount={amount}
-          unit={unit}
-          onAmountChange={(value) => {
-            edited();
-            setAmountInvalid(false);
-            setAmount(value);
-          }}
-          onUnitChange={(value) => {
-            edited();
-            setUnit(value);
-          }}
-          amountError={amountInvalid ? t('error.field.invalid_format') : serverFields.amount}
-          unitError={serverFields.unit}
-        />
-      )}
-      {!picked && typed && (
-        <FreeTextFields
-          amountText={amountText}
-          categoryId={chosenCategory}
-          onAmountTextChange={(value) => {
-            edited();
-            setAmountText(value);
-          }}
-          onCategoryChange={(value) => {
-            edited();
-            setCategoryId(value);
-          }}
-          amountTextError={serverFields.amount_text}
-          categoryError={serverFields.category_id}
-        />
-      )}
-      {showAlert && <ErrorAlert error={add.error} />}
-      <Button
-        type="submit"
-        className="self-start"
-        disabled={add.isPending || (!picked && !typed)}
-        aria-label={
-          picked || typed
-            ? t('lists.extra.addLabel', { name: picked ? picked.name : typed })
-            : undefined
-        }
+      {/* Offline, a draft can't change (SYNC-03): everything is disabled, nothing hidden. */}
+      <fieldset
+        disabled={!shopping && !connected}
+        className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0"
       >
-        <Plus aria-hidden="true" />
-        {t('lists.extra.add')}
-      </Button>
+        <div className="flex flex-col gap-2">
+          {picked ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <RemovableChip
+                removeLabel={t('lists.extra.unpick', { name: picked.name })}
+                onRemove={unpick}
+              >
+                {picked.name}
+              </RemovableChip>
+              <span className="text-sm text-muted-foreground">
+                {categoryName(t, categoryKeys.get(picked.category_id) ?? 'other')}
+              </span>
+            </div>
+          ) : (
+            <>
+              <Label htmlFor={inputId}>{t('lists.extra.label')}</Label>
+              <Input
+                ref={inputRef}
+                id={inputId}
+                data-testid={testIds.extraItemInput}
+                autoComplete="off"
+                enterKeyHint="done"
+                maxLength={MAX_TEXT_LENGTH}
+                aria-describedby={hintId}
+                aria-invalid={serverFields.text ? true : undefined}
+                value={text}
+                onChange={(event) => {
+                  add.reset();
+                  edited();
+                  setText(event.target.value);
+                }}
+              />
+              <p id={hintId} className="text-sm text-muted-foreground">
+                {serverFields.text ?? t('lists.extra.hint')}
+              </p>
+            </>
+          )}
+        </div>
+        {matches.length > 0 && (
+          <ul
+            aria-label={t('lists.extra.suggestions')}
+            className="flex flex-col divide-y rounded-lg border"
+          >
+            {matches.map((ingredient) => {
+              const key = categoryKeys.get(ingredient.category_id);
+              return (
+                <li key={ingredient.id}>
+                  <button
+                    type="button"
+                    onClick={() => pick(ingredient)}
+                    className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+                  >
+                    <span className="font-medium">{ingredient.name}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {key ? `${categoryName(t, key)} · ` : ''}
+                      {unitLabel(t, ingredient.base_unit)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <ErrorAlert error={suggestions.error} />
+        {picked && (
+          <AmountFields
+            amount={amount}
+            unit={unit}
+            onAmountChange={(value) => {
+              edited();
+              setAmountInvalid(false);
+              setAmount(value);
+            }}
+            onUnitChange={(value) => {
+              edited();
+              setUnit(value);
+            }}
+            amountError={amountInvalid ? t('error.field.invalid_format') : serverFields.amount}
+            unitError={serverFields.unit}
+          />
+        )}
+        {!picked && typed && (
+          <FreeTextFields
+            amountText={amountText}
+            categoryId={chosenCategory}
+            onAmountTextChange={(value) => {
+              edited();
+              setAmountText(value);
+            }}
+            onCategoryChange={(value) => {
+              edited();
+              setCategoryId(value);
+            }}
+            amountTextError={serverFields.amount_text}
+            categoryError={serverFields.category_id}
+          />
+        )}
+        {showAlert && <ErrorAlert error={add.error} />}
+        <Button
+          type="submit"
+          className="self-start"
+          disabled={add.isPending || (!picked && !typed) || (picked !== null && !connected)}
+          aria-label={
+            picked || typed
+              ? t('lists.extra.addLabel', { name: picked ? picked.name : typed })
+              : undefined
+          }
+        >
+          <Plus aria-hidden="true" />
+          {t('lists.extra.add')}
+        </Button>
+      </fieldset>
     </form>
   );
 }

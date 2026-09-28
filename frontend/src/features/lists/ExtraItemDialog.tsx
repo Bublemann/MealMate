@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
@@ -13,16 +13,17 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useCategories, type Unit } from '@/features/reference/api';
+import { useConnected, useQueueOp } from '@/features/sync/context';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { formatNumber, parseAmount } from '@/i18n/format';
 import { useLanguage } from '@/i18n';
 import {
+  shoppingOps,
   stampOp,
   useRemoveExtraItem,
   useUpdateExtraItem,
   type ExtraItem,
   type ExtraItemUpdate,
-  type OpStamp,
 } from './api';
 import { AmountFields, FreeTextFields } from './ExtraItemFields';
 import { otherCategoryId } from './format';
@@ -78,9 +79,9 @@ interface ItemFormProps {
 }
 
 /**
- * The fields of the item's kind. While shopping, a free-text item is saved and removed with ops,
- * as offline (M6): each keeps its stamp while it is tried again, and saving gets a new one once the
- * fields change.
+ * The fields of the item's kind. While shopping, a free-text item is saved and removed with ops of
+ * the outbox, which works offline too (SYNC-03); everything else needs a connection and is
+ * disabled without one.
  */
 function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
   const { t } = useTranslation();
@@ -99,15 +100,10 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
   const [amountInvalid, setAmountInvalid] = useState(false);
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, update.error);
-  const busy = update.isPending || remove.isPending;
   const byOps = shopping && !linked;
-  const saveStamp = useRef<OpStamp | null>(null);
-  const removeStamp = useRef<OpStamp | null>(null);
-
-  /** The fields changed: saving them is a new action. */
-  function edited() {
-    saveStamp.current = null;
-  }
+  const queue = useQueueOp(listId);
+  const connected = useConnected();
+  const busy = update.isPending || remove.isPending || (!byOps && !connected);
 
   function body(): ExtraItemUpdate | null {
     if (linked) {
@@ -130,9 +126,13 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
     setAmountInvalid(changes === null);
     if (!changes) return;
     if (byOps) {
-      saveStamp.current ??= stampOp();
-      const op = { extra_id: item.id, text: text.trim(), amount_text: amountText.trim() || null };
-      update.mutate({ op, ...saveStamp.current }, { onSuccess: onDone });
+      const payload = {
+        extra_id: item.id,
+        text: text.trim(),
+        amount_text: amountText.trim() || null,
+      };
+      void queue(shoppingOps.updateExtra(payload, stampOp()));
+      onDone();
     } else {
       update.mutate({ extraId: item.id, body: changes }, { onSuccess: onDone });
     }
@@ -140,8 +140,8 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
 
   function onRemove() {
     if (byOps) {
-      removeStamp.current ??= stampOp();
-      remove.mutate({ extraId: item.id, ...removeStamp.current }, { onSuccess: onDone });
+      void queue(shoppingOps.removeExtra(item.id, stampOp()));
+      onDone();
     } else {
       remove.mutate(item.id, { onSuccess: onDone });
     }
@@ -175,20 +175,14 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
                 required
                 maxLength={80}
                 value={text}
-                onChange={(event) => {
-                  edited();
-                  setText(event.target.value);
-                }}
+                onChange={(event) => setText(event.target.value)}
               />
             )}
           </FormField>
           <FreeTextFields
             amountText={amountText}
             categoryId={chosenCategory}
-            onAmountTextChange={(value) => {
-              edited();
-              setAmountText(value);
-            }}
+            onAmountTextChange={setAmountText}
             onCategoryChange={setCategoryId}
             amountTextError={serverFields.amount_text}
             categoryError={serverFields.category_id}

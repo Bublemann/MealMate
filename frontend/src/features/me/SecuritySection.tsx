@@ -3,10 +3,12 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSyncEngine } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { formatDate, formatDateTime } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
@@ -21,11 +23,23 @@ import {
 } from './api';
 import { PasswordDialog } from './PasswordDialog';
 
-/** Security notice, password change, sessions and "log out on all devices" (ACC-09, ACC-10). */
+/**
+ * Security notice, password change, sessions and "log out on all devices" (ACC-09, ACC-10). The
+ * latter logs out here too: with changes still waiting it says they will be lost (SYNC-05). The
+ * outbox is read before the question is asked, so a tap right after the start (before the
+ * waiting count has loaded) can't leave that out.
+ */
 export function SecuritySection() {
   const { t } = useTranslation();
   const [passwordChanged, setPasswordChanged] = useState(false);
   const logoutAll = useLogoutAll();
+  const engine = useSyncEngine();
+  /** The waiting changes as read when the button was tapped; null while the dialog is closed. */
+  const [pending, setPending] = useState<number | null>(null);
+
+  async function onLogoutAll() {
+    setPending(await engine.waitingCount());
+  }
 
   return (
     <Card>
@@ -41,19 +55,30 @@ export function SecuritySection() {
           </p>
         </div>
         <SessionList />
+        <Button
+          variant="outline"
+          data-testid={testIds.logoutAllButton}
+          disabled={logoutAll.isPending}
+          onClick={() => void onLogoutAll()}
+        >
+          {t('me.sessions.logoutAll')}
+        </Button>
         <ConfirmDialog
-          trigger={
-            <Button
-              variant="outline"
-              data-testid={testIds.logoutAllButton}
-              disabled={logoutAll.isPending}
-            >
-              {t('me.sessions.logoutAll')}
-            </Button>
+          open={pending !== null}
+          onOpenChange={(open) => {
+            if (!open) setPending(null);
+          }}
+          title={
+            pending
+              ? t('me.logoutPending.title', { count: pending })
+              : t('me.sessions.logoutAllTitle')
           }
-          title={t('me.sessions.logoutAllTitle')}
-          description={t('me.sessions.logoutAllText')}
-          confirmLabel={t('me.sessions.logoutAllConfirm')}
+          description={
+            pending
+              ? `${t('me.sessions.logoutAllText')} ${t('me.logoutPending.text')}`
+              : t('me.sessions.logoutAllText')
+          }
+          confirmLabel={pending ? t('me.logoutPending.confirm') : t('me.sessions.logoutAllConfirm')}
           onConfirm={() => logoutAll.mutate()}
           destructive
         />
@@ -68,7 +93,7 @@ function SecurityNotice() {
   const language = useLanguage();
   const security = useSecurityInfo();
 
-  if (!security.data) return <ErrorAlert error={security.error} />;
+  if (!security.data) return <LoadError error={security.error} />;
   const { password_reset_at: resetAt, password_reset_by: resetBy } = security.data;
   const changedAt = security.data.password_changed_at;
 
@@ -108,7 +133,7 @@ function SessionList() {
         {t('me.sessions.title')}
       </h3>
       {sessions.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={sessions.error} />
+      <LoadError error={sessions.error} />
       {sessions.data && (
         <ul data-testid={testIds.sessionList} className="flex flex-col divide-y">
           {sessions.data.map((session) => (

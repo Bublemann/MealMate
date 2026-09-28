@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { ErrorAlert } from '@/components/ErrorAlert';
 import { useLanguage } from '@/i18n';
 import { formatDateTime } from '@/i18n/format';
 import { testIds } from '@/testIds';
 import { AdminScreen } from './AdminScreen';
 import { useAdminEvents } from './api';
 import { describeEvent } from './events';
+import { LoadError } from '@/components/LoadError';
 
 /** The admin activity log (ADM-01), newest first. */
 export function AdminEventsScreen() {
@@ -16,7 +16,7 @@ export function AdminEventsScreen() {
   return (
     <AdminScreen title={t('admin.events.title')} testId={testIds.screenAdminEvents}>
       {events.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      <ErrorAlert error={events.error} />
+      <LoadError error={events.error} />
       {events.data?.length === 0 && (
         <p className="text-muted-foreground">{t('admin.events.empty')}</p>
       )}

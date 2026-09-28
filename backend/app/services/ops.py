@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ErrorCode
+from app.core.errors import ApiError, ErrorCode
 from app.domain.aggregation import Line
 from app.domain.lists import LINE_KEY_PATTERN, TEXT_KEY_PREFIX
 from app.media.store import MediaStore
@@ -224,9 +224,16 @@ async def apply_ops(
     body: OpsRequest,
     *,
     now: datetime,
+    expected_user_id: str | None = None,
 ) -> OpsResponse:
     """Apply the ops in order, in one transaction, on a list the principal may edit (404 or
-    403 for the whole request otherwise), and answer with each op's result and the list."""
+    403 for the whole request otherwise), and answer with each op's result and the list.
+
+    `expected_user_id`: who made the ops, if the client says so; when that is not the
+    principal nothing is applied (409 `auth.user_mismatch`), so ops never count as another
+    user's (SYNC-10)."""
+    if expected_user_id is not None and expected_user_id != principal.user_id:
+        raise ApiError(ErrorCode.USER_MISMATCH, status_code=409)
     async with session.begin():
         shopping_list, rights = await access.require_list_edit(session, principal, list_id)
         processed = await lists_repo.processed_op_ids(

@@ -5,6 +5,7 @@ SHOP, SYNC-05/06/08, CPL-02/03, VIS-03/06, UI-02)."""
 from typing import Annotated
 
 from fastapi import APIRouter, Header, Path, Response, status
+from pydantic_core import to_json
 
 from app.api.deps import CurrentUser, Db, ListResponses, Media, Now
 from app.core import etags
@@ -21,12 +22,16 @@ from app.schemas.lists import (
     ListMealAdd,
     ListMealUpdate,
     ListScope,
+    ListsSync,
     ListSummary,
     ListUpdate,
     OpsRequest,
     OpsResponse,
 )
 from app.services import lists, ops
+
+# Names the user who made the ops sent with it (see `apply_list_ops`).
+USER_HEADER = "X-MealMate-User"
 
 router = APIRouter(prefix="/api/lists", tags=["lists"], responses=ERROR_RESPONSES)
 
@@ -60,6 +65,37 @@ async def list_history(principal: CurrentUser, session: ReadSession) -> list[Lis
     and those your partner shares with you (SHOP-05, CPL-02). Group them by the week of
     `finished_at` in your time zone."""
     return await lists.list_history(session, principal)
+
+
+@router.get(
+    "/sync",
+    response_model=ListsSync,
+    responses={status.HTTP_304_NOT_MODIFIED: {"description": "Unchanged since the given ETag"}},
+)
+async def sync_lists(
+    principal: CurrentUser,
+    session: ReadSession,
+    database: Db,
+    cache: ListResponses,
+    media: Media,
+    now: Now,
+    if_none_match: Annotated[str | None, Header(max_length=1000)] = None,
+) -> Response:
+    """The local copy for offline use (SYNC-02, SYNC-10): every list you can edit that is a
+    draft or being shopped (yours and those your partner shares with you), each as
+    `GET /api/lists/{id}` shows it, most recently edited first. Replace the stored copy with
+    it: a list that is missing was deleted, finished or is no longer yours to edit. The weak
+    `ETag` covers `lists` but not `generated_at`, so `If-None-Match` gives a 304 while no list
+    in it changed."""
+    generation = database.write_generation
+    entries = await lists.sync_lists(session, media, principal, cache, generation, now=now)
+    # The bodies are the cached `ListDetail` JSON, joined as they are (no parsing again).
+    lists_json = b"[" + b",".join(entry.body for entry in entries) + b"]"
+    headers = {"ETag": etags.weak_etag(lists_json), "Cache-Control": "no-cache"}
+    if etags.matches(if_none_match, headers["ETag"]):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+    body = b'{"lists":' + lists_json + b',"generated_at":' + to_json(now) + b"}"
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -166,12 +202,26 @@ async def apply_list_ops(
     session: WriteSession,
     media: Media,
     now: Now,
+    user: Annotated[
+        str | None,
+        Header(
+            alias=USER_HEADER,
+            max_length=100,
+            description="The id of the user who made the ops. If given and not the signed-in "
+            "user, nothing is applied (409 `auth.user_mismatch`).",
+        ),
+    ] = None,
 ) -> OpsResponse:
     """Apply the actions of shopping mode in order, in one transaction (plan § 5.8): check
     off, add, rename and delete free-text items, finish. Each op is applied once, however often
     it is sent (SYNC-05); the result of each and the list afterwards come back. The list must
-    be one you may edit (404, 403 otherwise)."""
-    return await ops.apply_ops(session, media, principal, list_id, body, now=now)
+    be one you may edit (404, 403 otherwise).
+
+    `X-MealMate-User` guards against a phone sending one user's queued ops with another user's
+    session (SYNC-10): a mismatch is refused before anything else (409 `auth.user_mismatch`)."""
+    return await ops.apply_ops(
+        session, media, principal, list_id, body, now=now, expected_user_id=user
+    )
 
 
 @router.post("/{list_id}/meals")

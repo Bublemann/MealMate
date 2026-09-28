@@ -109,6 +109,7 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "delete_list",
         "copy_list",
         "list_history",
+        "sync_lists",
         "start_shopping",
         "reopen_list",
         "shop_again",

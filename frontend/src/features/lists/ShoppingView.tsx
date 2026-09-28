@@ -1,7 +1,6 @@
-import { Check, CircleCheck, CloudOff, Pencil, RefreshCw, ShoppingBasket } from 'lucide-react';
+import { Check, CircleCheck, Pencil, ShoppingBasket } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ErrorAlert } from '@/components/ErrorAlert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,18 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import type { PendingLine, PendingList } from '@/features/sync/applyPending';
+import { useQueueOp } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { userLabel } from '@/i18n/users';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
-import {
-  stampOp,
-  useCheckLine,
-  useFinishList,
-  type ListDetail,
-  type ListLine,
-  type OpStamp,
-} from './api';
+import { shoppingOps, stampOp } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { ExtraItemInput } from './ExtraItemInput';
 import { groupByCategory, initialOf, lineAmount, needsMoreTexts, reminderText } from './format';
@@ -31,11 +25,9 @@ import { ListMeals } from './ListMeals';
 import { Reminder } from './Reminder';
 
 interface ShoppingViewProps {
-  list: ListDetail;
+  /** The list with the user's waiting changes applied. */
+  list: PendingList;
   categoryKeys: ReadonlyMap<string, string>;
-  /** The last load of the list failed for want of a connection (SYNC-07). */
-  unreachable: boolean;
-  onRefresh: () => void;
   onAddMeals: () => void;
 }
 
@@ -48,20 +40,17 @@ const CART = Symbol('cart');
  * their line, the meals still editable but collapsed (LIST-12), and "Finish shopping" (SHOP-04).
  * Checking the last line offers to finish, once per visit.
  *
+ * Checking off, free-text items and *Finish* go through the outbox, online or offline (SYNC-03):
+ * stored, shown at once, then sent; what hasn't been sent yet looks faded (SYNC-07).
+ *
  * A checked line leaves the list, so the focus moves on to the next line to buy (the cart once
  * there is none), and an unchecked one keeps it in its new place; a polite live region says where
  * the line went.
  */
-export function ShoppingView({
-  list,
-  categoryKeys,
-  unreachable,
-  onRefresh,
-  onAddMeals,
-}: ShoppingViewProps) {
+export function ShoppingView({ list, categoryKeys, onAddMeals }: ShoppingViewProps) {
   const { t } = useTranslation();
   const headingId = useId();
-  const check = useCheckLine(list.id);
+  const queue = useQueueOp(list.id);
   const [finishOpen, setFinishOpen] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -94,15 +83,8 @@ export function ShoppingView({
     }
   });
 
-  function onCheck(line: ListLine, checked: boolean) {
-    check.mutate(
-      { key: line.key, checked, ...stampOp() },
-      {
-        onError: () => {
-          focusNext.current = null;
-        },
-      },
-    );
+  function onCheck(line: PendingLine, checked: boolean) {
+    void queue(shoppingOps.check(line.key, checked, stampOp()));
     setAnnouncement(
       t(checked ? 'lists.shop.inCart' : 'lists.shop.backOnList', { name: line.name }),
     );
@@ -136,13 +118,11 @@ export function ShoppingView({
 
   return (
     <>
-      <SyncStatus unreachable={unreachable} onRefresh={onRefresh} />
       <section aria-labelledby={headingId} className="flex flex-col gap-4">
         <h2 id={headingId} className="text-xl font-semibold">
           {t('lists.lines.title')}
         </h2>
         {!editable && <p className="text-muted-foreground">{t('lists.shop.readOnly')}</p>}
-        <ErrorAlert error={check.error} />
         {shown.length === 0 && <p className="text-muted-foreground">{t('lists.lines.empty')}</p>}
         {shown.length > 0 && open.length === 0 && (
           <p className="flex items-center gap-2 font-medium">
@@ -207,39 +187,10 @@ export function ShoppingView({
   );
 }
 
-/** SYNC-07 in short (M6 adds the offline states): did the last request reach the server? */
-function SyncStatus({ unreachable, onRefresh }: { unreachable: boolean; onRefresh: () => void }) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="-mt-2 flex items-center justify-between gap-3">
-      <p
-        role="status"
-        data-testid={testIds.syncStatus}
-        className={cn(
-          'flex items-center gap-2 text-sm',
-          unreachable ? 'font-medium text-destructive' : 'text-muted-foreground',
-        )}
-      >
-        {unreachable ? (
-          <CloudOff aria-hidden="true" className="size-4 shrink-0" />
-        ) : (
-          <Check aria-hidden="true" className="size-4 shrink-0" />
-        )}
-        {unreachable ? t('lists.sync.unreachable') : t('lists.sync.saved')}
-      </p>
-      <Button variant="ghost" size="compact" data-testid={testIds.refreshList} onClick={onRefresh}>
-        <RefreshCw aria-hidden="true" />
-        {t('lists.sync.refresh')}
-      </Button>
-    </div>
-  );
-}
-
 /** What every row needs from the view. */
 interface RowProps {
   editable: boolean;
-  onCheck: (line: ListLine, checked: boolean) => void;
+  onCheck: (line: PendingLine, checked: boolean) => void;
   /** Keeps track of each line's check box, to move the focus to it. */
   box: (key: string) => (element: HTMLInputElement | null) => void;
   /** Opens the dialog of an extra item (editors). */
@@ -248,7 +199,7 @@ interface RowProps {
 
 interface CategoryCheckLinesProps {
   name: string;
-  lines: ListLine[];
+  lines: PendingLine[];
   rowProps: RowProps;
 }
 
@@ -273,7 +224,7 @@ function CategoryCheckLines({ name, lines, rowProps }: CategoryCheckLinesProps) 
 }
 
 interface InTheCartProps {
-  lines: ListLine[];
+  lines: PendingLine[];
   summaryRef: RefObject<HTMLElement | null>;
   rowProps: RowProps;
 }
@@ -302,14 +253,15 @@ function InTheCart({ lines, summaryRef, rowProps }: InTheCartProps) {
 }
 
 interface CheckRowProps extends RowProps {
-  line: ListLine;
+  line: PendingLine;
 }
 
 /**
  * One line with a big check box (SHOP-01). The whole row is its label, and the box itself is at
  * least 44 × 44 px. Badges say what is new or needs more (LIST-12); a checked line is struck
  * through and shows who checked it. A line with an extra item has a button to change or remove
- * the item (editors, LIST-12).
+ * the item (editors, LIST-12). A line whose change hasn't been sent yet is faded and says so
+ * (SYNC-07).
  */
 function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const { t } = useTranslation();
@@ -320,7 +272,10 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const extraId = line.sources.find((source) => source.kind === 'extra')?.extra_id ?? null;
 
   return (
-    <li data-testid={testIds.shoppingLine} className="flex items-center">
+    <li
+      data-testid={testIds.shoppingLine}
+      className={cn('flex items-center', line.pending && 'bg-muted/50')}
+    >
       <label
         className={cn(
           'flex min-h-14 min-w-0 flex-1 items-center gap-3 py-1.5 pr-4 pl-1.5',
@@ -341,7 +296,11 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
           />
           <span
             aria-hidden="true"
-            className="flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60"
+            className={cn(
+              'flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60',
+              // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
+              line.pending && 'opacity-50 peer-checked:opacity-50',
+            )}
           >
             {line.checked && <Check className="size-6" strokeWidth={3} />}
           </span>
@@ -367,6 +326,11 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
               </span>
             )}
           </span>
+          {line.pending && (
+            <span data-testid={testIds.linePending} className="text-sm text-muted-foreground">
+              {t('lists.sync.pending')}
+            </span>
+          )}
           {(line.new || more.length > 0) && (
             <span className="flex flex-wrap gap-1">
               {line.new && (
@@ -420,7 +384,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
 }
 
 interface FinishDialogProps {
-  list: ListDetail;
+  list: PendingList;
   /** Visible lines not checked off. */
   unchecked: number;
   open: boolean;
@@ -430,8 +394,9 @@ interface FinishDialogProps {
 }
 
 /**
- * SHOP-04: the reminder, how many items aren't checked, then *Finish* or *Keep shopping*. The tap
- * on *Finish* is stamped once per opening, so trying again after an error is the same op.
+ * SHOP-04: the reminder, how many items aren't checked, then *Finish* or *Keep shopping*. *Finish*
+ * is an op of the outbox, stamped at the tap (the list counts as finished then), so it works
+ * offline too (SYNC-03); the view shows the done list at once.
  */
 function FinishDialog({
   list,
@@ -441,24 +406,20 @@ function FinishDialog({
   onCloseAutoFocus,
 }: FinishDialogProps) {
   const { t } = useTranslation();
-  const finish = useFinishList(list.id);
-  const stamp = useRef<OpStamp | null>(null);
-
-  function onOpen(next: boolean) {
-    if (next) {
-      finish.reset();
-      stamp.current = null;
-    }
-    onOpenChange(next);
-  }
+  const queue = useQueueOp(list.id);
+  const [finishing, setFinishing] = useState(false);
 
   function onFinish() {
-    stamp.current ??= stampOp();
-    finish.mutate(stamp.current, { onSuccess: () => onOpenChange(false) });
+    if (finishing) return;
+    setFinishing(true);
+    void queue(shoppingOps.finish(stampOp())).finally(() => {
+      setFinishing(false);
+      onOpenChange(false);
+    });
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid={testIds.finishDialog} onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{t('lists.shop.finishTitle')}</DialogTitle>
@@ -471,12 +432,11 @@ function FinishDialog({
           <span className="sr-only">{t('lists.reminderLabel')}: </span>
           {reminderText(t, list.reminder_seed)}
         </p>
-        <ErrorAlert error={finish.error} />
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpen(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('lists.shop.keepShopping')}
           </Button>
-          <Button disabled={finish.isPending} onClick={onFinish}>
+          <Button disabled={finishing} onClick={onFinish}>
             {t('lists.shop.finishConfirm')}
           </Button>
         </DialogFooter>

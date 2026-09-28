@@ -652,6 +652,22 @@ async def test_refresh_of_a_user_deactivated_without_revocation(
     assert await me_status(api, anna) == (401, "auth.session_revoked")
 
 
+async def test_a_deactivated_user_is_revoked_even_when_expired(
+    app: FastAPI, api: AsyncClient, clock: FakeClock
+) -> None:
+    """SYNC-10 tells the phone to delete its copy on `auth.session_revoked`, not on
+    `auth.session_expired`: a deactivated user's expired session says revoked, as a revoked
+    one does."""
+    anna = await make_user(app, api, "anna")
+    database = app.state.database
+    async with database.write_sessions() as session, session.begin():
+        user = await session.get(User, anna.id)
+        assert user is not None
+        user.is_active = False
+    clock.advance(days=91)
+    assert error(await refresh(api)) == "auth.session_revoked"
+
+
 async def test_login_without_a_user_agent(app: FastAPI, api: AsyncClient) -> None:
     anna = await insert_user(app, "anna")
     response = await api.post(

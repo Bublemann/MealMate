@@ -3,13 +3,18 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useCategories } from '@/features/reference/api';
+import type { PendingList } from '@/features/sync/applyPending';
+import { useConnected, usePendingList, useSyncEngine } from '@/features/sync/context';
+import { ListOfflineBanner } from '@/features/sync/ListOfflineBanner';
+import { SyncIndicator } from '@/features/sync/SyncIndicator';
 import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
-import { isUnreachable, useList, useStartShopping, type ListDetail } from './api';
+import { isUnreachable, useList, useStartShopping } from './api';
 import { DoneView } from './DoneView';
 import { ExtraItemInput } from './ExtraItemInput';
 import { listDisplayName } from './format';
@@ -45,7 +50,8 @@ function viewState(state: unknown): ListViewState {
 /**
  * `/lists/:id`: one list, editable for its editors, read-only for everyone else; a draft, the
  * shopping view or a done list by its state (LIST-10, plan § 8). It is checked for changes every
- * few seconds while on screen (SYNC-08).
+ * few seconds while on screen (SYNC-08). It shows the local copy until the server answers and
+ * while it can't be reached, with the user's waiting changes on top (SYNC-03/09).
  */
 export function ListScreen() {
   const { id = '' } = useParams();
@@ -58,14 +64,17 @@ function ListView({ id }: { id: string }) {
   const location = useLocation();
   const navigate = useNavigate();
   const list = useList(id);
+  const shown = usePendingList(list.data);
   const categories = useCategories();
+  const engine = useSyncEngine();
   // Read once: the state is removed from the history entry, so a reload doesn't repeat it.
   const [initial] = useState(() => viewState(location.state));
   const title = list.data ? listDisplayName(list.data, t, language) : t('nav.lists');
-  // With the list on screen, not reaching the server is what the shopping view's status line
-  // says; anything else (e.g. the list was deleted) is shown here.
+  // With the list on screen, not reaching the server is what the sync indicator and the offline
+  // banner say; anything else (e.g. the list was deleted) is shown here. Without the list (not in
+  // the copy) it is a friendly offline message.
   const unreachable = list.data !== undefined && list.error !== null && isUnreachable(list.error);
-  const loadError = unreachable && list.data?.status === 'shopping' ? null : list.error;
+  const loadError = unreachable ? null : list.error;
 
   useEffect(() => {
     if (location.state !== null && location.state !== undefined) {
@@ -106,14 +115,16 @@ function ListView({ id }: { id: string }) {
       {(list.isPending || categories.isPending) && (
         <p className="text-muted-foreground">{t('common.loading')}</p>
       )}
-      <ErrorAlert error={loadError ?? categories.error} />
-      {list.data && categories.data && (
+      <LoadError error={loadError ?? categories.error} />
+      {shown && categories.data && (
         <ListContent
-          list={list.data}
+          list={shown}
           categoryKeys={new Map(categories.data.map((category) => [category.id, category.key]))}
           openPicker={initial.openPicker === true}
-          unreachable={unreachable}
-          onRefresh={() => void list.refetch()}
+          onRefresh={() => {
+            void engine.flush();
+            void list.refetch();
+          }}
         />
       )}
     </Screen>
@@ -121,15 +132,15 @@ function ListView({ id }: { id: string }) {
 }
 
 interface ListContentProps {
-  list: ListDetail;
+  list: PendingList;
   categoryKeys: ReadonlyMap<string, string>;
   openPicker: boolean;
-  unreachable: boolean;
   onRefresh: () => void;
 }
 
-function ListContent({ list, categoryKeys, openPicker, unreachable, onRefresh }: ListContentProps) {
+function ListContent({ list, categoryKeys, openPicker, onRefresh }: ListContentProps) {
   const { t } = useTranslation();
+  const connected = useConnected();
   // Meals and extra items can change while shopping too (LIST-12); a done list is read-only.
   const editable = list.can_edit && list.status !== 'done';
   const draft = list.status === 'draft';
@@ -139,12 +150,15 @@ function ListContent({ list, categoryKeys, openPicker, unreachable, onRefresh }:
 
   return (
     <>
+      {/* SYNC-07, SHOP-03; "Refresh" while shopping, when the partner's changes matter most. */}
+      <SyncIndicator onRefresh={list.status === 'shopping' ? onRefresh : undefined} />
+      <ListOfflineBanner shopping={list.status === 'shopping' && list.can_edit} />
       <ListActions list={list} categoryKeys={categoryKeys} />
       {draft && list.can_edit && (
         <div className="flex flex-col gap-3">
           <Button
             data-testid={testIds.startShopping}
-            disabled={start.isPending}
+            disabled={start.isPending || !connected}
             onClick={() => start.mutate()}
             className="self-start"
           >
@@ -162,13 +176,7 @@ function ListContent({ list, categoryKeys, openPicker, unreachable, onRefresh }:
         </>
       )}
       {list.status === 'shopping' && (
-        <ShoppingView
-          list={list}
-          categoryKeys={categoryKeys}
-          unreachable={unreachable}
-          onRefresh={onRefresh}
-          onAddMeals={openPickerNow}
-        />
+        <ShoppingView list={list} categoryKeys={categoryKeys} onAddMeals={openPickerNow} />
       )}
       {list.status === 'done' && <DoneView list={list} categoryKeys={categoryKeys} />}
       {editable && <MealPicker listId={list.id} open={pickerOpen} onOpenChange={setPickerOpen} />}

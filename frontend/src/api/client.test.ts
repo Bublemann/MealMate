@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   connectAuth,
   createApiClient,
+  onReachability,
   READ_TIMEOUT_MS,
   unwrap,
+  withLongTimeout,
   withTimeout,
   WRITE_TIMEOUT_MS,
   type AuthBridge,
@@ -93,6 +95,50 @@ describe('api client', () => {
     });
   });
 
+  it('says whether each request reached the server (SYNC-07)', async () => {
+    const seen: boolean[] = [];
+    const stop = onReachability((reachable) => seen.push(reachable));
+    const answers = [
+      () => Promise.resolve(jsonResponse(VERSION)),
+      () => Promise.resolve(jsonResponse({ code: 'common.not_found' }, 404)),
+      () => Promise.resolve(jsonResponse({ code: 'common.internal' }, 502)),
+      () => Promise.reject(new TypeError('Failed to fetch')),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => answers.shift()!()),
+    );
+
+    for (let i = 0; i < 4; i += 1) await api.GET('/api/version').catch(() => undefined);
+    stop();
+    await api.GET('/api/version').catch(() => undefined);
+
+    expect(seen).toEqual([true, true, false, false]);
+  });
+
+  it('counts an error of the app itself as reached, a gateway’s 5xx not (SYNC-07)', async () => {
+    const seen: boolean[] = [];
+    const stop = onReachability((reachable) => seen.push(reachable));
+    const envelope = (code: string) => ({ code, params: {}, fields: [] });
+    const answers = [
+      // The server answered: busy, or not configured. MealMate is there.
+      () => Promise.resolve(jsonResponse(envelope('off.busy'), 503)),
+      () => Promise.resolve(jsonResponse(envelope('admin.public_url_missing'), 500)),
+      // A proxy or gateway in between answered for it.
+      () => Promise.resolve(new Response('<h1>Bad Gateway</h1>', { status: 502 })),
+      () => Promise.resolve(jsonResponse({ message: 'upstream timed out' }, 504)),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => answers.shift()!()),
+    );
+
+    for (let i = 0; i < 4; i += 1) await api.GET('/api/version').catch(() => undefined);
+    stop();
+
+    expect(seen).toEqual([true, true, false, false]);
+  });
+
   it('passes a caller abort through unchanged', async () => {
     vi.stubGlobal('fetch', hangingFetch());
     const controller = new AbortController();
@@ -150,6 +196,24 @@ describe('api client', () => {
       await vi.advanceTimersByTimeAsync(25_000 - WRITE_TIMEOUT_MS);
 
       await expect(result).resolves.toMatchObject({ code: 'client.timeout' });
+    });
+
+    it('lets a long-deadline request time out without saying MealMate is gone', async () => {
+      const seen: boolean[] = [];
+      const stop = onReachability((reachable) => seen.push(reachable));
+      vi.stubGlobal('fetch', hangingFetch());
+
+      const slow = api.GET('/api/version', { ...withLongTimeout(25_000) }).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(25_000);
+      await expect(slow).resolves.toMatchObject({ code: 'client.timeout' });
+      expect(seen).toEqual([]);
+
+      // A request with the usual deadline still does.
+      const normal = api.GET('/api/version', { ...withTimeout(1_000) }).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(normal).resolves.toMatchObject({ code: 'client.timeout' });
+      stop();
+      expect(seen).toEqual([false]);
     });
 
     it('keeps the deadline running while the body is still arriving', async () => {

@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { api, unwrap, withTimeout } from '@/api/client';
+import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 
 export type ProductLookup = components['schemas']['ProductLookup'];
@@ -17,7 +17,7 @@ export function useProductLookup() {
       unwrap(
         api.GET('/api/products/lookup', {
           params: { query: { barcode } },
-          ...withTimeout(LOOKUP_TIMEOUT_MS),
+          ...withLongTimeout(LOOKUP_TIMEOUT_MS),
         }),
       ),
   });

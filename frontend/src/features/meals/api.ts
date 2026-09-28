@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { api, unwrap, withTimeout } from '@/api/client';
+import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components, paths } from '@/api/generated/schema';
 import { useAuthSession, useCurrentUser } from '@/features/auth/context';
 import { photoFormData, preparePhoto } from './photo';
@@ -153,7 +153,7 @@ export function useUploadMealPhoto() {
           params: { path: { meal_id: mealId } },
           // openapi-fetch passes FormData through untouched; the browser sets the boundary.
           body: form as unknown as PhotoUpload,
-          ...withTimeout(PHOTO_UPLOAD_TIMEOUT_MS),
+          ...withLongTimeout(PHOTO_UPLOAD_TIMEOUT_MS),
         }),
       );
     },

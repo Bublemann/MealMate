@@ -1,6 +1,8 @@
 import { CircleUserRound, CookingPot, Carrot, ListChecks, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
+import { SyncBanners } from '@/features/sync/SyncBanners';
+import { SyncToasts } from '@/features/sync/SyncToasts';
 import { cn } from '@/lib/utils';
 import { testIds, type TestId } from '@/testIds';
 import { UpdatePrompt } from './UpdatePrompt';
@@ -19,15 +21,20 @@ const TABS: readonly Tab[] = [
   { to: '/me', label: 'nav.me', icon: CircleUserRound, testId: testIds.tabMe },
 ];
 
-/** App shell: the current screen above a bottom tab bar for one-handed use (UI-01). */
+/**
+ * App shell: the current screen above a bottom tab bar for one-handed use (UI-01), with the
+ * sync module's banners and messages (SYNC-07).
+ */
 export function Layout() {
   const { t } = useTranslation();
 
   return (
     <div className="flex min-h-dvh flex-col">
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))]">
+        <SyncBanners />
         <Outlet />
       </main>
+      <SyncToasts />
       <UpdatePrompt />
       <nav
         aria-label={t('nav.label')}

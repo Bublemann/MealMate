@@ -20,8 +20,8 @@ export function createQueryClient(): QueryClient {
       },
       mutations: {
         // The same for changes: while offline they fail at once, so the optimistic state is
-        // undone and the error says why, instead of the change waiting unseen (e.g. *Finish*
-        // spinning). M6's outbox takes over offline changes of lists.
+        // undone and the error says why, instead of the change waiting unseen. The shopping
+        // actions are not mutations: they go through the outbox of features/sync (SYNC-03).
         networkMode: 'always',
       },
     },

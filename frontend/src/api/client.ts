@@ -11,13 +11,72 @@ const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 export type FetchFn = (request: Request) => Promise<Response>;
 
+type ReachabilityListener = (reachable: boolean) => void;
+const reachabilityListeners = new Set<ReachabilityListener>();
+
+/**
+ * Whether the last request reached the server (SYNC-07): a timeout, a network failure or a 5xx
+ * that isn't the app's own answer (a proxy or gateway error) says no; any other answer yes, also a
+ * 5xx with the app's error envelope (e.g. 503 `off.busy`: the server answered). A request the
+ * caller aborted says nothing, and neither does the timeout of a long-deadline request
+ * (`withLongTimeout`). The sync status subscribes to it.
+ */
+export function onReachability(listener: ReachabilityListener): () => void {
+  reachabilityListeners.add(listener);
+  return () => reachabilityListeners.delete(listener);
+}
+
+function reportReachability(reachable: boolean): void {
+  for (const listener of reachabilityListeners) listener(reachable);
+}
+
+/**
+ * Whether a body is the app's JSON error envelope (`{code, params, fields}`): proof that the
+ * request reached MealMate, whatever the status.
+ */
+export function isErrorEnvelope(body: unknown): boolean {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'code' in body &&
+    typeof body.code === 'string' &&
+    'params' in body &&
+    typeof body.params === 'object' &&
+    body.params !== null &&
+    'fields' in body &&
+    Array.isArray(body.fields)
+  );
+}
+
+function answeredByApp(status: number, headers: Headers, body: ArrayBuffer): boolean {
+  if (status < 500) return true;
+  if (!headers.get('Content-Type')?.includes('json')) return false;
+  try {
+    return isErrorEnvelope(JSON.parse(new TextDecoder().decode(body)));
+  } catch {
+    return false;
+  }
+}
+
+export interface TimeoutFetchOptions {
+  /**
+   * Whether running out of time means MealMate can't be reached (default). Off for endpoints
+   * that may legitimately take long (a photo upload, an Open Food Facts lookup): their timeout
+   * says that one request was slow, not that the connection is gone.
+   */
+  timeoutMeansUnreachable?: boolean;
+}
+
 /**
  * A fetch function that gives up after `timeoutMs` (default: by method). The deadline covers the
  * whole exchange including the body, so a connection that stalls mid-response (lie-fi) cannot
  * hang the caller. Timeouts and network failures reject with an ApiError; an abort by the caller
  * (e.g. TanStack Query cancelling a query) rejects with the original AbortError.
  */
-export function createTimeoutFetch(timeoutMs?: number): FetchFn {
+export function createTimeoutFetch(
+  timeoutMs?: number,
+  { timeoutMeansUnreachable = true }: TimeoutFetchOptions = {},
+): FetchFn {
   return async (request) => {
     const deadline =
       timeoutMs ?? (READ_METHODS.has(request.method) ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS);
@@ -34,14 +93,19 @@ export function createTimeoutFetch(timeoutMs?: number): FetchFn {
     try {
       const response = await fetch(request, { signal: controller.signal });
       const body = await response.arrayBuffer();
+      reportReachability(answeredByApp(response.status, response.headers, body));
       return new Response(NULL_BODY_STATUSES.has(response.status) ? null : body, {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
       });
     } catch (error) {
-      if (timedOut) throw new ApiError({ status: 0, code: 'client.timeout' });
+      if (timedOut) {
+        if (timeoutMeansUnreachable) reportReachability(false);
+        throw new ApiError({ status: 0, code: 'client.timeout' });
+      }
       if (request.signal.aborted) throw error;
+      reportReachability(false);
       throw new ApiError({ status: 0, code: 'client.network' });
     } finally {
       clearTimeout(timer);
@@ -163,9 +227,18 @@ export type ApiClient = ReturnType<typeof createApiClient>;
 /** The app-wide API client. Features call it from their `api.ts` modules only. */
 export const api = createApiClient();
 
-/** Per-request timeout override: `api.GET('/api/…', { ...withTimeout(25_000) })`. */
+/** Per-request timeout override: `api.GET('/api/…', { ...withTimeout(5_000) })`. */
 export function withTimeout(timeoutMs: number): { fetch: FetchFn } {
   return { fetch: createTimeoutFetch(timeoutMs) };
+}
+
+/**
+ * The same for an endpoint that may legitimately take long (photo upload, Open Food Facts
+ * lookup): its timeout doesn't switch the app to "can't reach MealMate" (SYNC-07), since the
+ * connection may be fine and only this request slow. Network failures still do.
+ */
+export function withLongTimeout(timeoutMs: number): { fetch: FetchFn } {
+  return { fetch: createTimeoutFetch(timeoutMs, { timeoutMeansUnreachable: false }) };
 }
 
 /** Resolves to the response data, or rejects with an ApiError read from the error envelope. */

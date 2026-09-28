@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useConnected } from '@/features/sync/context';
 import { testIds } from '@/testIds';
 import {
   useRemoveListMeal,
@@ -26,13 +27,15 @@ interface ListMealsProps {
 /**
  * The meals at the top of the list with their servings (LIST-04/05). A meal the viewer can't
  * see is only "Private meal (N servings)" (VIS-06); a detached one is marked "no longer
- * available" and can be removed (LIST-15).
+ * available" and can be removed (LIST-15). Changing meals needs a connection: offline the controls
+ * are disabled (SYNC-03).
  */
 export function ListMeals({ list, editable, collapsible = false, onAddMeals }: ListMealsProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const setServings = useSetListMealServings(list.id);
   const remove = useRemoveListMeal(list.id);
+  const offline = !useConnected();
 
   const content = (
     <>
@@ -50,6 +53,7 @@ export function ListMeals({ list, editable, collapsible = false, onAddMeals }: L
               entry={entry}
               editable={editable}
               busy={remove.isPending}
+              offline={offline}
               onServings={(servings) => setServings.mutate({ listMealId: entry.id, servings })}
               onRemove={() => remove.mutate(entry.id)}
             />
@@ -61,6 +65,7 @@ export function ListMeals({ list, editable, collapsible = false, onAddMeals }: L
         <Button
           variant="outline"
           data-testid={testIds.addMeals}
+          disabled={offline}
           onClick={onAddMeals}
           className="self-start"
         >
@@ -99,11 +104,13 @@ interface MealEntryProps {
   entry: ListMealEntry;
   editable: boolean;
   busy: boolean;
+  /** Without a connection: the controls are disabled. */
+  offline: boolean;
   onServings: (servings: number) => void;
   onRemove: () => void;
 }
 
-function MealEntry({ entry, editable, busy, onServings, onRemove }: MealEntryProps) {
+function MealEntry({ entry, editable, busy, offline, onServings, onRemove }: MealEntryProps) {
   const { t } = useTranslation();
   const visible = !entry.private && entry.name !== null;
   const name = visible ? (entry.name ?? '') : t('lists.meals.private');
@@ -143,7 +150,7 @@ function MealEntry({ entry, editable, busy, onServings, onRemove }: MealEntryPro
             variant="ghost"
             size="icon"
             aria-label={t('lists.meals.remove', { name })}
-            disabled={busy}
+            disabled={busy || offline}
             onClick={onRemove}
           >
             <X aria-hidden="true" />
@@ -151,7 +158,12 @@ function MealEntry({ entry, editable, busy, onServings, onRemove }: MealEntryPro
         )}
       </div>
       {editable ? (
-        <ServingsStepper value={entry.servings} name={name} onChange={onServings} />
+        <ServingsStepper
+          value={entry.servings}
+          name={name}
+          onChange={onServings}
+          disabled={offline}
+        />
       ) : (
         visible && (
           <span className="text-sm text-muted-foreground">

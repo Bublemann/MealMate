@@ -1,4 +1,4 @@
-import { focusManager, onlineManager } from '@tanstack/react-query';
+import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
@@ -17,6 +17,7 @@ import {
 } from '@/test/lists';
 import { ME } from '@/test/meals';
 import { renderApp } from '@/test/render';
+import { SyncEngine } from '@/features/sync/engine';
 import { testIds } from '@/testIds';
 import { POLL_INTERVAL_MS } from './api';
 
@@ -71,7 +72,6 @@ function cartLines() {
 afterEach(() => {
   vi.useRealTimers();
   focusManager.setFocused(undefined);
-  onlineManager.setOnline(true);
 });
 
 /** The ops sent so far, in order. */
@@ -230,38 +230,65 @@ describe('shopping view (SHOP-01)', () => {
     });
   });
 
-  it('moves a line back and says why when checking it off fails', async () => {
-    const { user } = renderList({
-      [`POST ${BASE}/ops`]: errorResponse(500, 'common.internal'),
+  it('keeps a check-off waiting when the server fails, and sends the same op again', async () => {
+    let fail = true;
+    const { fetchMock, user } = renderList({
+      // A gateway's error page: not the app's answer, so MealMate counts as unreachable.
+      [`POST ${BASE}/ops`]: () =>
+        fail
+          ? new Response('Bad Gateway', { status: 502 })
+          : opsAnswer(withLine(shoppingList({ version: 6 }), 'Zwiebeln', checkedBy(ME))),
     });
 
     await user.click(await screen.findByRole('checkbox', { name: 'Check off Zwiebeln' }));
 
-    expect(await screen.findByText('Something went wrong. Please try again.')).toBeVisible();
-    await waitFor(() => expect(openLines()).toContain('Check off Zwiebeln'));
-    expect(cartLines()).not.toContain('Uncheck Zwiebeln');
+    // One code path (plan § 5.8): the op stays in the outbox, the line stays in the cart, faded.
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
+    const status = screen.getByTestId(testIds.syncStatus);
+    await waitFor(() =>
+      expect(status).toHaveTextContent(
+        "Can't reach MealMate – no signal or Tailscale off? · 1 change waiting",
+      ),
+    );
+    expect(cartLines()).toContain('Uncheck Zwiebeln');
+    const row = within(screen.getByTestId(testIds.inTheCart))
+      .getAllByTestId(testIds.shoppingLine)
+      .find((line) => line.textContent?.includes('Zwiebeln'))!;
+    expect(within(row).getByTestId(testIds.linePending)).toHaveTextContent('not sent yet');
+    expect(screen.queryByText('Something went wrong. Please try again.')).not.toBeInTheDocument();
+
+    // The connection is back: the same op again, then "Saved".
+    fail = false;
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(status).toHaveTextContent('Saved'));
+    const [first, again] = await sentOps(fetchMock);
+    expect(again).toEqual(first);
+    expect(within(row).queryByTestId(testIds.linePending)).not.toBeInTheDocument();
   });
 
-  it('moves a line back when the network is gone, and the status line says so', async () => {
+  it('keeps a check-off while the network is gone, and the status line says so', async () => {
     const { user, fetchMock } = renderList();
     await screen.findByTestId(testIds.shoppingLines);
     fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
 
     await user.click(screen.getByRole('checkbox', { name: 'Check off Zwiebeln' }));
 
-    expect(await screen.findByText("Can't reach MealMate. Are you online?")).toBeVisible();
-    expect(openLines()).toContain('Check off Zwiebeln');
-    // The list is loaded again after the failure, which can't reach the server either.
-    await waitFor(
-      () =>
-        expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent(
-          "Can't reach MealMate – no signal or Tailscale off?",
-        ),
-      { timeout: 3000 },
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent(
+        "Can't reach MealMate – no signal or Tailscale off? · 1 change waiting",
+      ),
+    );
+    expect(cartLines()).toContain('Uncheck Zwiebeln');
+    expect(screen.queryByText("Can't reach MealMate. Are you online?")).not.toBeInTheDocument();
+    // Offline, only the shopping actions work (SYNC-03).
+    expect(screen.getByTestId(testIds.offlineBanner)).toHaveTextContent(
+      "You're offline. Checking off, extra items and finishing still work; everything else needs a connection.",
     );
   });
 
-  it('shows the list as it is when the server turned the check-off down', async () => {
+  it('shows the list as it is and says so when the server turned the check-off down', async () => {
     // Ben finished the list a moment ago.
     const { user } = renderList({
       [`POST ${BASE}/ops`]: opsAnswer(doneList(), 'rejected'),
@@ -271,6 +298,12 @@ describe('shopping view (SHOP-01)', () => {
 
     const lines = await screen.findByTestId(testIds.doneLines);
     expect(within(lines).getByText('Zwiebeln').closest('li')).toHaveTextContent('(not bought)');
+    const toast = await screen.findByTestId(testIds.syncToast);
+    expect(toast).toHaveTextContent(
+      "A change to “Wochenende (26/09/2026)” could not be saved: This list is finished, so it can't be changed any more. Reopen it first.",
+    );
+    await user.click(within(toast).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByTestId(testIds.syncToast)).not.toBeInTheDocument();
   });
 
   it('adds a free-text item as an op while shopping (SHOP-02)', async () => {
@@ -412,7 +445,7 @@ describe('extra items while shopping (LIST-12)', () => {
     return within(await screen.findByRole('dialog', { name: 'Edit item' }));
   }
 
-  it('renames a free-text item through an op, trying again with the same op', async () => {
+  it('renames a free-text item through an op of the outbox, sent again after an error', async () => {
     let fail = true;
     const { fetchMock, user } = renderList({
       [`POST ${BASE}/ops`]: () =>
@@ -426,11 +459,16 @@ describe('extra items while shopping (LIST-12)', () => {
     await user.clear(name);
     await user.type(name, 'Kerzen');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
-    expect(await dialog.findByText('Something went wrong. Please try again.')).toBeVisible();
-    fail = false;
-    await user.click(dialog.getByRole('button', { name: 'Save' }));
 
+    // Shown at once under its new name, while it waits.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await screen.findByRole('checkbox', { name: 'Check off Kerzen' })).toBeVisible();
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
+    fail = false;
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(2));
     const [first, again] = await sentOps(fetchMock);
     expect(first).toEqual({
       op_id: A_UUID_V7,
@@ -502,42 +540,124 @@ describe('extra items while shopping (LIST-12)', () => {
     });
     const input = await screen.findByTestId(testIds.extraItemInput);
     await user.type(input, 'Servietten{Enter}');
-    expect(await screen.findByText('Something went wrong. Please try again.')).toBeVisible();
-    fail = false;
-    await user.click(screen.getByRole('button', { name: 'Add Servietten' }));
 
-    await waitFor(() => expect(input).toHaveValue(''));
+    // Cleared at once and shown as a new line, waiting to be sent.
+    expect(input).toHaveValue('');
+    const box = await screen.findByRole('checkbox', { name: 'Check off Servietten' });
+    expect(within(box.closest('li')!).getByTestId(testIds.linePending)).toBeVisible();
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
+    fail = false;
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(2));
     const [first, again] = await sentOps(fetchMock);
     expect(first).toMatchObject({ type: 'extra.add', op_id: A_UUID_V7 });
     expect(again).toEqual(first);
   });
+
+  it('keeps what was typed when the item could not be queued', async () => {
+    const enqueue = vi.spyOn(SyncEngine.prototype, 'enqueue').mockResolvedValue(false);
+    const { user } = renderList();
+    const input = await screen.findByTestId(testIds.extraItemInput);
+
+    await user.type(input, 'Servietten{Enter}');
+
+    expect(enqueue).toHaveBeenCalledOnce();
+    expect(input).toHaveValue('Servietten');
+  });
 });
 
-describe('offline (until the outbox of M6)', () => {
-  it('fails a check-off at once, moves the line back and says why', async () => {
-    const { user, fetchMock } = renderList();
-    await screen.findByTestId(testIds.shoppingLines);
-    act(() => onlineManager.setOnline(false));
+describe('offline (SYNC-03)', () => {
+  function goOffline(fetchMock: ReturnType<typeof mockApi>) {
     fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+  }
 
-    await user.click(screen.getByRole('checkbox', { name: 'Check off Zwiebeln' }));
-
-    expect(await screen.findByText("Can't reach MealMate. Are you online?")).toBeVisible();
-    expect(openLines()).toContain('Check off Zwiebeln');
-    expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('does not leave *Finish* waiting', async () => {
+  it('checks off, adds, renames and finishes offline; the rest is disabled', async () => {
     const { user, fetchMock } = renderList();
-    await user.click(await screen.findByTestId(testIds.finishShopping));
-    const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
-    act(() => onlineManager.setOnline(false));
-    fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+    await screen.findByTestId(testIds.shoppingLines);
+    goOffline(fetchMock);
 
+    await user.click(screen.getByRole('checkbox', { name: 'Check off Zwiebeln' }));
+    await user.type(screen.getByTestId(testIds.extraItemInput), 'Servietten{Enter}');
+
+    const status = screen.getByTestId(testIds.syncStatus);
+    await waitFor(() => expect(status).toHaveTextContent('Offline – 2 changes waiting'));
+    expect(cartLines()).toContain('Uncheck Zwiebeln');
+    expect(await screen.findByRole('checkbox', { name: 'Check off Servietten' })).toBeVisible();
+    expect(screen.getByTestId(testIds.offlineBanner)).toBeVisible();
+    // Disabled, not hidden: everything that needs a connection.
+    expect(screen.getByTestId(testIds.renameList)).toBeDisabled();
+    expect(screen.getByTestId(testIds.deleteList)).toBeDisabled();
+    const meals = screen.getByTestId(testIds.shoppingMeals);
+    expect(within(meals).getByTestId(testIds.addMeals)).toBeDisabled();
+    expect(
+      within(meals).getByRole('button', { name: 'More servings of Pfannkuchen' }),
+    ).toBeDisabled();
+    // Export works from what is on screen (EXP-03).
+    expect(screen.getByTestId(testIds.exportList)).toBeEnabled();
+    expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(0);
+
+    await user.click(screen.getByTestId(testIds.finishShopping));
+    const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
     await user.click(within(dialog).getByRole('button', { name: 'Finish' }));
 
-    expect(await within(dialog).findByText("Can't reach MealMate. Are you online?")).toBeVisible();
-    expect(within(dialog).getByRole('button', { name: 'Finish' })).toBeEnabled();
+    // Done at once, waiting to be sent; reopening waits until it was.
+    expect(await screen.findByTestId(testIds.doneLines)).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(status).toHaveTextContent('Offline – 3 changes waiting'));
+    expect(screen.getByTestId(testIds.reopenList)).toBeDisabled();
+    expect(screen.getByTestId(testIds.shopAgain)).toBeDisabled();
+  });
+
+  it('sends everything in order once the connection is back', async () => {
+    const { user, fetchMock } = renderList();
+    await screen.findByTestId(testIds.shoppingLines);
+    goOffline(fetchMock);
+    await user.click(screen.getByRole('checkbox', { name: 'Check off Zwiebeln' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Check off Mehl' }));
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent(
+        'Offline – 2 changes waiting',
+      ),
+    );
+
+    const answered = withLine(
+      withLine(shoppingList({ version: 7 }), 'Zwiebeln', checkedBy(ME)),
+      'Mehl',
+      checkedBy(ME),
+    );
+    mockApi({
+      ...LIST_ROUTES,
+      [`GET ${BASE}`]: answered,
+      [`POST ${BASE}/ops`]: opsAnswer(answered),
+    });
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent('Saved'));
+    const fetchNow = vi.mocked(fetch);
+    const posts = fetchNow.mock.calls
+      .map(([request]) => request as Request)
+      .filter((request) => request.method === 'POST');
+    expect(posts).toHaveLength(1);
+    const body = (await posts[0]!.clone().json()) as Schemas['OpsRequest'];
+    expect(body.ops.map((op) => op.type === 'line.check' && op.payload.line_key)).toEqual([
+      'i:ing-zwiebeln',
+      'i:ing-mehl',
+    ]);
+    expect(cartLines()).toEqual(expect.arrayContaining(['Uncheck Zwiebeln', 'Uncheck Mehl']));
   });
 });
 
@@ -579,16 +699,18 @@ describe('finish (SHOP-04)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
 
     await user.click(within(dialog).getByRole('button', { name: 'Finish' }));
-    expect(
-      await within(dialog).findByText('Something went wrong. Please try again.'),
-    ).toBeVisible();
-    fail = false;
-    await user.click(within(dialog).getByRole('button', { name: 'Finish' }));
-
     expect(await screen.findByTestId(testIds.doneLines)).toBeVisible();
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
+    fail = false;
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(2));
     const [first, again] = await sentOps(fetchMock);
     expect(first).toMatchObject({ type: 'list.finish', op_id: A_UUID_V7, at: AN_ISO_TIME });
     expect(again).toEqual(first);
+    await waitFor(() => expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent('Saved'));
   });
 
   it('offers to finish when the last line is checked off, once per visit', async () => {
