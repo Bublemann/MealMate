@@ -10,12 +10,19 @@ import { decodeVideoFrame, loadDecoder } from './decoder';
 vi.mock('./decoder', () => ({ loadDecoder: vi.fn(), decodeVideoFrame: vi.fn() }));
 
 const EAN13 = { text: '4006381333931', format: 'EAN13', orientation: 0 };
+const OTHER = { text: '96385074', format: 'EAN8', orientation: 0 };
+// The size asked for: up to 1080p, in getUserMedia and again in every applyConstraints.
+const CAMERA_SIZE = { width: { ideal: 1920 }, height: { ideal: 1080 } };
 
-function fakeCamera({ torch = false, id = 'stream-1' } = {}) {
+function fakeCamera({
+  torch = false,
+  id = 'stream-1',
+  capabilities = {},
+}: { torch?: boolean; id?: string; capabilities?: Record<string, unknown> } = {}) {
   // An EventTarget, so that the track can end ("ended") like a real one.
   const track = Object.assign(new EventTarget(), {
     stop: vi.fn(),
-    getCapabilities: vi.fn(() => (torch ? { torch: true } : {})),
+    getCapabilities: vi.fn(() => (torch ? { torch: true, ...capabilities } : capabilities)),
     applyConstraints: vi.fn(() => Promise.resolve()),
   });
   const stream = { id, getTracks: () => [track], getVideoTracks: () => [track] };
@@ -57,21 +64,29 @@ afterEach(() => {
 });
 
 describe('BarcodeScanner', () => {
-  it('opens the back camera, loads the decoder and reports the first barcode found', async () => {
+  it('opens the back camera, loads the decoder and reports a barcode read twice', async () => {
     const { stream, track } = fakeCamera();
     const getUserMedia = stubGetUserMedia(() => Promise.resolve(stream));
     vi.mocked(decodeVideoFrame).mockResolvedValueOnce(null).mockResolvedValue(EAN13);
     const { onBarcode, unmount } = renderScanner();
 
     expect(await screen.findByTestId(testIds.scannerVideo)).toHaveAccessibleName('Camera image');
+    expect(
+      screen.getByText('Tip: keep about 20 cm away; on round packages, hold the bars upright.'),
+    ).toBeVisible();
+    // The back camera at up to 1080p: the default 640 × 480 is too coarse for small codes.
     expect(getUserMedia).toHaveBeenCalledWith({
-      video: { facingMode: 'environment' },
+      video: { facingMode: 'environment', ...CAMERA_SIZE },
       audio: false,
     });
     // The decoder loads in the effect that follows the stream, not synchronously with it.
     await waitFor(() => expect(loadDecoder).toHaveBeenCalled());
-    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
+    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'), {
+      timeout: 3000,
+    });
     expect(onBarcode).toHaveBeenCalledTimes(1);
+    // A frame without a code, then the code in two frames.
+    expect(decodeVideoFrame).toHaveBeenCalledTimes(3);
     // Nothing else decoded once the barcode is found.
     const decoded = vi.mocked(decodeVideoFrame).mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 400));
@@ -93,25 +108,93 @@ describe('BarcodeScanner', () => {
       <BarcodeScanner onBarcode={onBarcode} onDecoded={onDecoded} onVideoTrack={onVideoTrack} />,
     );
 
-    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
+    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'), {
+      timeout: 3000,
+    });
+    // Once, for the confirmed code.
+    expect(onDecoded).toHaveBeenCalledTimes(1);
     expect(onDecoded).toHaveBeenCalledWith({ ...EAN13, orientation: 90 });
     expect(onVideoTrack).toHaveBeenCalledWith(track);
   });
 
-  it('also looks for the barcode turned by 90° every fourth frame without a result (O-6)', async () => {
+  it('takes a code only when two frames read it, also with another code in between', async () => {
     stubGetUserMedia(() => Promise.resolve(fakeCamera().stream));
+    vi.mocked(decodeVideoFrame)
+      .mockResolvedValueOnce(EAN13)
+      .mockResolvedValueOnce(OTHER)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(EAN13)
+      .mockResolvedValue(OTHER);
     const { onBarcode } = renderScanner();
 
-    await waitFor(() => expect(decodeVideoFrame).toHaveBeenCalledTimes(5), { timeout: 3000 });
-    const rotations = vi.mocked(decodeVideoFrame).mock.calls.map(([, , options]) => options);
-    expect(rotations).toEqual([
-      { rotate: false },
-      { rotate: false },
-      { rotate: false },
-      { rotate: true },
-      { rotate: false },
-    ]);
+    await waitFor(() => expect(decodeVideoFrame).toHaveBeenCalledTimes(3), { timeout: 3000 });
     expect(onBarcode).not.toHaveBeenCalled();
+    // The misread OTHER did not push EAN13 out: its second reading confirms it.
+    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
+    expect(decodeVideoFrame).toHaveBeenCalledTimes(4);
+    expect(onBarcode).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not take a code read in a single frame', async () => {
+    stubGetUserMedia(() => Promise.resolve(fakeCamera().stream));
+    vi.mocked(decodeVideoFrame).mockResolvedValueOnce(OTHER).mockResolvedValue(null);
+    const { onBarcode } = renderScanner();
+
+    await waitFor(() => expect(decodeVideoFrame).toHaveBeenCalledTimes(4), { timeout: 3000 });
+    expect(onBarcode).not.toHaveBeenCalled();
+  });
+
+  it('keeps the camera focusing by itself when it can', async () => {
+    const { stream, track } = fakeCamera({
+      capabilities: { focusMode: ['manual', 'single-shot', 'continuous'] },
+    });
+    stubGetUserMedia(() => Promise.resolve(stream));
+    renderScanner();
+
+    await screen.findByTestId(testIds.scannerVideo);
+    await waitFor(() =>
+      expect(track.applyConstraints).toHaveBeenCalledWith({
+        ...CAMERA_SIZE,
+        advanced: [{ focusMode: 'continuous' }],
+      }),
+    );
+  });
+
+  it('leaves the focus alone when the camera cannot focus by itself', async () => {
+    for (const capabilities of [{}, { focusMode: ['manual'] }, { focusMode: 'continuous' }]) {
+      const { stream, track } = fakeCamera({ capabilities });
+      stubGetUserMedia(() => Promise.resolve(stream));
+      const { unmount } = renderScanner();
+
+      await screen.findByTestId(testIds.scannerVideo);
+      expect(track.applyConstraints).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it('scans on when the camera refuses the focus mode or tells nothing', async () => {
+    const refusing = fakeCamera({ capabilities: { focusMode: ['continuous'] } });
+    refusing.track.applyConstraints.mockImplementation(() =>
+      Promise.reject(new DOMException('no', 'OverconstrainedError')),
+    );
+    stubGetUserMedia(() => Promise.resolve(refusing.stream));
+    vi.mocked(decodeVideoFrame).mockResolvedValue(EAN13);
+    const first = renderScanner();
+
+    await waitFor(() => expect(first.onBarcode).toHaveBeenCalledWith('4006381333931'), {
+      timeout: 3000,
+    });
+    expect(refusing.track.applyConstraints).toHaveBeenCalled();
+    first.unmount();
+
+    const silent = fakeCamera();
+    silent.track.getCapabilities.mockImplementation(() => {
+      throw new Error('not supported');
+    });
+    stubGetUserMedia(() => Promise.resolve(silent.stream));
+    renderScanner();
+    expect(await screen.findByTestId(testIds.scannerVideo)).toBeVisible();
+    expect(screen.queryByTestId(testIds.scannerTorch)).not.toBeInTheDocument();
   });
 
   it('offers the light only when the camera has one, and switches it', async () => {
@@ -122,10 +205,32 @@ describe('BarcodeScanner', () => {
     const torch = await screen.findByRole('button', { name: 'Light' });
     expect(torch).toHaveAttribute('aria-pressed', 'false');
     await user.click(torch);
-    expect(track.applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] });
+    // Applying constraints replaces the earlier ones: the size must go along.
+    expect(track.applyConstraints).toHaveBeenCalledWith({
+      ...CAMERA_SIZE,
+      advanced: [{ torch: true }],
+    });
     await waitFor(() => expect(torch).toHaveAttribute('aria-pressed', 'true'));
     await user.click(torch);
-    expect(track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] });
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({
+      ...CAMERA_SIZE,
+      advanced: [{ torch: false }],
+    });
+  });
+
+  it('keeps the focus mode when it switches the light', async () => {
+    const { stream, track } = fakeCamera({
+      torch: true,
+      capabilities: { focusMode: ['continuous'] },
+    });
+    stubGetUserMedia(() => Promise.resolve(stream));
+    const { user } = renderScanner();
+
+    await user.click(await screen.findByRole('button', { name: 'Light' }));
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({
+      ...CAMERA_SIZE,
+      advanced: [{ focusMode: 'continuous' }, { torch: true }],
+    });
   });
 
   it('shows no light button for a camera without one', async () => {
@@ -223,7 +328,9 @@ describe('BarcodeScanner', () => {
     expect(getUserMedia).toHaveBeenCalledTimes(2);
     expect(screen.queryByTestId(testIds.scannerCameraMessage)).not.toBeInTheDocument();
     vi.mocked(decodeVideoFrame).mockResolvedValue(EAN13);
-    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
+    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'), {
+      timeout: 3000,
+    });
   });
 
   it('falls back to the manual input when the decoder cannot load', async () => {

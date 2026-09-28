@@ -7,24 +7,49 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { testIds } from '@/testIds';
 import { typedBarcode } from './barcode';
+import { createConfirmation } from './confirmation';
 import { decodeVideoFrame, loadDecoder, type DecodedBarcode } from './decoder';
+import { GUIDE } from './guide';
 
-/** A frame is decoded this often; a phone keeps up easily and the battery is spared. */
-const FRAME_INTERVAL_MS = 250;
 /**
- * Every n-th frame without a result is also searched turned by 90°: in iOS 26 Home Screen apps
- * the camera may deliver frames rotated (O-6, to be confirmed on a real iPhone).
+ * A frame is decoded this long after the last one was done, so only one decode runs at a time; a
+ * phone keeps up easily and the battery is spared.
  */
-const ROTATE_EVERY = 4;
+const FRAME_INTERVAL_MS = 250;
+
+/**
+ * Up to 1080p if the camera has it: without a size, browsers start at 640 × 480, where the bars of
+ * a small or distant code are only a pixel or two wide. `ideal` never fails a camera that can't.
+ * Every `applyConstraints` call repeats it: applying constraints replaces all earlier ones, and a
+ * browser may then fall back to its default size.
+ */
+const CAMERA_SIZE = {
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+} satisfies MediaTrackConstraints;
+
+/** The back camera, at CAMERA_SIZE. */
+const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
+  video: { facingMode: 'environment', ...CAMERA_SIZE },
+  audio: false,
+};
+
+/**
+ * Autofocus that keeps following, so a code held close gets sharp without a tap. The DOM typings
+ * don't know `focusMode` yet.
+ */
+const CONTINUOUS_FOCUS = { focusMode: 'continuous' } as MediaTrackConstraintSet;
 
 /** `ended`: the camera went away while in use (unplugged, taken by another app, revoked). */
 type CameraProblem = 'denied' | 'unavailable' | 'failed' | 'ended';
 type Camera = { stream: MediaStream } | { problem: CameraProblem } | null;
 
 interface BarcodeScannerProps {
-  /** Called once with the digits of a scanned or typed barcode. */
+  /** Called once with the digits of a scanned (confirmed, see confirmation.ts) or typed barcode. */
   onBarcode: (barcode: string) => void;
-  /** Diagnostics only (M1, removed in M9): a camera scan with its format and orientation. */
+  /**
+   * Diagnostics only (M1, removed in M9): a confirmed camera scan with its format and orientation.
+   */
   onDecoded?: (decoded: DecodedBarcode) => void;
   /** Diagnostics only (M1, removed in M9): the camera's video track once the preview runs. */
   onVideoTrack?: (track: MediaStreamTrack) => void;
@@ -133,7 +158,7 @@ function useCamera(enabled: boolean): { camera: Camera; retry: () => void } {
       setCamera({ problem: 'ended' });
     }
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .getUserMedia(CAMERA_CONSTRAINTS)
       .then((started) => {
         if (!active) {
           stopStream(started);
@@ -169,15 +194,40 @@ function CameraPlaceholder() {
   );
 }
 
-/** Whether the camera has a light that can be switched on (image capture: `torch`). */
-function hasTorch(track: MediaStreamTrack | undefined): boolean {
-  // Not every browser has getCapabilities (Firefox before 132).
-  // The DOM typings don't know `torch` yet.
-  const capabilities = track?.getCapabilities?.();
-  return capabilities !== undefined && 'torch' in capabilities && capabilities.torch === true;
+/**
+ * What the camera can do, as far as the browser tells: not every browser has getCapabilities
+ * (Firefox before 132), and the DOM typings don't know `torch` or `focusMode` yet.
+ */
+function capabilitiesOf(track: MediaStreamTrack | undefined): Record<string, unknown> {
+  try {
+    return (track?.getCapabilities?.() ?? {}) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
-/** The live camera image, decoded every FRAME_INTERVAL_MS until a barcode is found. */
+/** Whether the camera has a light that can be switched on (image capture: `torch`). */
+function hasTorch(track: MediaStreamTrack | undefined): boolean {
+  return capabilitiesOf(track).torch === true;
+}
+
+/** Whether the camera can keep focusing by itself (image capture: `focusMode`). */
+function hasContinuousFocus(track: MediaStreamTrack | undefined): boolean {
+  const modes = capabilitiesOf(track).focusMode;
+  return Array.isArray(modes) && modes.includes('continuous');
+}
+
+/** The guide over the preview, placed with the numbers the decoder crops the frame by. */
+const GUIDE_STYLE = {
+  left: `${((1 - GUIDE.width) / 2) * 100}%`,
+  right: `${((1 - GUIDE.width) / 2) * 100}%`,
+  height: `${GUIDE.height * 100}%`,
+};
+
+/**
+ * The live camera image, decoded every FRAME_INTERVAL_MS until the same barcode was read twice
+ * (see confirmation.ts).
+ */
 function CameraPreview({
   stream,
   onBarcode,
@@ -191,6 +241,7 @@ function CameraPreview({
   const handlers = useRef({ onBarcode, onDecoded });
   const [torchOn, setTorchOn] = useState(false);
   const track = stream.getVideoTracks()[0];
+  const continuousFocus = hasContinuousFocus(track);
 
   useEffect(() => {
     handlers.current = { onBarcode, onDecoded };
@@ -199,6 +250,15 @@ function CameraPreview({
   useEffect(() => {
     if (track) onVideoTrack?.(track);
   }, [track, onVideoTrack]);
+
+  useEffect(() => {
+    // A camera that refuses keeps its own focus; scanning works either way.
+    if (track && continuousFocus) {
+      track
+        .applyConstraints({ ...CAMERA_SIZE, advanced: [CONTINUOUS_FOCUS] })
+        .catch(() => undefined);
+    }
+  }, [track, continuousFocus]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -210,8 +270,8 @@ function CameraPreview({
 
   useEffect(() => {
     const canvas = document.createElement('canvas');
+    const confirm = createConfirmation();
     let stopped = false;
-    let misses = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function tick() {
@@ -219,19 +279,18 @@ function CameraPreview({
       if (stopped || !video) return;
       let barcode: DecodedBarcode | null = null;
       try {
-        const rotate = misses % ROTATE_EVERY === ROTATE_EVERY - 1;
-        barcode = await decodeVideoFrame(video, canvas, { rotate });
+        barcode = await decodeVideoFrame(video, canvas);
       } catch {
         // A frame that can't be read is skipped; the manual input stays available.
       }
       if (stopped) return;
-      if (barcode) {
+      const confirmed = barcode && confirm(barcode, performance.now());
+      if (confirmed) {
         stopped = true;
-        handlers.current.onDecoded?.(barcode);
-        handlers.current.onBarcode(barcode.text);
+        handlers.current.onDecoded?.(confirmed);
+        handlers.current.onBarcode(confirmed.text);
         return;
       }
-      misses += 1;
       timer = setTimeout(() => void tick(), FRAME_INTERVAL_MS);
     }
 
@@ -246,44 +305,52 @@ function CameraPreview({
     if (!track) return;
     const next = !torchOn;
     const torch: MediaTrackConstraintSet & { torch: boolean } = { torch: next };
+    // Applying constraints replaces the earlier ones, so the size and focus mode go along.
     track
-      .applyConstraints({ advanced: [torch] })
+      .applyConstraints({
+        ...CAMERA_SIZE,
+        advanced: continuousFocus ? [CONTINUOUS_FOCUS, torch] : [torch],
+      })
       .then(() => setTorchOn(next))
       .catch(() => undefined);
   }
 
   return (
-    <div className="relative overflow-hidden rounded-xl bg-black">
-      <video
-        ref={videoRef}
-        data-testid={testIds.scannerVideo}
-        aria-label={t('scanner.camera.label')}
-        autoPlay
-        muted
-        playsInline
-        className="aspect-[4/3] w-full object-cover"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-[10%] top-1/2 h-1/3 -translate-y-1/2 rounded-lg border-2 border-white/80"
-      />
-      <p className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2 text-center text-sm text-white">
-        {t('scanner.camera.hint')}
-      </p>
-      {hasTorch(track) && (
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          data-testid={testIds.scannerTorch}
-          aria-label={t('scanner.torch')}
-          aria-pressed={torchOn}
-          onClick={toggleTorch}
-          className="absolute top-2 right-2"
-        >
-          {torchOn ? <FlashlightOff aria-hidden="true" /> : <Flashlight aria-hidden="true" />}
-        </Button>
-      )}
+    <div className="flex flex-col gap-2">
+      <div className="relative overflow-hidden rounded-xl bg-black">
+        <video
+          ref={videoRef}
+          data-testid={testIds.scannerVideo}
+          aria-label={t('scanner.camera.label')}
+          autoPlay
+          muted
+          playsInline
+          className="aspect-[4/3] w-full object-cover"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-lg border-2 border-white/80"
+          style={GUIDE_STYLE}
+        />
+        <p className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2 text-center text-sm text-white">
+          {t('scanner.camera.hint')}
+        </p>
+        {hasTorch(track) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            data-testid={testIds.scannerTorch}
+            aria-label={t('scanner.torch')}
+            aria-pressed={torchOn}
+            onClick={toggleTorch}
+            className="absolute top-2 right-2"
+          >
+            {torchOn ? <FlashlightOff aria-hidden="true" /> : <Flashlight aria-hidden="true" />}
+          </Button>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">{t('scanner.camera.tip')}</p>
     </div>
   );
 }

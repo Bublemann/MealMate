@@ -72,6 +72,8 @@ function row(name: string): HTMLElement {
 }
 
 describe('MealFormScreen (create)', () => {
+  // The longest walk through the form (typing every field, then the upload): under a busy
+  // test machine it can take more than the default 5 s.
   it('creates a meal with rows, tags and cuisine, then uploads the photo', async () => {
     const created = meal({ id: 'meal-new', photo: null });
     const { fetchMock, user, router } = renderForm('/meals/new', {
@@ -155,7 +157,7 @@ describe('MealFormScreen (create)', () => {
     expect(upload?.headers.get('content-type')).toMatch(/^multipart\/form-data; boundary=/);
     expect(upload?.headers.get('authorization')).toBe('Bearer test-access-token');
     expect(await upload?.text()).toMatch(/name="file"; filename="dish\.png"/);
-  });
+  }, 15_000);
 
   it('adds the ingredient of a scanned product as a row (BAR-01)', async () => {
     const { fetchMock, user } = renderForm('/meals/new', {

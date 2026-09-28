@@ -249,8 +249,9 @@ describe('ScanScreen', () => {
     const { fetchMock, router, user } = renderScan({ 'GET /api/products/lookup': NOT_FOUND });
     await typeBarcode(user);
 
+    // The barcode looked up shows, so that a misread code can be seen.
     expect(await screen.findByTestId(testIds.scanNotice)).toHaveTextContent(
-      'Not found – enter the values yourself.',
+      `Not found (${BARCODE}) – enter the values yourself.`,
     );
     expect(screen.queryByTestId(testIds.scanProposal)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.scanSuggestions)).not.toBeInTheDocument();
@@ -286,7 +287,7 @@ describe('ScanScreen', () => {
     await typeBarcode(user);
 
     expect(await screen.findByTestId(testIds.scanNotice)).toHaveTextContent(
-      'Open Food Facts is slow – try again or enter the values yourself.',
+      `Open Food Facts is slow (${BARCODE}) – try again or enter the values yourself.`,
     );
     // The values can be entered right away …
     expect(screen.getByTestId(testIds.scanWhich)).toBeVisible();
@@ -302,8 +303,9 @@ describe('ScanScreen', () => {
     await typeBarcode(user);
 
     expect(await screen.findByTestId(testIds.scanNotice)).toHaveTextContent(
-      'Open Food Facts is slow',
+      `Open Food Facts is slow (${BARCODE})`,
     );
+    expect(screen.getByTestId(testIds.scanAgain)).toHaveTextContent('Scan again');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
     await user.click(screen.getByTestId(testIds.scanEnterManually));
 
@@ -368,6 +370,36 @@ describe('ScanScreen', () => {
     ).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Choose another ingredient' }));
     expect(await screen.findByTestId(testIds.scanWhich)).toBeVisible();
+  });
+
+  it.each([
+    ['not found', NOT_FOUND],
+    ['Open Food Facts slow', { ...NOT_FOUND, off_unavailable: true }],
+  ])('scans again straight from the notice (%s)', async (_case, answer) => {
+    const { fetchMock, user } = renderScan({ 'GET /api/products/lookup': answer });
+    await typeBarcode(user);
+    await screen.findByTestId(testIds.scanNotice);
+
+    await user.click(screen.getByRole('button', { name: 'Scan again' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Barcode' })).toHaveValue('');
+    expect(screen.queryByTestId(testIds.scanNotice)).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, 'GET /api/products/lookup')).toHaveLength(1);
+  });
+
+  it('scans again from the notice of a barcode Open Food Facts does not know', async () => {
+    const { fetchMock, user } = renderScan({ 'GET /api/products/lookup': NOT_FOUND });
+    await typeBarcode(user);
+    await screen.findByTestId(testIds.scanNotice);
+    // One way back to the scanner, not two.
+    expect(screen.getAllByRole('button', { name: /^Scan/ })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Scan again' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Barcode' })).toHaveValue('');
+    expect(screen.queryByTestId(testIds.scanNotice)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.scanWhich)).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, 'GET /api/products/lookup')).toHaveLength(1);
   });
 
   it('starts over with another barcode', async () => {
