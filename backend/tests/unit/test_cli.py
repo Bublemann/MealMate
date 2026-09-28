@@ -44,6 +44,7 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "get_version",
         "set_diag_cookie",
         "check_diag_cookie",
+        "get_diag_request",
         "login",
         "refresh",
         "logout",

@@ -192,9 +192,11 @@ def test_compose_file_is_the_hardened_production_file() -> None:
         "MEALMATE_SECRET_KEY",
         "MEALMATE_PUBLIC_URL",
         "MEALMATE_IMAGE_DIGEST",
+        "MEALMATE_DIAGNOSTICS_ENABLED",
         "UVICORN_HOST",
     }, "the HC_* URLs and IMAGE_TAG must never reach the container"
     assert app["environment"]["MEALMATE_IMAGE_DIGEST"] == "", "unpinned: no digest"
+    assert app["environment"]["MEALMATE_DIAGNOSTICS_ENABLED"] == "false", "M1 only, off by default"
     assert app["user"] == "10001:10001"
     assert app["read_only"] is True
     assert app["cap_drop"] == ["ALL"]
@@ -214,7 +216,8 @@ def test_compose_file_is_the_hardened_production_file() -> None:
     # The admin page shows the pinned digest (the app keeps the part after "@").
     assert pinned_app["environment"]["MEALMATE_IMAGE_DIGEST"] == pinned_app["image"]
 
-    # Everything else is exactly plan § 11.1 (plus the digest line above).
+    # Everything else is exactly plan § 11.1, plus the digest line above and the M1 diagnostics
+    # switch (removed with the diagnostics in M9).
     plan = (DEPLOY.parent / "docs" / "plan.md").read_text(encoding="utf-8")
     block = re.search(r"`compose.yml` \(single service `app`\):\n\n```yaml\n(.*?)```", plan, re.S)
     assert block, "plan § 11.1 has the compose block"
@@ -223,9 +226,12 @@ def test_compose_file_is_the_hardened_production_file() -> None:
         for line in (DEPLOY / "compose.yml").read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    extra = "      MEALMATE_IMAGE_DIGEST: ${IMAGE_REF:-}"
-    assert extra in ours
-    assert [line for line in ours if line != extra] == block.group(1).rstrip("\n").splitlines()
+    extras = [
+        "      MEALMATE_IMAGE_DIGEST: ${IMAGE_REF:-}",
+        "      MEALMATE_DIAGNOSTICS_ENABLED: ${MEALMATE_DIAGNOSTICS_ENABLED:-false}",
+    ]
+    assert all(extra in ours for extra in extras)
+    assert [line for line in ours if line not in extras] == block.group(1).rstrip("\n").splitlines()
 
 
 BASH4_ONLY = [

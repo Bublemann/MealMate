@@ -388,6 +388,7 @@ Each rule has API tests, including negative cases and the switch combinations in
 | `INVITE_TTL_DAYS` / `RESET_TTL_HOURS` | `7` / `24` | |
 | `SESSION_IDLE_DAYS` | `90` | |
 | `API_DOCS_ENABLED` | `false` | `true` in dev |
+| `DIAGNOSTICS_ENABLED` | `false` | M1 only (removed in M9): registers `/api/auth/diag/*` for the `/diag` screen; passed through by the Pi's compose file from `/srv/mealmate/.env` |
 | `LOG_LEVEL` | `INFO` | JSON logs to stdout |
 
 - **Uvicorn** is configured through `UVICORN_*` variables. The image default is `UVICORN_HOST=0.0.0.0`, which CI and E2E need with a port mapping. The Pi's compose file sets `UVICORN_HOST=127.0.0.1`, and host networking must never bind `0.0.0.0` (§ 11.1). `--forwarded-allow-ips 127.0.0.1` is fixed.
@@ -456,7 +457,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 | Meals | `GET /meals?q=&users=&cuisine=&tag=&sort=` · `POST` · `GET/PATCH/DELETE /meals/{id}` · `POST /meals/{id}/copy` · `PUT/DELETE /meals/{id}/photo` · `GET /media/{key}` |
 | Lists | `GET /lists?scope=mine\|others&status=` · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` · `GET /lists/history` · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
 | Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/events` · `GET /admin/system` (version, plus backup and disk status read from the read-only `/status/*.json`) · `POST /admin/backup` (creates `/data/status/backup-request`, picked up by a systemd path unit) |
-| Diagnostics (M1 only, removed in M9) | `POST /auth/diag/set\|check` (cookie carry-over test, under `/api/auth` so the cookie path matches) |
+| Diagnostics (M1 only, removed in M9) | `POST /auth/diag/set\|check` (cookie carry-over test, under `/api/auth` so the cookie path matches) · `GET /auth/diag/request` (the client address, scheme and forwarding headers as the app sees them, O-3) |
 
 ## 8. Frontend design
 

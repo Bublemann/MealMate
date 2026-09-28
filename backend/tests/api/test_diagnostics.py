@@ -69,3 +69,34 @@ async def test_check_reports_the_cookie(
     assert after.json() == {"present": True}
     assert after.headers["cache-control"] == "no-store"
     assert "mm_diag" not in elsewhere.request.headers.get("cookie", "")
+
+
+async def test_request_echo_disabled_by_default(client: AsyncClient) -> None:
+    response = await client.get("/api/auth/diag/request")
+    assert response.status_code == 404
+    assert response.json()["code"] == "common.not_found"
+
+
+async def test_request_echo_shows_what_the_app_sees(
+    make_settings: SettingsFactory, client_for: ClientFactory
+) -> None:
+    app = create_app(make_settings(diagnostics_enabled=True))
+    async with client_for(app, base_url="https://mealmate.example.ts.net") as client:
+        forwarded = await client.get(
+            "/api/auth/diag/request",
+            headers={"X-Forwarded-For": "100.64.0.7", "X-Forwarded-Proto": "https"},
+        )
+        plain = await client.get("/api/auth/diag/request")
+
+    # The test transport is not uvicorn, so the forwarded headers are only echoed, not applied.
+    assert forwarded.status_code == 200
+    assert forwarded.json() == {
+        "client_host": "127.0.0.1",
+        "scheme": "https",
+        "host_header": "mealmate.example.ts.net",
+        "x_forwarded_for": "100.64.0.7",
+        "x_forwarded_proto": "https",
+    }
+    assert forwarded.headers["cache-control"] == "no-store"
+    assert plain.json()["x_forwarded_for"] is None
+    assert plain.json()["x_forwarded_proto"] is None

@@ -499,6 +499,61 @@
         "title": "DiagCookieCheck",
         "type": "object"
       },
+      "DiagRequestInfo": {
+        "description": "The request as the app sees it (O-3); `None` where a header is missing.",
+        "properties": {
+          "client_host": {
+            "title": "Client Host",
+            "type": "string"
+          },
+          "host_header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Header"
+          },
+          "scheme": {
+            "title": "Scheme",
+            "type": "string"
+          },
+          "x_forwarded_for": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Forwarded For"
+          },
+          "x_forwarded_proto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Forwarded Proto"
+          }
+        },
+        "required": [
+          "client_host",
+          "scheme",
+          "host_header",
+          "x_forwarded_for",
+          "x_forwarded_proto"
+        ],
+        "title": "DiagRequestInfo",
+        "type": "object"
+      },
       "DiskStatus": {
         "description": "Free space on the Pi's root file system when the host last checked (`disk.json`).",
         "properties": {
@@ -5181,6 +5236,38 @@
           }
         },
         "summary": "Check Diag Cookie",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/auth/diag/request": {
+      "get": {
+        "description": "The request as the app sees it, after uvicorn applied the proxy headers (O-3).\n\nBehind `tailscale serve`, `client_host` should be the phone's tailnet IP and `scheme` should\nbe `https`, because uvicorn trusts `X-Forwarded-*` from 127.0.0.1. `client_host` is the same\nvalue that login throttling uses (`ClientIp`). The raw forwarded headers are shown too, so a\nmismatch tells whether the proxy did not send them or uvicorn ignored them.",
+        "operationId": "get_diag_request",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagRequestInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "summary": "Get Diag Request",
         "tags": [
           "diagnostics"
         ]

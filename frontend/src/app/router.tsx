@@ -15,13 +15,23 @@ import { MeScreen } from '@/features/me/MeScreen';
 import { Layout } from './Layout';
 
 /**
- * /login, /join and /reset are public; everything else needs a signed-in user (RequireAuth).
+ * /login, /join, /reset and /diag are public; everything else needs a signed-in user (RequireAuth).
  * The app opens on Lists (UI-02); unknown paths lead there too.
  */
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginScreen /> },
   { path: '/join', element: <JoinScreen /> },
   { path: '/reset', element: <ResetScreen /> },
+  // The temporary diagnostics screen of the M1 platform spike (removed in M9); a separate chunk
+  // with the scanner. Public, so Safari can open it before any login. A Home Screen app has no
+  // address bar and reaches it only through Me → Diagnostics, i.e. signed in; signing in doesn't
+  // touch the mm_diag cookie, so the cookie test (O-10) still works after it.
+  {
+    path: '/diag',
+    lazy: async () => ({
+      Component: (await import('@/features/diagnostics/DiagnosticsScreen')).DiagnosticsScreen,
+    }),
+  },
   {
     element: <RequireAuth />,
     children: [

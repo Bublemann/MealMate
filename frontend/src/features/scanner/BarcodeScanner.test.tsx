@@ -9,6 +9,8 @@ import { decodeVideoFrame, loadDecoder } from './decoder';
 // mocked here (decoder.test.ts decodes real images).
 vi.mock('./decoder', () => ({ loadDecoder: vi.fn(), decodeVideoFrame: vi.fn() }));
 
+const EAN13 = { text: '4006381333931', format: 'EAN13', orientation: 0 };
+
 function fakeCamera({ torch = false, id = 'stream-1' } = {}) {
   // An EventTarget, so that the track can end ("ended") like a real one.
   const track = Object.assign(new EventTarget(), {
@@ -58,7 +60,7 @@ describe('BarcodeScanner', () => {
   it('opens the back camera, loads the decoder and reports the first barcode found', async () => {
     const { stream, track } = fakeCamera();
     const getUserMedia = stubGetUserMedia(() => Promise.resolve(stream));
-    vi.mocked(decodeVideoFrame).mockResolvedValueOnce(null).mockResolvedValue('4006381333931');
+    vi.mocked(decodeVideoFrame).mockResolvedValueOnce(null).mockResolvedValue(EAN13);
     const { onBarcode, unmount } = renderScanner();
 
     expect(await screen.findByTestId(testIds.scannerVideo)).toHaveAccessibleName('Camera image');
@@ -78,6 +80,22 @@ describe('BarcodeScanner', () => {
     expect(track.stop).not.toHaveBeenCalled();
     unmount();
     expect(track.stop).toHaveBeenCalled();
+  });
+
+  it('hands the diagnostics screen the video track and the decoded format', async () => {
+    const { stream, track } = fakeCamera();
+    stubGetUserMedia(() => Promise.resolve(stream));
+    vi.mocked(decodeVideoFrame).mockResolvedValue({ ...EAN13, orientation: 90 });
+    const onBarcode = vi.fn();
+    const onDecoded = vi.fn();
+    const onVideoTrack = vi.fn();
+    render(
+      <BarcodeScanner onBarcode={onBarcode} onDecoded={onDecoded} onVideoTrack={onVideoTrack} />,
+    );
+
+    await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
+    expect(onDecoded).toHaveBeenCalledWith({ ...EAN13, orientation: 90 });
+    expect(onVideoTrack).toHaveBeenCalledWith(track);
   });
 
   it('also looks for the barcode turned by 90° every fourth frame without a result (O-6)', async () => {
@@ -204,7 +222,7 @@ describe('BarcodeScanner', () => {
     await screen.findByTestId(testIds.scannerVideo);
     expect(getUserMedia).toHaveBeenCalledTimes(2);
     expect(screen.queryByTestId(testIds.scannerCameraMessage)).not.toBeInTheDocument();
-    vi.mocked(decodeVideoFrame).mockResolvedValue('4006381333931');
+    vi.mocked(decodeVideoFrame).mockResolvedValue(EAN13);
     await waitFor(() => expect(onBarcode).toHaveBeenCalledWith('4006381333931'));
   });
 

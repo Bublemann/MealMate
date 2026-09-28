@@ -410,6 +410,18 @@ sudo /srv/mealmate/bin/setup.sh --rotate-secret
 - Health: `curl -fsS http://127.0.0.1:8080/api/health` on the Pi checks the app (database query, data directory writable); `curl -fsS https://mealmate.<tailnet>.ts.net/api/health` also checks `tailscale serve` and the certificate.
 - Admin page → System shows the version, the pinned image digest (`IMAGE_REF`, passed in by `compose.yml`), the last backup and the free disk space (from `state/status/`).
 
+### Diagnostics for the iPhone platform tests (M1 only)
+
+The `/diag` screen (Me → Diagnostics, admins only) needs the diagnostics endpoints, which are off by default. Switch them on for the tests and **off again afterwards**:
+
+```bash
+echo 'MEALMATE_DIAGNOSTICS_ENABLED=true' | sudo tee -a /srv/mealmate/.env && sudo /srv/mealmate/bin/mm-compose up -d
+# afterwards:
+sudo sed -i '/^MEALMATE_DIAGNOSTICS_ENABLED=/d' /srv/mealmate/.env && sudo /srv/mealmate/bin/mm-compose up -d
+```
+
+The screen and the endpoints are removed in M9.
+
 ### 12.1 Performance check (PERF-02)
 
 From the Mac, against the Pi, as an existing user (not the admin you use daily), with the repository checked out:

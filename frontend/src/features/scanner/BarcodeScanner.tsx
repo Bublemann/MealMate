@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { testIds } from '@/testIds';
 import { typedBarcode } from './barcode';
-import { decodeVideoFrame, loadDecoder } from './decoder';
+import { decodeVideoFrame, loadDecoder, type DecodedBarcode } from './decoder';
 
 /** A frame is decoded this often; a phone keeps up easily and the battery is spared. */
 const FRAME_INTERVAL_MS = 250;
@@ -24,6 +24,10 @@ type Camera = { stream: MediaStream } | { problem: CameraProblem } | null;
 interface BarcodeScannerProps {
   /** Called once with the digits of a scanned or typed barcode. */
   onBarcode: (barcode: string) => void;
+  /** Diagnostics only (M1, removed in M9): a camera scan with its format and orientation. */
+  onDecoded?: (decoded: DecodedBarcode) => void;
+  /** Diagnostics only (M1, removed in M9): the camera's video track once the preview runs. */
+  onVideoTrack?: (track: MediaStreamTrack) => void;
 }
 
 /**
@@ -32,7 +36,7 @@ interface BarcodeScannerProps {
  * the scanner is closed; if it goes away while in use, decoding stops and it can be retried.
  * The decoder (a wasm download) is loaded only once there is a camera image to decode.
  */
-export function BarcodeScanner({ onBarcode }: BarcodeScannerProps) {
+export function BarcodeScanner({ onBarcode, onDecoded, onVideoTrack }: BarcodeScannerProps) {
   const { t } = useTranslation();
   const visible = usePageVisible();
   const [decoderFailed, setDecoderFailed] = useState(false);
@@ -72,7 +76,13 @@ export function BarcodeScanner({ onBarcode }: BarcodeScannerProps) {
           </AlertDescription>
         </Alert>
       ) : stream ? (
-        <CameraPreview key={stream.id} stream={stream} onBarcode={onBarcode} />
+        <CameraPreview
+          key={stream.id}
+          stream={stream}
+          onBarcode={onBarcode}
+          onDecoded={onDecoded}
+          onVideoTrack={onVideoTrack}
+        />
       ) : (
         <CameraPlaceholder />
       )}
@@ -168,16 +178,27 @@ function hasTorch(track: MediaStreamTrack | undefined): boolean {
 }
 
 /** The live camera image, decoded every FRAME_INTERVAL_MS until a barcode is found. */
-function CameraPreview({ stream, onBarcode }: { stream: MediaStream; onBarcode: BarcodeHandler }) {
+function CameraPreview({
+  stream,
+  onBarcode,
+  onDecoded,
+  onVideoTrack,
+}: Pick<BarcodeScannerProps, 'onBarcode' | 'onDecoded' | 'onVideoTrack'> & {
+  stream: MediaStream;
+}) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const onBarcodeRef = useRef(onBarcode);
+  const handlers = useRef({ onBarcode, onDecoded });
   const [torchOn, setTorchOn] = useState(false);
   const track = stream.getVideoTracks()[0];
 
   useEffect(() => {
-    onBarcodeRef.current = onBarcode;
+    handlers.current = { onBarcode, onDecoded };
   });
+
+  useEffect(() => {
+    if (track) onVideoTrack?.(track);
+  }, [track, onVideoTrack]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -196,7 +217,7 @@ function CameraPreview({ stream, onBarcode }: { stream: MediaStream; onBarcode: 
     async function tick() {
       const video = videoRef.current;
       if (stopped || !video) return;
-      let barcode: string | null = null;
+      let barcode: DecodedBarcode | null = null;
       try {
         const rotate = misses % ROTATE_EVERY === ROTATE_EVERY - 1;
         barcode = await decodeVideoFrame(video, canvas, { rotate });
@@ -206,7 +227,8 @@ function CameraPreview({ stream, onBarcode }: { stream: MediaStream; onBarcode: 
       if (stopped) return;
       if (barcode) {
         stopped = true;
-        onBarcodeRef.current(barcode);
+        handlers.current.onDecoded?.(barcode);
+        handlers.current.onBarcode(barcode.text);
         return;
       }
       misses += 1;

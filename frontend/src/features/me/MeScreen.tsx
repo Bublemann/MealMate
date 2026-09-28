@@ -31,7 +31,7 @@ export function MeScreen() {
       <SecuritySection />
       {user.role === 'admin' && <AdminEntry />}
       <LogoutCard />
-      <AboutCard />
+      <AboutCard diagnostics={user.role === 'admin'} />
     </Screen>
   );
 }
@@ -92,8 +92,11 @@ function LogoutCard() {
   );
 }
 
-/** UI-06, LIC-02, BAR-09 */
-function AboutCard() {
+/**
+ * UI-06, LIC-02, BAR-09. `diagnostics`: the link to /diag, for admins only (the owner runs the
+ * platform tests; nobody else needs a test screen in their app).
+ */
+function AboutCard({ diagnostics }: { diagnostics: boolean }) {
   const { t } = useTranslation();
   const version = useVersionInfo();
 
@@ -125,6 +128,16 @@ function AboutCard() {
           </ExternalLink>
         )}
         <OffAttribution />
+        {/* A Home Screen app has no address bar: the way to /diag (M1 spike, removed in M9). */}
+        {diagnostics && (
+          <Link
+            to="/diag"
+            data-testid={testIds.diagnosticsLink}
+            className="inline-flex min-h-(--tap-target) items-center self-start text-sm text-muted-foreground underline underline-offset-4"
+          >
+            {t('me.diagnostics')}
+          </Link>
+        )}
       </CardContent>
     </Card>
   );

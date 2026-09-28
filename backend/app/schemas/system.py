@@ -19,3 +19,13 @@ class VersionInfo(BaseModel):
 
 class DiagCookieCheck(BaseModel):
     present: bool
+
+
+class DiagRequestInfo(BaseModel):
+    """The request as the app sees it (O-3); `None` where a header is missing."""
+
+    client_host: str
+    scheme: str
+    host_header: str | None
+    x_forwarded_for: str | None
+    x_forwarded_proto: str | None

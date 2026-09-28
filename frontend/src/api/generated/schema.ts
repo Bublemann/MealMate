@@ -275,6 +275,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/diag/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Diag Request
+         * @description The request as the app sees it, after uvicorn applied the proxy headers (O-3).
+         *
+         *     Behind `tailscale serve`, `client_host` should be the phone's tailnet IP and `scheme` should
+         *     be `https`, because uvicorn trusts `X-Forwarded-*` from 127.0.0.1. `client_host` is the same
+         *     value that login throttling uses (`ClientIp`). The raw forwarded headers are shown too, so a
+         *     mismatch tells whether the proxy did not send them or uvicorn ignored them.
+         */
+        get: operations["get_diag_request"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/diag/set": {
         parameters: {
             query?: never;
@@ -1663,6 +1688,22 @@ export interface components {
         DiagCookieCheck: {
             /** Present */
             present: boolean;
+        };
+        /**
+         * DiagRequestInfo
+         * @description The request as the app sees it (O-3); `None` where a header is missing.
+         */
+        DiagRequestInfo: {
+            /** Client Host */
+            client_host: string;
+            /** Host Header */
+            host_header: string | null;
+            /** Scheme */
+            scheme: string;
+            /** X Forwarded For */
+            x_forwarded_for: string | null;
+            /** X Forwarded Proto */
+            x_forwarded_proto: string | null;
         };
         /**
          * DiskStatus
@@ -3546,6 +3587,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagCookieCheck"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_diag_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagRequestInfo"];
                 };
             };
             /** @description Error envelope; `code` names the error */

@@ -156,6 +156,10 @@ export const testIds = {
   pendingUpdate: 'pending-update',
   applyPendingUpdate: 'apply-pending-update',
   ignorePendingUpdate: 'ignore-pending-update',
+  diagnosticsLink: 'diagnostics-link',
+  screenDiagnostics: 'screen-diagnostics',
+  diagResult: 'diag-result',
+  diagReport: 'diag-report',
 } as const;
 
 export type TestId = (typeof testIds)[keyof typeof testIds];
