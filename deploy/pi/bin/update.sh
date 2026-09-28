@@ -9,7 +9,8 @@
 # 1. Resolve the digest of ghcr.io/bublemann/mealmate:$IMAGE_TAG (the tag, never the pin). If it
 #    is the running digest or a recorded bad digest: ping success and stop.
 # 2. Verify its signed build provenance (cosign, retried). A verification failure records it as
-#    bad; a network, registry or TUF problem only pings /fail, and the next run tries again.
+#    bad; no attestation yet (a release still signing) or a network, registry or TUF problem
+#    only pings /fail, and the next run tries again.
 # 3. Check that the current version is healthy (else ping /fail and stop). Pull the new one,
 #    record the running digest in state/previous-digest, backup.sh --label pre-update.
 # 4. Write state/update-in-progress, pin IMAGE_REF=<image>@<digest> in state/override.env and
@@ -222,6 +223,7 @@ case $verified in
     mm_record_bad_digest "$new"
     mm_die "$MM_IMAGE@$new has no valid build provenance; not installed"
     ;;
+  3) mm_die "$MM_IMAGE@$new has no build provenance yet (a release may still be signing); not installed and not recorded as bad, the next run tries again" ;;
   *) mm_die "could not check the build provenance of $MM_IMAGE@$new (cosign, network or registry trouble, see above); not installed and not recorded as bad, the next run tries again" ;;
 esac
 

@@ -338,11 +338,13 @@ mm_resolve_digest() {
 }
 
 # Classifies a failed cosign run by its stderr (on stdin): prints `definite` when cosign proved
-# that the image has no valid provenance from this repository's release workflow (no matching
-# attestation, wrong identity or issuer, bad signature), else `transient` (network, registry,
-# TUF or Rekor trouble, anything unknown). Only a definite failure blacklists a digest; the
-# transient patterns win, so a network error inside a verification message is never definite.
-# The patterns follow the messages of cosign v3 (pkg/cosign/verify.go, verify_attestation.go).
+# that the image has no valid provenance from this repository's release workflow (attestations
+# that fail: wrong identity or issuer, bad signature, another type), `unsigned` when it has no
+# attestation at all (a bare "no matching attestations:", as while a release is still being
+# signed), else `transient` (network, registry, TUF or Rekor trouble, anything unknown). Only a
+# definite failure blacklists a digest; the transient patterns win, so a network error inside a
+# verification message is never definite. The patterns follow the messages of cosign v3
+# (pkg/cosign/verify.go, verify_attestation.go).
 mm_cosign_failure_kind() {
   local text transient definite
   transient='dial tcp|i/o timeout|timed? ?out|deadline exceeded|connection (refused|reset)'
@@ -350,7 +352,7 @@ mm_cosign_failure_kind() {
   transient+='|unexpected EOF|status code [45][0-9][0-9]|too many requests|service unavailable'
   transient+='|bad gateway|internal server error|UNAUTHORIZED|DENIED|TOOMANYREQUESTS'
   transient+='|MANIFEST_UNKNOWN|NAME_UNKNOWN|(^|[^a-z])tuf([^a-z]|$)|trusted root|rekor'
-  definite='no matching attestations|no valid bundles|none of the attestations matched'
+  definite='no matching attestations: *[^ ]|no valid bundles|none of the attestations matched'
   definite+='|none of the expected identities matched|expected [a-z ]+ not found in certificate'
   definite+='|no matching signatures|no signatures found|invalid signature'
   definite+='|signature in bundle does not match|failed to verify signature'
@@ -360,6 +362,8 @@ mm_cosign_failure_kind() {
     echo transient
   elif grep -qiE -- "$definite" <<<"$text"; then
     echo definite
+  elif grep -qiE -- 'no matching attestations' <<<"$text"; then
+    echo unsigned
   else
     echo transient
   fi
@@ -368,7 +372,8 @@ mm_cosign_failure_kind() {
 # mm_verify_provenance <digest>: signed build provenance from this repository's release
 # workflow (SEC-12, plan § 11.5). Returns 0 if verified, 1 if cosign proved it invalid (a
 # definite failure), 2 if it could not be checked (after MM_COSIGN_ATTEMPTS tries with a
-# growing pause). cosign's last error lines go to the log and so into the /fail ping.
+# growing pause), 3 if the image has no attestation (yet: the release may still be signing).
+# cosign's last error lines go to the log and so into the /fail ping.
 mm_verify_provenance() {
   local digest=$1 attempt err kind line
   err=$(mktemp)
@@ -390,6 +395,11 @@ mm_verify_provenance() {
       rm -f -- "$err"
       mm_log "cosign: the provenance is invalid (a verification failure, not a network problem)"
       return 1
+    fi
+    if [ "$kind" = unsigned ]; then
+      rm -f -- "$err"
+      mm_log "cosign: no build provenance yet (a release may still be signing)"
+      return 3
     fi
     if ((attempt < MM_COSIGN_ATTEMPTS)); then
       mm_log "cosign could not check the provenance; trying again in $((MM_COSIGN_RETRY_DELAY * attempt)) s"

@@ -3,9 +3,10 @@ SEC-12, plan § 11.5), and what setup.sh does to the version on a re-run.
 
 The registry tag 2.0-pre first points to a good image, then to a deliberately broken one (it
 migrates the database to an unknown revision, changes the sentinel row, adds a table, plants
-symlinks and never becomes healthy), then to a new good digest, then to one that is healthy for
-a moment only, then to one whose provenance cannot be checked (network) and finally to one
-without valid provenance (the cosign shim fails).
+symlinks and never becomes healthy), then to a new good digest (not signed yet on the first run,
+installed on the next), then to one that is healthy for a moment only, then to one whose
+provenance cannot be checked (network) and finally to one without valid provenance (the cosign
+shim fails).
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import COSIGN_NETWORK_ERROR, Images, Pi, Registry, run
+from conftest import COSIGN_NETWORK_ERROR, COSIGN_UNSIGNED_ERROR, Images, Pi, Registry, run
 
 pytestmark = pytest.mark.docker
 
@@ -137,10 +138,24 @@ def test_rollback_then_recovery_then_unverifiable(
     assert "rolled back before" in pi.hc.last(update_check).body
     assert pi.container_image() == f"{pi.image}@{good}"
 
-    # --- A newer good digest on the tag: applied -----------------------------------------------
+    # --- A newer good digest on the tag, its attestation not there yet: refused, not recorded -
     host_file = pi.root / "bin" / "heartbeat.sh"
     host_file.write_text("# stale copy, replaced by the update\n")
     good2 = registry.push(images.good2, repository)
+    result = pi.script(
+        "update.sh", check=False, MM_TEST_COSIGN="fail", MM_TEST_COSIGN_ERROR=COSIGN_UNSIGNED_ERROR
+    )
+    assert result.returncode == 1
+    assert pi.container_image() == f"{pi.image}@{good}"
+    assert (pi.state / "bad-digest").read_text().split() == [bad], "not recorded as bad"
+    ping = pi.hc.last(update_check)
+    assert ping.path.endswith("/fail")
+    assert "no build provenance yet (a release may still be signing)" in ping.body
+    assert "not recorded as bad, the next run tries again" in ping.body
+    assert len([c for c in pi.calls() if c.endswith(f"@{good2}")]) == 1, "no retries"
+    assert good2 not in local_digests(pi), "nothing pulled"
+
+    # --- The next run (signed by now): applied -------------------------------------------------
     pi.script("update.sh")
     assert pi.pinned() == f"IMAGE_REF={pi.image}@{good2}"
     assert pi.container_image() == f"{pi.image}@{good2}"
