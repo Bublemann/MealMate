@@ -144,6 +144,30 @@ describe('shopping view (SHOP-01)', () => {
     expect(screen.getByTestId(testIds.listReminder)).toHaveTextContent('Toilet paper');
   });
 
+  it('names each brand of the same thing on its own line', async () => {
+    const list = shoppingList();
+    const flour = list.lines.find((line) => line.name === 'Mehl');
+    if (!flour) throw new Error('no flour line');
+    const aurora = { ...flour, brand: 'Aurora' };
+    const diamant = { ...flour, key: 'i:ing-mehl-diamant', ingredient_id: 'ing-mehl-diamant' };
+    renderList({
+      [`GET ${BASE}`]: {
+        ...list,
+        lines: list.lines.flatMap((line) =>
+          line === flour ? [aurora, { ...diamant, brand: 'Diamant' }] : [line],
+        ),
+      },
+    });
+
+    await screen.findByTestId(testIds.shoppingLines);
+    expect(openLines()).toEqual([
+      'Check off Zwiebeln',
+      'Check off Geburtstagskerzen',
+      'Check off Mehl (Aurora)',
+      'Check off Mehl (Diamant)',
+    ]);
+  });
+
   it('marks new lines and says what a checked line needs more of (LIST-12)', async () => {
     renderList();
 

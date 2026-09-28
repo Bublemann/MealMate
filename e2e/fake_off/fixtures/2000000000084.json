@@ -1,0 +1,37 @@
+{
+  "code": "2000000000084",
+  "errors": [],
+  "product": {
+    "brands": "Pastificio Testa",
+    "categories_tags": [
+      "en:plant-based-foods",
+      "en:cereals-and-potatoes",
+      "en:pastas",
+      "en:spaghetti"
+    ],
+    "code": "2000000000084",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 71,
+      "energy-kcal_100g": 359,
+      "fat_100g": 2,
+      "proteins_100g": 12,
+      "sugars_100g": 3.5
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Spaghetti n. 5",
+    "product_name_de": "Spaghetti n. 5",
+    "product_name_en": "Spaghetti no. 5",
+    "product_quantity": 500,
+    "product_quantity_unit": "g",
+    "quantity": "500 g"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

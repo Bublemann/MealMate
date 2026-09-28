@@ -21,9 +21,8 @@ from app.domain.meals import (
 )
 from app.domain.nutrition import MissingReason
 from app.domain.units import Unit
-from app.schemas.ingredients import IdInput, IngredientSummary, not_null
+from app.schemas.ingredients import IdInput, IngredientSummary, blank_to_none, not_null
 from app.schemas.nutrition import NutrientValues
-from app.schemas.products import blank_to_none
 from app.schemas.reference import Cuisine, Tag
 from app.schemas.users import UserRef
 
@@ -90,6 +89,7 @@ class MealNutritionMissing(BaseModel):
 
     ingredient_id: str
     ingredient_name: str
+    ingredient_brand: str | None
     reason: MissingReason
     nutrient: str | None
 

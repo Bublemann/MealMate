@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { ingredientLabel } from '@/features/ingredients/label';
 import { NUTRIENT_KEYS, nutrientLabel, type NutrientKey } from '@/features/ingredients/nutrients';
 import type { Language } from '@/i18n';
 import { formatList } from '@/i18n/format';
@@ -10,7 +11,8 @@ function isNutrientKey(key: string | null): key is NutrientKey {
 
 /**
  * What is missing, one line per ingredient and reason (NUT-04): "Salt: no amount", "Flour:
- * Calories and Fat unknown". The lines keep the server's order.
+ * Calories and Fat unknown", each ingredient named with its brand. The lines keep the server's
+ * order.
  */
 export function missingLines(
   t: TFunction,
@@ -21,7 +23,7 @@ export function missingLines(
   for (const entry of missing) {
     const key = `${entry.ingredient_id}:${entry.reason}`;
     const group = groups.get(key) ?? {
-      name: entry.ingredient_name,
+      name: ingredientLabel(entry.ingredient_name, entry.ingredient_brand),
       reason: entry.reason,
       nutrients: [],
     };

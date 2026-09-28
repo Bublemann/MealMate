@@ -4,6 +4,7 @@ import { CATEGORIES } from '@/test/ingredients';
 import {
   DETACHED_MEAL,
   doneList,
+  line,
   listDetail,
   listMeal,
   PRIVATE_MEAL,
@@ -79,6 +80,7 @@ describe('exportText', () => {
           kind: 'ingredient',
           ingredient_id: 'ing-zwiebeln',
           name: 'Zwiebeln',
+          brand: null,
           category_id: 'cat-fruit_vegetables',
           amounts: [
             { value: 1.25, unit: 'kg' },
@@ -95,6 +97,7 @@ describe('exportText', () => {
           kind: 'text',
           ingredient_id: null,
           name: 'Servietten',
+          brand: null,
           category_id: 'cat-other',
           amounts: [],
           has_unspecified: false,
@@ -123,6 +126,26 @@ describe('exportText', () => {
     );
     expect(exported('de', list)).toContain('Einkaufsliste (26.09.2026)');
     expect(exported('de', list)).toContain('- Zwiebeln: 1,25 kg + 3 Stk. + etwas');
+  });
+
+  it('names each brand of the same thing on its own line', () => {
+    const milk = (brand: string, id: string, value: number) =>
+      line({
+        key: `i:${id}`,
+        name: 'Milch',
+        brand,
+        ingredient_id: id,
+        category_id: 'cat-dairy_eggs',
+        amounts: [{ value, unit: 'ml' }],
+      });
+    const list = listDetail({
+      meals: [],
+      lines: [milk('Alpenhof', 'ing-alpenhof', 500), milk('Weidehof', 'ing-weidehof', 300)],
+    });
+
+    expect(exported('en', list)).toContain(
+      'Dairy & eggs\n- Milch (Alpenhof): 500 ml\n- Milch (Weidehof): 300 ml',
+    );
   });
 
   it('leaves out removed lines and empty sections', () => {

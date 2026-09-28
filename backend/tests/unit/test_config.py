@@ -106,6 +106,15 @@ def test_open_food_facts_rates_stay_within_its_limit(
         Settings(secret_key=secret_key, off_rate_job_per_minute=0)
 
 
+def test_open_food_facts_searches_have_their_own_limit(secret_key: str) -> None:
+    assert Settings(secret_key=secret_key).off_search_per_minute == 5
+    assert Settings(secret_key=secret_key, off_search_per_minute=10).off_search_per_minute == 10
+    with pytest.raises(ValidationError, match="off_search_per_minute must be at most 10"):
+        Settings(secret_key=secret_key, off_search_per_minute=11)
+    with pytest.raises(ValidationError, match="off_search_per_minute"):
+        Settings(secret_key=secret_key, off_search_per_minute=0)
+
+
 def test_build_info_needs_no_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEALMATE_VERSION", "2.0.0")
     assert BuildInfo().version == "2.0.0"

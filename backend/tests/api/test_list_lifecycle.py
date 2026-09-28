@@ -293,7 +293,7 @@ async def test_ingredients_on_lists_are_in_use(
             f"/api/admin/ingredients/{ingredient['id']}", headers=admin.headers
         )
         assert response.status_code == 409
-        assert response.json()["params"] == {"products": 0, "meals": 0, "lists": lists_count}
+        assert response.json()["params"] == {"meals": 0, "lists": lists_count}
 
     # Deleted extra items do not count; their tombstones go with the ingredient.
     await api.delete(f"/api/lists/{other_list['id']}", headers=anna.headers)

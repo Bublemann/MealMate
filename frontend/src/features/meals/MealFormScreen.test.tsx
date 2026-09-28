@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BEN, errorResponse, mockApi, nodeFormClasses, requestsTo } from '@/test/api';
 import { bareMeal, CUISINES, EGGS, FLOUR, meal, MEAL_ROUTES, MILK, SALT } from '@/test/meals';
 import { LIST_ID, listDetail } from '@/test/lists';
+import { ingredient, proposal } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -72,6 +73,8 @@ function row(name: string): HTMLElement {
 }
 
 describe('MealFormScreen (create)', () => {
+  // The longest walk through the form (typing every field, then the upload): under a busy
+  // test machine it can take more than the default 5 s.
   it('creates a meal with rows, tags and cuisine, then uploads the photo', async () => {
     const created = meal({ id: 'meal-new', photo: null });
     const { fetchMock, user, router } = renderForm('/meals/new', {
@@ -155,17 +158,15 @@ describe('MealFormScreen (create)', () => {
     expect(upload?.headers.get('content-type')).toMatch(/^multipart\/form-data; boundary=/);
     expect(upload?.headers.get('authorization')).toBe('Bearer test-access-token');
     expect(await upload?.text()).toMatch(/name="file"; filename="dish\.png"/);
-  });
+  }, 15_000);
 
   it('adds the ingredient of a scanned product as a row (BAR-01)', async () => {
     const { fetchMock, user } = renderForm('/meals/new', {
-      'GET /api/products/lookup': {
+      'GET /api/ingredients/lookup': {
         barcode: '4006381333931',
         found_in: 'db',
-        product: null,
-        ingredient: MILK,
+        ingredient: ingredient({ ...MILK, brand: 'Weidehof', barcode: '4006381333931' }),
         proposal: null,
-        suggestions: [],
         off_unavailable: false,
       },
     });
@@ -178,11 +179,72 @@ describe('MealFormScreen (create)', () => {
     await user.type(within(dialog).getByRole('textbox', { name: 'Barcode' }), '4006381333931');
     await user.click(within(dialog).getByRole('button', { name: 'Look up' }));
 
-    expect(await within(form).findByRole('listitem', { name: 'Ingredient Milch' })).toBeVisible();
+    expect(
+      await within(form).findByRole('listitem', { name: 'Ingredient Milch (Weidehof)' }),
+    ).toBeVisible();
     await waitFor(() => expect(screen.queryByTestId(testIds.scanDialog)).not.toBeInTheDocument());
     // The meal isn't saved by the scanner's form.
     expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
     expect(within(form).getByLabelText('Name')).toHaveValue('Kakao');
+  });
+
+  it('creates the ingredient of a new scanned product in the dialog and adds it (BAR-03)', async () => {
+    const created = ingredient({
+      id: 'ing-kakao',
+      name: 'Kakaopulver',
+      brand: 'Bio',
+      barcode: '4006381333931',
+      source: 'off',
+    });
+    const { fetchMock, user } = renderForm('/meals/new', {
+      'GET /api/ingredients/lookup': {
+        barcode: '4006381333931',
+        found_in: 'off',
+        ingredient: null,
+        proposal: proposal({ name: 'Kakaopulver', brand: 'Bio', nutrition_basis: 'g' }),
+        off_unavailable: false,
+      },
+      'GET /api/ingredients/similar': [],
+      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+    await user.type(within(form).getByLabelText('Name'), 'Kakao');
+
+    await user.click(within(form).getByRole('button', { name: 'Scan barcode' }));
+    const dialog = await screen.findByTestId(testIds.scanDialog);
+    await user.type(within(dialog).getByRole('textbox', { name: 'Barcode' }), '4006381333931');
+    await user.click(within(dialog).getByRole('button', { name: 'Look up' }));
+    const ingredientForm = await within(dialog).findByTestId(testIds.ingredientForm);
+    expect(within(ingredientForm).getByLabelText('Name')).toHaveValue('Kakaopulver');
+    await user.click(within(ingredientForm).getByRole('button', { name: 'Save' }));
+
+    expect(
+      await within(form).findByRole('listitem', { name: 'Ingredient Kakaopulver (Bio)' }),
+    ).toBeVisible();
+    await waitFor(() => expect(screen.queryByTestId(testIds.scanDialog)).not.toBeInTheDocument());
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1);
+    // Saving the ingredient doesn't save the meal.
+    expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
+  });
+
+  it('searches Open Food Facts with Enter from the picker, without saving the meal', async () => {
+    const { fetchMock, user } = renderForm('/meals/new', {
+      'GET /api/ingredients/similar': [],
+      'GET /api/ingredients/off-search': { q: 'Kakao', page: 1, results: [], has_more: false },
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+    await user.type(within(form).getByLabelText('Name'), 'Kakao');
+    await user.type(within(form).getByLabelText('Add ingredient'), 'Kakao');
+    await user.click(await within(form).findByTestId(testIds.ingredientPickerCreate));
+    await user.click(await screen.findByTestId(testIds.offSearchButton));
+    const search = await screen.findByTestId(testIds.offSearchDialog);
+
+    await user.type(within(search).getByLabelText('Product name or brand'), '{Enter}');
+
+    expect(await within(search).findByTestId(testIds.offSearchEmpty)).toBeVisible();
+    expect(requestsTo(fetchMock, 'GET /api/ingredients/off-search')).toHaveLength(1);
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
   });
 
   it('keeps servings between 1 and 99', async () => {

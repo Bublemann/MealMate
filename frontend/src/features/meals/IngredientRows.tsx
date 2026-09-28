@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import type { IngredientSummary } from '@/features/ingredients/api';
 import { IngredientPicker } from '@/features/ingredients/IngredientPicker';
+import { ingredientLabel } from '@/features/ingredients/label';
 import { useUnits, type Unit } from '@/features/reference/api';
 import { unitLabel } from '@/features/reference/labels';
 import { testIds } from '@/testIds';
@@ -66,12 +67,18 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
           ))}
         </ol>
       )}
-      {/* Enter in the search field picks nothing and must not save the whole meal. */}
+      {/* Enter in the search field picks nothing and must not save the whole meal. Dialogs
+          opened from the picker (the ingredient form, the Open Food Facts search) are portals:
+          their key events bubble through here in React, but their Enter must still submit. */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         className="rounded-xl border border-dashed p-3"
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && event.target instanceof HTMLInputElement) {
+          if (
+            event.key === 'Enter' &&
+            event.target instanceof HTMLInputElement &&
+            event.currentTarget.contains(event.target)
+          ) {
             event.preventDefault();
           }
         }}
@@ -124,7 +131,7 @@ function IngredientRow({
 }: IngredientRowProps) {
   const { t } = useTranslation();
   const units = useUnits();
-  const name = row.ingredient.name;
+  const name = ingredientLabel(row.ingredient.name, row.ingredient.brand);
   const rowError = fieldError(`${path}.ingredient_id`) ?? fieldError(path);
 
   return (

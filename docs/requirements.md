@@ -46,12 +46,11 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 
 | Term | Meaning |
 |---|---|
-| **Ingredient** | A generic, shared food item (e.g. "HÃ¤hnchenbrust"). It has a category, a base unit (g or ml) and nutrition values per 100 g/ml. |
-| **Product** | A specific barcode (EAN/UPC) item (e.g. one brand's chicken breast), linked to exactly one ingredient. It usually comes from Open Food Facts. |
+| **Ingredient** | A shared food item: either something generic typed by hand ("Zwiebel", "Ei (REWE)") or a specific product with a brand and a barcode, usually from Open Food Facts ("Milch â€“ Weihenstephan"). It has a category, a base unit (g or ml) and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients. |
 | **Meal** | A recipe owned by one user: ingredients with amounts, instructions, photo, source link, and "makes *N* servings". |
 | **Serving** | One portion. A meal's `servings` value is how many portions its ingredient amounts make (default 1). |
 | **Shopping list** | A list owned by one user, built from meals (each with a chosen number of servings) plus extra items. |
-| **Line** | One row on a shopping list after aggregation, e.g. "Onions 500 g". It merges the same ingredient from all meals and extra items. |
+| **Line** | One row on a shopping list after aggregation, e.g. "Onions 500 g". It merges the same ingredient from all meals and extra items; two brands of the same thing are two ingredients and so two lines. |
 | **Extra item** | Something added to a list by hand. It is either linked to an ingredient ("1 l milk") or free text ("Birthday candles"). |
 | **Frozen / detached meal** | A meal on a list whose ingredients were copied into the list, so later changes to the meal no longer affect that list (LIST-11, LIST-15). |
 | **Couple / partner** | Two users who have agreed to share shopping lists. Each user can be in at most one couple. |
@@ -127,7 +126,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 ### 4.3 Privacy and visibility (VIS)
 
 - **VIS-01** By default everything a user creates is visible to all users of the instance.
-  - Ingredients and products are always shared.
+  - Ingredients are always shared.
   - Meals and lists belong to their owner.
 - **VIS-02** Each user has two privacy switches, **meals public** and **lists public**. Both default to on (public). When a switch is off:
   - other users cannot see those meals or lists. The partner still sees all of the user's meals and lists (CPL-02, CPL-04);
@@ -155,32 +154,26 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 - **REF-03** **Cuisines:** a seeded, translated pick-list. Any user can add further cuisines as plain text. A meal has 0 or 1 cuisine.
 - **REF-04** **Tags:** free text, 0 or more per meal, from one shared pool with autocomplete. Unique ignoring case and umlauts. Not translated.
 
-### 4.5 Ingredients and products (ING)
+### 4.5 Ingredients (ING)
 
 - **ING-01** Ingredients are **shared by all users**. Any user can create one and **edit** any one, like a household wiki. The app records and shows "created by" and "last changed by".
 - **ING-02** An ingredient has:
-  - a **name** (one name, stored as typed, not translated; unique ignoring case and umlauts);
+  - a **name** (stored as typed, not translated). Names don't have to be unique: "Milch" can exist once per brand, and by hand;
+  - an optional **brand** and an optional **barcode** (EAN/UPC, unique when set), plus the pack size as information;
   - a **category** (required, default *Other*);
   - a **base unit** (`g` or `ml`, required, default `g`);
   - an optional **weight of one piece** in g (e.g. egg = 60 g);
   - an optional **density** in g per ml;
-  - optional manual nutrition values (NUT-02).
-
-  The base unit can only be changed while no products are linked.
-- **ING-03** Search ignores case, umlauts and accents: `apfel`, `Ã„pfel` and `aepfel` all find "Ã„pfel". When a user creates an ingredient, a "similar ingredient already exists" hint is shown.
-- **ING-04** An ingredient has 0 or more linked **products** (barcodes). Each product is linked to exactly one ingredient. Each product records its nutrition basis (per 100 g or per 100 ml), which must match the ingredient's base unit.
-- **ING-05** Only admins can **delete** an ingredient, and only while nothing references it. Otherwise admins can **merge** duplicate ingredients ("merge A into B"): every meal, list and product reference is moved to B, and A is deleted.
+  - its nutrition values (NUT-02), all optional.
+- **ING-03** Search covers the name and the brand and ignores case, umlauts and accents: `apfel`, `Ã„pfel` and `aepfel` all find "Ã„pfel". Everywhere an ingredient is shown, the brand follows the name ("Milch (Weihenstephan)"). When a user creates an ingredient, a "similar ingredient already exists" hint is shown; it doesn't block creating it.
+- **ING-04** An ingredient can be created by hand (name only is enough), from a **barcode scan**, or from an **Open Food Facts name search** (BAR-11). Scanned or searched ingredients keep their Open Food Facts origin for refreshes (BAR-05). An existing ingredient without a barcode can be given one later (a scan in the shop: "this is already in MealMate").
+- **ING-05** Only admins can **delete** an ingredient, and only while nothing references it. Otherwise admins can **merge** duplicate ingredients ("merge A into B"): every meal and list reference is moved to B, and A is deleted (A's barcode moves to B if B has none).
 - **ING-06** Ingredients created by a user who is later deleted stay, shown as created by "deleted user".
 
 ### 4.6 Nutrition (NUT)
 
 - **NUT-01** Tracked nutrients: **kcal, protein, carbohydrates, sugar, fat**, per 100 g or 100 ml. Adding a nutrient later must only require adding it to one registry in code, one database migration and translations (see plan).
-- **NUT-02** An ingredient's value for each nutrient, decided field by field:
-  1. the **manual value**, if one is set;
-  2. else the **average over its linked products** that have a value for that nutrient, with every product weighted equally;
-  3. else **unknown**. Unknown is never treated as 0.
-
-  When a manual value exists, the product average is shown next to it as a hint.
+- **NUT-02** An ingredient's value for each nutrient is its own stored value (typed, or from Open Food Facts); a missing value is **unknown**, and unknown is never treated as 0.
 - **NUT-03** A meal's nutrition is the sum over its ingredients (amount converted to the base unit Ã— value per 100). It is shown **per meal** and **per serving** (total Ã· `servings`).
 - **NUT-04** If any ingredient value is unknown or an amount can't be converted, the total shows what can be calculated plus an **"incomplete"** marker. The marker names the missing ingredients or fields.
 - **NUT-05** Conversions needed for nutrition:
@@ -193,10 +186,10 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 
 - **BAR-01** A **scan button** is available in the ingredient picker of the meal form and on the Ingredients tab. It uses the phone camera (EAN-13, EAN-8, UPC-A, UPC-E). The barcode can also be typed in by hand as a fallback.
 - **BAR-02** Lookup order: own database first, then OFF. A known barcode goes straight to its ingredient.
-- **BAR-03** For an unknown barcode, the app shows the OFF product (name in the user's language if available, brand, quantity, nutrition), or "not found â€“ enter values yourself". It then asks **"Which ingredient is this?"**, with name-matched suggestions and "Create new ingredient" (name prefilled, category guessed or chosen). The user can correct values before saving.
+- **BAR-03** For an unknown barcode, the app opens the **ingredient form prefilled** with the OFF product (name in the user's language if available, brand, pack size, category guess, nutrition, barcode); the user can correct anything and saves with **one tap**. If OFF doesn't know it, the same form opens with only the barcode filled in. Alternatively the barcode can be attached to an existing ingredient without a barcode.
 - **BAR-04** Values the user changed or typed are marked as **user-edited per field** and are never overwritten automatically.
-- **BAR-05** Cached OFF data is refreshed when older than **30 days** (configurable):
-  - in the background when the product is scanned or opened;
+- **BAR-05** Ingredients from OFF are refreshed when older than **30 days** (configurable):
+  - in the background when the ingredient is scanned or opened;
   - by a nightly job.
 - **BAR-06** When a refresh returns new values:
   - fields that were not user-edited update silently;
@@ -204,8 +197,8 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 - **BAR-07** When OFF is unreachable, or the product was removed there, the cached values stay and the next scheduled refresh tries again.
 - **BAR-08** OFF usage rules:
   - a descriptive User-Agent (`MealMate/<version> (<contact>)`);
-  - at most 10 product requests per minute from the server (OFF allows 15);
-  - no search-as-you-type against OFF.
+  - at most 10 product requests per minute from the server;
+  - text search (BAR-11) only on an explicit user action, never as-you-type, with its own smaller rate limit and a 24-hour cache.
 - **BAR-09** Attribution "Nutrition data: Open Food Facts (ODbL)" with a link is shown wherever OFF data is displayed and on the About page. Product images from OFF are not stored or shown in v2.0.
 - **BAR-10** OFF data is **untrusted input**. It is validated and sanitised on the server:
   - text lengths are capped;
@@ -213,6 +206,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   - nutrient values must be finite and plausible, otherwise they are dropped.
 
   It is only ever rendered as text.
+- **BAR-11** **Name search:** in the ingredient form and the ingredient picker, "Search Open Food Facts" searches OFF for the typed text (products sold in Germany). Results show name, brand, pack size and kcal, and mark products already in MealMate. Choosing one fills the ingredient form like a scan (BAR-03), barcode included.
 
 ### 4.8 Meals (MEAL)
 
@@ -401,7 +395,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
   2. Then their meals are detached from all lists of other users, including the ones that just moved (LIST-15).
   3. Finally their meals, photos, remaining lists (including history), pending couple requests, and any unused invites or reset links issued for them are removed.
 
-  Ingredients and products they created stay ("deleted user"). Copies other people made of their meals stay. The last active admin can't be deleted.
+  Ingredients they created stay ("deleted user"). Copies other people made of their meals stay. The last active admin can't be deleted.
 - **ADM-04** Admins have **no screen or endpoint** to view other users' private meals or lists, and cannot silently log in as another user.
   - The only way to take over an account is a reset link. That ends the user's sessions and is visible to them (ACC-10) and in the activity log.
   - Whoever runs the Pi can technically read the database and backups. The user guide says so.
@@ -669,7 +663,7 @@ These are not in v2.0. The data model should not make them hard.
 | D-03 | Images built by GitHub Actions and published to ghcr.io, **only from release branches** | reproducible; native arm64 runners; hotfixes on `release/X.Y` |
 | D-04 | Clean v2 rewrite; v1 archived as a tag; start with an empty database | v1 structure unsuitable; no data to migrate |
 | D-05 | Ingredients shared and wiki-editable; meals owned, viewable and copyable; lists owned and shareable within a couple | household use with personal meal collections |
-| D-06 | Generic ingredient + linked barcode products, with nutrition = per-field average | meals stay brand-independent; brands only matter when scanning |
+| D-06 | ~~Generic ingredient + linked barcode products, with nutrition = per-field average~~ â€” replaced by D-21 | |
 | D-07 | Servings = "the recipe makes *N*" (default 1); lists scale by the chosen servings | covers both "per serving" and "whole recipe" |
 | D-08 | Lists freeze meal ingredients at "Start shopping" | history stays true; check-off has stable lines |
 | D-09 | No households now | single persons and couples are enough; can be added with a migration later |
@@ -684,6 +678,7 @@ These are not in v2.0. The data model should not make them hard.
 | D-18 | A meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed (owner decision Q-3) | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
 | D-19 | "Shared with partner" switch: on = partner sees and edits; off = partner keeps read-only access while the couple exists (owner decision Q-2) | privacy never hides anything from the partner; the switch only controls editing and the partner's Lists home |
 | D-20 | Retention 7 daily / 4 weekly / 6 monthly (â‰ˆ 17), on Pi and Mac alike | as agreed by the owner; 6-hourly backups only reduce data loss on the current day |
+| D-21 | One kind of ingredient: typed by hand or from OFF (barcode or name search), with an optional brand and barcode and its own values; different brands are different ingredients and separate shopping-list lines (2026-09-28, replaces D-06) | a new user has nothing to scan; creating from a scan or search must be one step; exact values per product instead of averages |
 
 ## 8. Owner decisions
 

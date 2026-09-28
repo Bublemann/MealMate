@@ -3,15 +3,23 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
+import type { components } from '@/api/generated/schema';
 import { createQueryClient } from '@/app/queryClient';
 import { mockApi, requestsTo } from '@/test/api';
-import { ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import { ingredient, proposal, REFERENCE_ROUTES, summary } from '@/test/ingredients';
 import { testIds } from '@/testIds';
 import type { IngredientSummary } from './api';
 import { IngredientPicker } from './IngredientPicker';
 
-const APPLES = summary('Äpfel', 'fruit_vegetables', { product_count: 2 });
-const APPLE_JUICE = summary('Apfelsaft', 'other', { base_unit: 'ml' });
+type Schemas = components['schemas'];
+
+const APPLES = summary('Äpfel', 'fruit_vegetables');
+const APPLE_JUICE = summary('Apfelsaft', 'other', {
+  base_unit: 'ml',
+  brand: 'Hofgut',
+  barcode: '4000000000006',
+  source: 'off',
+});
 
 function renderPicker(
   props: Partial<Parameters<typeof IngredientPicker>[0]> = {},
@@ -37,15 +45,20 @@ function renderPicker(
 }
 
 describe('IngredientPicker', () => {
-  it('searches and picks an ingredient', async () => {
+  it('searches and picks an ingredient, showing brand and barcode', async () => {
     const { fetchMock, onSelect, user } = renderPicker();
 
     expect(screen.getByText('Type a name to search.')).toBeVisible();
     await user.type(screen.getByLabelText('Search ingredient'), 'apf');
 
     const results = await screen.findByRole('list', { name: 'Matching ingredients' });
-    const juice = await within(results).findByRole('button', { name: /^Apfelsaft/ });
-    expect(juice).toHaveTextContent('Other · ml');
+    const juice = await within(results).findByRole('button', {
+      name: /^Apfelsaft \(Hofgut\) with barcode/,
+    });
+    expect(juice).toHaveTextContent('Apfelsaft (Hofgut) with barcodeOther · ml');
+    expect(within(results).getByRole('button', { name: /^Äpfel/ })).toHaveTextContent(
+      'ÄpfelFruit & vegetables · g',
+    );
     await user.click(juice);
 
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(APPLE_JUICE);
@@ -102,15 +115,17 @@ describe('IngredientPicker', () => {
     await user.click(await screen.findByTestId(testIds.ingredientPickerCreate));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Quitten');
-    await user.click(within(dialog).getByRole('button', { name: 'Create ingredient' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(onSelect).toHaveBeenCalledExactlyOnceWith({
         id: 'ing-quitten',
         name: 'Quitten',
+        brand: null,
+        barcode: null,
+        source: 'manual',
         category_id: 'cat-other',
         base_unit: 'g',
-        product_count: 0,
       }),
     );
     expect(dialog).not.toBeInTheDocument();
@@ -132,6 +147,75 @@ describe('IngredientPicker', () => {
     await user.click(within(hint).getByRole('button', { name: 'Use Äpfel' }));
 
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(APPLES);
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+});
+
+describe('IngredientPicker, created from Open Food Facts', () => {
+  const MILK = proposal();
+
+  function offPage(results: Schemas['OffSearchResult'][]): Schemas['OffSearchPage'] {
+    return { q: 'Milch', page: 1, results, has_more: false };
+  }
+
+  it('fills the new ingredient from a search result and picks it once saved', async () => {
+    const created = ingredient({ id: 'ing-vollmilch', name: MILK.name ?? '', brand: 'Weidehof' });
+    const { fetchMock, onSelect, user } = renderPicker(
+      {},
+      {
+        'GET /api/ingredients/off-search': offPage([
+          { proposal: MILK, in_mealmate: false, ingredient: null },
+        ]),
+        'POST /api/ingredients': Response.json(created, { status: 201 }),
+      },
+    );
+
+    await user.type(screen.getByLabelText('Search ingredient'), 'Milch');
+    await user.click(await screen.findByTestId(testIds.ingredientPickerCreate));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    await user.click(within(dialog).getByTestId(testIds.offSearchButton));
+    const search = await screen.findByTestId(testIds.offSearchDialog);
+    await user.click(within(search).getByRole('button', { name: 'Search' }));
+    await user.click(await within(search).findByTestId(testIds.offSearchResult));
+
+    await waitFor(() => expect(within(dialog).getByLabelText('Brand')).toHaveValue('Weidehof'));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    expect(onSelect.mock.calls[0]?.[0]).toMatchObject({ id: 'ing-vollmilch', brand: 'Weidehof' });
+    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toMatchObject({
+      barcode: MILK.barcode,
+      off: { edited_fields: [] },
+    });
+  });
+
+  it('picks a product that is already in MealMate instead of creating it again', async () => {
+    const known = summary('Vollmilch', 'dairy_eggs', {
+      id: 'ing-known',
+      brand: 'Weidehof',
+      barcode: MILK.barcode,
+      source: 'off',
+    });
+    const { fetchMock, onSelect, user } = renderPicker(
+      {},
+      {
+        'GET /api/ingredients/off-search': offPage([
+          { proposal: MILK, in_mealmate: true, ingredient: known },
+        ]),
+      },
+    );
+
+    await user.type(screen.getByLabelText('Search ingredient'), 'Milch');
+    await user.click(await screen.findByTestId(testIds.ingredientPickerCreate));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    await user.click(within(dialog).getByTestId(testIds.offSearchButton));
+    const search = await screen.findByTestId(testIds.offSearchDialog);
+    await user.click(within(search).getByRole('button', { name: 'Search' }));
+    const result = await within(search).findByRole('button', { name: /Already in MealMate/ });
+    await user.click(result);
+
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(known);
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
   });
 });

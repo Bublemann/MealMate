@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { ingredientLabel } from '@/features/ingredients/label';
 import { categoryName, unitLabel } from '@/features/reference/labels';
 import type { Language } from '@/i18n';
 import { formatDate, formatNumber } from '@/i18n/format';
@@ -22,6 +23,14 @@ export function listDisplayName(
     name: list.name ?? t('lists.defaultName'),
     date: formatDate(list.created_at, language),
   });
+}
+
+/**
+ * A line's name as shown and exported: "Milch (Weidehof)". Two brands of the same thing are
+ * separate lines, so the brand tells them apart; a free-text line has none.
+ */
+export function lineLabel(line: { name: string; brand: string | null }): string {
+  return ingredientLabel(line.name, line.brand);
 }
 
 /** "550 g", "1,5 kg" (de) or "1.5 kg" (en), "2 Stk." / "2 pcs". */

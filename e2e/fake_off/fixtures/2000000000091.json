@@ -1,0 +1,36 @@
+{
+  "code": "2000000000091",
+  "errors": [],
+  "product": {
+    "brands": "Nudelwerk Muster",
+    "categories_tags": [
+      "en:plant-based-foods",
+      "en:cereals-and-potatoes",
+      "en:pastas",
+      "en:spaghetti"
+    ],
+    "code": "2000000000091",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 70,
+      "energy-kcal_100g": 353,
+      "fat_100g": 1.5,
+      "proteins_100g": 13,
+      "sugars_100g": 3.2
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Spaghetti",
+    "product_name_de": "Spaghetti",
+    "product_quantity": 1000,
+    "product_quantity_unit": "g",
+    "quantity": "1 kg"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

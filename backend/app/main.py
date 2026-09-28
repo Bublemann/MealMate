@@ -19,6 +19,7 @@ from app.media.store import MediaStore
 from app.services.context import AuthConfig
 from app.services.list_cache import ListCache
 from app.services.off_refresh import OffRefresher
+from app.services.off_search import SearchCache
 from app.web.static import add_frontend_route
 
 DOCS_URL = "/api/docs"
@@ -40,7 +41,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        await database.dispose()
+        # The Open Food Facts client of this moment (tests replace it) keeps a connection pool.
+        # The database is disposed of even if closing that pool fails.
+        refresher: OffRefresher = app.state.off_refresh
+        try:
+            await refresher.off.aclose()
+        finally:
+            await database.dispose()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -67,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.rate_limits = RateLimits()
     app.state.list_cache = ListCache()
     app.state.off_refresh = OffRefresher.from_settings(settings)
+    app.state.off_search_cache = SearchCache()
     app.state.clock = utcnow
 
     install_exception_handlers(app)

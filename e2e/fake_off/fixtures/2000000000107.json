@@ -1,0 +1,36 @@
+{
+  "code": "2000000000107",
+  "errors": [],
+  "product": {
+    "brands": "Hof Sonnenschein",
+    "categories_tags": [
+      "en:plant-based-foods",
+      "en:canned-foods",
+      "en:tomato-sauces"
+    ],
+    "code": "2000000000107",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 5.4,
+      "energy-kcal_100g": 36,
+      "fat_100g": 0.2,
+      "proteins_100g": 1.6,
+      "sugars_100g": 4.8
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Passierte Tomaten",
+    "product_name_de": "Passierte Tomaten",
+    "product_name_en": "Strained tomatoes",
+    "product_quantity": 500,
+    "product_quantity_unit": "g",
+    "quantity": "500 g"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

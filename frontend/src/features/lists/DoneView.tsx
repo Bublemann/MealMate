@@ -11,7 +11,7 @@ import { formatDayMonth } from '@/i18n/format';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import { useReopenList, useShopAgain, type ListDetail, type ListLine } from './api';
-import { groupByCategory, lineAmount } from './format';
+import { groupByCategory, lineAmount, lineLabel } from './format';
 import { ListMeals } from './ListMeals';
 import type { ListViewState } from './ListScreen';
 import { Reminder } from './Reminder';
@@ -128,7 +128,7 @@ function DoneCategory({ name, lines }: { name: string; lines: ListLine[] }) {
                 className={cn('size-5 shrink-0', line.checked && 'text-primary')}
               />
               <span className="min-w-0 flex-1 break-words">
-                {line.name}
+                {lineLabel(line)}
                 <span className="sr-only">
                   {' '}
                   ({line.checked ? t('lists.done.bought') : t('lists.done.notBought')})

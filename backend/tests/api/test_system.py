@@ -118,6 +118,29 @@ async def test_runs_under_the_asgi_lifespan_protocol(settings: Settings) -> None
     assert response.json() == {"status": "ok"}
 
 
+async def test_the_database_is_disposed_of_even_if_closing_open_food_facts_fails(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    disposed: list[Database] = []
+    dispose = Database.dispose
+
+    async def recorded_dispose(database: Database) -> None:
+        disposed.append(database)
+        await dispose(database)
+
+    async def broken_aclose() -> None:
+        raise RuntimeError("pool broken")
+
+    monkeypatch.setattr(Database, "dispose", recorded_dispose)
+    monkeypatch.setattr(app.state.off_refresh.off, "aclose", broken_aclose)
+
+    with pytest.raises(RuntimeError, match="pool broken"):
+        async with app.router.lifespan_context(app):
+            pass
+
+    assert disposed == [app.state.database]
+
+
 def test_create_app_refuses_to_start_without_a_secret_key() -> None:
     with pytest.raises(ValueError, match="secret_key"):
         create_app()

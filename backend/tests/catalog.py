@@ -1,4 +1,4 @@
-"""Helpers for tests of reference data, ingredients and products."""
+"""Helpers for tests of reference data and ingredients."""
 
 from typing import Any
 
@@ -14,11 +14,6 @@ EAN_8 = "96385074"
 UPC_E = "04252614"
 
 NO_NUTRIENTS = {"kcal": None, "protein": None, "carbs": None, "sugar": None, "fat": None}
-
-
-def unknown_nutrition() -> dict[str, Any]:
-    info = {"value": None, "source": "unknown", "products_mean": None, "products_count": 0}
-    return {key: info for key in NO_NUTRIENTS}
 
 
 def ref(user: Account) -> dict[str, Any]:
@@ -38,13 +33,16 @@ async def create_ingredient(api: AsyncClient, user: Account, name: str, **body: 
     return response.json()
 
 
-async def create_product(
-    api: AsyncClient, user: Account, ingredient_id: str, barcode: str, **body: Any
+async def create_from_off(
+    api: AsyncClient,
+    user: Account,
+    name: str,
+    barcode: str,
+    *,
+    edited_fields: list[str] | None = None,
+    off_last_modified_at: str | None = None,
+    **body: Any,
 ) -> Any:
-    response = await api.post(
-        "/api/products",
-        json={"barcode": barcode, "ingredient_id": ingredient_id, **body},
-        headers=user.headers,
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
+    """An ingredient saved from an Open Food Facts proposal (`source` off)."""
+    off = {"edited_fields": edited_fields or [], "off_last_modified_at": off_last_modified_at}
+    return await create_ingredient(api, user, name, barcode=barcode, off=off, **body)

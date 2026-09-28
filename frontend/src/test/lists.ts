@@ -79,6 +79,7 @@ export function line(
   return {
     key: `i:${overrides.name}`,
     kind: 'ingredient',
+    brand: null,
     ingredient_id: null,
     category_id: 'cat-other',
     amounts: [],

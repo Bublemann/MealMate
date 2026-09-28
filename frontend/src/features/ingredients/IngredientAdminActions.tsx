@@ -31,6 +31,7 @@ import {
   type IngredientSummary,
 } from './api';
 import { IngredientPicker } from './IngredientPicker';
+import { ingredientLabel } from './label';
 
 /** ING-05 (admins): merge a duplicate into another ingredient, or delete an unused one. */
 export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient }) {
@@ -40,7 +41,8 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
   const remove = useDeleteIngredient(ingredient.id);
   const [picking, setPicking] = useState(false);
   const [target, setTarget] = useState<IngredientSummary | null>(null);
-  const name = ingredient.name;
+  const name = ingredientLabel(ingredient.name, ingredient.brand);
+  const into = target ? ingredientLabel(target.name, target.brand) : '';
   const busy = merge.isPending || remove.isPending;
 
   function onPick(picked: IngredientSummary) {
@@ -51,7 +53,7 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
   function onMerge() {
     if (!target) return;
     merge.mutate(target.id, {
-      onSuccess: (into) => void navigate(`/ingredients/${into.id}`, { replace: true }),
+      onSuccess: (kept) => void navigate(`/ingredients/${kept.id}`, { replace: true }),
     });
     setTarget(null);
   }
@@ -123,10 +125,10 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t('ingredients.admin.mergeConfirmTitle', { from: name, into: target?.name ?? '' })}
+              {t('ingredients.admin.mergeConfirmTitle', { from: name, into })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t('ingredients.admin.mergeConfirmText', { from: name, into: target?.name ?? '' })}
+              {t('ingredients.admin.mergeConfirmText', { from: name, into })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

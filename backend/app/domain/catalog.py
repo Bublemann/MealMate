@@ -1,4 +1,4 @@
-"""Input rules for ingredients, products, cuisines and tags (ING-02, REF-03, REF-04, BAR-10).
+"""Input rules for ingredients, cuisines and tags (ING-02, REF-03, REF-04, BAR-10).
 
 Names are stored as typed (trimmed) and compared through `normalize()` (`*_norm` columns).
 Typed text with control, format, surrogate, private-use or unassigned characters is refused
@@ -13,9 +13,8 @@ from app.domain.text import normalize
 INGREDIENT_NAME_MAX_LENGTH = 60
 CUISINE_NAME_MAX_LENGTH = 40
 TAG_NAME_MAX_LENGTH = 30
-PRODUCT_NAME_MAX_LENGTH = 120
-PRODUCT_BRAND_MAX_LENGTH = 80
-PRODUCT_QUANTITY_TEXT_MAX_LENGTH = 40
+BRAND_MAX_LENGTH = 80
+QUANTITY_TEXT_MAX_LENGTH = 40
 BARCODE_INPUT_MAX_LENGTH = 32
 
 # Exclusive lower bound 0, inclusive upper bound.
@@ -27,10 +26,11 @@ PACK_QUANTITY_MAX = 100_000.0
 # Normalised names can be longer than typed ones ("ß" → "ss", compatibility forms).
 NAME_NORM_FACTOR = 4
 
-# A product's data fields, as opposed to its barcode and ingredient link. Each one a user
-# typed or changed is recorded as user-edited (BAR-04), nutrients as `nutrients.<key>`.
-PRODUCT_DATA_FIELDS: tuple[str, ...] = (
-    "nutrition_basis",
+# The fields of an ingredient that Open Food Facts provides and refreshes (BAR-04..06), other
+# than the nutrients. Each one a user changes on an ingredient from Open Food Facts is recorded
+# as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base unit, piece weight
+# and density are the user's alone: a refresh never touches them.
+OFF_DATA_FIELDS: tuple[str, ...] = (
     "name",
     "brand",
     "quantity_text",
@@ -44,8 +44,8 @@ def nutrient_field(key: str) -> str:
     return f"nutrients.{key}"
 
 
-PRODUCT_FIELDS: tuple[str, ...] = (
-    *PRODUCT_DATA_FIELDS,
+OFF_FIELDS: tuple[str, ...] = (
+    *OFF_DATA_FIELDS,
     *(nutrient_field(key) for key in NUTRIENT_KEYS),
 )
 
@@ -71,6 +71,19 @@ def clean_text(text: str, max_length: int) -> str | None:
         if char.isspace() or unicodedata.category(char) not in _UNSAFE_CATEGORIES
     )
     return " ".join(kept.split())[:max_length].rstrip() or None
+
+
+def cut_at_word(text: str, max_length: int) -> str:
+    """`text` shortened to at most `max_length` characters at the last word boundary, so that a
+    long Open Food Facts name becomes a readable ingredient name ("Bio Vollmilch 3,8 % Fett
+    frisch" rather than "Bio Vollmilch 3,8 % Fe"). Where that would lose more than half, such as
+    before one overlong word, it is cut hard instead."""
+    if len(text) <= max_length:
+        return text
+    hard = text[:max_length].rstrip()
+    head = text[: max_length + 1]
+    cut = head.rsplit(" ", 1)[0].rstrip(" ,;:-/(") if " " in head else ""
+    return cut if len(cut) >= max_length // 2 else hard
 
 
 def check_text(text: str) -> str:

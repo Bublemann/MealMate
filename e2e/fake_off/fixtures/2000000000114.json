@@ -1,0 +1,36 @@
+{
+  "code": "2000000000114",
+  "errors": [],
+  "product": {
+    "brands": "MealMate Test Kitchen",
+    "categories_tags": [
+      "en:beverages",
+      "en:plant-based-beverages",
+      "en:oat-based-drinks"
+    ],
+    "code": "2000000000114",
+    "lang": "de",
+    "last_modified_t": 1767225600,
+    "nutriments": {
+      "carbohydrates_100g": 7.1,
+      "energy-kcal_100g": 46,
+      "fat_100g": 1.5,
+      "proteins_100g": 0.3,
+      "sugars_100g": 4.1
+    },
+    "nutrition_data_per": "100g",
+    "product_name": "Haferdrink",
+    "product_name_de": "Haferdrink",
+    "product_name_en": "Oat drink",
+    "product_quantity": 1000,
+    "product_quantity_unit": "ml",
+    "quantity": "1 l"
+  },
+  "result": {
+    "id": "product_found",
+    "lc_name": "Product found",
+    "name": "Product found"
+  },
+  "status": "success",
+  "warnings": []
+}

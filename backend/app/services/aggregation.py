@@ -12,11 +12,12 @@ the frontend (AGG-01).
    has one (taken when shopping starts or when it is added while shopping), else with the live
    attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
    `amount_text` is shown as it is.
-3. In a draft, an ingredient line shows the live ingredient's name and category; once shopping
-   started, those of the first of its parts with a snapshot (frozen rows in the order of the
-   meals, then extra items), so ingredient edits no longer change the list (LIST-11). A
-   free-text line shows its text and category. Lines are sorted by category order, then
-   normalised name, then key (AGG-05), and carry their hidden state (LIST-07).
+3. In a draft, an ingredient line shows the live ingredient's name, brand and category; once
+   shopping started, those of the first of its parts with a snapshot (frozen rows in the order
+   of the meals, then extra items), so ingredient edits no longer change the list (LIST-11).
+   Two brands of the same thing are two ingredients and so two lines. A free-text line shows
+   its text and category. Lines are sorted by category order, then normalised name and brand,
+   then key (AGG-05), and carry their hidden state (LIST-07).
 4. Outside a draft, lines carry their check state (plan § 5.7): a line without a stored state
    is `new` while shopping; a checked line that needs more since it was checked (or a free-text
    item that was edited) is reported unchecked, with the reason (LIST-12). Nothing is stored
@@ -175,9 +176,10 @@ def _snapshot_attrs(row: ListMealIngredient) -> IngredientAttrs:
 
 def attrs_snapshot(ingredient: Ingredient) -> dict[str, Any]:
     """What a linked extra item keeps of its ingredient once shopping started (LIST-11):
-    `{name, base_unit, piece_weight_g, density_g_per_ml, category_id}`."""
+    `{name, brand, base_unit, piece_weight_g, density_g_per_ml, category_id}`."""
     return {
         "name": ingredient.name,
+        "brand": ingredient.brand,
         "base_unit": ingredient.base_unit,
         "piece_weight_g": ingredient.piece_weight_g,
         "density_g_per_ml": ingredient.density_g_per_ml,
@@ -273,22 +275,35 @@ def meal_name(content: ListContent, list_meal: ListMeal) -> str:
     return list_meal.meal_name_snapshot if meal is None else meal.name
 
 
-def _snapshot_labels(
-    content: ListContent, shopping_list: ShoppingList
-) -> dict[str, tuple[str, str]]:
-    """The name and category id of each ingredient line from the first of its parts with a
-    snapshot: frozen rows in the order of the meals, then linked extra items (LIST-11)."""
-    labels: dict[str, tuple[str, str]] = {}
+@dataclass(frozen=True)
+class _Label:
+    """What a line shows: a name, a brand (ingredients only) and a category."""
+
+    name: str
+    brand: str | None
+    category_id: str
+
+
+def _snapshot_labels(content: ListContent, shopping_list: ShoppingList) -> dict[str, _Label]:
+    """The name, brand and category id of each ingredient line from the first of its parts
+    with a snapshot: frozen rows in the order of the meals, then linked extra items (LIST-11).
+    Snapshots taken before brands existed have none."""
+    labels: dict[str, _Label] = {}
     for list_meal in content.meals.get(shopping_list.id, []):
         for row in content.frozen_rows.get(list_meal.id, []):
             labels.setdefault(
                 ingredient_key(row.ingredient_id),
-                (row.ingredient_name_snapshot, row.category_id_snapshot),
+                _Label(
+                    row.ingredient_name_snapshot,
+                    row.ingredient_brand_snapshot,
+                    row.category_id_snapshot,
+                ),
             )
     for extra in content.extras.get(shopping_list.id, []):
         if extra.ingredient_id is not None and (snapshot := extra.attrs_snapshot) is not None:
             labels.setdefault(
-                ingredient_key(extra.ingredient_id), (snapshot["name"], snapshot["category_id"])
+                ingredient_key(extra.ingredient_id),
+                _Label(snapshot["name"], snapshot.get("brand"), snapshot["category_id"]),
             )
     return labels
 
@@ -390,19 +405,23 @@ def lines(
     other_category_id = content.other_category_id()
     labels = {} if shopping_list.status == "draft" else _snapshot_labels(content, shopping_list)
 
-    def describe(line_key: str) -> tuple[str, str]:
-        """The name and category id of a line."""
+    def describe(line_key: str) -> _Label:
+        """The name, brand and category id of a line."""
         if line_key.startswith(INGREDIENT_KEY_PREFIX):
             if (label := labels.get(line_key)) is not None:
                 return label
             ingredient = content.ingredients[line_key.removeprefix(INGREDIENT_KEY_PREFIX)]
-            return ingredient.name, ingredient.category_id
+            return _Label(ingredient.name, ingredient.brand, ingredient.category_id)
         extra = extras[line_key.removeprefix(TEXT_KEY_PREFIX)]
-        return extra.text or "", extra.category_id or other_category_id
+        return _Label(extra.text or "", None, extra.category_id or other_category_id)
 
-    def order(line_key: str) -> tuple[int, str]:
-        name, category_id = describe(line_key)
-        return content.categories[category_id].sort_order, normalize(name)
+    def order(line_key: str) -> tuple[int, str, str]:
+        label = describe(line_key)
+        return (
+            content.categories[label.category_id].sort_order,
+            normalize(label.name),
+            normalize(label.brand or ""),
+        )
 
     def source(ref: SourceRef) -> LineSource:
         if ref.kind == "meal":
@@ -435,7 +454,7 @@ def lines(
     hidden = _hidden_keys(content, shopping_list)
     result = []
     for line in aggregate(parts(content, shopping_list), order):
-        name, category_id = describe(line.line_key)
+        label = describe(line.line_key)
         is_ingredient = line.line_key.startswith(INGREDIENT_KEY_PREFIX)
         text_extra = None if is_ingredient else extras[line.line_key.removeprefix(TEXT_KEY_PREFIX)]
         check = _check_state(shopping_list, states.get(line.line_key), line, text_extra, refs)
@@ -446,8 +465,9 @@ def lines(
                 ingredient_id=(
                     line.line_key.removeprefix(INGREDIENT_KEY_PREFIX) if is_ingredient else None
                 ),
-                name=name,
-                category_id=category_id,
+                name=label.name,
+                brand=label.brand,
+                category_id=label.category_id,
                 amounts=[
                     DisplayAmountOut(value=item.value, unit=item.unit) for item in line.display
                 ],

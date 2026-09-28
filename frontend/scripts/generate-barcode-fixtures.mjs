@@ -18,6 +18,7 @@ const samples = [
   { file: 'ean13.png', format: 'EAN13', text: '4006381333931' },
   { file: 'ean8.png', format: 'EAN8', text: '96385074' },
   { file: 'upca.png', format: 'UPCA', text: '036000291452' },
+  { file: 'upce.png', format: 'UPCE', text: '01234565' },
   // Lying on its side, as a phone may deliver a camera frame (O-6).
   { file: 'ean13-rotated.png', format: 'EAN13', text: '4006381333931', rotate: 90 },
 ];

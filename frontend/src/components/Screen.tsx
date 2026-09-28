@@ -13,7 +13,7 @@ export function Screen({ title, testId, children }: ScreenProps) {
 
   return (
     <section aria-labelledby={headingId} data-testid={testId} className="flex flex-col gap-6">
-      <h1 id={headingId} className="text-3xl font-bold tracking-tight">
+      <h1 id={headingId} className="text-3xl font-bold tracking-tight wrap-anywhere">
         {title}
       </h1>
       {children}
