@@ -305,6 +305,7 @@ def jobs_off_refresh() -> None:
                 database, off, max_age=max_age, max_products=max_products
             )
         finally:
+            await off.aclose()
             await database.dispose()
 
     outcomes = asyncio.run(run())

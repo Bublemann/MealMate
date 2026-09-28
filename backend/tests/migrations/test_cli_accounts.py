@@ -383,12 +383,16 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
             (found, down, broken),
         )
     jobs: list[tuple[int, int | None]] = []
+    clients: list[OffClient] = []
     refresh_stale = off_refresh.refresh_stale
     apply_refresh = off_refresh.apply_refresh
 
     async def spy(database: Any, off: OffClient, **options: Any) -> Any:
         jobs.append((off.rate_limit.limit, options["max_products"]))
-        return await refresh_stale(database, off, **options)
+        clients.append(off)
+        outcomes = await refresh_stale(database, off, **options)
+        assert off.is_open
+        return outcomes
 
     def fails_for_broken(row: Any, found: Any, **options: Any) -> Any:
         if row.barcode == broken:
@@ -414,6 +418,7 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
     ) in result.output
     # The job's own rate limit (4 per minute, the app has 6), an hour's worth of products.
     assert jobs == [(4, 240)]
+    assert not clients[0].is_open  # the job closes its connections
     assert request.calls.last.request.headers["user-agent"] == (
         "MealMate/2.0.0 (https://github.com/Bublemann/MealMate)"
     )

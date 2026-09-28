@@ -40,7 +40,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        await database.dispose()
+        # The Open Food Facts client of this moment (tests replace it) keeps a connection pool.
+        # The database is disposed of even if closing that pool fails.
+        refresher: OffRefresher = app.state.off_refresh
+        try:
+            await refresher.off.aclose()
+        finally:
+            await database.dispose()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

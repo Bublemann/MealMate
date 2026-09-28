@@ -27,6 +27,7 @@ from tests.off import (
     refresher,
     route,
 )
+from tests.support import serve
 
 OATS_NUTRIENTS = {"kcal": 372, "protein": 13.5, "carbs": 58.7, "sugar": 0.7, "fat": 7}
 
@@ -283,6 +284,64 @@ async def test_busy_while_too_many_lookups_wait(
     clock.advance(seconds=55.5)  # the next start is now 4.5 s away: worth the wait
     app.state.off_refresh.off.rate_limit.sleep = _no_sleep
     assert (await lookup(api, anna, UNKNOWN)).status_code == 200
+
+
+async def test_unknown_products_do_not_use_up_the_lookups(
+    app: FastAPI, api: AsyncClient, anna: Account, off_api: respx.MockRouter, clock: FakeClock
+) -> None:
+    """Open Food Facts' "not found" is final: it is not asked again, so each scan of an unknown
+    product takes one of the app's places per minute, and as many unknown scans as there are
+    places are all answered, none of them `busy`."""
+    per_minute = app.state.settings.off_rate_app_per_minute
+    app.state.off_refresh = refresher(SlidingWindow(per_minute, clock=clock.monotonic))
+    request = route(off_api, UNKNOWN).respond(404, json=recorded("product_not_found"))
+
+    for _ in range(per_minute):
+        response = await lookup(api, anna, UNKNOWN)
+        assert response.status_code == 200
+        assert (response.json()["found_in"], response.json()["off_unavailable"]) == (
+            "none",
+            False,
+        )
+
+    assert request.call_count == per_minute
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        httpx.Response(503),
+        httpx.Response(404, text="<html>Not Found</html>"),  # an error page in front of OFF
+        httpx.ConnectError("refused"),
+    ],
+)
+async def test_a_lookup_asks_open_food_facts_again_after_a_transient_failure(
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    failure: httpx.Response | Exception,
+) -> None:
+    """The first scan of a product must not end in "Open Food Facts is slow" when a second
+    request, a moment later, finds it."""
+    request = route(off_api, OATS).mock(side_effect=[failure, httpx.Response(200, json=oats())])
+
+    body = (await lookup(api, anna, OATS)).json()
+
+    assert (body["found_in"], body["proposal"]["name"]) == ("off", "Haferflocken")
+    assert request.call_count == 2
+
+
+async def test_the_lifespan_closes_the_open_food_facts_connections(
+    app: FastAPI, off_api: respx.MockRouter
+) -> None:
+    route(off_api, OATS).respond(json=oats())
+    off = app.state.off_refresh.off
+
+    async with serve(app):
+        assert (await off.fetch(OATS, max_wait=None)).status == "found"
+        assert off.is_open
+
+    assert not off.is_open
 
 
 async def _no_sleep(_seconds: float) -> None:
