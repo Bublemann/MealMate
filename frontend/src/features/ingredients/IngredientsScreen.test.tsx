@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { errorResponse, mockApi, requestsTo } from '@/test/api';
+import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import { ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -36,6 +36,20 @@ function searchTerms(fetchMock: ReturnType<typeof mockApi>) {
 }
 
 describe('IngredientsScreen', () => {
+  it('shows only a quiet placeholder until it knows whether there are ingredients (UI-03)', async () => {
+    const ingredients = heldRoute();
+    renderIngredients({ 'GET /api/ingredients': ingredients.route });
+
+    expect(await screen.findByText('Loading…')).toBeVisible();
+    expect(screen.queryByLabelText('Search ingredients')).toBeNull();
+    expect(screen.queryByTestId(testIds.newIngredient)).toBeNull();
+
+    await ingredients.answer([]);
+    expect(await screen.findByText('No ingredients yet')).toBeVisible();
+    expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+    expect(screen.queryByLabelText('Search ingredients')).toBeNull();
+  });
+
   it('groups the ingredients under their categories in walking order', async () => {
     renderIngredients();
 

@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Screen } from '@/components/Screen';
 import { UserFilterChips } from '@/components/UserFilterChips';
 import { Button } from '@/components/ui/button';
@@ -65,7 +66,13 @@ function MyLists() {
     });
   }
 
-  if (lists.data?.length === 0) {
+  // Until the first answer (or the local copy, SYNC-09) it is unknown whether there are lists at
+  // all: nothing of the filled view shows before it is certain (UI-03).
+  if (!lists.data) {
+    return lists.error ? <LoadError error={lists.error} /> : <LoadingState />;
+  }
+
+  if (lists.data.length === 0) {
     return (
       <div className="flex flex-col gap-3">
         <EmptyState
@@ -82,9 +89,9 @@ function MyLists() {
   }
 
   // Finished here but not sent yet: already in the history as far as this phone knows.
-  const current = lists.data?.filter((list) => !finishing.has(list.id));
-  const shopping = current?.filter((list) => list.status === 'shopping') ?? [];
-  const drafts = current?.filter((list) => list.status !== 'shopping');
+  const current = lists.data.filter((list) => !finishing.has(list.id));
+  const shopping = current.filter((list) => list.status === 'shopping');
+  const drafts = current.filter((list) => list.status !== 'shopping');
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
@@ -104,13 +111,8 @@ function MyLists() {
       <h2 id={headingId} className="text-xl font-semibold">
         {t('lists.mine.title')}
       </h2>
-      {lists.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      {/* Shown from the local copy when the server can't be reached (SYNC-09). */}
-      <LoadError error={lists.data ? null : lists.error} />
-      {drafts && drafts.length === 0 && (
-        <p className="text-muted-foreground">{t('lists.mine.noDrafts')}</p>
-      )}
-      {drafts && drafts.length > 0 && <ListCards lists={drafts} testId={testIds.listDrafts} />}
+      {drafts.length === 0 && <p className="text-muted-foreground">{t('lists.mine.noDrafts')}</p>}
+      {drafts.length > 0 && <ListCards lists={drafts} testId={testIds.listDrafts} />}
     </section>
   );
 }

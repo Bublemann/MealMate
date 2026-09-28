@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Screen } from '@/components/Screen';
 import { UserFilterChips } from '@/components/UserFilterChips';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,14 @@ export function MealsScreen() {
 
   return (
     <Screen title={t('nav.meals')} testId={testIds.screenMeals}>
-      {noMealsAtAll ? (
+      {!meals.data ? (
+        // Until the first answer it is unknown whether there are meals at all (UI-03).
+        meals.error ? (
+          <LoadError error={meals.error} />
+        ) : (
+          <LoadingState />
+        )
+      ) : noMealsAtAll ? (
         <>
           <UserChips onlyWithOthers />
           <EmptyState
@@ -96,7 +104,6 @@ export function MealsScreen() {
             />
             <UserChips />
           </div>
-          {meals.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
           <LoadError error={meals.error} />
           {shown && shown.length === 0 && (
             <Card className="items-start gap-3 px-5" aria-live="polite">
