@@ -194,6 +194,7 @@ async def test_start_shopping(
     assert snapshots == [
         {
             "name": "Zwiebeln",
+            "brand": None,
             "base_unit": "g",
             "piece_weight_g": 150,
             "density_g_per_ml": None,
@@ -202,6 +203,7 @@ async def test_start_shopping(
         None,
         {
             "name": "Salz",
+            "brand": None,
             "base_unit": "g",
             "piece_weight_g": None,
             "density_g_per_ml": None,
@@ -278,6 +280,48 @@ async def test_changes_of_meals_and_ingredients_leave_shopping_lists_alone(
         ("Rote Zwiebeln", categories["other"], [{"value": 150, "unit": "g"}]),
     ]
     assert draft["meals"][0]["name"] == "Neues Brot"
+
+
+async def test_two_brands_of_the_same_thing_are_two_lines(
+    api: AsyncClient, anna: Account, categories: dict[str, str]
+) -> None:
+    """Different brands are different ingredients, so they stay apart on a list (owner
+    decision 2026-09-28), sorted by name, then brand; once shopping started, the lines keep the
+    brand they had (LIST-11)."""
+    pasta = categories["pasta_rice_grains"]
+    barilla = await create_ingredient(api, anna, "Spaghetti", brand="Barilla", category_id=pasta)
+    de_cecco = await create_ingredient(api, anna, "Spaghetti", brand="De Cecco", category_id=pasta)
+    generic = await create_ingredient(api, anna, "Spaghetti", category_id=pasta)
+    bolognese = await create_meal(api, anna, "Bolognese", ingredients=[row(de_cecco, 500, "g")])
+    aglio = await create_meal(api, anna, "Aglio e olio", ingredients=[row(barilla, 250, "g")])
+    shopping_list = await create_list(api, anna, "Pasta")
+    for meal in (bolognese, aglio):
+        await added(api, anna, shopping_list["id"], meal["id"])
+    await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=generic["id"], amount=100, unit="g"
+    )
+    await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=barilla["id"], amount=250, unit="g"
+    )
+
+    def spaghetti(body: Any) -> list[tuple[str | None, list[Any]]]:
+        return [(item["brand"], item["amounts"]) for item in body["lines"]]
+
+    draft = await detail(api, anna, shopping_list["id"])
+    assert spaghetti(draft) == [
+        (None, [{"value": 100, "unit": "g"}]),
+        ("Barilla", [{"value": 500, "unit": "g"}]),
+        ("De Cecco", [{"value": 500, "unit": "g"}]),
+    ]
+
+    before = await start_shopping(api, anna, shopping_list["id"])
+    for ingredient in (barilla, de_cecco):
+        response = await api.patch(
+            f"/api/ingredients/{ingredient['id']}", json={"brand": "Neu"}, headers=anna.headers
+        )
+        assert response.status_code == 200
+    after = await detail(api, anna, shopping_list["id"])
+    assert spaghetti(after) == spaghetti(before) == spaghetti(draft)
 
 
 async def test_detach_triggers_leave_shopping_lists_alone(
@@ -785,6 +829,7 @@ async def test_demo_shopping_and_history(
         for item in body["lines"]
     }
     assert states["Spaghetti"] == (True, "Anna", False, None)
+    assert [item["brand"] for item in body["lines"] if item["name"] == "Spaghetti"] == ["Barilla"]
     assert states["Hackfleisch"] == (True, "Ben", False, None)
     assert states["Milch"] == (True, "Anna", False, None)
     # Two onions were checked; ben's meal got more servings: one onion more.
@@ -803,6 +848,16 @@ async def test_demo_shopping_and_history(
     body = await detail(api, anna, salad["id"])
     assert [(item["name"], item["checked"]) for item in body["lines"] if not item["checked"]] == [
         ("Pfeffer", False)
+    ]
+    # carl's draft has the Barilla spaghetti of anna's Bolognese and the De Cecco of his own
+    # aglio e olio: the same thing in two brands, two lines.
+    [grill] = [item for item in await summaries(api, carl) if item["name"] == "Grillabend"]
+    grill_lines = (await detail(api, carl, grill["id"]))["lines"]
+    assert [
+        (item["name"], item["brand"]) for item in grill_lines if item["name"] == "Spaghetti"
+    ] == [
+        ("Spaghetti", "Barilla"),
+        ("Spaghetti", "De Cecco"),
     ]
     [carls] = (await api.get("/api/lists/history", headers=carl.headers)).json()
     assert carls["name"] == "Vorrat"

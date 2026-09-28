@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.domain.catalog import clean_text
+from app.domain.catalog import clean_text, cut_at_word
 from app.domain.units import BaseUnit
 from app.integrations.off import OffProduct
 
@@ -39,6 +39,37 @@ def product(**raw: Any) -> OffProduct:
 )
 def test_clean_text(text: str, max_length: int, expected: str | None) -> None:
     assert clean_text(text, max_length) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "max_length", "expected"),
+    [
+        ("Haferflocken", 12, "Haferflocken"),
+        ("Bio Vollmilch 3,8 % Fett", 20, "Bio Vollmilch 3,8 %"),
+        ("Tomaten, passiert und fein", 20, "Tomaten, passiert"),
+        ("Tomaten, passierte", 10, "Tomaten"),
+        ("Superlangesproduktwort", 10, "Superlange"),
+        ("A Superlangesproduktwort", 10, "A Superlan"),
+    ],
+)
+def test_cut_at_word(text: str, max_length: int, expected: str) -> None:
+    """Long names are cut at a word boundary, unless that loses more than half."""
+    assert cut_at_word(text, max_length) == expected
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("4006381333931", "4006381333931"),
+        ("036000291452", "0036000291452"),
+        ("4006381333932", None),
+        ("", None),
+        (4006381333931, None),
+        ("4" * 40, None),
+    ],
+)
+def test_code_is_a_canonical_barcode(code: Any, expected: str | None) -> None:
+    assert product(code=code).code == expected
 
 
 def test_empty_product() -> None:
@@ -86,7 +117,7 @@ def test_texts_are_cleaned_and_capped() -> None:
     name = hostile.name("de")
     assert name is not None
     assert name.startswith("Evil nnn")
-    assert len(name) == 120
+    assert len(name) == 60
     assert hostile.brands == "Evil Corp " + "X" * 70
     assert hostile.quantity == "100 g " + "x" * 34
 

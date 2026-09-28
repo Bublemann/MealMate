@@ -23,7 +23,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import EAN_13, EAN_13_B, create_ingredient, create_product, ref
+from tests.catalog import EAN_13, create_ingredient, ref
 from tests.meals import create_meal, get_meal, list_meals, upload
 
 NO_VALUES = {"kcal": None, "protein": None, "carbs": None, "sugar": None, "fat": None}
@@ -69,7 +69,7 @@ async def cuisines(api: AsyncClient, anna: Account) -> dict[str, str]:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl", manual=values(364, 10, 76, 0.7, 1))
+    return await create_ingredient(api, anna, "Mehl", nutrients=values(364, 10, 76, 0.7, 1))
 
 
 @pytest.fixture
@@ -83,7 +83,9 @@ def summary(ingredient: Any) -> dict[str, Any]:
         "name": ingredient["name"],
         "category_id": ingredient["category_id"],
         "base_unit": ingredient["base_unit"],
-        "product_count": ingredient["product_count"],
+        "brand": ingredient["brand"],
+        "barcode": ingredient["barcode"],
+        "source": ingredient["source"],
     }
 
 
@@ -327,10 +329,10 @@ async def test_nutrition_per_meal_and_per_serving(
     api: AsyncClient, anna: Account, flour: Any, salt: Any
 ) -> None:
     milk = await create_ingredient(
-        api, anna, "Milch", base_unit="ml", manual=values(64, 3.4, 4.8, 4.8, 3.5)
+        api, anna, "Milch", base_unit="ml", nutrients=values(64, 3.4, 4.8, 4.8, 3.5)
     )
     eggs = await create_ingredient(
-        api, anna, "Eier", piece_weight_g=60, manual=values(155, 13, 1.1, 1.1, 11)
+        api, anna, "Eier", piece_weight_g=60, nutrients=values(155, 13, 1.1, 1.1, 11)
     )
     meal = await create_meal(
         api,
@@ -354,6 +356,7 @@ async def test_nutrition_per_meal_and_per_serving(
         {
             "ingredient_id": salt["id"],
             "ingredient_name": "Salz",
+            "ingredient_brand": None,
             "reason": "no_amount",
             "nutrient": None,
         }
@@ -361,11 +364,11 @@ async def test_nutrition_per_meal_and_per_serving(
 
 
 async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
-    butter = await create_ingredient(api, anna, "Butter", manual=values(741, 0.6, 0.6, 0.6, 82))
-    bread = await create_ingredient(api, anna, "Brot", manual=values(245, 8.5, 45, 3, 1.6))
-    pasta = await create_ingredient(api, anna, "Nudeln", manual={"protein": 12})
-    await create_product(api, anna, pasta["id"], EAN_13, nutrients=values(350, 13, 70, 3, 2))
-    await create_product(api, anna, pasta["id"], EAN_13_B, nutrients={"kcal": 360})
+    butter = await create_ingredient(api, anna, "Butter", nutrients=values(741, 0.6, 0.6, 0.6, 82))
+    bread = await create_ingredient(api, anna, "Brot", nutrients=values(245, 8.5, 45, 3, 1.6))
+    pasta = await create_ingredient(
+        api, anna, "Nudeln", brand="Barilla", barcode=EAN_13, nutrients=values(355, 12, 70, 3, 2)
+    )
 
     meal = await create_meal(
         api,
@@ -380,7 +383,7 @@ async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
 
     nutrition = meal["nutrition"]
     # Butter: a spoon counted as 15 g (estimate); bread: pieces without a piece weight;
-    # pasta: the manual protein, the mean of both products' kcal, the other product values.
+    # pasta: its own values (NUT-02).
     assert nutrition["per_meal"] == pytest.approx(
         values(111.15 + 355, 0.09 + 12, 70.09, 3.09, 14.3)
     )
@@ -389,11 +392,11 @@ async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
     assert [(item["ingredient_name"], item["reason"]) for item in nutrition["missing"]] == [
         ("Brot", "not_convertible")
     ]
-    assert meal["ingredients"][2]["ingredient"]["product_count"] == 2
+    assert meal["ingredients"][2]["ingredient"]["brand"] == "Barilla"
 
 
 async def test_unknown_values_are_listed_per_nutrient(api: AsyncClient, anna: Account) -> None:
-    cream = await create_ingredient(api, anna, "Sahne", base_unit="ml", manual={"kcal": 300})
+    cream = await create_ingredient(api, anna, "Sahne", base_unit="ml", nutrients={"kcal": 300})
     meal = await create_meal(
         api, anna, "Soße", ingredients=[{"ingredient_id": cream["id"], "amount": 0.5, "unit": "l"}]
     )
@@ -416,7 +419,7 @@ async def test_nutrition_follows_ingredient_edits(
     assert meal["nutrition"]["per_meal"]["kcal"] == pytest.approx(1820)
 
     response = await api.patch(
-        f"/api/ingredients/{flour['id']}", json={"manual": {"kcal": 350}}, headers=ben.headers
+        f"/api/ingredients/{flour['id']}", json={"nutrients": {"kcal": 350}}, headers=ben.headers
     )
     assert response.status_code == 200
     assert (await get_meal(api, anna, meal["id"])).json()["nutrition"]["per_meal"][
@@ -958,7 +961,6 @@ async def test_list_and_detail_take_a_fixed_number_of_queries(
     flour: Any,
     salt: Any,
 ) -> None:
-    await create_product(api, anna, flour["id"], EAN_13, nutrients={"kcal": 350})
     rows = [
         {"ingredient_id": flour["id"], "amount": 100, "unit": "g"},
         {"ingredient_id": salt["id"], "amount": 1, "unit": "tsp"},

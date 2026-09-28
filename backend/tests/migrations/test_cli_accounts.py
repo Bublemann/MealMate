@@ -203,23 +203,22 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     )
     assert members == [("anna",), ("ben",)]
     assert query(database, "SELECT kind, used_at FROM one_time_codes") == [("invite", None)]
-    assert "Demo ingredients: 29, products: 6" in result.output
+    assert "Demo ingredients: 30 (5 with a barcode)" in result.output
 
-    ingredients = dict(
-        query(
-            database,
-            "SELECT i.name, count(p.id) FROM ingredients i "
-            "LEFT JOIN products p ON p.ingredient_id = i.id GROUP BY i.id",
-        )
-    )
-    assert len(ingredients) == 29
-    assert ingredients["Spaghetti"] == 2  # an average of two products
-    [(kcal, basis)] = query(
-        database,
-        "SELECT i.kcal, p.nutrition_basis FROM ingredients i "
-        "JOIN products p ON p.ingredient_id = i.id WHERE i.name = 'Milch'",
-    )
-    assert (kcal, basis) == (64, "ml")  # manual value plus a product (the hint)
+    ingredients = query(database, "SELECT name, brand, barcode, source FROM ingredients")
+    assert len(ingredients) == 30
+    # The same thing in two brands: two ingredients of the same name.
+    assert sorted(
+        (brand, barcode) for name, brand, barcode, _ in ingredients if name == "Spaghetti"
+    ) == [("Barilla", "8005516001475"), ("De Cecco", "8002331045820")]
+    assert {name for name, _, barcode, _ in ingredients if barcode} == {
+        "Spaghetti",
+        "Butter",
+        "Passierte Tomaten",
+        "Olivenöl",
+    }
+    assert {source for *_, source in ingredients} == {"manual"}  # never refreshed in development
+    assert query(database, "SELECT kcal FROM ingredients WHERE name = 'Milch'") == [(64,)]
     categories = query(database, "SELECT count(DISTINCT category_id) FROM ingredients")
     assert categories == [(15,)]
     creators = query(
@@ -228,10 +227,10 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
         "ORDER BY 1",
     )
     assert creators == [("anna",), ("ben",), ("carl",)]
-    barcodes = [code for (code,) in query(database, "SELECT barcode FROM products")]
+    barcodes = [code for _, _, code, _ in ingredients if code is not None]
     assert all(normalize_barcode(code) == code for code in barcodes)
 
-    assert "Demo meals: 8" in result.output
+    assert "Demo meals: 9" in result.output
     meals = query(
         database,
         "SELECT u.username, m.name, m.photo_key, m.copied_from_meal_id IS NOT NULL, "
@@ -247,6 +246,7 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
         ("ben", "Tomatensalat"),
         ("carl", "Ofenkartoffeln mit Kräuterjoghurt"),
         ("carl", "Spaghetti Bolognese"),
+        ("carl", "Spaghetti aglio e olio"),
         ("carl", "Tofu-Gemüse-Curry"),
     ]
     assert all(rows > 0 and tags > 0 for *_, rows, tags in meals)
@@ -276,7 +276,7 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
         ("anna", "Wocheneinkauf", 1, "shopping", 21, 2, 3, 0),
         ("anna", "Wochenende", 1, "draft", 3, 2, 3, 1),
         ("ben", None, 0, "draft", 7, 2, 0, 0),
-        ("carl", "Grillabend", 0, "draft", 12, 2, 1, 0),
+        ("carl", "Grillabend", 0, "draft", 12, 3, 1, 0),
         ("carl", "Vorrat", 0, "done", 58, 1, 1, 0),
     ]
     checks = query(
@@ -319,13 +319,15 @@ def test_seed_demo_leaves_nothing_behind_when_it_fails(
 ) -> None:
     """Accounts and catalog are one transaction, so a failed run can simply be repeated."""
     with monkeypatch.context() as patched:
-        # A product twice: its barcode is unique, so the catalog fails after the accounts.
-        patched.setattr(demo, "DEMO_PRODUCTS", (*demo.DEMO_PRODUCTS, demo.DEMO_PRODUCTS[0]))
+        # A scanned ingredient twice: its barcode is unique, so the catalog fails after the
+        # accounts.
+        scanned = next(item for item in demo.DEMO_INGREDIENTS if item.barcode is not None)
+        patched.setattr(demo, "DEMO_INGREDIENTS", (*demo.DEMO_INGREDIENTS, scanned))
         result = runner.invoke(main, ["seed-demo"])
     assert result.exit_code == 1
     assert isinstance(result.exception, IntegrityError)
     tables = ("users", "couples", "couple_members", "one_time_codes", "admin_events")
-    catalog = ("ingredients", "products", "tags", "meals", "meal_ingredients", "shopping_lists")
+    catalog = ("ingredients", "tags", "meals", "meal_ingredients", "shopping_lists")
     for table in (*tables, *catalog):
         assert query(database, f"SELECT count(*) FROM {table}") == [(0,)], table  # noqa: S608
 
@@ -374,11 +376,11 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("MEALMATE_VERSION", "2.0.0")
     assert runner.invoke(main, ["seed-demo"]).exit_code == 0
     [(found,), (down,), (broken,), *_] = query(
-        database, "SELECT barcode FROM products ORDER BY barcode"
+        database, "SELECT barcode FROM ingredients WHERE barcode IS NOT NULL ORDER BY barcode"
     )
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
-            "UPDATE products SET source = 'off', fetched_at = NULL, user_edited_fields = '[]'"
+            "UPDATE ingredients SET source = 'off', fetched_at = NULL, user_edited_fields = '[]'"
             " WHERE barcode IN (?, ?, ?)",
             (found, down, broken),
         )
@@ -388,7 +390,7 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
     apply_refresh = off_refresh.apply_refresh
 
     async def spy(database: Any, off: OffClient, **options: Any) -> Any:
-        jobs.append((off.rate_limit.limit, options["max_products"]))
+        jobs.append((off.rate_limit.limit, options["max_ingredients"]))
         clients.append(off)
         outcomes = await refresh_stale(database, off, **options)
         assert off.is_open
@@ -412,16 +414,16 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
     assert result.exit_code == 0, result.output
     assert (
-        "Refreshed 3 products from Open Food Facts: 1 updated, 0 with newer values for "
+        "Refreshed 3 ingredients from Open Food Facts: 1 updated, 0 with newer values for "
         "user-edited fields, 0 unchanged, 1 kept for the next run (1 unavailable, 0 not found), "
         "1 failed with an error (see the log)."
     ) in result.output
-    # The job's own rate limit (4 per minute, the app has 6), an hour's worth of products.
+    # The job's own rate limit (4 per minute, the app has 6), an hour's worth of ingredients.
     assert jobs == [(4, 240)]
     assert not clients[0].is_open  # the job closes its connections
     assert request.calls.last.request.headers["user-agent"] == (
         "MealMate/2.0.0 (https://github.com/Bublemann/MealMate)"
     )
-    assert query(database, "SELECT brand FROM products WHERE barcode = ?", found) == [("Neu",)]
-    [(fetched_at,)] = query(database, "SELECT fetched_at FROM products WHERE barcode = ?", down)
+    assert query(database, "SELECT brand FROM ingredients WHERE barcode = ?", found) == [("Neu",)]
+    [(fetched_at,)] = query(database, "SELECT fetched_at FROM ingredients WHERE barcode = ?", down)
     assert fetched_at is None

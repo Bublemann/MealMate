@@ -7,11 +7,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
 from app.domain.catalog import (
+    BRAND_MAX_LENGTH,
     INGREDIENT_NAME_MAX_LENGTH,
     NAME_NORM_FACTOR,
-    PRODUCT_BRAND_MAX_LENGTH,
-    PRODUCT_NAME_MAX_LENGTH,
-    PRODUCT_QUANTITY_TEXT_MAX_LENGTH,
+    QUANTITY_TEXT_MAX_LENGTH,
 )
 from app.domain.nutrients import NUTRIENT_KEYS
 
@@ -41,56 +40,40 @@ for _key in NUTRIENT_KEYS:
 
 
 class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
-    """A shared ingredient, editable by everyone like a wiki (ING-01, ING-02).
+    """A shared ingredient, editable by everyone like a wiki (ING-01, ING-02). There is one kind
+    of ingredient: typed by hand ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and
+    taken from Open Food Facts with its barcode.
 
-    The nutrient columns hold manual values (NUT-02). `base_unit` can only change while no
-    product is linked.
+    The nutrient columns are the ingredient's own values per 100 g or 100 ml of its base unit
+    (NUT-02); null is unknown. Names are not unique: two brands of the same thing are two
+    ingredients with the same name. A barcode belongs to at most one ingredient.
+
+    The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
+    fields a user changed (`name`, `nutrients.kcal`, ...), which a refresh never overwrites
+    (BAR-04); `pending_update` holds newer Open Food Facts values for those (BAR-06), see
+    `services.off_fields`. `quantity_text`, `pack_quantity` and `pack_unit` are information only.
     """
 
     __tablename__ = "ingredients"
-    __table_args__ = (CheckConstraint("base_unit IN ('g', 'ml')", name="base_unit"),)
+    __table_args__ = (
+        CheckConstraint("base_unit IN ('g', 'ml')", name="base_unit"),
+        CheckConstraint("source IN ('off', 'manual')", name="source"),
+    )
 
     name: Mapped[str] = mapped_column(String(INGREDIENT_NAME_MAX_LENGTH))
     name_norm: Mapped[str] = mapped_column(
-        String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), unique=True
+        String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
     )
+    brand: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
+    brand_norm: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH * NAME_NORM_FACTOR))
+    barcode: Mapped[str | None] = mapped_column(String(14), unique=True)
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
     base_unit: Mapped[str] = mapped_column(String(2), default="g")
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
     density_g_per_ml: Mapped[float | None] = mapped_column(Float)
-    created_by: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
-    )
-    updated_by: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
-    )
-
-
-class Product(IdMixin, TimestampMixin, NutrientColumns, Base):
-    """A barcode linked to exactly one ingredient (ING-04), with nutrition per 100 g/ml.
-
-    `user_edited_fields` lists the fields a user typed or changed (`name`, `nutrients.kcal`,
-    ...), which an Open Food Facts refresh never overwrites (BAR-04); `pending_update` holds
-    newer OFF values for those (BAR-06, M7). `pack_quantity`/`pack_unit` are kept for the
-    postponed pack-rounding feature.
-    """
-
-    __tablename__ = "products"
-    __table_args__ = (
-        CheckConstraint("nutrition_basis IN ('g', 'ml')", name="nutrition_basis"),
-        CheckConstraint("source IN ('off', 'manual')", name="source"),
-    )
-
-    barcode: Mapped[str] = mapped_column(String(14), unique=True)
-    ingredient_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("ingredients.id", ondelete="RESTRICT"), index=True
-    )
-    nutrition_basis: Mapped[str] = mapped_column(String(2))
-    name: Mapped[str | None] = mapped_column(String(PRODUCT_NAME_MAX_LENGTH))
-    brand: Mapped[str | None] = mapped_column(String(PRODUCT_BRAND_MAX_LENGTH))
-    quantity_text: Mapped[str | None] = mapped_column(String(PRODUCT_QUANTITY_TEXT_MAX_LENGTH))
+    quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))
     pack_quantity: Mapped[float | None] = mapped_column(Float)
     pack_unit: Mapped[str | None] = mapped_column(String(10))
     source: Mapped[str] = mapped_column(String(10), default="manual")

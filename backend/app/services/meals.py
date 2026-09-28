@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
-from app.domain.nutrition import ingredient_nutrition, meal_nutrition
+from app.domain.nutrition import meal_nutrition
 from app.domain.text import normalize
 from app.domain.units import BaseUnit, IngredientAttrs, Unit
 from app.media.store import MediaStore
@@ -30,7 +30,6 @@ from app.models import Tag as TagRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
-from app.repositories import products as products_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
 from app.schemas.meals import (
@@ -69,17 +68,6 @@ async def _nutrition_and_rows(
     rows = (await meals_repo.rows_for(session, [meal.id]))[meal.id]
     ingredient_ids = {row.ingredient_id for row in rows}
     ingredients = await ingredients_repo.by_ids(session, ingredient_ids)
-    products = await products_repo.for_ingredients(session, ingredient_ids)
-    values = {
-        ingredient.id: {
-            key: value.value
-            for key, value in ingredient_nutrition(
-                ingredient.nutrients(),
-                [product.nutrients() for product in products.get(ingredient.id, [])],
-            ).items()
-        }
-        for ingredient in ingredients.values()
-    }
 
     def attrs(ingredient: IngredientRow) -> IngredientAttrs:
         return IngredientAttrs(
@@ -96,7 +84,7 @@ async def _nutrition_and_rows(
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
                 attrs=attrs(ingredients[row.ingredient_id]),
-                values=values[row.ingredient_id],
+                values=ingredients[row.ingredient_id].nutrients(),
             )
             for row in rows
         ],
@@ -112,6 +100,7 @@ async def _nutrition_and_rows(
                 MealNutritionMissing(
                     ingredient_id=item.ingredient_id,
                     ingredient_name=item.ingredient_name,
+                    ingredient_brand=ingredients[item.ingredient_id].brand,
                     reason=item.reason,
                     nutrient=item.nutrient,
                 )
@@ -122,9 +111,7 @@ async def _nutrition_and_rows(
             MealIngredientRow(
                 id=row.id,
                 position=row.position,
-                ingredient=ingredient_summary(
-                    ingredients[row.ingredient_id], len(products.get(row.ingredient_id, []))
-                ),
+                ingredient=ingredient_summary(ingredients[row.ingredient_id]),
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
                 note=row.note,

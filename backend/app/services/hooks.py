@@ -82,7 +82,7 @@ async def on_meal_deleted(session: AsyncSession, meal_id: str, *, now: datetime)
 
 
 async def ingredient_references(session: AsyncSession, ingredient_id: str) -> dict[str, int]:
-    """References to an ingredient other than its products, counted per kind; any of them
+    """References to an ingredient, counted per kind: its usage on the detail page; any of them
     blocks deleting it (ING-05) and is reported in the `ingredient.in_use` params.
 
     - `meals`: the meals with rows (`meal_ingredients`) of this ingredient;
@@ -104,8 +104,8 @@ async def before_ingredient_deleted(session: AsyncSession, ingredient_id: str) -
 async def on_ingredients_merged(
     session: AsyncSession, from_id: str, into_id: str, *, now: datetime
 ) -> None:
-    """Runs when an admin merges ingredient `from_id` into `into_id` (ING-05), after the
-    products moved and before `from_id` is deleted.
+    """Runs when an admin merges ingredient `from_id` into `into_id` (ING-05), after its
+    barcode moved (if the target has none) and before `from_id` is deleted.
 
     Meal rows (`meal_ingredients`), frozen list rows and extra items are repointed, keeping
     their positions and snapshots; a meal may then have two rows of the same ingredient, which
