@@ -181,7 +181,9 @@ def test_member_creates_an_ingredient_from_a_typed_barcode(
     unknown = new_barcode()
     page.goto("/scan")
     look_up(page, unknown)
-    expect(page.get_by_test_id(TEST_IDS["scanNotice"])).to_have_text(text("scanner.notFound"))
+    expect(page.get_by_test_id(TEST_IDS["scanNotice"])).to_have_text(
+        text("scanner.notFound", barcode=unknown)
+    )
     expect(page.get_by_test_id(TEST_IDS["scanProposal"])).to_have_count(0)
     which = page.get_by_test_id(TEST_IDS["scanWhich"])
     which.get_by_label(text("scanner.which.search"), exact=True).fill(ingredient_name)
