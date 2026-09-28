@@ -90,24 +90,28 @@ describe('MealDetailScreen', () => {
             {
               ingredient_id: EGGS.id,
               ingredient_name: 'Eier',
+              ingredient_brand: null,
               reason: 'unknown_value',
               nutrient: 'sugar',
             },
             {
               ingredient_id: EGGS.id,
               ingredient_name: 'Eier',
+              ingredient_brand: null,
               reason: 'unknown_value',
               nutrient: 'fat',
             },
             {
               ingredient_id: 'ing-x',
               ingredient_name: 'Rübe',
+              ingredient_brand: null,
               reason: 'not_convertible',
               nutrient: null,
             },
             {
               ingredient_id: 'ing-y',
               ingredient_name: 'Zimt',
+              ingredient_brand: null,
               reason: 'unknown_value',
               nutrient: null,
             },

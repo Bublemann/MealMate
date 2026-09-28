@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import { ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
@@ -7,11 +7,17 @@ import { testIds } from '@/testIds';
 
 const ALL = [
   // The server's order; the screen groups by the categories' walking order.
-  summary('Butter', 'dairy_eggs', { product_count: 1 }),
+  summary('Butter', 'dairy_eggs', { brand: 'Kerrygold', barcode: '5011038133535', source: 'off' }),
   summary('Salz', 'other'),
-  summary('Äpfel', 'fruit_vegetables', { product_count: 2 }),
+  summary('Äpfel', 'fruit_vegetables'),
   summary('Milch', 'dairy_eggs', { base_unit: 'ml' }),
 ];
+
+// jsdom has no camera: the barcode field's scanner shows its manual input.
+vi.mock('@/features/scanner/decoder', () => ({
+  loadDecoder: () => Promise.resolve(),
+  decodeVideoFrame: () => Promise.resolve(null),
+}));
 
 function listIngredients(request: Request) {
   const q = new URL(request.url).searchParams.get('q');
@@ -50,7 +56,7 @@ describe('IngredientsScreen', () => {
     expect(screen.queryByLabelText('Search ingredients')).toBeNull();
   });
 
-  it('groups the ingredients under their categories in walking order', async () => {
+  it('groups the ingredients under their categories in walking order, with brand and barcode', async () => {
     renderIngredients();
 
     const list = await screen.findByTestId(testIds.ingredientList);
@@ -63,14 +69,16 @@ describe('IngredientsScreen', () => {
     const dairy = within(list).getByRole('region', { name: 'Dairy & eggs' });
     const rows = within(dairy).getAllByTestId(testIds.ingredientRow);
     expect(rows.map((row) => row.textContent)).toEqual([
-      'Butterg · 1 product',
-      'Milchml · 0 products',
+      'Butter (Kerrygold) with barcodeg',
+      'Milchml',
     ]);
     expect(within(list).getByRole('link', { name: /^Äpfel/ })).toHaveAttribute(
       'href',
       '/ingredients/ing-äpfel',
     );
-    expect(within(list).getByRole('link', { name: /^Äpfel/ })).toHaveTextContent('2 products');
+    expect(
+      within(list).getByRole('link', { name: /^Butter \(Kerrygold\) with barcode/ }),
+    ).toHaveAttribute('href', '/ingredients/ing-butter');
   });
 
   it('searches on the server once typing pauses', async () => {
@@ -128,17 +136,17 @@ describe('IngredientsScreen', () => {
 });
 
 describe('IngredientFormDialog (create)', () => {
-  it('creates an ingredient with decimal commas and opens it', async () => {
-    const created = ingredient({ id: 'ing-birnen', name: 'Birnen' });
+  it('creates an ingredient with brand, barcode, package and decimal commas, and opens it', async () => {
+    const created = ingredient({ id: 'ing-birnen', name: 'Birnen', brand: 'Hofgut' });
     const { fetchMock, user, router } = renderIngredients({
       'POST /api/ingredients': Response.json(created, { status: 201 }),
-      'GET /api/ingredients/ing-birnen/products': [],
     });
 
     await user.click(await screen.findByTestId(testIds.newIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     const form = within(dialog).getByTestId(testIds.ingredientForm);
     await user.type(within(form).getByLabelText('Name'), '  Birnen ');
+    await user.type(within(form).getByLabelText('Brand'), 'Hofgut ');
     // The category defaults to Other.
     await waitFor(() =>
       expect(within(form).getByLabelText('Category')).toHaveDisplayValue('Other'),
@@ -152,24 +160,70 @@ describe('IngredientFormDialog (create)', () => {
     );
     await user.type(within(form).getByLabelText('Calories'), '57');
     await user.type(within(form).getByLabelText('Fat'), '0.4');
-    await user.click(within(form).getByRole('button', { name: 'Create ingredient' }));
+    await user.type(within(form).getByLabelText('Barcode'), '4006381 333931');
+    // The package is optional and folded away under "More".
+    const more = within(form).getByText('More: package');
+    expect(within(form).getByLabelText('Package contents')).not.toBeVisible();
+    await user.click(more);
+    await user.type(within(form).getByLabelText('Package contents'), '1,5');
+    await user.selectOptions(within(form).getByLabelText('Unit of the contents'), 'kg');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-birnen'));
     await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
       name: 'Birnen',
       base_unit: 'g',
       category_id: 'cat-fruit_vegetables',
+      brand: 'Hofgut',
+      barcode: '4006381333931',
+      pack_quantity: 1.5,
+      pack_unit: 'kg',
       piece_weight_g: 180.5,
-      manual: { kcal: 57, fat: 0.4 },
+      nutrients: { kcal: 57, fat: 0.4 },
     });
-    expect(await screen.findByRole('heading', { level: 1, name: 'Birnen' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Birnen (Hofgut)' })).toBeVisible();
+  });
+
+  it('scans a barcode into the barcode field', async () => {
+    const { user } = renderIngredients();
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    await user.click(within(dialog).getByTestId(testIds.barcodeFieldScan));
+    const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
+    await user.type(within(scanner).getByTestId(testIds.barcodeInput), '4006381333931{Enter}');
+
+    await waitFor(() => expect(scanner).not.toBeInTheDocument());
+    // Only filled in: nothing is looked up, and the form is still open.
+    const form = screen.getByTestId(testIds.ingredientForm);
+    expect(within(form).getByLabelText('Barcode')).toHaveValue('4006381333931');
+    expect(screen.getByRole('dialog', { name: 'New ingredient' })).toBeVisible();
+  });
+
+  it('shows a barcode another ingredient has next to the field', async () => {
+    const { user } = renderIngredients({
+      'POST /api/ingredients': errorResponse(409, 'ingredient.barcode_taken'),
+    });
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    await user.type(within(dialog).getByLabelText('Name'), 'Milch');
+    await user.type(within(dialog).getByLabelText('Barcode'), '4006381333931');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Barcode')).toHaveAccessibleDescription(
+        /^Another ingredient already has this barcode/,
+      ),
+    );
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows the server field errors next to their fields', async () => {
     const { user } = renderIngredients({
       'POST /api/ingredients': errorResponse(422, 'common.validation', [
         { loc: ['body', 'name'], code: 'taken' },
-        { loc: ['body', 'manual', 'kcal'], code: 'out_of_range' },
+        { loc: ['body', 'nutrients', 'kcal'], code: 'out_of_range' },
       ]),
     });
 
@@ -177,7 +231,7 @@ describe('IngredientFormDialog (create)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Äpfel');
     await user.type(within(dialog).getByLabelText('Calories'), '1000');
-    await user.click(within(dialog).getByRole('button', { name: 'Create ingredient' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(within(dialog).getByLabelText('Name')).toHaveAccessibleDescription('Already taken'),
@@ -191,14 +245,14 @@ describe('IngredientFormDialog (create)', () => {
     const { user } = renderIngredients({
       'POST /api/ingredients': errorResponse(422, 'common.validation', [
         { loc: ['body', 'name'], code: 'taken' },
-        { loc: ['body', 'manual'], code: 'invalid' },
+        { loc: ['body', 'off'], code: 'invalid' },
       ]),
     });
 
     await user.click(await screen.findByTestId(testIds.newIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Äpfel');
-    await user.click(within(dialog).getByRole('button', { name: 'Create ingredient' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     expect(await within(dialog).findByText('Please check your input.')).toBeVisible();
     expect(within(dialog).getByLabelText('Name')).toHaveAccessibleDescription('Already taken');
@@ -211,7 +265,7 @@ describe('IngredientFormDialog (create)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Birnen');
     await user.type(within(dialog).getByLabelText('Density (g/ml)'), '1,2,3');
-    await user.click(within(dialog).getByRole('button', { name: 'Create ingredient' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     expect(within(dialog).getByLabelText('Density (g/ml)')).toHaveAccessibleDescription(
       /^Invalid format/,

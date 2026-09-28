@@ -1,3 +1,4 @@
+import { ingredientLabel } from '@/features/ingredients/label';
 import type { ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
 
 /** A line as the view shows it; `pending`: changed by an op that wasn't sent yet (SYNC-07). */
@@ -156,6 +157,7 @@ function addExtra(
     key: extraLineKey(id),
     kind: 'text',
     name: text,
+    brand: null,
     ingredient_id: null,
     category_id: categoryId,
     amounts: [],
@@ -186,14 +188,17 @@ function addExtra(
   list.lines = insertByCategory(list.lines, line);
 }
 
-/** Puts a line among those of its category, by name (the server's order, AGG-05). */
+/**
+ * Puts a line among those of its category, by name and then brand (the server's order, AGG-05):
+ * two brands of the same thing are separate lines.
+ */
 function insertByCategory(lines: PendingLine[], line: PendingLine): PendingLine[] {
   let index = lines.length;
   let lastOfCategory = -1;
   for (const [i, other] of lines.entries()) {
     if (other.category_id !== line.category_id) continue;
     lastOfCategory = i;
-    if (other.name.localeCompare(line.name) > 0) {
+    if (ingredientLabel(other.name, other.brand).localeCompare(line.name) > 0) {
       index = i;
       break;
     }

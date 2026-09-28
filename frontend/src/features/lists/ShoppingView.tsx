@@ -20,7 +20,14 @@ import { testIds } from '@/testIds';
 import { shoppingOps, stampOp } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { ExtraItemInput } from './ExtraItemInput';
-import { groupByCategory, initialOf, lineAmount, needsMoreTexts, reminderText } from './format';
+import {
+  groupByCategory,
+  initialOf,
+  lineAmount,
+  lineLabel,
+  needsMoreTexts,
+  reminderText,
+} from './format';
 import { ListMeals } from './ListMeals';
 import { Reminder } from './Reminder';
 
@@ -86,7 +93,7 @@ export function ShoppingView({ list, categoryKeys, onAddMeals }: ShoppingViewPro
   function onCheck(line: PendingLine, checked: boolean) {
     void queue(shoppingOps.check(line.key, checked, stampOp()));
     setAnnouncement(
-      t(checked ? 'lists.shop.inCart' : 'lists.shop.backOnList', { name: line.name }),
+      t(checked ? 'lists.shop.inCart' : 'lists.shop.backOnList', { name: lineLabel(line) }),
     );
     if (checked) {
       const index = openInOrder.findIndex((other) => other.key === line.key);
@@ -287,7 +294,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
             ref={box(line.key)}
             type="checkbox"
             aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
-              name: line.name,
+              name: lineLabel(line),
             })}
             checked={line.checked}
             disabled={!editable}
@@ -313,7 +320,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
                 line.checked && 'text-muted-foreground line-through',
               )}
             >
-              {line.name}
+              {lineLabel(line)}
             </span>
             {amount && (
               <span
@@ -372,7 +379,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
           variant="ghost"
           size="icon"
           data-testid={testIds.editShoppingItem}
-          aria-label={t('lists.sources.editLabel', { name: line.name })}
+          aria-label={t('lists.sources.editLabel', { name: lineLabel(line) })}
           onClick={() => onEdit(extraId)}
           className="mr-1 shrink-0"
         >

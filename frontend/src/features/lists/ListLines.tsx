@@ -24,7 +24,7 @@ import {
   type ListLine,
 } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
-import { groupByCategory, lineAmount, sourceAmount } from './format';
+import { groupByCategory, lineAmount, lineLabel, sourceAmount } from './format';
 import { Reminder } from './Reminder';
 
 /** How far (px) a line has to be swiped to the left to be removed for this list (LIST-07). */
@@ -240,7 +240,7 @@ function LineRow({ line, swipeable, onOpen, onHide }: LineRowProps) {
           onClick={onOpen}
           className="flex min-h-(--tap-target) w-full items-baseline justify-between gap-3 px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <span className="min-w-0 break-words">{line.name}</span>
+          <span className="min-w-0 break-words">{lineLabel(line)}</span>
           {amount && <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>}
         </button>
       </div>
@@ -273,14 +273,14 @@ function HiddenLines({ lines, editable, offline, onRestore }: HiddenLinesProps) 
             return (
               <li key={line.key} className="flex items-center justify-between gap-3 py-2">
                 <span className="min-w-0 break-words text-muted-foreground">
-                  {line.name}
+                  {lineLabel(line)}
                   {amount && <span className="ml-2 tabular-nums">{amount}</span>}
                 </span>
                 {editable && (
                   <Button
                     variant="outline"
                     size="compact"
-                    aria-label={t('lists.lines.restoreLabel', { name: line.name })}
+                    aria-label={t('lists.lines.restoreLabel', { name: lineLabel(line) })}
                     disabled={offline}
                     onClick={() => onRestore(line)}
                   >
@@ -330,7 +330,7 @@ function SourcesDialog({
         {line && (
           <>
             <DialogHeader>
-              <DialogTitle className="break-words">{line.name}</DialogTitle>
+              <DialogTitle className="break-words">{lineLabel(line)}</DialogTitle>
               {amount && <p className="text-lg font-medium tabular-nums">{amount}</p>}
             </DialogHeader>
             <DialogDescription className="font-medium text-foreground">
@@ -353,7 +353,7 @@ function SourcesDialog({
                       <Button
                         variant="outline"
                         size="compact"
-                        aria-label={t('lists.sources.editLabel', { name: line.name })}
+                        aria-label={t('lists.sources.editLabel', { name: lineLabel(line) })}
                         disabled={offline}
                         onClick={() => source.extra_id && onEdit(source.extra_id)}
                       >
@@ -363,7 +363,7 @@ function SourcesDialog({
                       <Button
                         variant="outline"
                         size="compact"
-                        aria-label={t('lists.item.removeLabel', { name: line.name })}
+                        aria-label={t('lists.item.removeLabel', { name: lineLabel(line) })}
                         disabled={removeItem.isPending || offline}
                         onClick={() => source.extra_id && removeItem.mutate(source.extra_id)}
                       >
@@ -386,7 +386,7 @@ function SourcesDialog({
                 ) : (
                   <Button
                     variant="outline"
-                    aria-label={t('lists.lines.hideLabel', { name: line.name })}
+                    aria-label={t('lists.lines.hideLabel', { name: lineLabel(line) })}
                     disabled={offline}
                     onClick={() => onHide(line, true)}
                   >

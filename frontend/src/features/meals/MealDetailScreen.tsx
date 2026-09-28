@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ingredientLabel } from '@/features/ingredients/label';
 import { cuisineName, unitLabel } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { formatNumber } from '@/i18n/format';
@@ -273,7 +274,7 @@ function IngredientsCard({ meal }: { meal: Meal }) {
                     to={`/ingredients/${row.ingredient.id}`}
                     className="inline-flex min-h-(--tap-target) items-center font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    {row.ingredient.name}
+                    {ingredientLabel(row.ingredient.name, row.ingredient.brand)}
                   </Link>
                   {row.note && <span className="text-muted-foreground"> · {row.note}</span>}
                 </span>

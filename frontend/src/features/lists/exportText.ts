@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { Language } from '@/i18n';
 import type { ListDetail } from './api';
-import { groupByCategory, lineAmount, listDisplayName, reminderText } from './format';
+import { groupByCategory, lineAmount, lineLabel, listDisplayName, reminderText } from './format';
 
 /** What the export needs of a list: exactly what the list view already loaded. */
 export type ExportableList = Pick<
@@ -46,7 +46,7 @@ export function exportText(list: ExportableList, { t, language, categoryKeys }: 
   const openKey = list.status === 'done' ? 'lists.export.notBought' : 'lists.export.open';
   const item = (line: ExportLine) => {
     const amount = lineAmount(t, language, line);
-    return amount ? t('lists.export.item', { name: line.name, amount }) : line.name;
+    return amount ? t('lists.export.item', { name: lineLabel(line), amount }) : lineLabel(line);
   };
   for (const group of groupByCategory(shown, categoryKeys, t)) {
     const open = group.lines.filter((line) => !line.checked);
