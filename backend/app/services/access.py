@@ -8,14 +8,14 @@
 | List (M5a) | owner · partner (CPL-04) · all if *lists public* | owner · partner if shared |
 | Shopping (M5b) | shop again: whoever sees the done list | start, ops, reopen: list editors |
 | Meal on a list (M5a) | details if its meal is visible, else "Private meal" (VIS-06) | n/a |
-| Ingredient, product (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
+| Ingredient (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
 | Reference data (M3) | everyone | add a cuisine: everyone; reorder categories: admin |
 | Admin endpoints | active admin (`require_admin`) | same; never self-deactivation or deletion |
 
 A list's partner sees it while the couple exists; everyone but the owner (and the partner of a
 shared list) sees it read-only. Only the owner deletes a list and switches sharing (LIST-13).
 
-Ingredients and products are a shared household wiki, so they need no per-object check; the
+Ingredients are a shared household wiki, so they need no per-object check; the
 admin-only actions go through `require_admin` (via the `CurrentAdmin` dependency).
 
 A meal or list the viewer may not see answers exactly like one that does not exist (404

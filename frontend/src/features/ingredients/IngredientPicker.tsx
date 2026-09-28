@@ -10,6 +10,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import { toSummary, useIngredients, type IngredientSummary } from './api';
 import { IngredientFormDialog } from './IngredientFormDialog';
+import { IngredientName } from './IngredientName';
 
 /** More matches than this are left out: the search narrows them down. */
 const MAX_RESULTS = 50;
@@ -26,7 +27,8 @@ interface IngredientPickerProps {
 }
 
 /**
- * Search and pick an ingredient, or create it inline (ING-03). Reused by meals and lists. The
+ * Search (name and brand) and pick an ingredient, or create it inline with the full ingredient
+ * form, which can also fill it from Open Food Facts (ING-03). Reused by meals and lists. The
  * results are a list of buttons: Tab or the arrow keys move through them, Enter or Space picks.
  */
 export function IngredientPicker({
@@ -111,7 +113,7 @@ export function IngredientPicker({
                   onClick={() => onSelect(ingredient)}
                   className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
                 >
-                  <span className="font-medium">{ingredient.name}</span>
+                  <IngredientName ingredient={ingredient} />
                   <span className="text-sm text-muted-foreground">
                     {key ? `${categoryName(t, key)} · ` : ''}
                     {unitLabel(t, ingredient.base_unit)}

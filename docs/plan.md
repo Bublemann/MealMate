@@ -251,11 +251,9 @@ Each rule has API tests, including negative cases and the switch combinations in
   - `convert(amount, unit, to_base, attrs)` uses the ingredient attributes (`base_unit`, `piece_weight_g`, `density_g_per_ml`), which are either live or from a frozen snapshot. It returns the value plus an `estimate` flag (NUT-05), or "not convertible".
 - **Nutrients registry:**
   - `NUTRIENTS = [kcal, protein, carbs, sugar, fat]`, each with its OFF field names (`energy-kcal_100g`, `proteins_100g`, `carbohydrates_100g`, `sugars_100g`, `fat_100g`), a plausible range and a display unit.
-  - Nullable columns on `ingredients` (manual values) and `products` are generated from it, and so are the schema fields.
+  - Nullable columns on `ingredients` are generated from it, and so are the schema fields.
   - Adding a nutrient: add it to the registry, run `alembic revision --autogenerate`, add translation keys, and add OFF mapping tests (MNT-06).
-- **Ingredient nutrition** (NUT-02), per field:
-  - the manual value, else the mean over the products that have that field, else `None`.
-  - It returns the value, its source (`manual`/`products`/`unknown`) and the product mean as a hint.
+- **Ingredient nutrition** (NUT-02): the ingredient's own column per field; `None` is unknown. (Until migration 0007 an ingredient averaged over linked products; D-21 replaced that.)
 - **Meal nutrition** (NUT-03/04):
   - the sum over rows of `convert(amount) / 100 × value`;
   - it collects `missing` entries (ingredient + field or "no amount"/"not convertible") and `estimate` flags;
@@ -332,17 +330,19 @@ Each rule has API tests, including negative cases and the switch combinations in
   - strings are trimmed to name ≤ 200, brand ≤ 100 and quantity ≤ 50 characters;
   - control and bidi characters are removed;
   - nutrients must be finite and within the registry range (e.g. 0–100 g per 100 g, kcal ≤ 900), otherwise they are dropped.
-- **Rate limit:** sliding 60-second windows, so OFF never gets more than 10 requests in any minute from the Pi: the app process may start at most 6 (`OFF_RATE_APP_PER_MINUTE`), the nightly job, which runs as a separate process, at most 4 (`OFF_RATE_JOB_PER_MINUTE`); their sum is checked to be ≤ 10. Excess lookups wait up to 5 s, then return `off.busy`, and the user can retry or enter the values by hand. So the server always answers a lookup within about 15 s. Background refreshes only take a free slot and never wait.
-- **Lookup flow:** `GET /api/products/lookup?barcode=`:
+- **Rate limit:** sliding 60-second windows, so OFF never gets more than 10 product reads in any minute from the Pi: the app process may start at most 6 (`OFF_RATE_APP_PER_MINUTE`), the nightly job, which runs as a separate process, at most 4 (`OFF_RATE_JOB_PER_MINUTE`); their sum is checked to be ≤ 10. Excess lookups wait up to 5 s, then return `off.busy`, and the user can retry or enter the values by hand. So the server always answers a lookup within about 15 s. Background refreshes only take a free slot and never wait. Name searches (BAR-11) have their own window, `OFF_SEARCH_PER_MINUTE` (default 5, at most 10, OFF's search limit).
+- **Answers:** "not found" only when OFF says so (`product_not_found`, or its redirect for another product type); error pages, 5xx, timeouts and network errors are "unavailable". An interactive lookup or search retries a transient answer once within its deadline; the HTTP client is pooled and closed at shutdown; every outcome is logged (never a search text).
+- **Lookup flow:** `GET /api/ingredients/lookup?barcode=`:
   1. validate the check digit;
-  2. look in the own database;
+  2. look for an ingredient with that barcode;
   3. if not found, ask OFF;
-  4. return a *proposal* (not saved) with name (in the user's language, else the generic name), brand, quantity, `product_quantity`, nutrition basis and nutrients.
+  4. return a *proposal* (not saved) with barcode, name (in the user's language, else the generic name, cut at a word boundary to 60 characters), brand, quantity, `product_quantity`, basis, category guess and nutrients.
 
-  Saving happens in `POST /api/products` with `ingredient_id`, and requires that the nutrition basis matches the ingredient's base unit (ING-04).
+  Saving is `POST /api/ingredients` with the (corrected) values and an `off` block (`off_last_modified_at`, `edited_fields`), which creates a `source=off` ingredient in one request and marks the edited fields as user-edited (BAR-04).
+- **Name search** (BAR-11): `GET /api/ingredients/off-search?q=&page=` on an explicit user action only. It calls OFF's full-text search (`/cgi/search.pl`, `search_simple=1`, 20 per page, sorted by scans, filtered to `en:germany`, `lc` = the user's language, the same `fields=`), because its products have the same shape as the v3 read and pass the same validation. Results are proposals, flagged `in_mealmate` when the barcode already exists; cached 24 h (in-memory LRU, 200 entries); failures are not cached. A weekly contract check covers it. `search.pl` is OFF's legacy full-text search; revisit when their newer search service (search-a-licious) is stable and returns the same product shape.
 - **Refresh:**
-  - `mealmate jobs off-refresh` runs nightly and refreshes products with `fetched_at` older than `MEALMATE_OFF_REFRESH_DAYS`, spread out under the rate limit, with each write in its own short transaction.
-  - Opening or scanning such a product triggers a background refresh.
+  - `mealmate jobs off-refresh` runs nightly and refreshes `source=off` ingredients with `fetched_at` older than `MEALMATE_OFF_REFRESH_DAYS`, spread out under the rate limit, with each write in its own short transaction.
+  - Opening or scanning such an ingredient triggers a background refresh.
   - Fields that were not user-edited update silently. User-edited fields with different values are stored in `pending_update` (BAR-06).
   - Apply and Ignore endpoints clear it. Ignore also remembers the ignored OFF `last_modified`, so the same values aren't suggested again.
 
@@ -371,7 +371,7 @@ Each rule has API tests, including negative cases and the switch combinations in
 | `backup-db <path>` | Consistent snapshot via the SQLite backup API plus `PRAGMA integrity_check` (OPS-01) |
 | `jobs off-refresh` · `jobs cleanup` | Background jobs, called by systemd timers. Cleanup removes expired codes, ops older than 30 days, expired session tokens and orphaned media |
 | `export-openapi <path>` | Writes `openapi.json` without starting a server (for type generation) |
-| `seed-demo` | Demo users (admin, a couple, a single user), ingredients with products, meals with photos, drafts, a shopping list and history. Refuses to run if real users exist |
+| `seed-demo` | Demo users (admin, a couple, a single user), ingredients (some with brand and barcode, one thing in two brands), meals with photos, drafts, a shopping list and history. Refuses to run if real users exist |
 
 ### 5.12 Configuration (`MEALMATE_` environment variables)
 
@@ -385,6 +385,7 @@ Each rule has API tests, including negative cases and the switch combinations in
 | `OFF_REFRESH_DAYS` | `30` | |
 | `OFF_USER_AGENT_CONTACT` | repo URL | |
 | `OFF_RATE_APP_PER_MINUTE` / `OFF_RATE_JOB_PER_MINUTE` | `6` / `4` | Requests to OFF per 60 s from the app and from the nightly job; together ≤ 10 (BAR-08) |
+| `OFF_SEARCH_PER_MINUTE` | `5` | OFF name searches per 60 s (1–10, BAR-11) |
 | `INVITE_TTL_DAYS` / `RESET_TTL_HOURS` | `7` / `24` | |
 | `SESSION_IDLE_DAYS` | `90` | |
 | `API_DOCS_ENABLED` | `false` | `true` in dev |
@@ -411,8 +412,7 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 | `categories` | `key` (unique), `sort_order` | Seeded by migration |
 | `cuisines` | `key` (unique, nullable), `name` (nullable), `name_norm` (unique), `created_by` FK set null | Seeded entries have a `key`; user-added ones have a `name` |
 | `tags`, `meal_tags` | `name`, `name_norm` (unique) · (`meal_id`, `tag_id`) | |
-| `ingredients` | `name`, `name_norm` (unique), `category_id` FK, `base_unit` (`g`/`ml`), `piece_weight_g`, `density_g_per_ml`, nutrient columns (manual, nullable), `created_by`/`updated_by` FK set null | |
-| `products` | `barcode` (unique), `ingredient_id` FK restrict, `nutrition_basis` (`g`/`ml`), `name`, `brand`, `quantity_text`, `pack_quantity`, `pack_unit`, nutrient columns, `source` (`off`/`manual`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` | The pack size is stored for the postponed pack-rounding feature |
+| `ingredients` | `name`, `name_norm` (indexed, not unique), `brand`, `brand_norm`, `barcode` (unique, nullable), `category_id` FK, `base_unit` (`g`/`ml`), `piece_weight_g`, `density_g_per_ml`, nutrient columns (nullable), `quantity_text`, `pack_quantity`, `pack_unit`, `source` (`manual`/`off`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` FK set null | One kind of ingredient (D-21, migration 0007 merged the former `products` table into it); the pack size is stored for the postponed pack-rounding feature |
 | `meals` | `owner_id` FK cascade, `name`, `name_norm`, `instructions`, `source_url`, `servings`, `cuisine_id` FK set null, `photo_key`, `copied_from_meal_id` FK set null | |
 | `meal_ingredients` | `meal_id` FK cascade, `position`, `ingredient_id` FK restrict, `amount`, `unit`, `note` | |
 | `shopping_lists` | `owner_id` FK cascade, `name` (nullable → translated default), `status`, `shared_with_partner`, `version`, `reminder_seed`, `shopping_started_at`, `finished_at` | |
@@ -437,8 +437,8 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
   3. end the couple;
   4. cascade: meals, other lists, sessions, codes;
   5. media files are removed by the cleanup job.
-- **Ingredient merge** (ING-05) repoints `meal_ingredients`, `list_meal_ingredients`, `list_extra_items` and `products`, rewrites `list_line_states.line_key` (`i:A` → `i:B`, merging check states: checked only if both were checked), then deletes A.
-- **Base unit change** (ING-02) is rejected while products are linked.
+- **Ingredient merge** (ING-05) repoints `meal_ingredients`, `list_meal_ingredients` and `list_extra_items`, moves A's barcode to B if B has none, rewrites `list_line_states.line_key` (`i:A` → `i:B`, merging check states: checked only if both were checked), then deletes A.
+- **Base unit change** (ING-02) is allowed any time; values stay per 100 of the new unit, and pending OFF nutrient updates are dropped.
 
 ## 7. API outline
 
@@ -452,8 +452,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 | Couple | `GET /couple` · `POST /couple/requests` · `POST /couple/requests/{id}/accept\|decline\|cancel` · `DELETE /couple` |
 | Users | `GET /users` (active users: id + display name, for the couple picker) · `GET /users/visible?for=meals\|lists` (filter chips) |
 | Reference | `GET /categories` · `GET /units` · `GET/POST /cuisines` · `GET /tags?q=` |
-| Ingredients | `GET /ingredients?q=&category=` · `POST` · `GET/PATCH /ingredients/{id}` · `GET /ingredients/{id}/products` |
-| Products | `GET /products/lookup?barcode=` · `POST /products` · `PATCH /products/{id}` · `POST /products/{id}/pending-update/apply\|ignore` |
+| Ingredients | `GET /ingredients?q=&category_id=` (name and brand) · `POST` · `GET/PATCH /ingredients/{id}` · `GET /ingredients/similar?name=&brand=` · `GET /ingredients/lookup?barcode=` · `GET /ingredients/off-search?q=&page=` · `POST /ingredients/{id}/barcode` (link a barcode to an ingredient without one; 409 otherwise) · `POST /ingredients/{id}/pending-update/apply\|ignore` |
 | Meals | `GET /meals?q=&users=&cuisine=&tag=&sort=` · `POST` · `GET/PATCH/DELETE /meals/{id}` · `POST /meals/{id}/copy` · `PUT/DELETE /meals/{id}/photo` · `GET /media/{key}` |
 | Lists | `GET /lists?scope=mine\|others&status=` · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` · `GET /lists/history` · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
 | Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/events` · `GET /admin/system` (version, plus backup and disk status read from the read-only `/status/*.json`) · `POST /admin/backup` (creates `/data/status/backup-request`, picked up by a systemd path unit) |
@@ -466,7 +465,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - `/lists/:id` (draft view / shopping view), `/lists/history`, `/meals/:id`, `/meals/:id/edit`, `/ingredients/:id`;
   - `/join`, `/reset`, `/login`, `/me/admin/*`. The code is read from `location.hash` and removed from the URL immediately.
 - **Server state:** TanStack Query per feature (`features/*/api.ts`), all calls through `src/api/client.ts` (openapi-fetch).
-  - The client gives every request an `AbortController` timeout: 8 s for reads, 15 s for ops and uploads, and 25 s for `GET /products/lookup`. A timeout counts as "can't reach MealMate" (SYNC-09). A lookup timeout instead shows "Open Food Facts is slow – try again or enter the values yourself".
+  - The client gives every request an `AbortController` timeout: 8 s for reads, 15 s for ops and uploads, and 25 s for the barcode lookup and the OFF name search. A timeout counts as "can't reach MealMate" (SYNC-09). A lookup timeout instead shows "Open Food Facts is slow – try again or enter the values yourself".
   - The auth middleware refreshes **single-flight**: one shared promise, plus `navigator.locks.request('mm-refresh')` across tabs, then retries once on 401. No API call is sent before the startup refresh has settled.
 - **Auth:**
   - The access token lives in memory.
@@ -517,7 +516,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 |---|---|---|
 | Domain unit | Units, conversion, nutrition, aggregation, rounding, needs-more, normalisation (table-driven + Hypothesis) | `backend/tests/unit`, every PR |
 | Services / API | Every endpoint; permissions (positive and negative, incl. VIS-06 and CPL-02/04 combinations); detach and deletion rules (incl. deleting a user whose shared draft contains their own meal); refresh grace (lost response, two parallel refreshes → afterwards exactly one active token) and fork (second fork refused, stale token → login, no revocation); ops idempotency and conflict rules; 20 parallel ops (no lost updates); rate limits; OFF client and validation (respx); image pipeline; production cookie attributes | `backend/tests/api`, every PR, coverage gate ≥ 85 % |
-| Migrations | Empty → head → base → head; **seed-demo DB at the previous head → head with unchanged row counts and unchanged counts of non-NULL values in every nullable FK column**, `foreign_key_check` empty, no `_alembic_tmp_*`; no autogenerate diff | `backend/tests/migrations`, every PR |
+| Migrations | Empty → head → base → head; **seed-demo DB at the previous head → head with unchanged row counts and unchanged counts of non-NULL values in every nullable FK column** (a migration that moves data by design, like 0007, asserts exactly its intended changes), `foreign_key_check` empty, no `_alembic_tmp_*`; no autogenerate diff. Since the models only describe the head, older revisions are seeded from a frozen SQL dump of the seed-demo DB (`tests/migrations/fixtures/demo-0006.sql`) | `backend/tests/migrations`, every PR |
 | Frontend | API client (timeouts, single-flight refresh), `parseAmount`/format, outbox, flush and lifecycle (fake-indexeddb), export text, i18n completeness (keys, placeholders, error codes), barcode decoding of sample EAN images | Vitest, every PR |
 | E2E | The 11 journeys in QA-04 plus a lie-fi case (`page.route` never answers) and a "no request leaves the origin" assertion; axe checks | `e2e/`, every PR |
 | Deploy | `docker compose config` of `deploy/compose.yml` with the example env; backup → restore round trip (including a stale `-wal` file); update rollback with a deliberately unhealthy image (asserting the schema revision and a sentinel row, not only `integrity_check`), then recovery with the next good digest; retention pruning (`deploy/common/tests`) | CI (in containers) |

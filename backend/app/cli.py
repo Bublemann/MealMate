@@ -43,7 +43,6 @@ from app.services.demo import (
     DEMO_INGREDIENTS,
     DEMO_LISTS,
     DEMO_MEALS,
-    DEMO_PRODUCTS,
     DemoRefusedError,
     seed_demo,
 )
@@ -206,7 +205,8 @@ def reset_link(
 @main.command("seed-demo")
 def seed_demo_command() -> None:
     """Fill an empty installation with demo users (admin, anna + ben as a couple, carl with
-    private meals), an open invite, ingredients, products, meals with photos and draft lists.
+    private meals), an open invite, ingredients (some with brand and barcode), meals with photos
+    and draft lists.
     Refuses to run if any user exists."""
     settings = _load_settings()
     _require_current_database(settings)
@@ -221,7 +221,8 @@ def seed_demo_command() -> None:
     typer.echo("Demo users: admin (admin), anna + ben (a couple), carl")
     typer.echo(f"Demo password (all users): {seed.password}")
     typer.echo(f"Open invite: {seed.invite_url}")
-    typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)}, products: {len(DEMO_PRODUCTS)}")
+    scanned = sum(1 for item in DEMO_INGREDIENTS if item.barcode is not None)
+    typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)} ({scanned} with a barcode)")
     typer.echo(f"Demo meals: {len(DEMO_MEALS)}")
     typer.echo(f"Demo lists: {len(DEMO_LISTS)}")
 
@@ -289,20 +290,21 @@ def jobs_cleanup() -> None:
 
 @jobs_app.command("off-refresh")
 def jobs_off_refresh() -> None:
-    """Refresh products from Open Food Facts fetched longer than MEALMATE_OFF_REFRESH_DAYS ago,
-    oldest first, at most MEALMATE_OFF_RATE_JOB_PER_MINUTE per minute and an hour's worth per
-    run (BAR-05, BAR-08). A product that fails is logged and counted; the others go on."""
+    """Refresh the ingredients from Open Food Facts fetched longer than
+    MEALMATE_OFF_REFRESH_DAYS ago, oldest first, at most MEALMATE_OFF_RATE_JOB_PER_MINUTE per
+    minute and an hour's worth per run (BAR-05, BAR-08). An ingredient that fails is logged and
+    counted; the others go on."""
     settings = _load_settings()
     _require_current_database(settings)
     off = OffClient.from_settings(settings, job=True)
     max_age = timedelta(days=settings.off_refresh_days)
-    max_products = off_refresh.JOB_MAX_MINUTES * settings.off_rate_job_per_minute
+    max_ingredients = off_refresh.JOB_MAX_MINUTES * settings.off_rate_job_per_minute
 
     async def run() -> Counter[off_refresh.Outcome]:
         database = Database.open(settings.data_dir)
         try:
             return await off_refresh.refresh_stale(
-                database, off, max_age=max_age, max_products=max_products
+                database, off, max_age=max_age, max_ingredients=max_ingredients
             )
         finally:
             await off.aclose()
@@ -311,7 +313,7 @@ def jobs_off_refresh() -> None:
     outcomes = asyncio.run(run())
     kept = outcomes[off_refresh.Outcome.UNAVAILABLE] + outcomes[off_refresh.Outcome.NOT_FOUND]
     typer.echo(
-        f"Refreshed {outcomes.total()} products from Open Food Facts: "
+        f"Refreshed {outcomes.total()} ingredients from Open Food Facts: "
         f"{outcomes[off_refresh.Outcome.UPDATED]} updated, "
         f"{outcomes[off_refresh.Outcome.PENDING]} with newer values for user-edited fields, "
         f"{outcomes[off_refresh.Outcome.UNCHANGED]} unchanged, "

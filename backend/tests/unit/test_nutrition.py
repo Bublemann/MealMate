@@ -1,24 +1,17 @@
-"""Ingredient and meal nutrition (NUT-02..05)."""
+"""Meal nutrition (NUT-03..05); an ingredient's values are its own columns (NUT-02)."""
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from app.domain.nutrients import NUTRIENT_KEYS
-from app.domain.nutrition import (
-    MealRow,
-    Missing,
-    NutrientValue,
-    ingredient_nutrition,
-    meal_nutrition,
-)
+from app.domain.nutrition import MealRow, Missing, meal_nutrition
 from app.domain.units import BaseUnit, IngredientAttrs, Unit
 
 G = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
 EGG = IngredientAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
 MILK = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=1.03)
 FULL = dict.fromkeys(NUTRIENT_KEYS, 10.0)
-UNKNOWN = NutrientValue(None, "unknown", None, 0)
 
 
 def row(
@@ -29,30 +22,6 @@ def row(
     values: dict[str, float | None] | None = None,
 ) -> MealRow:
     return MealRow(name.lower(), name, amount, unit, attrs, FULL if values is None else values)
-
-
-@pytest.mark.parametrize(
-    ("manual", "products", "expected"),
-    [
-        ({}, [], UNKNOWN),
-        ({"kcal": 52}, [], NutrientValue(52, "manual", None, 0)),
-        ({}, [{"kcal": 350}, {"kcal": 360}], NutrientValue(355, "products", 355, 2)),
-        # Products without the value do not count, not even as 0.
-        ({}, [{"kcal": 350}, {"kcal": None}, {}], NutrientValue(350, "products", 350, 1)),
-        ({"kcal": 64}, [{"kcal": 66}, {"kcal": 65}], NutrientValue(64, "manual", 65.5, 2)),
-        ({"kcal": 0}, [{"kcal": 10}], NutrientValue(0, "manual", 10, 1)),
-        ({"kcal": None}, [{"kcal": 0}], NutrientValue(0, "products", 0, 1)),
-    ],
-)
-def test_ingredient_nutrition(
-    manual: dict[str, float | None],
-    products: list[dict[str, float | None]],
-    expected: NutrientValue,
-) -> None:
-    result = ingredient_nutrition(manual, products)
-    assert list(result) == list(NUTRIENT_KEYS)
-    assert result["kcal"] == expected
-    assert result["fat"] == UNKNOWN
 
 
 def test_meal_nutrition() -> None:

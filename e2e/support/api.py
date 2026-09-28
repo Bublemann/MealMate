@@ -199,17 +199,13 @@ class Api:
     def create_ingredient(
         self, account: Account, name: str, *, category_key: str = "other", **fields: Any
     ) -> dict[str, Any]:
-        """POST /api/ingredients in the category `category_key`; the created Ingredient."""
+        """POST /api/ingredients in the category `category_key`, e.g. with `brand="REWE"`,
+        `barcode=new_barcode()` or `nutrients={"kcal": 52}`; the created Ingredient."""
         token = self.token(account)
         categories = self.call("GET", "/api/categories", token=token)
         [category_id] = [c["id"] for c in categories if c["key"] == category_key]
         body = {"name": name, "category_id": category_id, **fields}
         return self.call("POST", "/api/ingredients", token=token, json=body)
-
-    def create_product(self, account: Account, ingredient_id: str, **fields: Any) -> dict[str, Any]:
-        """POST /api/products with a new barcode; the created Product."""
-        body = {"barcode": new_barcode(), "ingredient_id": ingredient_id, **fields}
-        return self.call("POST", "/api/products", token=self.token(account), json=body)
 
     def update_me(self, account: Account, **fields: Any) -> dict[str, Any]:
         """PATCH /api/me, e.g. `meals_public=False`; the updated Me."""

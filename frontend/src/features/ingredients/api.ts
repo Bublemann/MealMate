@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { api, unwrap } from '@/api/client';
+import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 
 export type Ingredient = components['schemas']['Ingredient'];
@@ -14,18 +14,23 @@ export type IngredientCreate = components['schemas']['IngredientCreate'];
 export type IngredientUpdate = components['schemas']['IngredientUpdate'];
 export type BaseUnit = Ingredient['base_unit'];
 export type NutrientValues = components['schemas']['NutrientValues'];
-export type NutrientInfo = components['schemas']['NutrientInfo'];
-export type Product = components['schemas']['Product'];
-export type ProductCreate = components['schemas']['ProductCreate'];
-export type ProductUpdate = components['schemas']['ProductUpdate'];
-export type ProductField = Product['user_edited_fields'][number];
 export type PendingUpdateField = components['schemas']['PendingUpdateField'];
-export type ProductProposal = components['schemas']['ProductProposal'];
+export type OffProposal = components['schemas']['ProductProposal'];
+export type OffSearchPage = components['schemas']['OffSearchPage'];
+export type OffSearchResult = OffSearchPage['results'][number];
+/** A field that came from Open Food Facts and was changed by a user (BAR-04). */
+export type EditedField = Ingredient['user_edited_fields'][number];
+
+/**
+ * An Open Food Facts search waits for Open Food Facts like a barcode lookup does (up to about 15 s
+ * on the server), so it gets the lookup's deadline; running out of it means "Open Food Facts is
+ * slow".
+ */
+export const OFF_TIMEOUT_MS = 25_000;
 
 const INGREDIENTS_KEY = ['ingredients'] as const;
 const listKey = (query: string) => [...INGREDIENTS_KEY, 'list', query] as const;
 const detailKey = (id: string) => [...INGREDIENTS_KEY, 'detail', id] as const;
-const productsKey = (id: string) => [...INGREDIENTS_KEY, 'products', id] as const;
 
 /** Lists and similarity hints show names, categories and counts, which may have changed. */
 function invalidateSearches(queryClient: QueryClient) {
@@ -35,8 +40,8 @@ function invalidateSearches(queryClient: QueryClient) {
 
 /** A summary as the lists show it, from a full ingredient (e.g. one just created). */
 export function toSummary(ingredient: Ingredient): IngredientSummary {
-  const { id, name, category_id, base_unit, product_count } = ingredient;
-  return { id, name, category_id, base_unit, product_count };
+  const { id, name, brand, barcode, source, category_id, base_unit } = ingredient;
+  return { id, name, brand, barcode, source, category_id, base_unit };
 }
 
 /**
@@ -90,7 +95,10 @@ export function useCreateIngredient() {
   });
 }
 
-/** ING-01/02: anyone can edit any ingredient; the base unit is locked while products exist. */
+/**
+ * ING-01/02: anyone can edit any ingredient. Only changed fields are sent: a changed field that
+ * came from Open Food Facts is marked as edited by a user (BAR-04).
+ */
 export function useUpdateIngredient(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -108,41 +116,26 @@ export function useUpdateIngredient(id: string) {
   });
 }
 
-/** The products linked to an ingredient (ING-04). */
-export function useIngredientProducts(id: string) {
-  return useQuery({
-    queryKey: productsKey(id),
-    queryFn: ({ signal }) =>
+/**
+ * Gives an existing ingredient the scanned barcode ("This is already in MealMate"): the next scan
+ * finds it (BAR-02). Only for an ingredient without a barcode: the caller checks what it shows,
+ * and the server refuses to replace one (409 `ingredient.has_barcode`) in case that was stale.
+ * The edit form changes a barcode with PATCH instead.
+ */
+export function useLinkBarcode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, barcode }: { id: string; barcode: string }) =>
       unwrap(
-        api.GET('/api/ingredients/{ingredient_id}/products', {
+        api.POST('/api/ingredients/{ingredient_id}/barcode', {
           params: { path: { ingredient_id: id } },
-          signal,
+          body: { barcode },
         }),
       ),
-  });
-}
-
-/** A product entered by hand (ING-04); the nutrition average of its ingredient changes. */
-export function useCreateProduct() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (body: ProductCreate) => unwrap(api.POST('/api/products', { body })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: INGREDIENTS_KEY }),
-  });
-}
-
-/** Only the fields in `body` are sent: the server marks them as edited by a user (BAR-04). */
-export function useUpdateProduct(productId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (body: ProductUpdate) =>
-      unwrap(
-        api.PATCH('/api/products/{product_id}', {
-          params: { path: { product_id: productId } },
-          body,
-        }),
-      ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: INGREDIENTS_KEY }),
+    onSuccess: (ingredient) => {
+      queryClient.setQueryData(detailKey(ingredient.id), ingredient);
+      invalidateSearches(queryClient);
+    },
   });
 }
 
@@ -150,18 +143,38 @@ export function useUpdateProduct(productId: string) {
  * BAR-06: takes Open Food Facts' newer values for the user-edited fields (`apply`), or keeps the
  * user's values and stops proposing this Open Food Facts version (`ignore`).
  */
-export function usePendingUpdate(productId: string, action: 'apply' | 'ignore') {
+export function usePendingUpdate(id: string, action: 'apply' | 'ignore') {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => {
-      const params = { params: { path: { product_id: productId } } };
+      const params = { params: { path: { ingredient_id: id } } };
       return unwrap(
         action === 'apply'
-          ? api.POST('/api/products/{product_id}/pending-update/apply', params)
-          : api.POST('/api/products/{product_id}/pending-update/ignore', params),
+          ? api.POST('/api/ingredients/{ingredient_id}/pending-update/apply', params)
+          : api.POST('/api/ingredients/{ingredient_id}/pending-update/ignore', params),
       );
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: INGREDIENTS_KEY }),
+    onSuccess: (ingredient) => {
+      queryClient.setQueryData(detailKey(id), ingredient);
+      invalidateSearches(queryClient);
+    },
+  });
+}
+
+/**
+ * Searches Open Food Facts by name (one page of up to 20 proposals). A mutation, not a query: it
+ * runs only when the user taps "Search" or presses Enter, never while typing (BAR-08), and the
+ * server has its own cache and rate limit for it.
+ */
+export function useOffSearch() {
+  return useMutation({
+    mutationFn: ({ q, page }: { q: string; page: number }) =>
+      unwrap(
+        api.GET('/api/ingredients/off-search', {
+          params: { query: { q, page } },
+          ...withLongTimeout(OFF_TIMEOUT_MS),
+        }),
+      ),
   });
 }
 
@@ -172,7 +185,6 @@ export function usePendingUpdate(productId: string, action: 'apply' | 'ignore') 
 function forgetIngredient(queryClient: QueryClient, id: string) {
   invalidateSearches(queryClient);
   void queryClient.invalidateQueries({ queryKey: detailKey(id), refetchType: 'none' });
-  void queryClient.invalidateQueries({ queryKey: productsKey(id), refetchType: 'none' });
   void queryClient.invalidateQueries({ queryKey: ['admin', 'events'] });
 }
 
@@ -190,7 +202,6 @@ export function useMergeIngredient(id: string) {
     onSuccess: (target) => {
       forgetIngredient(queryClient, id);
       queryClient.setQueryData(detailKey(target.id), target);
-      void queryClient.invalidateQueries({ queryKey: productsKey(target.id) });
     },
   });
 }

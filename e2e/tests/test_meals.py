@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, text
+from support.frontend import TEST_IDS, ingredient_label, text
 from support.images import png
 
 MEAL_URL = re.compile(r"/meals/([\w-]+)$")
@@ -26,12 +26,15 @@ def nutrient_row(page: Page, key: str) -> Locator:
     )
 
 
-def add_row(page: Page, name: str, amount: str = "", unit: str | None = None) -> Locator:
-    """Picks ingredient `name` in the meal form and fills in its amount and unit."""
+def add_row(
+    page: Page, name: str, amount: str = "", unit: str | None = None, *, brand: str | None = None
+) -> Locator:
+    """Picks ingredient `name` (of `brand`) in the meal form and fills in its amount and unit."""
+    label = ingredient_label(name, brand)
     picker = page.get_by_test_id(TEST_IDS["mealForm"]).get_by_test_id(TEST_IDS["ingredientPicker"])
     picker.get_by_label(text("meals.field.addIngredient"), exact=True).fill(name)
-    picker.get_by_role("button", name=re.compile(f"^{re.escape(name)}")).click()
-    row = page.get_by_role("listitem", name=text("meals.row.label", name=name), exact=True)
+    picker.get_by_role("button", name=re.compile(f"^{re.escape(label)}")).click()
+    row = page.get_by_role("listitem", name=text("meals.row.label", name=label), exact=True)
     expect(row).to_be_visible()
     if amount:
         row.get_by_label(text("meals.row.amount"), exact=True).fill(amount)
@@ -56,7 +59,7 @@ def based_on_text(name: str, owner: str) -> str:
 
 def soup(api: Api, owner: Account, tag: str) -> dict[str, Any]:
     """A public meal of `owner` with one ingredient row."""
-    lentils = api.create_ingredient(owner, f"Linsen {tag}", manual={"kcal": 350})
+    lentils = api.create_ingredient(owner, f"Linsen {tag}", nutrients={"kcal": 350})
     return api.create_meal(
         owner,
         f"Linsensuppe {tag}",
@@ -72,12 +75,18 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     """Journey 4 (MEAL-01..04, NUT-03/04): rows, nutrition per meal and serving, photo."""
     page = member_page
     tag = unique("e2e")
-    flour = api.create_ingredient(member, f"Mehl {tag}", manual={"kcal": 364})
+    flour = api.create_ingredient(member, f"Mehl {tag}", nutrients={"kcal": 364})
+    # A brand is part of the name wherever the ingredient shows.
     milk = api.create_ingredient(
-        member, f"Milch {tag}", category_key="dairy_eggs", base_unit="ml", manual={"kcal": 64}
+        member,
+        f"Milch {tag}",
+        brand="Weidehof",
+        category_key="dairy_eggs",
+        base_unit="ml",
+        nutrients={"kcal": 64},
     )
     eggs = api.create_ingredient(
-        member, f"Eier {tag}", category_key="dairy_eggs", piece_weight_g=60, manual={"kcal": 155}
+        member, f"Eier {tag}", category_key="dairy_eggs", piece_weight_g=60, nutrients={"kcal": 155}
     )
     salt = api.create_ingredient(member, f"Salz {tag}")
     name = f"Pfannkuchen {tag}"
@@ -96,7 +105,7 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True).click()
     expect(form.get_by_label(text("meals.field.servings"), exact=True)).to_have_value("2")
     add_row(page, flour["name"], "200", "g")
-    add_row(page, milk["name"], "300", "ml")
+    add_row(page, milk["name"], "300", "ml", brand="Weidehof")
     add_row(page, eggs["name"], "2", "piece")
     salt_row = add_row(page, salt["name"])
     salt_row.get_by_label(text("meals.row.note"), exact=True).fill("to taste")
@@ -114,6 +123,9 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     expect(detail.get_by_role("heading", level=1)).to_have_text(name)
     ingredients = page.get_by_test_id(TEST_IDS["mealIngredients"])
     expect(ingredients.get_by_role("listitem")).to_have_count(4)
+    expect(
+        ingredients.get_by_role("link", name=ingredient_label(milk["name"], "Weidehof"))
+    ).to_have_attribute("href", f"/ingredients/{milk['id']}")
     expect(page.get_by_test_id(TEST_IDS["mealInstructions"])).to_have_text(
         "Alles verrühren.\nIn der Pfanne backen."
     )

@@ -83,15 +83,52 @@ def route(mock: respx.MockRouter, barcode: str) -> respx.Route:
     return mock.get(product_url(barcode))
 
 
+def search_route(mock: respx.MockRouter) -> respx.Route:
+    return mock.get("/cgi/search.pl")
+
+
+def search_response(*products: dict[str, Any], count: int | None = None) -> dict[str, Any]:
+    """A page of `/cgi/search.pl?json=1`, as OFF sends it; `products` are API product objects
+    (e.g. `oats()["product"]`)."""
+    return {
+        "count": len(products) if count is None else count,
+        "page": 1,
+        "page_count": len(products),
+        "page_size": 20,
+        "products": list(products),
+        "skip": 0,
+    }
+
+
 def unlimited_rate() -> SlidingWindow:
     return SlidingWindow(1_000_000)
 
 
-def client(rate_limit: SlidingWindow | None = None, **options: Any) -> OffClient:
+def client(
+    rate_limit: SlidingWindow | None = None,
+    *,
+    search_rate_limit: SlidingWindow | None = None,
+    **options: Any,
+) -> OffClient:
     """A client for the mocked OFF_URL; a lookup's second try follows without a pause."""
     options = {"retry_pause": 0.0} | options
-    return OffClient(OFF_URL, USER_AGENT, rate_limit=rate_limit or unlimited_rate(), **options)
+    return OffClient(
+        OFF_URL,
+        USER_AGENT,
+        rate_limit=rate_limit or unlimited_rate(),
+        search_rate_limit=search_rate_limit or unlimited_rate(),
+        **options,
+    )
 
 
-def refresher(rate_limit: SlidingWindow | None = None, **options: Any) -> OffRefresher:
-    return OffRefresher(client(rate_limit), max_age=timedelta(days=30), **options)
+def refresher(
+    rate_limit: SlidingWindow | None = None,
+    *,
+    search_rate_limit: SlidingWindow | None = None,
+    **options: Any,
+) -> OffRefresher:
+    return OffRefresher(
+        client(rate_limit, search_rate_limit=search_rate_limit),
+        max_age=timedelta(days=30),
+        **options,
+    )

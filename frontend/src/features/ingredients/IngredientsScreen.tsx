@@ -16,6 +16,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import { useIngredients, type IngredientSummary } from './api';
 import { IngredientFormDialog } from './IngredientFormDialog';
+import { IngredientName } from './IngredientName';
 
 interface Group {
   category: Category;
@@ -39,7 +40,10 @@ function groupByCategory(ingredients: IngredientSummary[], categories: Category[
   });
 }
 
-/** The Ingredients tab: search, grouped by category, and "New ingredient" (ING-01, ING-03). */
+/**
+ * The Ingredients tab: search (name and brand), grouped by category, "New ingredient" and "Scan"
+ * (ING-01, ING-03, BAR-01).
+ */
 export function IngredientsScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -174,11 +178,9 @@ function CategoryGroup({ category, ingredients }: Group) {
               className="flex min-h-(--tap-target) items-center gap-3 px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
             >
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="font-medium break-words">{ingredient.name}</span>
+                <IngredientName ingredient={ingredient} />
                 <span className="text-sm text-muted-foreground">
                   {unitLabel(t, ingredient.base_unit)}
-                  {' · '}
-                  {t('ingredients.productCount', { count: ingredient.product_count })}
                 </span>
               </span>
               <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />

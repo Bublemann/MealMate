@@ -16,6 +16,7 @@ from app.services import access, auth
 from app.services.context import AuthConfig
 from app.services.list_cache import ListCache
 from app.services.off_refresh import OffRefresher
+from app.services.off_search import SearchCache
 from app.services.principal import Principal
 
 UNKNOWN_CLIENT = "unknown"
@@ -53,6 +54,11 @@ def get_off_refresher(request: Request) -> OffRefresher:
     return refresher
 
 
+def get_off_search_cache(request: Request) -> SearchCache:
+    cache: SearchCache = request.app.state.off_search_cache
+    return cache
+
+
 def get_now(request: Request) -> datetime:
     """The current time from the app's clock (`app.state.clock`), which tests can move."""
     clock: Callable[[], datetime] = request.app.state.clock
@@ -76,6 +82,7 @@ Media = Annotated[MediaStore, Depends(get_media)]
 Db = Annotated[Database, Depends(get_database)]
 ListResponses = Annotated[ListCache, Depends(get_list_cache)]
 OffRefresh = Annotated[OffRefresher, Depends(get_off_refresher)]
+OffSearchCache = Annotated[SearchCache, Depends(get_off_search_cache)]
 Now = Annotated[datetime, Depends(get_now)]
 ClientIp = Annotated[str, Depends(get_client_ip)]
 UserAgent = Annotated[str | None, Depends(get_user_agent)]

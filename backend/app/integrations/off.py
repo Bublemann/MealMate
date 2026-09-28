@@ -5,6 +5,16 @@ last version with the flat `nutriments` object (`energy-kcal_100g`, ...) and pla
 `categories_tags`; v3.5 introduces a new nutrition structure that is still under development, and
 v3.6 a new tags schema. `fields=` asks only for what MealMate stores.
 
+Products are searched by name (`search`, BAR-08: only on an explicit user action) with Open Food
+Facts' full-text search `/cgi/search.pl` (`search_terms`, `json=1`), filtered to products sold in
+Germany (`countries` contains `en:germany`), the most scanned first, 20 per page, with the same
+`fields=`. It is the one search whose products come in the same flat shape as the product read
+above, so each result is validated by the very same `OffProduct`: `/api/v2/search` has no
+full-text search (only tag filters), and search-a-licious (`search.openfoodfacts.org`) is another
+service, still in beta, with another document shape (names per language, taxonomy objects).
+Searches have their own rate limit (`MEALMATE_OFF_SEARCH_PER_MINUTE`), as Open Food Facts counts
+them against its own, smaller limit for searches.
+
 The client never raises to its caller. Every request:
 
 - first waits for its turn under the rate limit (a `SlidingWindow`: the app process starts at
@@ -18,12 +28,14 @@ The client never raises to its caller. Every request:
   so a small "decompression bomb" cannot make it hold more;
 - answers `found` (with the validated product), `not_found` (OFF's `product_not_found` body,
   with HTTP 404 or 200, or a redirect), or `unavailable` (network error, timeout, a body too
-  large or not the expected JSON, any other status). OFF redirects a product of another product
+  large or not the expected JSON, any other status); a search answers `found` with the page's
+  products (maybe none) or `unavailable`. OFF redirects a product of another product
   type, such as cosmetics, to that database's site: no food product has the barcode, so a
   redirect is `not_found` (logged with the host it points to, never followed). A 404 without
   OFF's body comes from something in front of OFF (a proxy, a CDN's error page): it says
   nothing about the product, so it is `unavailable`;
-- is logged at INFO with its barcode, outcome and HTTP status (no personal data).
+- is logged at INFO with its barcode, outcome and HTTP status (no personal data; a search is
+  logged with its page and the length of its query, not the text the user typed).
 
 The client keeps one connection pool (`httpx.AsyncClient`), opened on first use, so that
 consecutive lookups reuse the connection instead of paying for a new TLS handshake each time.
@@ -41,7 +53,8 @@ place under the rate limit, but only one it gets within the time the lookup was 
 refreshes never retry: they try again later anyway.
 
 Everything in a response is untrusted (BAR-10, SEC-13): `OffProduct` keeps only what it can
-validate. Texts lose control and bidi characters and are cut to the product field lengths,
+validate. Texts lose control and bidi characters and are cut to the ingredient field lengths (a
+name at a word boundary),
 nutrients must be finite and plausible (`app.domain.nutrients.plausible`), everything else that
 does not fit becomes unknown.
 """
@@ -63,12 +76,14 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, ValidationError
 
 from app.core.config import Settings
 from app.core.ratelimit import SlidingWindow
+from app.domain.barcodes import normalize_barcode
 from app.domain.catalog import (
+    BRAND_MAX_LENGTH,
+    INGREDIENT_NAME_MAX_LENGTH,
     PACK_QUANTITY_MAX,
-    PRODUCT_BRAND_MAX_LENGTH,
-    PRODUCT_NAME_MAX_LENGTH,
-    PRODUCT_QUANTITY_TEXT_MAX_LENGTH,
+    QUANTITY_TEXT_MAX_LENGTH,
     clean_text,
+    cut_at_word,
     nutrient_field,
 )
 from app.domain.categories import guess_category
@@ -80,6 +95,10 @@ logger = logging.getLogger(__name__)
 
 OFF_API_VERSION = "v3.4"
 PRODUCT_PATH = f"/api/{OFF_API_VERSION}/product/{{barcode}}"
+SEARCH_PATH = "/cgi/search.pl"
+SEARCH_PAGE_SIZE = 20
+# Products sold in Germany (the canonical tag of `countries_tags`).
+SEARCH_COUNTRY_TAG = "en:germany"
 LANGUAGES: tuple[str, ...] = get_args(Language)
 FIELDS = ",".join(
     (
@@ -117,14 +136,32 @@ _NUMBER_MAX_LENGTH = 32
 _UNIT_MAX_LENGTH = 16
 _TAGS_MAX = 200
 _TAG_MAX_LENGTH = 100
+# Longer names are cleaned first and then cut at a word boundary.
+_RAW_NAME_MAX_LENGTH = 500
+# At most this many products of a search page are read.
+_SEARCH_RESULTS_MAX = 100
 # Unix time of 3000-01-01: later timestamps are not plausible.
 _TIMESTAMP_MAX = 32_503_680_000
 
 type OffStatus = Literal["found", "not_found", "unavailable", "busy"]
+type RequestKind = Literal["lookup", "search"]
 
 
 def _text(value: object, max_length: int) -> str | None:
     return clean_text(value, max_length) if isinstance(value, str) else None
+
+
+def _name(value: object) -> str | None:
+    """A name cut at a word boundary to the length of an ingredient name."""
+    text = _text(value, _RAW_NAME_MAX_LENGTH)
+    return None if text is None else cut_at_word(text, INGREDIENT_NAME_MAX_LENGTH)
+
+
+def _code(value: object) -> str | None:
+    """The canonical barcode (`app.domain.barcodes`), or None if it is not a valid one."""
+    if not isinstance(value, str) or len(value) > _NUMBER_MAX_LENGTH:
+        return None
+    return normalize_barcode(value)
 
 
 def _number(value: object) -> float | None:
@@ -188,7 +225,7 @@ def _per(value: object) -> str | None:
     return None if text is None else "".join(text.split()).lower()
 
 
-_Name = Annotated[str | None, BeforeValidator(partial(_text, max_length=PRODUCT_NAME_MAX_LENGTH))]
+_Name = Annotated[str | None, BeforeValidator(_name)]
 
 
 class OffProduct(BaseModel):
@@ -197,17 +234,18 @@ class OffProduct(BaseModel):
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
+    code: Annotated[str | None, BeforeValidator(_code)] = None
     product_name: _Name = None
     product_name_de: _Name = None
     product_name_en: _Name = None
     generic_name: _Name = None
     generic_name_de: _Name = None
     generic_name_en: _Name = None
-    brands: Annotated[
-        str | None, BeforeValidator(partial(_text, max_length=PRODUCT_BRAND_MAX_LENGTH))
-    ] = None
+    brands: Annotated[str | None, BeforeValidator(partial(_text, max_length=BRAND_MAX_LENGTH))] = (
+        None
+    )
     quantity: Annotated[
-        str | None, BeforeValidator(partial(_text, max_length=PRODUCT_QUANTITY_TEXT_MAX_LENGTH))
+        str | None, BeforeValidator(partial(_text, max_length=QUANTITY_TEXT_MAX_LENGTH))
     ] = None
     product_quantity: Annotated[float | None, BeforeValidator(_pack_quantity)] = None
     product_quantity_unit: Annotated[BaseUnit | None, BeforeValidator(_pack_unit)] = None
@@ -264,7 +302,7 @@ class OffProduct(BaseModel):
         return self.last_modified_t
 
     def fields(self, language: str) -> dict[str, str | float | None]:
-        """The product's values by product field (`name`, ..., `nutrients.kcal`, ...), with
+        """The product's values by ingredient field (`name`, ..., `nutrients.kcal`, ...), with
         the name in `language`; nutrients only when the basis is known."""
         pack_quantity, pack_unit = self.pack
         values: dict[str, str | float | None] = {
@@ -282,10 +320,14 @@ class OffProduct(BaseModel):
 
 @dataclass(frozen=True)
 class OffResponse:
-    """What asking Open Food Facts gave; `product` is set when `status` is found."""
+    """What asking Open Food Facts gave. A lookup that found its product has `product`; a
+    search that got an answer (`found`) has the page's `results` and the `count` of all
+    matching products."""
 
     status: OffStatus
     product: OffProduct | None = None
+    results: tuple[OffProduct, ...] = ()
+    count: int = 0
 
 
 BUSY = OffResponse("busy")
@@ -295,6 +337,47 @@ UNAVAILABLE = OffResponse("unavailable")
 
 class _TooLargeError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class _Request:
+    """One kind of request to Open Food Facts: where it goes, and what it is logged with."""
+
+    kind: RequestKind
+    path: str
+    params: dict[str, str | int]
+    log: dict[str, object]
+
+    @classmethod
+    def lookup(cls, barcode: str) -> _Request:
+        return cls(
+            "lookup",
+            PRODUCT_PATH.format(barcode=barcode),
+            {"fields": FIELDS},
+            {"barcode": barcode},
+        )
+
+    @classmethod
+    def search(cls, query: str, *, page: int, language: str) -> _Request:
+        return cls(
+            "search",
+            SEARCH_PATH,
+            {
+                "search_terms": query,
+                "search_simple": 1,
+                "action": "process",
+                "json": 1,
+                "page": page,
+                "page_size": SEARCH_PAGE_SIZE,
+                "sort_by": "unique_scans_n",
+                "tagtype_0": "countries",
+                "tag_contains_0": "contains",
+                "tag_0": SEARCH_COUNTRY_TAG,
+                "lc": language,
+                "fields": FIELDS,
+            },
+            {"page": page, "query_length": len(query)},
+        )
 
 
 @dataclass
@@ -324,7 +407,8 @@ def user_agent(settings: Settings) -> str:
 
 
 class OffClient:
-    """Reads products from Open Food Facts at `base_url`, under the `rate_limit`. Owns a
+    """Reads products from Open Food Facts at `base_url`, under the `rate_limit`, and searches
+    them under the `search_rate_limit` (without one, searches share the `rate_limit`). Owns a
     connection pool once used: close it with `aclose`."""
 
     def __init__(
@@ -333,6 +417,7 @@ class OffClient:
         user_agent: str,
         *,
         rate_limit: SlidingWindow,
+        search_rate_limit: SlidingWindow | None = None,
         timeout: float = TIMEOUT_SECONDS,
         max_bytes: int = MAX_RESPONSE_BYTES,
         retry_pause: float = RETRY_PAUSE_SECONDS,
@@ -340,6 +425,7 @@ class OffClient:
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
         self.rate_limit = rate_limit
+        self.search_rate_limit = search_rate_limit or rate_limit
         self.timeout = timeout
         self.max_bytes = max_bytes
         self.retry_pause = retry_pause
@@ -348,10 +434,13 @@ class OffClient:
     @classmethod
     def from_settings(cls, settings: Settings, *, job: bool = False) -> OffClient:
         """The app's client, or with `job` the nightly job's, each with its own rate limit
-        (BAR-08)."""
+        (BAR-08); the app's searches have another one."""
         per_minute = settings.off_rate_job_per_minute if job else settings.off_rate_app_per_minute
         return cls(
-            settings.off_base_url, user_agent(settings), rate_limit=SlidingWindow(per_minute)
+            settings.off_base_url,
+            user_agent(settings),
+            rate_limit=SlidingWindow(per_minute),
+            search_rate_limit=SlidingWindow(settings.off_search_per_minute),
         )
 
     @property
@@ -391,45 +480,67 @@ class OffClient:
         turn under the rate limit (None: as long as needed), else answers `busy`. With `retry`
         (a lookup the user waits for), a transient failure gets one more try within `max_wait`
         plus the timeout (see the module docstring)."""
+        return await self._send(
+            _Request.lookup(barcode), self.rate_limit, max_wait=max_wait, retry=retry
+        )
+
+    async def search(
+        self, query: str, *, page: int, language: str, max_wait: float | None
+    ) -> OffResponse:
+        """One page (from 1) of the products sold in Germany that match `query`, under the
+        search rate limit; `busy`, `unavailable`, or `found` with the (possibly empty) page. The
+        user waits for it, so a transient failure gets a second try as a lookup's does."""
+        request = _Request.search(query, page=page, language=language)
+        return await self._send(request, self.search_rate_limit, max_wait=max_wait, retry=True)
+
+    async def _send(
+        self, request: _Request, rate_limit: SlidingWindow, *, max_wait: float | None, retry: bool
+    ) -> OffResponse:
         started = anyio.current_time()
-        if not await self.rate_limit.acquire(max_wait):
-            _log_outcome(barcode, _Answer(BUSY), _Exchange(), attempt=1)
+        if not await rate_limit.acquire(max_wait):
+            _log_outcome(request, _Answer(BUSY), _Exchange(), attempt=1)
             return BUSY
-        first = await self._request(barcode, time_limit=self.timeout, attempt=1)
+        first = await self._request(request, time_limit=self.timeout, attempt=1)
         if not retry or not first.transient:
             return first.response
-        return await self._retry(barcode, first.response, max_wait=max_wait, started=started)
+        return await self._retry(
+            request, rate_limit, first.response, max_wait=max_wait, started=started
+        )
 
     async def _retry(
-        self, barcode: str, first: OffResponse, *, max_wait: float | None, started: float
+        self,
+        request: _Request,
+        rate_limit: SlidingWindow,
+        first: OffResponse,
+        *,
+        max_wait: float | None,
+        started: float,
     ) -> OffResponse:
-        """The second try of a lookup, if it fits into the lookup's time and gets a place under
-        the rate limit; else the first answer. An `unavailable` second answer never replaces
-        the first one: it cannot say more."""
+        """The second try of a request the user waits for, if it fits into the request's time
+        and gets a place under the rate limit; else the first answer. An `unavailable` second
+        answer never replaces the first one: it cannot say more."""
         deadline = started + (max_wait or 0.0) + self.timeout
         await anyio.sleep(self.retry_pause)
         left = deadline - anyio.current_time()
         if left < RETRY_MIN_SECONDS:
-            logger.info("open food facts: no time left to retry", extra={"barcode": barcode})
+            logger.info("open food facts: no time left to retry", extra=request.log)
             return first
         wait_limit = left - RETRY_MIN_SECONDS
-        wait = self.rate_limit.reserve(
-            wait_limit if max_wait is None else min(max_wait, wait_limit)
-        )
+        wait = rate_limit.reserve(wait_limit if max_wait is None else min(max_wait, wait_limit))
         if wait is None:
-            logger.info("open food facts: busy, no retry", extra={"barcode": barcode})
+            logger.info("open food facts: busy, no retry", extra=request.log)
             return first
         if wait > 0:
-            await self.rate_limit.sleep(wait)
-        second = await self._request(barcode, time_limit=min(self.timeout, left - wait), attempt=2)
+            await rate_limit.sleep(wait)
+        second = await self._request(request, time_limit=min(self.timeout, left - wait), attempt=2)
         return first if second.response.status == "unavailable" else second.response
 
-    async def _request(self, barcode: str, *, time_limit: float, attempt: int) -> _Answer:
+    async def _request(self, request: _Request, *, time_limit: float, attempt: int) -> _Answer:
         """One request, never raising; its outcome is logged."""
         exchange = _Exchange()
         try:
             with anyio.fail_after(time_limit):
-                answer = await self._get(barcode, exchange)
+                answer = await self._get(request, exchange)
         except TimeoutError:
             answer = _unavailable("timeout", transient=True)
         except httpx.TransportError as exc:  # connecting, reading, the protocol, a proxy
@@ -441,16 +552,17 @@ class OffClient:
         except Exception:
             logger.exception("open food facts: unexpected error")
             answer = _Answer(UNAVAILABLE)
-        _log_outcome(barcode, answer, exchange, attempt=attempt)
+        _log_outcome(request, answer, exchange, attempt=attempt)
         return answer
 
-    async def _get(self, barcode: str, exchange: _Exchange) -> _Answer:
-        async with self._http().stream(
-            "GET", PRODUCT_PATH.format(barcode=barcode), params={"fields": FIELDS}
-        ) as response:
+    async def _get(self, request: _Request, exchange: _Exchange) -> _Answer:
+        async with self._http().stream("GET", request.path, params=request.params) as response:
             status = exchange.http_status = response.status_code
             if httpx.codes.is_redirect(status):  # any 3xx, with a Location or not
-                return _redirected(status, response.headers.get("location"))
+                location = response.headers.get("location")
+                if request.kind == "search":  # the search itself is elsewhere: no answer
+                    return _unavailable("redirect", status=status)
+                return _redirected(status, location)
             if status not in (httpx.codes.OK, httpx.codes.NOT_FOUND):
                 # OFF's servers failing may pass; a 429 or another 4xx would only be repeated.
                 return _unavailable(
@@ -459,6 +571,8 @@ class OffClient:
                     transient=httpx.codes.is_server_error(status),
                 )
             body = await self._read(response)
+        if request.kind == "search":
+            return self._parse_search(body, status)
         return self._parse(body, status)
 
     async def _read(self, response: httpx.Response) -> bytes:
@@ -529,6 +643,34 @@ class OffClient:
                 pass
         return _unavailable("unexpected JSON", status=http_status)
 
+    @staticmethod
+    def _parse_search(body: bytes, http_status: int) -> _Answer:
+        """A search page from a 200 body with a `products` list; each product is validated like
+        a looked-up one (unusable values become unknown). Anything else is `unavailable`; a 404,
+        which the search never answers itself, comes from something in front of OFF:
+        transient."""
+        if http_status != httpx.codes.OK:
+            return _unavailable("unexpected status", status=http_status, transient=True)
+        try:
+            document: Any = json.loads(body)
+        except ValueError:
+            return _unavailable("invalid JSON", status=http_status)
+        if not isinstance(document, dict) or not isinstance(document.get("products"), list):
+            return _unavailable("unexpected JSON", status=http_status)
+        results = tuple(
+            OffProduct.model_validate(item)
+            for item in document["products"][:_SEARCH_RESULTS_MAX]
+            if isinstance(item, dict)
+        )
+        count = _number(document.get("count"))
+        return _Answer(
+            OffResponse(
+                "found",
+                results=results,
+                count=int(count) if count is not None and count > 0 else len(results),
+            )
+        )
+
 
 def _unavailable(reason: str, *, status: int | None = None, transient: bool = False) -> _Answer:
     """`unavailable`, with a warning that says why."""
@@ -554,11 +696,11 @@ def _redirected(status: int, location: str | None) -> _Answer:
     return _NOT_FOUND_ANSWER
 
 
-def _log_outcome(barcode: str, answer: _Answer, exchange: _Exchange, *, attempt: int) -> None:
+def _log_outcome(request: _Request, answer: _Answer, exchange: _Exchange, *, attempt: int) -> None:
     logger.info(
-        "open food facts lookup",
+        f"open food facts {request.kind}",
         extra={
-            "barcode": barcode,
+            **request.log,
             "outcome": answer.response.status,
             "http_status": exchange.http_status,
             "attempt": attempt,

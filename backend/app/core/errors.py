@@ -55,19 +55,21 @@ class ErrorCode(StrEnum):
     ADMIN_LAST_ADMIN = "admin.last_admin"
     ADMIN_PUBLIC_URL_MISSING = "admin.public_url_missing"
 
-    # 409: the base unit cannot change while products are linked (ING-02).
-    INGREDIENT_BASE_UNIT_LOCKED = "ingredient.base_unit_locked"
     # 409: the ingredient is still referenced; `params` counts the references per kind
-    # (`products`, `meals`, `lists`).
+    # (`meals`, `lists`).
     INGREDIENT_IN_USE = "ingredient.in_use"
-    # 409: merging would move products to an ingredient with another base unit.
-    INGREDIENT_MERGE_BASE_UNIT_MISMATCH = "ingredient.merge_base_unit_mismatch"
-    # 409: a product's nutrition basis must be its ingredient's base unit (ING-04).
-    PRODUCT_BASIS_MISMATCH = "product.basis_mismatch"
-    # 409: apply or ignore, but the product has no newer Open Food Facts values (BAR-06).
-    PRODUCT_NO_PENDING_UPDATE = "product.no_pending_update"
-    # 503: too many Open Food Facts lookups right now (BAR-08); retry or enter values by hand.
+    # 409: another ingredient has this barcode; `params.ingredient_id` is that one.
+    INGREDIENT_BARCODE_TAKEN = "ingredient.barcode_taken"
+    # 409: linking a barcode to an ingredient that already has one (the scanner's "already in
+    # MealMate"); linking never replaces a barcode, the edit form changes it on purpose.
+    INGREDIENT_HAS_BARCODE = "ingredient.has_barcode"
+    # 409: apply or ignore, but the ingredient has no newer Open Food Facts values (BAR-06).
+    INGREDIENT_NO_PENDING_UPDATE = "ingredient.no_pending_update"
+    # 503: too many Open Food Facts lookups or searches right now (BAR-08); retry or enter the
+    # values by hand.
     OFF_BUSY = "off.busy"
+    # 503: Open Food Facts could not be asked (slow or unreachable) for a name search; retry.
+    OFF_UNAVAILABLE = "off.unavailable"
 
     # 409: the action is only possible while the list is a draft (e.g. hiding a line, LIST-07).
     LIST_NOT_DRAFT = "list.not_draft"

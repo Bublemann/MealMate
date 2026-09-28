@@ -45,3 +45,12 @@ def text(key: str, language: str = "en", **params: str) -> str:
         return params[match[1]]
 
     return _PLACEHOLDER.sub(fill, translations(language)[key])
+
+
+def ingredient_label(name: str, brand: str | None = None) -> str:
+    """An ingredient's name as the app shows it: "Milch (Weidehof)" (features/ingredients/label.ts).
+
+    Two brands of the same thing are different ingredients, so the brand is part of the name
+    everywhere (meal rows, list lines, the export, headings)."""
+    brand = (brand or "").strip()
+    return f"{name} ({brand})" if brand else name

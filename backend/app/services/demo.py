@@ -1,20 +1,23 @@
 """Demo data for development and the migration tests (`mealmate seed-demo`, plan § 5.11).
 
 - M2: an admin, a couple, a single user and one open invite (`seed_accounts`);
-- M3: ingredients across most categories, about half of them with manual nutrition, and a few
-  products entered by hand (`seed_catalog`): Spaghetti has two products (an average), Milch
-  has manual values and a product (the hint).
-- M4: meals of every demo user (`seed_meals`) with cuisines, tags and rows in all kinds of
+- M3: ingredients across most categories, about half of them with nutrition (`_insert_catalog`):
+  most are generic, without a brand or barcode ("Zwiebeln"); butter, passata and olive oil have
+  a brand, a barcode and pack sizes as if scanned (entered by hand, so nothing is refreshed from
+  Open Food Facts in development); spaghetti comes in two brands, Barilla and De Cecco, two
+  ingredients of the same name.
+- M4: meals of every demo user (`_insert_meals`) with cuisines, tags and rows in all kinds of
   units (pieces with a piece weight, spoons, rows "to taste" without an amount, a spoon of
   butter that makes an estimate, bread in pieces without a piece weight that cannot be
   counted); three have photos drawn with Pillow and sent through the real pipeline, and carl
   copied anna's Bolognese ("based on"). carl's meals are private (VIS-02).
-- M5a: drafts (`seed_lists`): anna's "Wochenende", shared with ben, with her meal and one of
+- M5a: drafts (`_insert_lists`): anna's "Wochenende", shared with ben, with her meal and one of
   ben's at other servings, a linked and a free-text extra item and a hidden line; ben's
   unshared draft without a name, with a meal he deleted afterwards (detached, "no longer
-  available", through the real hook); carl's public "Grillabend" with one of his private
-  meals, which others see as "Private meal (N servings)" (VIS-06).
-- M5b: shopping and history (`seed_lists`, through the rules of `services.shopping`): anna's
+  available", through the real hook); carl's public "Grillabend" with two of his private
+  meals, which others see as "Private meal (N servings)" (VIS-06), and anna's Bolognese: its
+  Barilla spaghetti and the De Cecco spaghetti of carl's aglio e olio are two lines.
+- M5b: shopping and history (`_insert_lists`, through the rules of `services.shopping`): anna's
   shared "Wocheneinkauf" being shopped, with lines checked off by anna and one by ben, a line
   that needs more (ben's meal got more servings after the onions were checked) and a new
   line (coffee, added while shopping); two done lists in different weeks for the history:
@@ -26,16 +29,16 @@ between runs; the times of shopping and finishing are relative to the time of se
 
 import io
 import secrets
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from PIL import Image, ImageDraw
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passwords import hash_password
 from app.db.ids import new_id
-from app.domain.catalog import PRODUCT_FIELDS
 from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
@@ -51,11 +54,9 @@ from app.models import (
     Meal,
     MealIngredient,
     MealTag,
-    Product,
     ShoppingList,
     Tag,
 )
-from app.repositories import ingredients as ingredients_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
@@ -88,74 +89,60 @@ class DemoIngredient:
     base_unit: str = "g"
     piece_weight_g: float | None = None
     density_g_per_ml: float | None = None
-    manual: Mapping[str, float] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class DemoProduct:
-    barcode: str
-    ingredient: str
-    creator: str
-    name: str
-    brand: str
-    quantity_text: str
-    pack_quantity: float
-    pack_unit: Unit
-    nutrients: Mapping[str, float]
+    nutrients: Mapping[str, float] = field(default_factory=dict)
+    # A branded product as if scanned: brand, barcode, and the pack as text, quantity and unit.
+    brand: str | None = None
+    barcode: str | None = None
+    pack: tuple[str, float, Unit] | None = None
 
 
 DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Äpfel", "fruit_vegetables", "anna", piece_weight_g=180,
-                   manual=_values(52, 0.3, 11.4, 10.4, 0.2)),
+                   nutrients=_values(52, 0.3, 11.4, 10.4, 0.2)),
     DemoIngredient("Zwiebeln", "fruit_vegetables", "ben", piece_weight_g=150,
-                   manual=_values(40, 1.1, 9.3, 4.2, 0.1)),
+                   nutrients=_values(40, 1.1, 9.3, 4.2, 0.1)),
     DemoIngredient("Knoblauch", "fruit_vegetables", "carl", piece_weight_g=5),
     DemoIngredient("Tomaten", "fruit_vegetables", "anna", piece_weight_g=100,
-                   manual=_values(18, 0.9, 3.9, 2.6, 0.2)),
+                   nutrients=_values(18, 0.9, 3.9, 2.6, 0.2)),
     DemoIngredient("Kartoffeln", "fruit_vegetables", "ben", piece_weight_g=150,
-                   manual=_values(77, 2.0, 17.0, 0.8, 0.1)),
+                   nutrients=_values(77, 2.0, 17.0, 0.8, 0.1)),
     DemoIngredient("Karotten", "fruit_vegetables", "carl", piece_weight_g=80),
-    DemoIngredient("Brot", "bread_bakery", "anna", manual=_values(245, 8.5, 45.0, 3.0, 1.6)),
+    DemoIngredient("Brot", "bread_bakery", "anna", nutrients=_values(245, 8.5, 45.0, 3.0, 1.6)),
     DemoIngredient("Milch", "dairy_eggs", "anna", base_unit="ml", density_g_per_ml=1.03,
-                   manual=_values(64, 3.4, 4.8, 4.8, 3.5)),
+                   nutrients=_values(64, 3.4, 4.8, 4.8, 3.5)),
     DemoIngredient("Eier", "dairy_eggs", "carl", piece_weight_g=60,
-                   manual=_values(155, 13.0, 1.1, 1.1, 11.0)),
-    DemoIngredient("Butter", "dairy_eggs", "ben"),
+                   nutrients=_values(155, 13.0, 1.1, 1.1, 11.0)),
+    DemoIngredient("Butter", "dairy_eggs", "ben", nutrients=_values(741, 0.6, 0.6, 0.6, 82.0),
+                   brand="Kerrygold", barcode="4061453007189", pack=("250 g", 250, Unit.G)),
     DemoIngredient("Joghurt", "dairy_eggs", "ben"),
     DemoIngredient("Gouda", "cheese", "anna"),
-    DemoIngredient("Parmesan", "cheese", "carl", manual=_values(392, 35.8, 3.2, 0.9, 25.8)),
+    DemoIngredient("Parmesan", "cheese", "carl", nutrients=_values(392, 35.8, 3.2, 0.9, 25.8)),
     DemoIngredient("Hähnchenbrust", "meat_fish", "ben",
-                   manual=_values(110, 23.0, 0.0, 0.0, 1.2)),
+                   nutrients=_values(110, 23.0, 0.0, 0.0, 1.2)),
     DemoIngredient("Hackfleisch", "meat_fish", "anna"),
     DemoIngredient("Salami", "sausage_deli", "carl"),
     DemoIngredient("Tofu", "plant_based", "carl"),
-    DemoIngredient("Spaghetti", "pasta_rice_grains", "anna"),
-    DemoIngredient("Reis", "pasta_rice_grains", "ben", manual=_values(350, 7.0, 78.0, 0.2, 0.6)),
-    DemoIngredient("Passierte Tomaten", "canned_jars", "anna"),
-    DemoIngredient("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml", density_g_per_ml=0.92),
+    DemoIngredient("Spaghetti", "pasta_rice_grains", "anna",
+                   nutrients=_values(359, 12.0, 71.0, 3.5, 2.0),
+                   brand="Barilla", barcode="8005516001475", pack=("500 g", 500, Unit.G)),
+    DemoIngredient("Spaghetti", "pasta_rice_grains", "ben",
+                   nutrients=_values(353, 13.0, 70.0, 3.5, 1.5),
+                   brand="De Cecco", barcode="8002331045820", pack=("500 g", 500, Unit.G)),
+    DemoIngredient("Reis", "pasta_rice_grains", "ben", nutrients=_values(350, 7.0, 78.0, 0.2, 0.6)),
+    DemoIngredient("Passierte Tomaten", "canned_jars", "anna",
+                   nutrients=_values(36, 1.6, 5.4, 4.8, 0.2),
+                   brand="Mutti", barcode="8004207009356", pack=("700 g", 700, Unit.G)),
+    DemoIngredient("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml", density_g_per_ml=0.92,
+                   nutrients=_values(828, 0.0, 0.0, 0.0, 92.0),
+                   brand="Bertolli", barcode="4017952000633", pack=("750 ml", 750, Unit.ML)),
     DemoIngredient("Salz", "sauces_spices_oils", "ben"),
     DemoIngredient("Pfeffer", "sauces_spices_oils", "carl"),
     DemoIngredient("Mehl", "baking", "carl"),
-    DemoIngredient("Zucker", "baking", "anna", manual=_values(400, 0.0, 100.0, 100.0, 0.0)),
+    DemoIngredient("Zucker", "baking", "anna", nutrients=_values(400, 0.0, 100.0, 100.0, 0.0)),
     DemoIngredient("Erdbeermarmelade", "breakfast_spreads", "ben"),
     DemoIngredient("Zartbitterschokolade", "snacks_sweets", "carl"),
     DemoIngredient("Erbsen (TK)", "frozen", "anna"),
     DemoIngredient("Kaffee", "drinks", "carl"),
-)  # fmt: skip
-
-DEMO_PRODUCTS: tuple[DemoProduct, ...] = (
-    DemoProduct("8005516001475", "Spaghetti", "anna", "Spaghetti n.5", "Barilla", "500 g",
-                500, Unit.G, _values(359, 12.0, 71.0, 3.5, 2.0)),
-    DemoProduct("8002331045820", "Spaghetti", "ben", "Spaghetti n.12", "De Cecco", "500 g",
-                500, Unit.G, _values(353, 13.0, 70.0, 3.5, 1.5)),
-    DemoProduct("4028173104529", "Milch", "ben", "Frische Vollmilch 3,5 %", "Weihenstephan",
-                "1 l", 1, Unit.L, _values(65, 3.5, 4.8, 4.8, 3.5)),
-    DemoProduct("4061453007189", "Butter", "carl", "Original Irische Butter", "Kerrygold",
-                "250 g", 250, Unit.G, _values(741, 0.6, 0.6, 0.6, 82.0)),
-    DemoProduct("8004207009356", "Passierte Tomaten", "anna", "Passata", "Mutti", "700 g",
-                700, Unit.G, _values(36, 1.6, 5.4, 4.8, 0.2)),
-    DemoProduct("4017952000633", "Olivenöl", "ben", "Natives Olivenöl Extra", "Bertolli",
-                "750 ml", 750, Unit.ML, _values(828, 0.0, 0.0, 0.0, 92.0)),
 )  # fmt: skip
 
 
@@ -164,10 +151,13 @@ type RGB = tuple[int, int, int]
 
 @dataclass(frozen=True)
 class DemoRow:
+    """A meal row; `brand` picks one of several ingredients of the same name."""
+
     ingredient: str
     amount: float | None = None
     unit: Unit | None = None
     note: str | None = None
+    brand: str | None = None
 
 
 @dataclass(frozen=True)
@@ -200,7 +190,7 @@ DEMO_MEALS: tuple[DemoMeal, ...] = (
     DemoMeal(
         "Spaghetti Bolognese", "anna", servings=4, cuisine="italian", tags=("Pasta", "Klassiker"),
         rows=(
-            DemoRow("Spaghetti", 500, Unit.G),
+            DemoRow("Spaghetti", 500, Unit.G, brand="Barilla"),
             DemoRow("Hackfleisch", 400, Unit.G),
             DemoRow("Passierte Tomaten", 700, Unit.G),
             DemoRow("Zwiebeln", 1, Unit.PIECE),
@@ -287,6 +277,15 @@ DEMO_MEALS: tuple[DemoMeal, ...] = (
             DemoRow("Gouda", 40, Unit.G),
         ),
     ),
+    DemoMeal(
+        "Spaghetti aglio e olio", "carl", servings=2, cuisine="italian", tags=("Pasta", "Schnell"),
+        rows=(
+            DemoRow("Spaghetti", 250, Unit.G, brand="De Cecco"),
+            DemoRow("Knoblauch", 3, Unit.PIECE, "in Scheiben"),
+            DemoRow("Olivenöl", 4, Unit.TBSP),
+            DemoRow("Salz", note=_TO_TASTE),
+        ),
+    ),
     DemoMeal("Spaghetti Bolognese", "carl", copy_of="Spaghetti Bolognese"),
 )  # fmt: skip
 
@@ -315,6 +314,7 @@ class DemoExtra:
     """A linked extra item (`ingredient`) or a free-text one (`text`, category *Other*)."""
 
     ingredient: str | None = None
+    brand: str | None = None
     amount: float | None = None
     unit: Unit | None = None
     text: str | None = None
@@ -323,10 +323,12 @@ class DemoExtra:
 
 @dataclass(frozen=True)
 class DemoCheck:
-    """A line checked off by `user`: an ingredient's name or a free-text item's text."""
+    """A line checked off by `user`: an ingredient's name (and brand) or a free-text item's
+    text."""
 
     line: str
     user: str
+    brand: str | None = None
 
 
 @dataclass(frozen=True)
@@ -381,6 +383,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         meals=(
             DemoListMeal("carl", "Tofu-Gemüse-Curry", 4),
             DemoListMeal("anna", "Spaghetti Bolognese", 2),
+            DemoListMeal("carl", "Spaghetti aglio e olio", 4),
         ),
         extras=(DemoExtra(text="Grillkohle", amount_text="2 Säcke"),),
     ),
@@ -397,7 +400,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         shopping=DemoShopping(
             started_hours_ago=1,
             checks=(
-                DemoCheck("Spaghetti", "anna"),
+                DemoCheck("Spaghetti", "anna", brand="Barilla"),
                 DemoCheck("Milch", "anna"),
                 DemoCheck("Zwiebeln", "anna"),
                 DemoCheck("Hackfleisch", "ben"),
@@ -511,46 +514,32 @@ async def _insert_catalog(
     session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime
 ) -> None:
     categories = {row.key: row.id for row in await reference_repo.categories_in_order(session)}
-    ingredient_ids: dict[str, str] = {}
     for item in DEMO_INGREDIENTS:
         creator = user_ids[item.creator]
+        quantity_text, pack_quantity, pack_unit = item.pack or (None, None, None)
         ingredient = Ingredient(
             name=item.name,
             name_norm=normalize(item.name),
+            brand=item.brand,
+            brand_norm=None if item.brand is None else normalize(item.brand),
+            barcode=item.barcode,
             category_id=categories[item.category],
             base_unit=item.base_unit,
             piece_weight_g=item.piece_weight_g,
             density_g_per_ml=item.density_g_per_ml,
-            created_by=creator,
-            updated_by=creator,
-            created_at=now,
-            updated_at=now,
-        )
-        ingredient.set_nutrients({key: item.manual.get(key) for key in NUTRIENT_KEYS})
-        session.add(ingredient)
-        await session.flush()
-        ingredient_ids[item.name] = ingredient.id
-    for demo in DEMO_PRODUCTS:
-        base_unit = next(i.base_unit for i in DEMO_INGREDIENTS if i.name == demo.ingredient)
-        creator = user_ids[demo.creator]
-        product = Product(
-            barcode=demo.barcode,
-            ingredient_id=ingredient_ids[demo.ingredient],
-            nutrition_basis=base_unit,
-            name=demo.name,
-            brand=demo.brand,
-            quantity_text=demo.quantity_text,
-            pack_quantity=demo.pack_quantity,
-            pack_unit=demo.pack_unit.value,
+            quantity_text=quantity_text,
+            pack_quantity=pack_quantity,
+            pack_unit=None if pack_unit is None else pack_unit.value,
             source="manual",
-            user_edited_fields=list(PRODUCT_FIELDS),
+            user_edited_fields=[],
             created_by=creator,
             updated_by=creator,
             created_at=now,
             updated_at=now,
         )
-        product.set_nutrients(demo.nutrients)
-        session.add(product)
+        ingredient.set_nutrients({key: item.nutrients.get(key) for key in NUTRIENT_KEYS})
+        session.add(ingredient)
+    await session.flush()
 
 
 def demo_picture(photo: DemoPhoto) -> bytes:
@@ -587,16 +576,35 @@ async def _write_photos(media: MediaStore) -> list[str | None]:
     return keys
 
 
-async def _ingredient_ids(session: AsyncSession) -> dict[str, str]:
-    """Ingredient ids by normalised name."""
-    return {name_norm: row_id for row_id, name_norm in await ingredients_repo.names(session)}
+class _IngredientIds:
+    """The demo ingredients' ids by name and brand; a name alone is enough while only one
+    ingredient has it."""
+
+    def __init__(self, rows: Iterable[tuple[str, str, str | None]]) -> None:
+        self._ids: dict[str, dict[str | None, str]] = {}
+        for row_id, name_norm, brand_norm in rows:
+            self._ids.setdefault(name_norm, {})[brand_norm] = row_id
+
+    def __call__(self, name: str, brand: str | None = None) -> str:
+        by_brand = self._ids[normalize(name)]
+        if brand is None:
+            [only] = by_brand.values()
+            return only
+        return by_brand[normalize(brand)]
+
+
+async def _ingredient_ids(session: AsyncSession) -> _IngredientIds:
+    result = await session.execute(
+        select(Ingredient.id, Ingredient.name_norm, Ingredient.brand_norm)
+    )
+    return _IngredientIds((row[0], row[1], row[2]) for row in result)
 
 
 def _add_rows(
     session: AsyncSession,
     meal_id: str,
     rows: tuple[DemoRow, ...],
-    ingredient_ids: Mapping[str, str],
+    ingredient_ids: _IngredientIds,
     *,
     now: datetime,
 ) -> None:
@@ -604,7 +612,7 @@ def _add_rows(
         MealIngredient(
             meal_id=meal_id,
             position=position,
-            ingredient_id=ingredient_ids[normalize(row.ingredient)],
+            ingredient_id=ingredient_ids(row.ingredient, row.brand),
             amount=row.amount,
             unit=None if row.unit is None else row.unit.value,
             note=row.note,
@@ -681,7 +689,7 @@ def _extra_item(
     shopping_list: ShoppingList,
     extra: DemoExtra,
     added_by: str,
-    ingredient_ids: Mapping[str, str],
+    ingredient_ids: _IngredientIds,
     categories: Mapping[str, str],
     *,
     now: datetime,
@@ -689,7 +697,7 @@ def _extra_item(
     return ListExtraItem(
         list_id=shopping_list.id,
         ingredient_id=(
-            None if extra.ingredient is None else ingredient_ids[normalize(extra.ingredient)]
+            None if extra.ingredient is None else ingredient_ids(extra.ingredient, extra.brand)
         ),
         text=extra.text,
         amount=extra.amount,
@@ -707,7 +715,7 @@ async def _shop(
     shopping_list: ShoppingList,
     demo: DemoShopping,
     user_ids: Mapping[str, str],
-    ingredient_ids: Mapping[str, str],
+    ingredient_ids: _IngredientIds,
     *,
     now: datetime,
 ) -> None:
@@ -723,7 +731,7 @@ async def _shop(
     for minute, check in enumerate(demo.checks, start=1):
         text_extra = extras.get(check.line)
         line_key = (
-            ingredient_key(ingredient_ids[normalize(check.line)])
+            ingredient_key(ingredient_ids(check.line, check.brand))
             if text_extra is None
             else text_key(text_extra.id)
         )
@@ -808,7 +816,7 @@ async def _insert_lists(
         session.add_all(
             ListLineState(
                 list_id=shopping_list.id,
-                line_key=ingredient_key(ingredient_ids[normalize(name)]),
+                line_key=ingredient_key(ingredient_ids(name)),
                 checked=False,
                 hidden=True,
             )
@@ -828,29 +836,6 @@ async def seed_accounts(session: AsyncSession, config: AuthConfig, *, now: datet
     password, password_hash = await _demo_password(config)
     async with session.begin():
         return await _insert_accounts(session, config, password, password_hash, now=now)
-
-
-async def seed_catalog(
-    session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime
-) -> None:
-    """The demo ingredients and products, created by the demo users."""
-    async with session.begin():
-        await _insert_catalog(session, user_ids, now=now)
-
-
-async def seed_meals(
-    session: AsyncSession, user_ids: Mapping[str, str], media: MediaStore, *, now: datetime
-) -> None:
-    """The demo meals of the demo users, with their photos (needs the demo catalog)."""
-    photo_keys = await _write_photos(media)
-    async with session.begin():
-        await _insert_meals(session, user_ids, photo_keys, now=now)
-
-
-async def seed_lists(session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime) -> None:
-    """The demo drafts (needs the demo meals)."""
-    async with session.begin():
-        await _insert_lists(session, user_ids, now=now)
 
 
 async def seed_demo(

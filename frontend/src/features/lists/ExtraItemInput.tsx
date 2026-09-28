@@ -7,6 +7,8 @@ import { RemovableChip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useIngredients, type IngredientSummary } from '@/features/ingredients/api';
+import { IngredientName } from '@/features/ingredients/IngredientName';
+import { ingredientLabel } from '@/features/ingredients/label';
 import { useCategories, type Unit } from '@/features/reference/api';
 import { useConnected, useQueueOp } from '@/features/sync/context';
 import { categoryName, unitLabel } from '@/features/reference/labels';
@@ -68,6 +70,7 @@ export function ExtraItemInput({
   const suggestions = useIngredients(debounced, { enabled: searching });
   const matches = searching ? (suggestions.data ?? []).slice(0, MAX_SUGGESTIONS) : [];
   const typed = text.trim();
+  const pickedLabel = picked ? ingredientLabel(picked.name, picked.brand) : null;
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, add.error);
   const shownFields = picked ? ['amount', 'unit'] : ['text', 'amount_text', 'category_id'];
@@ -181,10 +184,10 @@ export function ExtraItemInput({
           {picked ? (
             <div className="flex flex-wrap items-center gap-2">
               <RemovableChip
-                removeLabel={t('lists.extra.unpick', { name: picked.name })}
+                removeLabel={t('lists.extra.unpick', { name: pickedLabel })}
                 onRemove={unpick}
               >
-                {picked.name}
+                {pickedLabel}
               </RemovableChip>
               <span className="text-sm text-muted-foreground">
                 {categoryName(t, categoryKeys.get(picked.category_id) ?? 'other')}
@@ -229,7 +232,7 @@ export function ExtraItemInput({
                     onClick={() => pick(ingredient)}
                     className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
                   >
-                    <span className="font-medium">{ingredient.name}</span>
+                    <IngredientName ingredient={ingredient} />
                     <span className="text-sm text-muted-foreground">
                       {key ? `${categoryName(t, key)} · ` : ''}
                       {unitLabel(t, ingredient.base_unit)}
@@ -280,9 +283,7 @@ export function ExtraItemInput({
           className="self-start"
           disabled={add.isPending || (!picked && !typed) || (picked !== null && !connected)}
           aria-label={
-            picked || typed
-              ? t('lists.extra.addLabel', { name: picked ? picked.name : typed })
-              : undefined
+            picked || typed ? t('lists.extra.addLabel', { name: pickedLabel ?? typed }) : undefined
           }
         >
           <Plus aria-hidden="true" />

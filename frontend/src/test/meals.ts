@@ -61,6 +61,7 @@ export function meal(overrides: Partial<Schemas['Meal']> = {}): Schemas['Meal'] 
         {
           ingredient_id: SALT.id,
           ingredient_name: SALT.name,
+          ingredient_brand: null,
           reason: 'no_amount',
           nutrient: null,
         },

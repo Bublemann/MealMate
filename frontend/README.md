@@ -60,7 +60,7 @@ frontend/
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
-    │   ├── ingredients/    # Ingredients tab, detail with products, IngredientPicker (reused)
+    │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # /scan and the meal form's scan dialog: camera, decoder, lookup flow
     │   ├── lists/          # Lists tab, draft/shopping/done views, history, polling, export text
     │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
@@ -93,6 +93,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **No domain calculations in the frontend** (MNT-02). Amounts, conversions, aggregation,
   rounding, nutrition and permissions come from the backend; the frontend formats and displays
   (`src/i18n/format.ts`: `formatNumber`, `formatDate`, `parseAmount`).
+- **Ingredient names** are shown with their brand: `ingredientLabel(name, brand)` from
+  `features/ingredients/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
+  history, export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode
+  icon). Two brands of the same thing are different ingredients and separate list lines.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps
@@ -274,15 +278,31 @@ initial JavaScript stays small (PERF-03).
   while in use (unplugged, taken by another app), decoding stops and "No camera available" is
   shown with a "Try again" button. Without a camera, or when access is denied, only the manual
   input is shown; it is always there (`inputMode="numeric"`).
-- **Flow:** `GET /api/products/lookup` (25 s timeout; a timeout or `off.busy` shows "Open Food
-  Facts is slow"). A known barcode goes straight to its ingredient (or into the meal row). Otherwise
-  the Open Food Facts proposal is shown as text with the attribution, then "Which ingredient is
-  this?" (suggestions, search, "Create new ingredient" prefilled from the proposal), then the
-  product form prefilled with the proposal. It is saved with `source: "off"` and `edited_fields`
-  naming only the values the user changed (BAR-04).
+- **Flow:** `GET /api/ingredients/lookup` (25 s timeout; a timeout or `off.busy` shows "Open Food
+  Facts is slow"). A known barcode goes straight to its ingredient (or into the meal row).
+  Otherwise the ingredient form (`IngredientForm`, the same as for "New ingredient") opens inline,
+  filled with the Open Food Facts proposal (name, brand, category guess, base unit, nutrients,
+  package, barcode) or, when Open Food Facts doesn't know the barcode or can't be asked, with only
+  the barcode (and the notice naming it, "Try again", "Scan again"). One "Save" creates the
+  ingredient in one request, with an `off` block naming only the values the user changed
+  (`edited_fields`, BAR-04). "This is already in MealMate" instead gives the barcode to an existing
+  ingredient that has none (an ingredient with a barcode keeps it).
+- **Barcode field:** the ingredient form's "Scan" opens `BarcodeScanDialog` (lazy, same decoder),
+  which only fills the field.
 - **Tests:** `decoder.test.ts` decodes the PNGs in `features/scanner/fixtures/` with the real
   decoder (made by `node scripts/generate-barcode-fixtures.mjs`, deterministic); the camera and
   flow tests mock the decoder.
+
+## Open Food Facts search by name
+
+People who start with no data have nothing to scan yet, so a new ingredient can also be filled
+from a search by name: "Search Open Food Facts" in the ingredient form (also when creating from
+the picker) opens `OffSearchDialog`. The search (`GET /api/ingredients/off-search?q=&page=`, 25 s
+timeout) runs only when the user taps "Search" or presses Enter, never while typing (BAR-08); the
+server rate-limits and caches it. A result shows name, brand, package size and calories per
+100 g/ml; choosing one fills the form like a scanned proposal (with its barcode, read-only). A
+product that is already in MealMate picks that ingredient in the picker and links to it elsewhere.
+"More results" loads the next page.
 
 ## Tests
 
@@ -393,10 +413,14 @@ order.
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
 | `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
-| `productList`            | `product-list`             | Products of an ingredient                   |
-| `productRow`             | `product-row`              | One product of an ingredient                |
-| `addProduct`             | `add-product`              | "Add product" on the ingredient detail      |
-| `productForm`            | `product-form`             | Create/edit product form                    |
+| `offSearchButton`        | `off-search-button`        | "Search Open Food Facts" in the form        |
+| `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name              |
+| `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search      |
+| `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts        |
+| `offSearchMore`          | `off-search-more`          | "More results" (next page)                  |
+| `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search               |
+| `barcodeFieldScan`       | `barcode-field-scan`       | "Scan" at the form's barcode field          |
+| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner that fills the barcode field        |
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |
@@ -495,12 +519,10 @@ order.
 | `barcodeInput`           | `barcode-input`            | Manual barcode input                        |
 | `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode             |
 | `scanNotice`             | `scan-notice`              | "Not found" / "Open Food Facts is slow"     |
-| `scanProposal`           | `scan-proposal`            | The product proposed by Open Food Facts     |
-| `scanWhich`              | `scan-which`               | "Which ingredient is this?" step            |
-| `scanSuggestions`        | `scan-suggestions`         | Suggested ingredients for the product       |
-| `scanCreateIngredient`   | `scan-create-ingredient`   | "Create new ingredient" in the scan flow    |
 | `scanEnterManually`      | `scan-enter-manually`      | "Enter the values yourself"                 |
 | `scanAgain`              | `scan-again`               | "Scan again" next to the notice             |
+| `scanLinkExisting`       | `scan-link-existing`       | "This is already in MealMate" (scan form)   |
+| `scanLink`               | `scan-link`                | Linking a barcode to an existing ingredient |
 | `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"    |
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |

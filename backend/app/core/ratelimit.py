@@ -14,8 +14,10 @@ tests replace.
   instance).
 - `SlidingWindow`: requests to Open Food Facts (BAR-08): at most N started in any 60 s window,
   shared by the lookups and background refreshes of the app process; the nightly job has its own
-  with a smaller N, so that both together stay within Open Food Facts' 10 per minute. Callers
-  wait for their turn, lookups only up to a few seconds.
+  with a smaller N, so that both together stay within our budget of 10 product reads per minute
+  (Open Food Facts allows 100). Name searches, which Open Food Facts limits to 10 per minute,
+  have another one (5 by default). Callers wait for their turn, lookups and searches only up to
+  a few seconds.
 """
 
 import math

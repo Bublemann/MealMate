@@ -1,7 +1,8 @@
-"""Nutrition of ingredients and meals (NUT-02..06, plan § 5.6).
+"""Nutrition of meals (NUT-03..06, plan § 5.6).
 
-Nothing here is stored: values are computed when requested, so wiki edits of an ingredient show
-up everywhere at once (NUT-06). Unknown is never treated as 0.
+An ingredient's value per nutrient is its own column (NUT-02, null is unknown). Meal totals are
+not stored: they are computed when requested, so wiki edits of an ingredient show up everywhere
+at once (NUT-06). Unknown is never treated as 0.
 """
 
 import math
@@ -12,39 +13,7 @@ from typing import Literal
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.units import IngredientAttrs, Unit, convert
 
-NutrientSource = Literal["manual", "products", "unknown"]
 MissingReason = Literal["no_amount", "not_convertible", "unknown_value"]
-
-
-@dataclass(frozen=True)
-class NutrientValue:
-    """An ingredient's value for one nutrient and where it comes from. `products_mean` is the
-    average over the `products_count` linked products that have a value (the hint next to a
-    manual value)."""
-
-    value: float | None
-    source: NutrientSource
-    products_mean: float | None
-    products_count: int
-
-
-def ingredient_nutrition(
-    manual: Mapping[str, float | None], products: Sequence[Mapping[str, float | None]]
-) -> dict[str, NutrientValue]:
-    """Per nutrient (NUT-02): the manual value, else the mean over the products that have the
-    field (each product weighted equally), else unknown."""
-    result: dict[str, NutrientValue] = {}
-    for key in NUTRIENT_KEYS:
-        present = [value for product in products if (value := product.get(key)) is not None]
-        mean = math.fsum(present) / len(present) if present else None
-        manual_value = manual.get(key)
-        if manual_value is not None:
-            result[key] = NutrientValue(manual_value, "manual", mean, len(present))
-        elif mean is not None:
-            result[key] = NutrientValue(mean, "products", mean, len(present))
-        else:
-            result[key] = NutrientValue(None, "unknown", None, 0)
-    return result
 
 
 @dataclass(frozen=True)

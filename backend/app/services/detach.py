@@ -1,10 +1,10 @@
 """Freezing and detaching list meals (LIST-11, LIST-15, plan § 5.7).
 
-Freezing copies a meal's current rows into `list_meal_ingredients`, with the ingredient
-attributes and category needed to calculate them, and refreshes the meal's name and servings
-snapshots, so the list keeps showing the same amounts. Detaching also drops the link to the
-meal (`meal_id` null) and says why (`deleted` | `unavailable`); the list owner can then remove
-it. Both run inside the caller's transaction and bump the affected lists' versions.
+Freezing copies a meal's current rows into `list_meal_ingredients`, with the ingredient's name
+and brand and the attributes and category needed to calculate them, and refreshes the meal's
+name and servings snapshots, so the list keeps showing the same amounts. Detaching also drops
+the link to the meal (`meal_id` null) and says why (`deleted` | `unavailable`); the list owner
+can then remove it. Both run inside the caller's transaction and bump the affected lists' versions.
 """
 
 from collections.abc import Sequence
@@ -42,6 +42,7 @@ async def freeze(session: AsyncSession, list_meals: Sequence[ListMeal], *, now: 
                     position=row.position,
                     ingredient_id=row.ingredient_id,
                     ingredient_name_snapshot=ingredient.name,
+                    ingredient_brand_snapshot=ingredient.brand,
                     base_unit_snapshot=ingredient.base_unit,
                     piece_weight_g_snapshot=ingredient.piece_weight_g,
                     density_snapshot=ingredient.density_g_per_ml,

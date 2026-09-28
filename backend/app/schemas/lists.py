@@ -29,9 +29,8 @@ from app.domain.lists import (
     ListStatus,
 )
 from app.domain.units import Unit
-from app.schemas.ingredients import IdInput, not_null
+from app.schemas.ingredients import IdInput, blank_to_none, not_null
 from app.schemas.meals import AmountInput, ServingsInput
-from app.schemas.products import blank_to_none
 from app.schemas.users import UserRef
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
@@ -151,6 +150,7 @@ class ListLine(BaseModel):
     kind: LineKind
     ingredient_id: str | None
     name: str
+    brand: str | None
     category_id: str
     amounts: list[DisplayAmountOut]
     has_unspecified: bool

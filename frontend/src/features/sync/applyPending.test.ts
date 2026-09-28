@@ -113,6 +113,25 @@ describe('applyPending', () => {
     });
   });
 
+  it('sorts a free-text line among brands by the name as shown, "Mehl (Aurora)" first', () => {
+    const list = shoppingList();
+    const flour = lineOf({ ...list, pendingFinish: false }, 'Mehl');
+    const branded = {
+      ...list,
+      lines: list.lines.map((line) => (line === flour ? { ...line, brand: 'Aurora' } : line)),
+    };
+    const shown = applyPending(
+      branded,
+      [op('extra.add', { extra_id: NEW_ID, text: 'Mehl (Bio)' })],
+      OPTIONS,
+    );
+
+    const names = shown.lines.map((line) => [line.name, line.brand]);
+    const index = names.findIndex(([name]) => name === 'Mehl (Bio)');
+    expect(names[index - 1]).toEqual(['Mehl', 'Aurora']);
+    expect(lineOf(shown, 'Mehl (Bio)').brand).toBeNull();
+  });
+
   it('adds to Other without a known category, at the end of its lines', () => {
     const shown = applyPending(
       shoppingList(),

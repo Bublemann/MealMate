@@ -230,6 +230,57 @@
         "title": "BackupStatus",
         "type": "object"
       },
+      "BarcodeLookup": {
+        "description": "The result of a barcode lookup (BAR-02, BAR-03), our own ingredients first:\n\n- `found_in` db: the `ingredient` with this barcode (go straight to it, or pick it);\n- `found_in` off: Open Food Facts' `proposal`; nothing is saved until the user saves the\n  prefilled ingredient form (`POST /api/ingredients` with `off`);\n- `found_in` none: unknown to Open Food Facts, or `off_unavailable` when it could not be\n  asked (slow or unreachable); the user enters the values.\n\n`barcode` is the canonical form (EAN-13, or EAN-8) to save the ingredient with.",
+        "properties": {
+          "barcode": {
+            "title": "Barcode",
+            "type": "string"
+          },
+          "found_in": {
+            "enum": [
+              "db",
+              "off",
+              "none"
+            ],
+            "title": "Found In",
+            "type": "string"
+          },
+          "ingredient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ingredient"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "off_unavailable": {
+            "title": "Off Unavailable",
+            "type": "boolean"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "barcode",
+          "found_in",
+          "ingredient",
+          "proposal",
+          "off_unavailable"
+        ],
+        "title": "BarcodeLookup",
+        "type": "object"
+      },
       "Body_upload_meal_photo": {
         "properties": {
           "file": {
@@ -634,12 +685,12 @@
           "admin.self_forbidden",
           "admin.last_admin",
           "admin.public_url_missing",
-          "ingredient.base_unit_locked",
           "ingredient.in_use",
-          "ingredient.merge_base_unit_mismatch",
-          "product.basis_mismatch",
-          "product.no_pending_update",
+          "ingredient.barcode_taken",
+          "ingredient.has_barcode",
+          "ingredient.no_pending_update",
           "off.busy",
+          "off.unavailable",
           "list.not_draft",
           "list.done",
           "list.not_done",
@@ -1245,8 +1296,19 @@
         "type": "object"
       },
       "Ingredient": {
-        "description": "An ingredient with its manual values and the resulting nutrition (NUT-02).\n\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
+        "description": "An ingredient with its own nutrition per 100 g or 100 ml of `base_unit` (NUT-02; null\nis unknown, never 0).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe\nthe pack (information only). `created_by` / `updated_by` are null for a deleted user\n(ING-06).",
         "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
           "base_unit": {
             "enum": [
               "g",
@@ -1254,6 +1316,17 @@
             ],
             "title": "Base Unit",
             "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
           },
           "category_id": {
             "title": "Category Id",
@@ -1285,19 +1358,71 @@
             ],
             "title": "Density G Per Ml"
           },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
-          },
-          "manual": {
-            "$ref": "#/components/schemas/NutrientValues"
           },
           "name": {
             "title": "Name",
             "type": "string"
           },
-          "nutrition": {
-            "$ref": "#/components/schemas/IngredientNutrition"
+          "nutrients": {
+            "$ref": "#/components/schemas/NutrientValues"
+          },
+          "off_last_modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off Last Modified At"
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_update": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "piece_weight_g": {
             "anyOf": [
@@ -1310,9 +1435,24 @@
             ],
             "title": "Piece Weight G"
           },
-          "product_count": {
-            "title": "Product Count",
-            "type": "integer"
+          "quantity_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
           },
           "updated_at": {
             "format": "date-time",
@@ -1328,18 +1468,49 @@
                 "type": "null"
               }
             ]
+          },
+          "usage": {
+            "$ref": "#/components/schemas/IngredientUsage"
+          },
+          "user_edited_fields": {
+            "items": {
+              "enum": [
+                "name",
+                "brand",
+                "quantity_text",
+                "pack_quantity",
+                "pack_unit",
+                "nutrients.kcal",
+                "nutrients.protein",
+                "nutrients.carbs",
+                "nutrients.sugar",
+                "nutrients.fat"
+              ],
+              "type": "string"
+            },
+            "title": "User Edited Fields",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "name",
+          "brand",
+          "barcode",
           "category_id",
           "base_unit",
           "piece_weight_g",
           "density_g_per_ml",
-          "manual",
-          "nutrition",
-          "product_count",
+          "nutrients",
+          "quantity_text",
+          "pack_quantity",
+          "pack_unit",
+          "source",
+          "user_edited_fields",
+          "off_last_modified_at",
+          "fetched_at",
+          "pending_update",
+          "usage",
           "created_by",
           "updated_by",
           "created_at",
@@ -1348,9 +1519,38 @@
         "title": "Ingredient",
         "type": "object"
       },
-      "IngredientCreate": {
-        "description": "`category_id` defaults to the *Other* category, `base_unit` to g (ING-02).\n\n`piece_weight_g`: 0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5.",
+      "IngredientBarcodeLink": {
+        "description": "Give an ingredient without a barcode the scanned one (the scanner's \"already in\nMealMate\"). Unlike an update, this never replaces a barcode: 409 `ingredient.has_barcode`\nif the ingredient has one, 409 `ingredient.barcode_taken` if another ingredient has it.",
         "properties": {
+          "barcode": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Barcode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "barcode"
+        ],
+        "title": "IngredientBarcodeLink",
+        "type": "object"
+      },
+      "IngredientCreate": {
+        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g or 100 ml of the base\nunit. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are\nignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E\nexpanded first), an EAN-8 as it is; a barcode another ingredient has is 409\n`ingredient.barcode_taken`.\n\nWith `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs\nits `barcode` (422 `required` without). Names need not be unique: the \"similar ingredient\nexists\" hint (`GET /api/ingredients/similar`) is only a hint.",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
           "base_unit": {
             "default": "g",
             "enum": [
@@ -1359,6 +1559,18 @@
             ],
             "title": "Base Unit",
             "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
           },
           "category_id": {
             "anyOf": [
@@ -1386,7 +1598,13 @@
             ],
             "title": "Density G Per Ml"
           },
-          "manual": {
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "nutrients": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/NutrientValues"
@@ -1396,11 +1614,38 @@
               }
             ]
           },
-          "name": {
-            "maxLength": 60,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
+          "off": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngredientOffOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "piece_weight_g": {
             "anyOf": [
@@ -1414,6 +1659,18 @@
               }
             ],
             "title": "Piece Weight G"
+          },
+          "quantity_text": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
           }
         },
         "required": [
@@ -1438,38 +1695,59 @@
         "title": "IngredientMerge",
         "type": "object"
       },
-      "IngredientNutrition": {
-        "description": "The ingredient's value per nutrient (NUT-02).",
+      "IngredientOffOrigin": {
+        "description": "The ingredient's values come from an Open Food Facts proposal (a barcode lookup or the\nname search), possibly corrected: `off_last_modified_at` is the proposal's, and\n`edited_fields` the fields the user changed compared with it. Only those are marked\nuser-edited; the others are refreshed from Open Food Facts (BAR-04, BAR-05).",
         "properties": {
-          "carbs": {
-            "$ref": "#/components/schemas/NutrientInfo"
+          "edited_fields": {
+            "items": {
+              "enum": [
+                "name",
+                "brand",
+                "quantity_text",
+                "pack_quantity",
+                "pack_unit",
+                "nutrients.kcal",
+                "nutrients.protein",
+                "nutrients.carbs",
+                "nutrients.sugar",
+                "nutrients.fat"
+              ],
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Edited Fields",
+            "type": "array"
           },
-          "fat": {
-            "$ref": "#/components/schemas/NutrientInfo"
-          },
-          "kcal": {
-            "$ref": "#/components/schemas/NutrientInfo"
-          },
-          "protein": {
-            "$ref": "#/components/schemas/NutrientInfo"
-          },
-          "sugar": {
-            "$ref": "#/components/schemas/NutrientInfo"
+          "off_last_modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off Last Modified At"
           }
         },
-        "required": [
-          "kcal",
-          "protein",
-          "carbs",
-          "sugar",
-          "fat"
-        ],
-        "title": "IngredientNutrition",
+        "title": "IngredientOffOrigin",
         "type": "object"
       },
       "IngredientSummary": {
-        "description": "A search result or list entry.",
+        "description": "A search result, list entry or meal row's ingredient. It is shown as `name` with the\n`brand` in brackets when there is one (\"Milch (Weihenstephan)\"); `barcode` is set for\nscanned ingredients.",
         "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
           "base_unit": {
             "enum": [
               "g",
@@ -1477,6 +1755,17 @@
             ],
             "title": "Base Unit",
             "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
           },
           "category_id": {
             "title": "Category Id",
@@ -1490,24 +1779,43 @@
             "title": "Name",
             "type": "string"
           },
-          "product_count": {
-            "title": "Product Count",
-            "type": "integer"
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "name",
+          "brand",
+          "barcode",
+          "source",
           "category_id",
-          "base_unit",
-          "product_count"
+          "base_unit"
         ],
         "title": "IngredientSummary",
         "type": "object"
       },
       "IngredientUpdate": {
-        "description": "Only the fields that are sent change; an explicit null clears the piece weight or\ndensity, and is refused for the name, category and base unit (422 `invalid`). `manual`\nchanges only the nutrients it contains (null clears one).\n\nThe base unit cannot change while products are linked (409 `ingredient.base_unit_locked`).",
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.",
         "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
           "base_unit": {
             "anyOf": [
               {
@@ -1522,6 +1830,18 @@
               }
             ],
             "title": "Base Unit"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
           },
           "category_id": {
             "anyOf": [
@@ -1549,16 +1869,6 @@
             ],
             "title": "Density G Per Ml"
           },
-          "manual": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NutrientValues"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "name": {
             "anyOf": [
               {
@@ -1572,6 +1882,39 @@
             ],
             "title": "Name"
           },
+          "nutrients": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Unit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "piece_weight_g": {
             "anyOf": [
               {
@@ -1584,9 +1927,40 @@
               }
             ],
             "title": "Piece Weight G"
+          },
+          "quantity_text": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
           }
         },
         "title": "IngredientUpdate",
+        "type": "object"
+      },
+      "IngredientUsage": {
+        "description": "How many meals use the ingredient, and how many lists keep it in frozen rows or extra\nitems (the references that block deleting it, ING-05).",
+        "properties": {
+          "lists": {
+            "title": "Lists",
+            "type": "integer"
+          },
+          "meals": {
+            "title": "Meals",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "meals",
+          "lists"
+        ],
+        "title": "IngredientUsage",
         "type": "object"
       },
       "Invite": {
@@ -2173,6 +2547,17 @@
             "title": "Amounts",
             "type": "array"
           },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
           "category_id": {
             "title": "Category Id",
             "type": "string"
@@ -2265,6 +2650,7 @@
           "kind",
           "ingredient_id",
           "name",
+          "brand",
           "category_id",
           "amounts",
           "has_unspecified",
@@ -3100,6 +3486,17 @@
       "MealNutritionMissing": {
         "description": "Why a row does not (fully) count: no amount, an amount that cannot be converted to the\ningredient's base unit, or an unknown value for `nutrient` (NUT-04).",
         "properties": {
+          "ingredient_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredient Brand"
+          },
           "ingredient_id": {
             "title": "Ingredient Id",
             "type": "string"
@@ -3132,6 +3529,7 @@
         "required": [
           "ingredient_id",
           "ingredient_name",
+          "ingredient_brand",
           "reason",
           "nutrient"
         ],
@@ -3324,54 +3722,6 @@
         "title": "MealUpdate",
         "type": "object"
       },
-      "NutrientInfo": {
-        "description": "An ingredient's value for one nutrient, decided field by field (NUT-02): the manual\nvalue, else the average over its products that have one, else unknown (null, never 0).\n`products_mean` is that average (shown as a hint next to a manual value).",
-        "properties": {
-          "products_count": {
-            "title": "Products Count",
-            "type": "integer"
-          },
-          "products_mean": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Products Mean"
-          },
-          "source": {
-            "enum": [
-              "manual",
-              "products",
-              "unknown"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "value": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Value"
-          }
-        },
-        "required": [
-          "value",
-          "source",
-          "products_mean",
-          "products_count"
-        ],
-        "title": "NutrientInfo",
-        "type": "object"
-      },
       "NutrientValues": {
         "description": "Values per 100 g or 100 ml; null means unknown. In requests every value must be plausible: 0 up to the nutrient's maximum (900 kcal, 100 g for the others).",
         "properties": {
@@ -3442,6 +3792,67 @@
           }
         },
         "title": "NutrientValues",
+        "type": "object"
+      },
+      "OffSearchPage": {
+        "description": "One page of up to 20 Open Food Facts products for the query `q`, sold in Germany, the\nmost scanned first; `has_more` when there is a next `page`. Products without a valid\nbarcode are left out, so a page may hold fewer.",
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "q": {
+            "title": "Q",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/OffSearchResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "q",
+          "page",
+          "results",
+          "has_more"
+        ],
+        "title": "OffSearchPage",
+        "type": "object"
+      },
+      "OffSearchResult": {
+        "description": "A product found by the Open Food Facts name search, as a `proposal` like the barcode\nlookup's. `in_mealmate`: an ingredient already has its barcode (`ingredient`), which can\nbe picked instead of creating another one.",
+        "properties": {
+          "in_mealmate": {
+            "title": "In Mealmate",
+            "type": "boolean"
+          },
+          "ingredient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngredientSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/ProductProposal"
+          }
+        },
+        "required": [
+          "proposal",
+          "in_mealmate",
+          "ingredient"
+        ],
+        "title": "OffSearchResult",
         "type": "object"
       },
       "Op": {
@@ -3601,7 +4012,7 @@
         "type": "object"
       },
       "PendingUpdateField": {
-        "description": "A user-edited field for which Open Food Facts now has another value: `current` is the\nproduct's value, `proposed` the new one (a text, a number or null).",
+        "description": "A user-edited field for which Open Food Facts now has another value: `current` is the\ningredient's value, `proposed` the new one (a text, a number or null).",
         "properties": {
           "current": {
             "anyOf": [
@@ -3619,7 +4030,6 @@
           },
           "field": {
             "enum": [
-              "nutrition_basis",
               "name",
               "brand",
               "quantity_text",
@@ -3657,419 +4067,13 @@
         "title": "PendingUpdateField",
         "type": "object"
       },
-      "Product": {
-        "description": "`nutrients` are per 100 g or 100 ml (`nutrition_basis`, always the ingredient's base\nunit). `user_edited_fields` names the fields a user typed or changed (`name`,\n`nutrients.kcal`, ...); Open Food Facts never overwrites them (BAR-04). Products with\n`source` off are refreshed from Open Food Facts; `pending_update` then holds newer values\nfor user-edited fields (BAR-06).",
-        "properties": {
-          "barcode": {
-            "title": "Barcode",
-            "type": "string"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "created_by": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "fetched_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fetched At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "ingredient_id": {
-            "title": "Ingredient Id",
-            "type": "string"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "nutrients": {
-            "$ref": "#/components/schemas/NutrientValues"
-          },
-          "nutrition_basis": {
-            "enum": [
-              "g",
-              "ml"
-            ],
-            "title": "Nutrition Basis",
-            "type": "string"
-          },
-          "pack_quantity": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pack Quantity"
-          },
-          "pack_unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Unit"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "pending_update": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PendingUpdate"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
-          },
-          "source": {
-            "enum": [
-              "off",
-              "manual"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "updated_by": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "user_edited_fields": {
-            "items": {
-              "enum": [
-                "nutrition_basis",
-                "name",
-                "brand",
-                "quantity_text",
-                "pack_quantity",
-                "pack_unit",
-                "nutrients.kcal",
-                "nutrients.protein",
-                "nutrients.carbs",
-                "nutrients.sugar",
-                "nutrients.fat"
-              ],
-              "type": "string"
-            },
-            "title": "User Edited Fields",
-            "type": "array"
-          }
-        },
-        "required": [
-          "id",
-          "barcode",
-          "ingredient_id",
-          "nutrition_basis",
-          "name",
-          "brand",
-          "quantity_text",
-          "pack_quantity",
-          "pack_unit",
-          "nutrients",
-          "source",
-          "user_edited_fields",
-          "fetched_at",
-          "pending_update",
-          "created_by",
-          "updated_by",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "Product",
-        "type": "object"
-      },
-      "ProductCreate": {
-        "description": "A product entered by hand, or saved from an Open Food Facts proposal. The barcode is\nEAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are ignored); it is stored as\nEAN-13 (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is.\n`nutrition_basis` defaults to the ingredient's base unit and must match it (409\n`product.basis_mismatch`).\n\n- `source` manual (the default): every field given is marked user-edited.\n- `source` off: the values come from the lookup's proposal (possibly corrected), with its\n  `off_last_modified_at`; only the `edited_fields` (those the user changed compared with\n  the proposal) are marked user-edited, the others are refreshed from Open Food Facts\n  (BAR-04, BAR-05). `edited_fields` and `off_last_modified_at` are ignored for manual\n  products.",
-        "properties": {
-          "barcode": {
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Barcode",
-            "type": "string"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "edited_fields": {
-            "anyOf": [
-              {
-                "items": {
-                  "enum": [
-                    "nutrition_basis",
-                    "name",
-                    "brand",
-                    "quantity_text",
-                    "pack_quantity",
-                    "pack_unit",
-                    "nutrients.kcal",
-                    "nutrients.protein",
-                    "nutrients.carbs",
-                    "nutrients.sugar",
-                    "nutrients.fat"
-                  ],
-                  "type": "string"
-                },
-                "maxItems": 11,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Edited Fields"
-          },
-          "ingredient_id": {
-            "maxLength": 36,
-            "minLength": 1,
-            "title": "Ingredient Id",
-            "type": "string"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 120,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "nutrients": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NutrientValues"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "nutrition_basis": {
-            "anyOf": [
-              {
-                "enum": [
-                  "g",
-                  "ml"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nutrition Basis"
-          },
-          "off_last_modified_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Off Last Modified At"
-          },
-          "pack_quantity": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 100000.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pack Quantity"
-          },
-          "pack_unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Unit"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "maxLength": 40,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
-          },
-          "source": {
-            "default": "manual",
-            "enum": [
-              "off",
-              "manual"
-            ],
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "barcode",
-          "ingredient_id"
-        ],
-        "title": "ProductCreate",
-        "type": "object"
-      },
-      "ProductLookup": {
-        "description": "The result of a barcode lookup (BAR-02, BAR-03), our own database first:\n\n- `found_in` db: `product` and its `ingredient` (go straight to it);\n- `found_in` off: the `proposal` and name-matched `suggestions` for \"Which ingredient is\n  this?\"; nothing is saved yet;\n- `found_in` none: unknown to Open Food Facts, or `off_unavailable` when it could not be\n  asked (slow or unreachable); the user enters the values.\n\n`barcode` is the canonical form (EAN-13, or EAN-8) to save the product with.",
-        "properties": {
-          "barcode": {
-            "title": "Barcode",
-            "type": "string"
-          },
-          "found_in": {
-            "enum": [
-              "db",
-              "off",
-              "none"
-            ],
-            "title": "Found In",
-            "type": "string"
-          },
-          "ingredient": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/IngredientSummary"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "off_unavailable": {
-            "title": "Off Unavailable",
-            "type": "boolean"
-          },
-          "product": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Product"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "proposal": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ProductProposal"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "suggestions": {
-            "items": {
-              "$ref": "#/components/schemas/IngredientSummary"
-            },
-            "title": "Suggestions",
-            "type": "array"
-          }
-        },
-        "required": [
-          "barcode",
-          "found_in",
-          "product",
-          "ingredient",
-          "proposal",
-          "suggestions",
-          "off_unavailable"
-        ],
-        "title": "ProductLookup",
-        "type": "object"
-      },
       "ProductProposal": {
-        "description": "A product from Open Food Facts, validated and cleaned (BAR-10) but not saved.\n\n`name` is in the user's language if Open Food Facts has it. `nutrition_basis` is null when\nOpen Food Facts gives no values per 100 g or 100 ml; the nutrients are then all unknown and\nthe basis is the chosen ingredient's base unit. `category_key` is a guessed category\n(`/api/categories` key) for a new ingredient, or null. Values that are not plausible are\ndropped (null).",
+        "description": "A product from Open Food Facts, validated and cleaned (BAR-10) but not saved: the values\nto prefill the ingredient form with.\n\n`name` is in the user's language if Open Food Facts has it, cut at a word boundary to the\n60 characters of an ingredient name. `nutrition_basis` is null when Open Food Facts gives no\nvalues per 100 g or 100 ml; the nutrients are then all unknown. `category_key` is a guessed\ncategory (`/api/categories` key), or null. Values that are not plausible are dropped\n(null). `barcode` is the canonical form to save the ingredient with.",
         "properties": {
+          "barcode": {
+            "title": "Barcode",
+            "type": "string"
+          },
           "brand": {
             "anyOf": [
               {
@@ -4167,6 +4171,7 @@
           }
         },
         "required": [
+          "barcode",
           "name",
           "brand",
           "quantity_text",
@@ -4178,123 +4183,6 @@
           "off_last_modified_at"
         ],
         "title": "ProductProposal",
-        "type": "object"
-      },
-      "ProductUpdate": {
-        "description": "Only the fields that are sent change (null clears an optional one; it is refused for\nthe barcode, ingredient and basis with 422 `invalid`); each becomes user-edited.\n`ingredient_id` moves the product to another ingredient, whose base unit must match the\nnutrition basis.",
-        "properties": {
-          "barcode": {
-            "anyOf": [
-              {
-                "maxLength": 32,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Barcode"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "ingredient_id": {
-            "anyOf": [
-              {
-                "maxLength": 36,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ingredient Id"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 120,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "nutrients": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NutrientValues"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "nutrition_basis": {
-            "anyOf": [
-              {
-                "enum": [
-                  "g",
-                  "ml"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nutrition Basis"
-          },
-          "pack_quantity": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 100000.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pack Quantity"
-          },
-          "pack_unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Unit"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "maxLength": 40,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
-          }
-        },
-        "title": "ProductUpdate",
         "type": "object"
       },
       "RefreshRequest": {
@@ -6041,7 +5929,7 @@
     },
     "/api/ingredients": {
       "get": {
-        "description": "Search ignoring case, umlauts and accents (`q`), prefix matches first; without `q`,\nall ingredients by category order and name (at most 1000).",
+        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then by name and brand; without `q`, all ingredients by\ncategory order, name and brand (at most 1000).",
         "operationId": "list_ingredients",
         "parameters": [
           {
@@ -6116,7 +6004,7 @@
         ]
       },
       "post": {
-        "description": "Add an ingredient; the name must be unique ignoring case and umlauts.",
+        "description": "Add an ingredient, by hand or from an Open Food Facts proposal (`off`) in one request;\n409 `ingredient.barcode_taken` if another ingredient has the barcode.",
         "operationId": "create_ingredient",
         "requestBody": {
           "content": {
@@ -6161,9 +6049,120 @@
         ]
       }
     },
+    "/api/ingredients/lookup": {
+      "get": {
+        "description": "Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a\nproposal, not saved). 422 `invalid_format` for a barcode with a wrong check digit, 503\n`off.busy` while too many lookups wait for Open Food Facts. A stale ingredient from Open\nFood Facts is refreshed after the response.",
+        "operationId": "lookup_barcode",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "barcode",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "title": "Barcode",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarcodeLookup"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Lookup Barcode",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
+    "/api/ingredients/off-search": {
+      "get": {
+        "description": "Search Open Food Facts by name, for an explicit user action only (a button or Enter,\nnever while typing; BAR-08): one page of up to 20 products sold in Germany, as proposals\nlike the barcode lookup's, those already in MealMate flagged. `q` is trimmed and must be 2\nto 80 characters long. Answers are cached for 24 hours; 503 `off.busy` while too many\nsearches wait for Open Food Facts, 503 `off.unavailable` when it is slow or unreachable.",
+        "operationId": "search_open_food_facts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "minLength": 2,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OffSearchPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Search Open Food Facts",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
     "/api/ingredients/similar": {
       "get": {
-        "description": "Up to five ingredients with a similar name, for the \"similar ingredient exists\" hint.",
+        "description": "Up to five ingredients with a similar name, for the \"similar ingredient exists\" hint\n(only a hint: names need not be unique); those with the same name and `brand` first.",
         "operationId": "list_similar_ingredients",
         "parameters": [
           {
@@ -6174,6 +6173,23 @@
               "maxLength": 100,
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "brand",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Brand"
             }
           }
         ],
@@ -6216,7 +6232,7 @@
     },
     "/api/ingredients/{ingredient_id}": {
       "get": {
-        "description": "An ingredient with its nutrition per nutrient and where each value comes from.",
+        "description": "An ingredient with its values, barcode, Open Food Facts data and usage; a stale one from\nOpen Food Facts is refreshed after the response.",
         "operationId": "get_ingredient",
         "parameters": [
           {
@@ -6262,7 +6278,7 @@
         ]
       },
       "patch": {
-        "description": "Change an ingredient (anyone may); the base unit is locked while products are linked.",
+        "description": "Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.\nClearing or changing the barcode of one from Open Food Facts makes it manual.",
         "operationId": "update_ingredient",
         "parameters": [
           {
@@ -6318,10 +6334,10 @@
         ]
       }
     },
-    "/api/ingredients/{ingredient_id}/products": {
-      "get": {
-        "description": "The ingredient's products, by name and barcode; stale Open Food Facts products are\nrefreshed after the response.",
-        "operationId": "list_ingredient_products",
+    "/api/ingredients/{ingredient_id}/barcode": {
+      "post": {
+        "description": "Give an ingredient without a barcode a scanned one (the scanner's \"already in\nMealMate\"); it never replaces one: 409 `ingredient.has_barcode` if it has a barcode, 409\n`ingredient.barcode_taken` if another ingredient has this one. The edit form changes a\nbarcode with PATCH instead.",
+        "operationId": "link_barcode",
         "parameters": [
           {
             "in": "path",
@@ -6333,16 +6349,22 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngredientBarcodeLink"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Product"
-                  },
-                  "title": "Response List Ingredient Products",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Ingredient"
                 }
               }
             },
@@ -6364,7 +6386,103 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "List Ingredient Products",
+        "summary": "Link Barcode",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
+    "/api/ingredients/{ingredient_id}/pending-update/apply": {
+      "post": {
+        "description": "Take the newer Open Food Facts values (BAR-06); those fields are no longer\nuser-edited. 409 `ingredient.no_pending_update` if there are none.",
+        "operationId": "apply_pending_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ingredient"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply Pending Update",
+        "tags": [
+          "ingredients"
+        ]
+      }
+    },
+    "/api/ingredients/{ingredient_id}/pending-update/ignore": {
+      "post": {
+        "description": "Keep the user's values (BAR-06); the same Open Food Facts version is not proposed\nagain. 409 `ingredient.no_pending_update` if there is nothing to ignore.",
+        "operationId": "ignore_pending_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ingredient"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ignore Pending Update",
         "tags": [
           "ingredients"
         ]
@@ -8352,302 +8470,6 @@
         "summary": "Get Media",
         "tags": [
           "media"
-        ]
-      }
-    },
-    "/api/products": {
-      "post": {
-        "description": "Add a product by hand or from an Open Food Facts proposal; its nutrition basis must be\nthe ingredient's base unit.",
-        "operationId": "create_product",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProductCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Product"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Create Product",
-        "tags": [
-          "products"
-        ]
-      }
-    },
-    "/api/products/lookup": {
-      "get": {
-        "description": "Look a scanned or typed barcode up: our own products first, then Open Food Facts (a\nproposal, not saved). 422 `invalid_format` for a barcode with a wrong check digit, 503\n`off.busy` while too many lookups wait for Open Food Facts.",
-        "operationId": "lookup_product",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "barcode",
-            "required": true,
-            "schema": {
-              "maxLength": 32,
-              "title": "Barcode",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProductLookup"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Lookup Product",
-        "tags": [
-          "products"
-        ]
-      }
-    },
-    "/api/products/{product_id}": {
-      "get": {
-        "description": "One product; a stale Open Food Facts product is refreshed after the response.",
-        "operationId": "get_product",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "product_id",
-            "required": true,
-            "schema": {
-              "title": "Product Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Product"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Get Product",
-        "tags": [
-          "products"
-        ]
-      },
-      "patch": {
-        "description": "Change a product (anyone may); every field sent is marked user-edited.",
-        "operationId": "update_product",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "product_id",
-            "required": true,
-            "schema": {
-              "title": "Product Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProductUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Product"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Update Product",
-        "tags": [
-          "products"
-        ]
-      }
-    },
-    "/api/products/{product_id}/pending-update/apply": {
-      "post": {
-        "description": "Take the newer Open Food Facts values (BAR-06); those fields are no longer\nuser-edited. 409 `product.no_pending_update` if there are none.",
-        "operationId": "apply_pending_update",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "product_id",
-            "required": true,
-            "schema": {
-              "title": "Product Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Product"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Apply Pending Update",
-        "tags": [
-          "products"
-        ]
-      }
-    },
-    "/api/products/{product_id}/pending-update/ignore": {
-      "post": {
-        "description": "Keep the user's values (BAR-06); the same Open Food Facts version is not proposed\nagain. 409 `product.no_pending_update` if there is nothing to ignore.",
-        "operationId": "ignore_pending_update",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "product_id",
-            "required": true,
-            "schema": {
-              "title": "Product Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Product"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Ignore Pending Update",
-        "tags": [
-          "products"
         ]
       }
     },

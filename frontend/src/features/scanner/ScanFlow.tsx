@@ -1,36 +1,27 @@
-import { CircleAlert, Plus, RotateCcw, ScanBarcode } from 'lucide-react';
+import { ChevronLeft, CircleAlert, Link2, RotateCcw, ScanBarcode } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fieldErrorCodes, isApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { toSummary, type IngredientSummary } from '@/features/ingredients/api';
-import { IngredientFormDialog } from '@/features/ingredients/IngredientFormDialog';
+import { toSummary, useLinkBarcode, type IngredientSummary } from '@/features/ingredients/api';
+import { IngredientForm } from '@/features/ingredients/IngredientFormDialog';
 import { IngredientPicker } from '@/features/ingredients/IngredientPicker';
-import { formatNutrient, NUTRIENT_KEYS, nutrientLabel } from '@/features/ingredients/nutrients';
-import { OffAttribution } from '@/features/ingredients/OffAttribution';
-import { ProductForm } from '@/features/ingredients/ProductFormDialog';
-import { useCategories } from '@/features/reference/api';
-import { categoryName, unitLabel } from '@/features/reference/labels';
-import { useLanguage } from '@/i18n';
+import { ingredientLabel } from '@/features/ingredients/label';
 import { testIds } from '@/testIds';
-import { useProductLookup, type ProductLookup } from './api';
+import { useBarcodeLookup, type BarcodeLookup } from './api';
 import { BarcodeScanner } from './BarcodeScanner';
-
-/** The longest ingredient name the ingredient form accepts; a product name may be longer. */
-const INGREDIENT_NAME_MAX = 60;
 
 type Step =
   | { kind: 'scan' }
-  | { kind: 'which'; lookup: ProductLookup }
-  | { kind: 'product'; lookup: ProductLookup; ingredient: IngredientSummary };
+  | { kind: 'form'; lookup: BarcodeLookup }
+  | { kind: 'link'; lookup: BarcodeLookup };
 
 interface ScanFlowProps {
   /**
-   * Called with the ingredient the barcode belongs to: the known product's (BAR-02), or the one
-   * chosen or created for a new product once that is saved (BAR-03).
+   * Called with the ingredient the barcode belongs to: the known one (BAR-02), the one just
+   * created from the scanned product (BAR-03), or an existing one the barcode was linked to.
    */
   onIngredient: (ingredient: IngredientSummary) => void;
 }
@@ -41,21 +32,28 @@ function isOffSlow(error: unknown): boolean {
 }
 
 /**
- * Scan or type a barcode, look it up (our products first, then Open Food Facts), and for a new
- * product ask "Which ingredient is this?" before saving it with its (corrected) values.
+ * Scan or type a barcode and look it up (our ingredients first, then Open Food Facts). A known
+ * barcode ends at once with its ingredient. Otherwise the ingredient form opens, filled with
+ * Open Food Facts' proposal (or only the barcode), and one "Save" creates the ingredient.
  */
 export function ScanFlow({ onIngredient }: ScanFlowProps) {
   const { t } = useTranslation();
-  const lookup = useProductLookup();
+  const lookup = useBarcodeLookup();
   const [step, setStep] = useState<Step>({ kind: 'scan' });
   const [barcode, setBarcode] = useState('');
+  // A new lookup of the same barcode (retry) starts the form over with its answer.
+  const [attempt, setAttempt] = useState(0);
 
   function lookUp(code: string) {
     setBarcode(code);
     lookup.mutate(code, {
       onSuccess: (result) => {
-        if (result.found_in === 'db' && result.ingredient) onIngredient(result.ingredient);
-        else setStep({ kind: 'which', lookup: result });
+        if (result.found_in === 'db' && result.ingredient) {
+          onIngredient(toSummary(result.ingredient));
+          return;
+        }
+        setAttempt((current) => current + 1);
+        setStep({ kind: 'form', lookup: result });
       },
     });
   }
@@ -65,26 +63,27 @@ export function ScanFlow({ onIngredient }: ScanFlowProps) {
     setStep({ kind: 'scan' });
   }
 
-  if (step.kind === 'which') {
+  if (step.kind === 'form') {
     return (
-      <WhichIngredient
+      <ScannedForm
+        key={attempt}
         lookup={step.lookup}
         onRetry={() => lookUp(step.lookup.barcode)}
         retrying={lookup.isPending}
         retryError={lookup.error}
-        onChoose={(ingredient) => setStep({ kind: 'product', lookup: step.lookup, ingredient })}
+        onSaved={onIngredient}
+        onLinkExisting={() => setStep({ kind: 'link', lookup: step.lookup })}
         onRestart={restart}
       />
     );
   }
 
-  if (step.kind === 'product') {
+  if (step.kind === 'link') {
     return (
-      <ProductStep
-        lookup={step.lookup}
-        ingredient={step.ingredient}
-        onSaved={() => onIngredient(step.ingredient)}
-        onBack={() => setStep({ kind: 'which', lookup: step.lookup })}
+      <LinkExisting
+        barcode={step.lookup.barcode}
+        onLinked={onIngredient}
+        onBack={() => setStep({ kind: 'form', lookup: step.lookup })}
       />
     );
   }
@@ -109,7 +108,7 @@ export function ScanFlow({ onIngredient }: ScanFlowProps) {
           <Button
             variant="outline"
             data-testid={testIds.scanEnterManually}
-            onClick={() => setStep({ kind: 'which', lookup: unavailableLookup(barcode) })}
+            onClick={() => setStep({ kind: 'form', lookup: unavailableLookup(barcode) })}
           >
             {t('scanner.enterManually')}
           </Button>
@@ -136,16 +135,8 @@ export function ScanFlow({ onIngredient }: ScanFlowProps) {
 }
 
 /** A lookup that couldn't ask Open Food Facts: the user enters the values. */
-function unavailableLookup(barcode: string): ProductLookup {
-  return {
-    barcode,
-    found_in: 'none',
-    product: null,
-    ingredient: null,
-    proposal: null,
-    suggestions: [],
-    off_unavailable: true,
-  };
+function unavailableLookup(barcode: string): BarcodeLookup {
+  return { barcode, found_in: 'none', ingredient: null, proposal: null, off_unavailable: true };
 }
 
 /**
@@ -180,37 +171,46 @@ function useFocusOnMount<T extends HTMLElement>() {
   return ref;
 }
 
-interface WhichIngredientProps {
-  lookup: ProductLookup;
-  onChoose: (ingredient: IngredientSummary) => void;
+interface ScannedFormProps {
+  lookup: BarcodeLookup;
   onRetry: () => void;
   retrying: boolean;
   retryError: unknown;
+  onSaved: (ingredient: IngredientSummary) => void;
+  onLinkExisting: () => void;
   onRestart: () => void;
 }
 
-/** BAR-03: the proposal (or "not found"), then "Which ingredient is this?". */
-function WhichIngredient({
+/**
+ * BAR-03: the ingredient form for a new barcode, filled with Open Food Facts' values (or only the
+ * barcode when it doesn't know it or couldn't be asked). Everything can be corrected before the
+ * one "Save".
+ */
+function ScannedForm({
   lookup,
-  onChoose,
   onRetry,
   retrying,
   retryError,
+  onSaved,
+  onLinkExisting,
   onRestart,
-}: WhichIngredientProps) {
+}: ScannedFormProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
-  const categories = useCategories();
-  const [creating, setCreating] = useState(false);
-  const { proposal, suggestions } = lookup;
-  const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
+  const { proposal } = lookup;
 
   return (
-    <div className="flex flex-col gap-5">
-      {proposal ? (
-        <ProposalCard lookup={lookup} />
-      ) : (
+    <section aria-labelledby={headingId} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+          {t(proposal ? 'scanner.form.titleFound' : 'scanner.form.titleNew')}
+        </h2>
+        <p className="text-muted-foreground">
+          {t(proposal ? 'scanner.form.textFound' : 'scanner.form.textNew')}
+        </p>
+      </div>
+      {!proposal && (
         <div className="flex flex-col gap-3">
           <Notice
             text={t(lookup.off_unavailable ? 'scanner.offUnavailable' : 'scanner.notFound', {
@@ -229,179 +229,92 @@ function WhichIngredient({
           <ErrorAlert error={retryError} />
         </div>
       )}
-      <section
-        aria-labelledby={headingId}
-        data-testid={testIds.scanWhich}
-        className="flex flex-col gap-4"
+      <IngredientForm
+        prefill={{ barcode: lookup.barcode, proposal }}
+        onClose={() => undefined}
+        onSaved={(ingredient) => onSaved(toSummary(ingredient))}
+        onPickExisting={onSaved}
       >
-        <div className="flex flex-col gap-1">
-          <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
-            {t('scanner.which.title')}
-          </h2>
-          <p className="text-muted-foreground">{t('scanner.which.text')}</p>
-        </div>
-        {suggestions.length > 0 && (
-          <ul
-            data-testid={testIds.scanSuggestions}
-            aria-label={t('scanner.which.suggestions')}
-            className="flex flex-col divide-y rounded-lg border"
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            data-testid={testIds.scanLinkExisting}
+            onClick={onLinkExisting}
           >
-            {suggestions.map((ingredient) => {
-              const key = categoryKeys.get(ingredient.category_id);
-              return (
-                <li key={ingredient.id}>
-                  <button
-                    type="button"
-                    onClick={() => onChoose(ingredient)}
-                    className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    <span className="font-medium break-words">{ingredient.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {key ? `${categoryName(t, key)} · ` : ''}
-                      {unitLabel(t, ingredient.base_unit)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <IngredientPicker
-          label={t('scanner.which.search')}
-          allowCreate={false}
-          onSelect={onChoose}
-        />
-        <Button
-          variant="outline"
-          className="self-start"
-          data-testid={testIds.scanCreateIngredient}
-          onClick={() => setCreating(true)}
-        >
-          <Plus aria-hidden="true" />
-          {t('scanner.which.create')}
-        </Button>
-      </section>
-      {/* Without a proposal, the notice at the top has "Scan again" already. */}
-      {proposal && (
-        <Button variant="ghost" className="self-start" onClick={onRestart}>
-          <ScanBarcode aria-hidden="true" />
-          {t('scanner.scanAnother')}
-        </Button>
-      )}
-      <IngredientFormDialog
-        open={creating}
-        onOpenChange={setCreating}
-        initialName={proposal?.name?.slice(0, INGREDIENT_NAME_MAX) ?? ''}
-        initialCategoryKey={proposal?.category_key}
-        initialBaseUnit={proposal?.nutrition_basis ?? undefined}
-        onSaved={(ingredient) => onChoose(toSummary(ingredient))}
-        onPickExisting={onChoose}
-      />
-    </div>
-  );
-}
-
-/** What Open Food Facts knows about the product, as text only (BAR-10, SEC-13). */
-function ProposalCard({ lookup }: { lookup: ProductLookup }) {
-  const { t } = useTranslation();
-  const language = useLanguage();
-  const proposal = lookup.proposal;
-  if (!proposal) return null;
-  const basis = proposal.nutrition_basis;
-  const values = NUTRIENT_KEYS.flatMap((key) => {
-    const value = proposal.nutrients[key];
-    return value === null || value === undefined
-      ? []
-      : [{ key, text: formatNutrient(t, language, key, value) }];
-  });
-
-  return (
-    <Card data-testid={testIds.scanProposal}>
-      <CardHeader>
-        <CardTitle className="break-words">
-          {proposal.name ?? t('ingredients.products.unnamed')}
-        </CardTitle>
-        <CardDescription>{t('scanner.proposal.found')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <dl className="flex flex-col divide-y">
-          {proposal.brand && <Row label={t('ingredients.product.brand')} value={proposal.brand} />}
-          {proposal.quantity_text && (
-            <Row label={t('scanner.proposal.quantity')} value={proposal.quantity_text} />
-          )}
-          <Row label={t('ingredients.product.barcode')} value={lookup.barcode} />
-        </dl>
-        <div className="flex flex-col gap-2">
-          <h3 className="font-semibold">
-            {basis
-              ? t('ingredients.product.nutritionTitle', { unit: unitLabel(t, basis) })
-              : t('scanner.proposal.nutritionUnknownBasis')}
-          </h3>
-          {values.length > 0 ? (
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {values.map(({ key, text }) => (
-                <div key={key} className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">{nutrientLabel(t, key)}</dt>
-                  <dd className="font-medium tabular-nums">{text}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p className="text-muted-foreground">{t('ingredients.products.noValues')}</p>
+            <Link2 aria-hidden="true" />
+            {t('scanner.link.open')}
+          </Button>
+          {/* Without a proposal, the notice at the top has "Scan again" already. */}
+          {proposal && (
+            <Button type="button" variant="ghost" className="self-start" onClick={onRestart}>
+              <ScanBarcode aria-hidden="true" />
+              {t('scanner.scanAnother')}
+            </Button>
           )}
         </div>
-        <OffAttribution />
-      </CardContent>
-    </Card>
+      </IngredientForm>
+    </section>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium break-words">{value}</dd>
-    </div>
-  );
-}
-
-interface ProductStepProps {
-  lookup: ProductLookup;
-  ingredient: IngredientSummary;
-  onSaved: () => void;
+interface LinkExistingProps {
+  barcode: string;
+  onLinked: (ingredient: IngredientSummary) => void;
   onBack: () => void;
 }
 
-/** The product's values, prefilled from Open Food Facts and correctable, saved to `ingredient`. */
-function ProductStep({ lookup, ingredient, onSaved, onBack }: ProductStepProps) {
+/**
+ * "This is already in MealMate": the scanned barcode goes to an ingredient typed by hand before,
+ * so the next scan finds it (BAR-02). An ingredient that has a barcode keeps it: a package of
+ * another brand is another ingredient.
+ */
+function LinkExisting({ barcode, onLinked, onBack }: LinkExistingProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
-  const proposal = lookup.proposal;
+  const link = useLinkBarcode();
+  const [refused, setRefused] = useState<string | null>(null);
+
+  function onSelect(ingredient: IngredientSummary) {
+    link.reset();
+    if (ingredient.barcode) {
+      setRefused(ingredientLabel(ingredient.name, ingredient.brand));
+      return;
+    }
+    setRefused(null);
+    link.mutate(
+      { id: ingredient.id, barcode },
+      { onSuccess: (linked) => onLinked(toSummary(linked)) },
+    );
+  }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4">
+    <section
+      aria-labelledby={headingId}
+      data-testid={testIds.scanLink}
+      className="flex flex-col gap-4"
+    >
       <div className="flex flex-col gap-1">
-        <h2
-          id={headingId}
-          ref={headingRef}
-          tabIndex={-1}
-          className="text-xl font-semibold break-words"
-        >
-          {t('scanner.product.title', { name: ingredient.name })}
+        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+          {t('scanner.link.title')}
         </h2>
-        <p className="text-muted-foreground">
-          {t(proposal ? 'scanner.product.textProposal' : 'scanner.product.textManual')}
-        </p>
+        <p className="text-muted-foreground">{t('scanner.link.text', { barcode })}</p>
       </div>
-      {proposal && <OffAttribution />}
-      <ProductForm
-        ingredient={ingredient}
-        lookedUp={{ barcode: lookup.barcode, proposal }}
-        onClose={onSaved}
-      />
-      <Button variant="outline" className="self-start" onClick={onBack}>
-        {t('scanner.product.otherIngredient')}
+      <IngredientPicker label={t('scanner.link.search')} allowCreate={false} onSelect={onSelect} />
+      <div aria-live="polite">
+        {refused && (
+          <Alert variant="destructive">
+            <CircleAlert aria-hidden="true" />
+            <AlertDescription>{t('scanner.link.hasBarcode', { name: refused })}</AlertDescription>
+          </Alert>
+        )}
+      </div>
+      <ErrorAlert error={link.error} />
+      <Button variant="outline" className="self-start" disabled={link.isPending} onClick={onBack}>
+        <ChevronLeft aria-hidden="true" />
+        {t('scanner.link.back')}
       </Button>
     </section>
   );

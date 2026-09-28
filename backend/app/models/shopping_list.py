@@ -16,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
-from app.domain.catalog import INGREDIENT_NAME_MAX_LENGTH
+from app.domain.catalog import BRAND_MAX_LENGTH, INGREDIENT_NAME_MAX_LENGTH
 from app.domain.lists import (
     AMOUNT_TEXT_MAX_LENGTH,
     EXTRA_TEXT_MAX_LENGTH,
@@ -107,8 +107,9 @@ class ListMeal(IdMixin, TimestampMixin, Base):
 
 
 class ListMealIngredient(IdMixin, TimestampMixin, Base):
-    """The frozen copy of a meal's row (LIST-11, LIST-15), with the ingredient attributes and
-    category it was calculated with. Ingredients referenced here cannot be deleted (ING-05)."""
+    """The frozen copy of a meal's row (LIST-11, LIST-15), with the ingredient's name, brand,
+    attributes and category it was calculated with. Ingredients referenced here cannot be
+    deleted (ING-05)."""
 
     __tablename__ = "list_meal_ingredients"
     __table_args__ = (
@@ -127,6 +128,7 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
         String(36), ForeignKey("ingredients.id", ondelete="RESTRICT"), index=True
     )
     ingredient_name_snapshot: Mapped[str] = mapped_column(String(INGREDIENT_NAME_MAX_LENGTH))
+    ingredient_brand_snapshot: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
     base_unit_snapshot: Mapped[str] = mapped_column(String(2))
     piece_weight_g_snapshot: Mapped[float | None] = mapped_column(Float)
     density_snapshot: Mapped[float | None] = mapped_column(Float)

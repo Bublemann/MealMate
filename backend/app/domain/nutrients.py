@@ -1,14 +1,14 @@
 """The nutrients registry (NUT-01, MNT-06).
 
 Everything nutrient-shaped is generated from `NUTRIENTS`: the nullable columns on `ingredients`
-(manual values) and `products`, the API schemas (`NutrientValues`, `IngredientNutrition`), the
-calculations, and later the Open Food Facts mapping (M7).
+(each ingredient's own values), the API schema `NutrientValues`, the calculations, and the Open
+Food Facts mapping.
 
 Adding a nutrient:
 1. add it here (key, OFF field, plausible maximum per 100 g/ml, display unit);
-2. run `alembic revision --autogenerate` for the two new columns, and `make openapi`;
+2. run `alembic revision --autogenerate` for the new column, and `make openapi`;
 3. add the translations `nutrient.<key>` in `de.json` and `en.json`;
-4. extend the tests (plausibility, and the OFF mapping from M7 on).
+4. extend the tests (plausibility and the OFF mapping).
 """
 
 import math

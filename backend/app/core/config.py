@@ -15,8 +15,11 @@ MEDIA_DIRNAME = "media"
 # `<data dir>/status/`: files the app and the host hand over (the backup request, plan § 11.1).
 DATA_STATUS_DIRNAME = "status"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-# Open Food Facts' limit for product reads (BAR-08), for the app and the nightly job together.
+# Our budget for Open Food Facts product reads (BAR-08), for the app and the nightly job
+# together: a tenth of the 100 per minute Open Food Facts allows.
 OFF_REQUESTS_PER_MINUTE = 10
+# Open Food Facts allows 10 search requests per minute; the name search stays at or below it.
+OFF_SEARCHES_PER_MINUTE = 10
 
 _COMMIT_SHA = re.compile(r"[0-9a-f]{7,40}")
 
@@ -58,6 +61,9 @@ class Settings(BuildInfo):
     # as both may run at the same time (BAR-08).
     off_rate_app_per_minute: int = Field(default=6, ge=1)
     off_rate_job_per_minute: int = Field(default=4, ge=1)
+    # Open Food Facts name searches started in any 60 s window by the app, a limit of their own
+    # (searches count against another Open Food Facts limit than product reads).
+    off_search_per_minute: int = Field(default=5, ge=1)
     invite_ttl_days: int = Field(default=7, ge=1)
     reset_ttl_hours: int = Field(default=24, ge=1)
     session_idle_days: int = Field(default=90, ge=1)
@@ -101,7 +107,12 @@ class Settings(BuildInfo):
         if self.off_rate_app_per_minute + self.off_rate_job_per_minute > OFF_REQUESTS_PER_MINUTE:
             raise ValueError(
                 "off_rate_app_per_minute + off_rate_job_per_minute must be at most "
-                f"{OFF_REQUESTS_PER_MINUTE} (Open Food Facts' limit)"
+                f"{OFF_REQUESTS_PER_MINUTE} (our budget for Open Food Facts' product reads)"
+            )
+        if self.off_search_per_minute > OFF_SEARCHES_PER_MINUTE:
+            raise ValueError(
+                f"off_search_per_minute must be at most {OFF_SEARCHES_PER_MINUTE} "
+                "(Open Food Facts' limit for searches)"
             )
         return self
 
