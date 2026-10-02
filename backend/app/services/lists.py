@@ -31,6 +31,7 @@ from app.core.errors import (
 from app.db.ids import new_id
 from app.domain.lists import (
     FEED_PAGE_SIZE,
+    LIST_STATUSES,
     REMINDER_SEED_MAX,
     DetachedReason,
     FeedPosition,
@@ -49,6 +50,7 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
+from app.repositories import users as users_repo
 from app.schemas.lists import (
     ExtraItem,
     ExtraItemCreate,
@@ -250,9 +252,11 @@ async def _summaries(
 async def list_feed(
     session: AsyncSession, principal: Principal, *, cursor: str | None
 ) -> ListFeedPage:
-    """A page of the list feed (UI-02, D-24): every list the principal can see, in every state:
-    their own, all of their partner's (CPL-02/04) and those of owners whose *lists public*
-    switch is on (VIS-02/03). Newest created first, ties by id, `FEED_PAGE_SIZE` per page;
+    """A page of the list feed (UI-02, D-24, D-26): every list the principal can see: their own,
+    all of their partner's (CPL-02/04) and those of owners whose *lists public* switch is on
+    (VIS-02/03), as far as their saved filters show them. The user filter hides every list of
+    an unticked owner, the principal's own and shared ones too; the state filter hides the
+    lists in unticked states. Newest created first, ties by id, `FEED_PAGE_SIZE` per page;
     `cursor` is the previous page's `next_cursor` (422 if it is not one)."""
     after: FeedPosition | None = None
     if cursor is not None:
@@ -261,8 +265,13 @@ async def list_feed(
             raise validation_error([FieldProblem(("query", "cursor"), FieldErrorCode.INVALID)])
     async with session.begin():
         partner = await access.partner_id(session, principal.user_id)
-        owners = await access.owners_visible_to(session, principal.user_id, partner, "lists")
-        rows = await lists_repo.feed(session, owners, after, FEED_PAGE_SIZE + 1)
+        visible = await access.owners_visible_to(session, principal.user_id, partner, "lists")
+        viewer = await users_repo.get(session, principal.user_id)
+        hidden = {} if viewer is None else viewer.filter_hidden
+        owners = visible - set(hidden.get("lists", []))
+        hidden_states = set(hidden.get("list_states", []))
+        statuses = [status for status in LIST_STATUSES if status not in hidden_states]
+        rows = await lists_repo.feed(session, owners, statuses, after, FEED_PAGE_SIZE + 1)
         page = rows[:FEED_PAGE_SIZE]
         next_cursor = (
             feed_cursor(FeedPosition(page[-1].created_at, page[-1].id))

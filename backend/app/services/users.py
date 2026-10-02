@@ -1,4 +1,5 @@
-"""Other users: references, the couple picker and the user filter chips (CPL-01, VIS-02)."""
+"""Other users: references, the couple picker and the choices of the user filters (CPL-01,
+VIS-02, MEAL-10, UI-02)."""
 
 from collections.abc import Iterable
 
@@ -32,12 +33,15 @@ async def list_others(session: AsyncSession, principal: Principal) -> list[UserR
 async def list_visible(
     session: AsyncSession, principal: Principal, scope: VisibilityScope
 ) -> list[UserRef]:
-    """The users whose meals (or lists) the caller can see, for the filter chips: the caller
-    first, then everyone else by display name. Deactivated users are included and flagged."""
+    """The users whose meals (or lists) the caller can see, the choices of the user filter on
+    Meals (or Lists): the caller first, their partner, then everyone else by display name.
+    Deactivated users are included and flagged."""
     async with session.begin():
-        owner_ids = await access.visible_owner_ids(session, principal.user_id, scope)
+        partner = await access.partner_id(session, principal.user_id)
+        owner_ids = await access.owners_visible_to(session, principal.user_id, partner, scope)
         users = await users_repo.by_ids(session, owner_ids)
     ordered = sorted(
-        users.values(), key=lambda user: (user.id != principal.user_id, user.display_name_norm)
+        users.values(),
+        key=lambda user: (user.id != principal.user_id, user.id != partner, user.display_name_norm),
     )
     return [user_ref(user) for user in ordered]

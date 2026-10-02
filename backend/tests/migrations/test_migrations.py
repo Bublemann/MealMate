@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0009"
+HEAD = "0010"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +59,8 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients; 0008 and 0009 only add columns.
+# 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 changes
+# only values.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -131,6 +132,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0009")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0010")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0009")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
@@ -582,6 +587,73 @@ def test_category_names_are_unique_per_language(
             f"UPDATE categories SET {column} = "  # noqa: S608
             f"(SELECT {column} FROM categories WHERE key = 'other') WHERE key = 'cheese'"
         )
+
+
+# --- 0010 -----------------------------------------------------------------------------------
+
+
+def saved_filters(path: Path) -> dict[str, dict[str, list[str]]]:
+    return {
+        str(row["username"]): json.loads(str(row["filter_hidden"]))
+        for row in rows_of(path, "users")
+    }
+
+
+def dump_without(path: Path, *tables: str) -> list[str]:
+    """The database as SQL, without the rows of `tables`."""
+    skipped = tuple(f'INSERT INTO "{table}"' for table in tables)
+    with closing(sqlite3.connect(path)) as connection:
+        return [line for line in connection.iterdump() if not line.startswith(skipped)]
+
+
+def test_0010_gives_every_user_an_empty_state_filter_and_changes_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """seed-demo data at 0009 → 0010 (D-26): every user's saved filters gain the state filter on
+    Lists, empty, so every state shows; what the user filters hide stays, and no row and no other
+    value changes. The downgrade drops the state filter again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        [(ben_id,)] = connection.execute("SELECT id FROM users WHERE username = 'ben'")
+        [(carl_id,)] = connection.execute("SELECT id FROM users WHERE username = 'carl'")
+        connection.execute(
+            "UPDATE users SET filter_hidden = ? WHERE username = 'anna'",
+            (json.dumps({"meals": [ben_id], "lists": [carl_id, ben_id]}),),
+        )
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = saved_filters(path)
+    rest = dump_without(path, "users", "alembic_version")
+    users = [
+        {column: value for column, value in row.items() if column != "filter_hidden"}
+        for row in rows_of(path, "users")
+    ]
+
+    command.upgrade(config, "0010")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    assert saved_filters(path) == {
+        username: {**hidden, "list_states": []} for username, hidden in before.items()
+    }
+    assert saved_filters(path)["anna"] == {
+        "meals": [ben_id],
+        "lists": [carl_id, ben_id],
+        "list_states": [],
+    }
+    assert dump_without(path, "users", "alembic_version") == rest
+    assert [
+        {column: value for column, value in row.items() if column != "filter_hidden"}
+        for row in rows_of(path, "users")
+    ] == users
+
+    command.downgrade(config, "0009")
+    assert saved_filters(path) == before
+    assert row_counts(path) == counts
+    assert_clean(path)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

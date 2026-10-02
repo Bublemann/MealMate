@@ -25,6 +25,7 @@ from tests.accounts import (
     login,
     make_couple,
     make_user,
+    save_filters,
     scalars,
     set_privacy,
 )
@@ -478,6 +479,101 @@ async def test_the_feed_comes_in_pages_of_30(
         response = await api.get("/api/lists", params={"cursor": cursor}, headers=anna.headers)
         assert response.status_code == 422, cursor
         assert set(fields(response)) == {("query", "cursor")}
+
+
+async def test_the_user_filter_hides_every_list_of_an_unticked_user(
+    api: AsyncClient, anna: Account, ben: Account, carl: Account, clock: FakeClock
+) -> None:
+    await make_couple(api, anna, ben)
+    await create_list(api, anna, "Anna geteilt")
+    clock.advance(minutes=1)
+    unshared = await create_list(api, anna, "Anna privat")
+    await patch(api, anna, unshared["id"], shared_with_partner=False)
+    clock.advance(minutes=1)
+    await create_list(api, ben, "Ben geteilt")
+    clock.advance(minutes=1)
+    bens = await create_list(api, ben, "Ben privat")
+    await patch(api, ben, bens["id"], shared_with_partner=False)
+    clock.advance(minutes=1)
+    carls = await create_list(api, carl, "Carl")
+    await start_shopping(api, carl, carls["id"])
+    await applied(api, carl, carls["id"], op("list.finish", at=clock.now))
+    everything = ["Carl", "Ben privat", "Ben geteilt", "Anna privat", "Anna geteilt"]
+    assert names(await summaries(api, anna)) == everything
+
+    # The partner's lists go, the shared one Anna may edit included; so do Carl's done list…
+    await save_filters(api, anna, lists=[ben.id, carl.id])
+    assert names(await summaries(api, anna)) == ["Anna privat", "Anna geteilt"]
+    # … and her own, the one she shares included.
+    await save_filters(api, anna, lists=[anna.id])
+    assert names(await summaries(api, anna)) == ["Carl", "Ben privat", "Ben geteilt"]
+    # Each user has their own filter, and the filter on Meals doesn't touch the lists.
+    await save_filters(api, ben, meals=[anna.id, ben.id, carl.id])
+    assert names(await summaries(api, ben)) == everything
+
+
+async def test_the_state_filter_hides_lists_in_unticked_states(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
+) -> None:
+    await make_couple(api, anna, ben)
+    done = await create_list(api, anna, "Erledigt")
+    await start_shopping(api, anna, done["id"])
+    await applied(api, anna, done["id"], op("list.finish", at=clock.now))
+    clock.advance(minutes=1)
+    shopping = await create_list(api, ben, "Einkauf")
+    await start_shopping(api, ben, shopping["id"])
+    clock.advance(minutes=1)
+    await create_list(api, anna, "Entwurf")
+
+    await save_filters(api, anna, list_states=["done"])
+    assert names(await summaries(api, anna)) == ["Entwurf", "Einkauf"]
+    await save_filters(api, anna, list_states=["draft", "shopping"])
+    assert names(await summaries(api, anna)) == ["Erledigt"]
+    # With the user filter: what either hides is gone.
+    await save_filters(api, anna, lists=[ben.id], list_states=["done"])
+    assert names(await summaries(api, anna)) == ["Entwurf"]
+    await save_filters(api, anna, list_states=["draft", "shopping", "done"])
+    assert names(await summaries(api, anna)) == []
+    await save_filters(api, anna)
+    assert names(await summaries(api, anna)) == ["Entwurf", "Einkauf", "Erledigt"]
+
+
+async def test_the_filters_never_show_what_privacy_hides(
+    api: AsyncClient, anna: Account, ben: Account, carl: Account, dora: Account
+) -> None:
+    await make_couple(api, anna, ben)
+    await create_list(api, ben, "Ben")
+    await create_list(api, carl, "Carl")
+    await create_list(api, dora, "Dora")
+    await set_privacy(api, ben, lists_public=False)
+    await set_privacy(api, dora, lists_public=False)
+
+    # Nothing hidden: Dora's lists stay private, Ben's show for his partner (CPL-04).
+    await save_filters(api, anna)
+    assert names(await summaries(api, anna)) == ["Carl", "Ben"]
+    await save_filters(api, anna, lists=[carl.id])
+    assert names(await summaries(api, anna)) == ["Ben"]
+    # A user hidden while private stays hidden when they make their lists public again.
+    await save_filters(api, anna, lists=[dora.id])
+    await set_privacy(api, dora, lists_public=True)
+    assert names(await summaries(api, anna)) == ["Carl", "Ben"]
+
+
+async def test_hidden_lists_take_no_room_on_a_page(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
+) -> None:
+    created = []
+    for index in range(31):
+        created.append((await create_list(api, anna, f"Liste {index}"))["id"])
+        await create_list(api, ben, f"Bens {index}")
+        clock.advance(seconds=1)
+    await save_filters(api, anna, lists=[ben.id])
+
+    first = await feed_page(api, anna)
+    assert [item["id"] for item in first["lists"]] == created[:0:-1]
+    second = await feed_page(api, anna, first["next_cursor"])
+    assert [item["id"] for item in second["lists"]] == created[:1]
+    assert second["next_cursor"] is None
 
 
 # --- meals on a list (LIST-03, LIST-04, VIS-06) ---------------------------------------------

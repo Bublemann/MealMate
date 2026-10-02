@@ -1,4 +1,5 @@
-"""The couple picker and the user filter chips (CPL-01, CPL-04, VIS-02)."""
+"""The couple picker and the choices of the user filters (CPL-01, CPL-04, VIS-02, MEAL-10,
+UI-02)."""
 
 from typing import Any
 
@@ -78,6 +79,18 @@ async def test_private_users_disappear_from_the_chips_but_not_for_their_partner(
     # After the couple ends, the privacy switch applies to Anna as well.
     assert (await api.delete("/api/couple", headers=anna.headers)).status_code == 204
     assert await visible(api, anna, "meals") == [ref(anna), ref(dora)]
+
+
+async def test_the_partner_comes_right_after_oneself(
+    people: dict[str, Account], api: AsyncClient
+) -> None:
+    anna, ben, carl, dora = people.values()
+    await make_couple(api, anna, dora)
+
+    for scope in ("meals", "lists"):
+        assert await visible(api, anna, scope) == [ref(anna), ref(dora), ref(ben), ref(carl)]
+        assert await visible(api, dora, scope) == [ref(dora), ref(anna), ref(ben), ref(carl)]
+        assert await visible(api, carl, scope) == [ref(carl), ref(anna), ref(ben), ref(dora)]
 
 
 async def test_deactivated_users_stay_visible_and_flagged(
