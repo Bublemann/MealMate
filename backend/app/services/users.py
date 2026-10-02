@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User
 from app.repositories import users as users_repo
-from app.schemas.users import UserRef, VisibilityScope
+from app.schemas.users import SavedFilter, UserRef, VisibilityScope
 from app.services import access
 from app.services.principal import Principal
 
@@ -20,6 +20,14 @@ async def user_refs(session: AsyncSession, user_ids: Iterable[str | None]) -> di
     """References for the given ids; ids of deleted users are simply missing."""
     users = await users_repo.by_ids(session, (user_id for user_id in user_ids if user_id))
     return {user_id: user_ref(user) for user_id, user in users.items()}
+
+
+async def hidden_by(session: AsyncSession, user_id: str, saved_filter: SavedFilter) -> set[str]:
+    """What one of the user's saved filters hides (`FilterHidden`): the users unticked in the
+    user filter on Meals (`meals`) or on Lists (`lists`), or the list states unticked in the state
+    filter (`list_states`)."""
+    user = await users_repo.get(session, user_id)
+    return set() if user is None else set(user.filter_hidden.get(saved_filter, []))
 
 
 async def list_others(session: AsyncSession, principal: Principal) -> list[UserRef]:

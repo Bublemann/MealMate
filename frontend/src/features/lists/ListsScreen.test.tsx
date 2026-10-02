@@ -10,6 +10,7 @@ import {
   slowFilterSaves,
   TEST_USER,
 } from '@/test/api';
+import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { emptyList, FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listSummary } from '@/test/lists';
 import { ME } from '@/test/meals';
 import { renderApp } from '@/test/render';
@@ -31,17 +32,12 @@ function filteredFeed(saved: () => SavedFilters) {
 }
 
 function renderLists(routes: Record<string, unknown> = {}, me = TEST_USER) {
-  let saved = me.filter_hidden;
+  const saves = filterSaves(me);
   const fetchMock = mockApi({
     ...LIST_ROUTES,
     'GET /api/couple': IN_COUPLE,
-    'GET /api/lists': filteredFeed(() => saved),
-    // Saves the filters, as the server does.
-    'PATCH /api/me': async (request: Request) => {
-      const body = (await request.json()) as Pick<typeof TEST_USER, 'filter_hidden'>;
-      saved = body.filter_hidden;
-      return { ...me, filter_hidden: saved };
-    },
+    'GET /api/lists': filteredFeed(saves.saved),
+    'PATCH /api/me': saves.route,
     ...routes,
   });
   return { fetchMock, ...renderApp('/lists', { user: me }) };
@@ -60,31 +56,6 @@ function shownIds() {
 }
 
 const ALL_IDS = FEED_LISTS.map((list) => list.id);
-
-/** The bodies of the profile saves, read from copies so a waitFor can read them again. */
-async function savedFilters(fetchMock: ReturnType<typeof mockApi>) {
-  return Promise.all(
-    requestsTo(fetchMock, 'PATCH /api/me').map((request) => request.clone().json()),
-  );
-}
-
-type User = ReturnType<typeof renderApp>['user'];
-
-async function openPanel(user: User) {
-  await user.click(screen.getByTestId(testIds.filterButton));
-  return screen.findByRole('dialog', { name: 'Filters' });
-}
-
-function group(panel: HTMLElement, name: string) {
-  return within(panel).getByRole('group', { name });
-}
-
-/** The checkboxes' names: the text of the label each one sits in. */
-function checkboxNames(element: HTMLElement) {
-  return within(element)
-    .getAllByRole('checkbox')
-    .map((box) => (box as HTMLInputElement).labels?.[0]?.textContent);
-}
 
 /** What a row says: whose it is (its marker), its text after the marker, and its icons. */
 function rowOf(row: HTMLElement) {

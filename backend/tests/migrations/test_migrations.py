@@ -599,6 +599,13 @@ def saved_filters(path: Path) -> dict[str, dict[str, list[str]]]:
     }
 
 
+def users_but_filters(path: Path) -> list[dict[str, object]]:
+    return [
+        {column: value for column, value in row.items() if column != "filter_hidden"}
+        for row in rows_of(path, "users")
+    ]
+
+
 def dump_without(path: Path, *tables: str) -> list[str]:
     """The database as SQL, without the rows of `tables`."""
     skipped = tuple(f'INSERT INTO "{table}"' for table in tables)
@@ -626,10 +633,7 @@ def test_0010_gives_every_user_an_empty_state_filter_and_changes_nothing_else(
     counts, references = row_counts(path), non_null_foreign_keys(path)
     before = saved_filters(path)
     rest = dump_without(path, "users", "alembic_version")
-    users = [
-        {column: value for column, value in row.items() if column != "filter_hidden"}
-        for row in rows_of(path, "users")
-    ]
+    users = users_but_filters(path)
 
     command.upgrade(config, "0010")
 
@@ -645,10 +649,7 @@ def test_0010_gives_every_user_an_empty_state_filter_and_changes_nothing_else(
         "list_states": [],
     }
     assert dump_without(path, "users", "alembic_version") == rest
-    assert [
-        {column: value for column, value in row.items() if column != "filter_hidden"}
-        for row in rows_of(path, "users")
-    ] == users
+    assert users_but_filters(path) == users
 
     command.downgrade(config, "0009")
     assert saved_filters(path) == before

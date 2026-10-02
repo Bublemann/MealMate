@@ -1,13 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
-import type { components } from '@/api/generated/schema';
 import { useAuthSession, useCurrentUser } from '@/features/auth/context';
-
-/** What the saved filters hide: users on Meals and on Lists, and list states on Lists. */
-type SavedFilters = components['schemas']['FilterHidden'];
-
-/** Whose meals (MEAL-10) or whose lists (UI-02) a user filter chooses. */
-export type UserFilterKind = 'meals' | 'lists';
+import type { SavedFilters, UserFilterKind } from './types';
 
 /** Everyone whose meals or lists the user can see, the user first (MEAL-10, UI-02, VIS-02). */
 export function useVisibleUsers(kind: UserFilterKind) {

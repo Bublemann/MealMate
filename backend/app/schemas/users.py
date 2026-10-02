@@ -12,6 +12,8 @@ from app.domain.lists import LIST_STATUSES, ListStatus
 Role = Literal["user", "admin"]
 Language = Literal["de", "en"]
 VisibilityScope = Literal["meals", "lists"]
+# The parts of `FilterHidden`.
+SavedFilter = Literal["meals", "lists", "list_states"]
 
 DisplayNameInput = Annotated[
     str,

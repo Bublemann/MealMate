@@ -11,7 +11,7 @@ import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
 import { useCuisines } from '@/features/reference/api';
 import { cuisineName } from '@/features/reference/labels';
-import { useUserFilterGroup } from '@/features/userFilter/useUserFilterGroup';
+import { useUserFilterGroup } from '@/features/savedFilters/useUserFilterGroup';
 import { useTabMemory } from '@/lib/tabMemory';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';

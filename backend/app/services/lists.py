@@ -50,7 +50,6 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.repositories import users as users_repo
 from app.schemas.lists import (
     ExtraItem,
     ExtraItemCreate,
@@ -70,7 +69,7 @@ from app.services import access, aggregation, detach, shopping
 from app.services.access import ListRights
 from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
-from app.services.users import user_refs
+from app.services.users import hidden_by, user_refs
 
 # The local copy holds the drafts and lists being shopped one can edit (SYNC-02).
 COPY_STATUSES: tuple[ListStatus, ...] = ("draft", "shopping")
@@ -266,10 +265,8 @@ async def list_feed(
     async with session.begin():
         partner = await access.partner_id(session, principal.user_id)
         visible = await access.owners_visible_to(session, principal.user_id, partner, "lists")
-        viewer = await users_repo.get(session, principal.user_id)
-        hidden = {} if viewer is None else viewer.filter_hidden
-        owners = visible - set(hidden.get("lists", []))
-        hidden_states = set(hidden.get("list_states", []))
+        owners = visible - await hidden_by(session, principal.user_id, "lists")
+        hidden_states = await hidden_by(session, principal.user_id, "list_states")
         statuses = [status for status in LIST_STATUSES if status not in hidden_states]
         rows = await lists_repo.feed(session, owners, statuses, after, FEED_PAGE_SIZE + 1)
         page = rows[:FEED_PAGE_SIZE]

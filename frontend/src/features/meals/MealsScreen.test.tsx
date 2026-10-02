@@ -10,6 +10,7 @@ import {
   slowFilterSaves,
   TEST_USER,
 } from '@/test/api';
+import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { CUISINES, ME, meal, MEAL_ROUTES, mealSummary, TAGS } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -45,16 +46,11 @@ function listMeals(hidden: () => readonly string[]) {
 }
 
 function renderMeals(routes: Record<string, unknown> = {}, user = TEST_USER) {
-  let hidden: readonly string[] = user.filter_hidden.meals;
+  const saves = filterSaves(user);
   const fetchMock = mockApi({
     ...MEAL_ROUTES,
-    'GET /api/meals': listMeals(() => hidden),
-    // Saves the user filter, as the server does.
-    'PATCH /api/me': async (request: Request) => {
-      const body = (await request.json()) as Pick<typeof TEST_USER, 'filter_hidden'>;
-      hidden = body.filter_hidden.meals;
-      return { ...user, filter_hidden: body.filter_hidden };
-    },
+    'GET /api/meals': listMeals(() => saves.saved().meals),
+    'PATCH /api/me': saves.route,
     ...routes,
   });
   return { fetchMock, ...renderApp('/meals', { user }) };
@@ -62,13 +58,6 @@ function renderMeals(routes: Record<string, unknown> = {}, user = TEST_USER) {
 
 function searches(fetchMock: ReturnType<typeof mockApi>) {
   return requestsTo(fetchMock, 'GET /api/meals').map((request) => new URL(request.url).search);
-}
-
-/** The bodies of the profile saves, read from copies so a waitFor can read them again. */
-async function savedFilters(fetchMock: ReturnType<typeof mockApi>) {
-  return Promise.all(
-    requestsTo(fetchMock, 'PATCH /api/me').map((request) => request.clone().json()),
-  );
 }
 
 /** The rows' texts, also while the filter panel hides the list from screen readers. */
@@ -79,24 +68,6 @@ function rowTexts() {
         .getAllByTestId(testIds.mealCard)
         .map((row) => row.textContent)
     : [];
-}
-
-type User = ReturnType<typeof renderApp>['user'];
-
-async function openPanel(user: User) {
-  await user.click(screen.getByTestId(testIds.filterButton));
-  return screen.findByRole('dialog', { name: 'Filters' });
-}
-
-function group(panel: HTMLElement, name: string) {
-  return within(panel).getByRole('group', { name });
-}
-
-/** The checkboxes' names: the text of the label each one sits in. */
-function checkboxNames(element: HTMLElement) {
-  return within(element)
-    .getAllByRole('checkbox')
-    .map((box) => (box as HTMLInputElement).labels?.[0]?.textContent);
 }
 
 describe('MealsScreen', () => {

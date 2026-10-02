@@ -91,6 +91,11 @@ async def test_the_partner_comes_right_after_oneself(
         assert await visible(api, anna, scope) == [ref(anna), ref(dora), ref(ben), ref(carl)]
         assert await visible(api, dora, scope) == [ref(dora), ref(anna), ref(ben), ref(carl)]
         assert await visible(api, carl, scope) == [ref(carl), ref(anna), ref(ben), ref(dora)]
+    # Private lists hide Dora from everyone's user filter on Lists but her partner's (VIS-02).
+    await set_privacy(api, dora, lists_public=False)
+    assert await visible(api, anna, "lists") == [ref(anna), ref(dora), ref(ben), ref(carl)]
+    assert await visible(api, carl, "lists") == [ref(carl), ref(anna), ref(ben)]
+    assert await visible(api, carl, "meals") == [ref(carl), ref(anna), ref(ben), ref(dora)]
 
 
 async def test_deactivated_users_stay_visible_and_flagged(

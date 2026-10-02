@@ -64,7 +64,7 @@ frontend/
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
-    │   ├── userFilter/     # the user filter on Meals and Lists: visible users, filter group; saving the saved filters
+    │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
@@ -146,12 +146,13 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   its accessible name. A group shows the loading placeholder until its options arrive, and its
   error when they fail to load or a change fails. Ingredients offers the categories (any of them,
   ING-03); Meals the user filter (MEAL-10), the cuisines (any of them) and the tags (all of them,
-  MEAL-09); Lists the user filter and the state filter (UI-02). The user filter is
-  `useUserFilterGroup` (`features/userFilter/`), one checkbox per user whose meals or lists are
-  visible, "Me" first, then the partner; the state filter is `useStateFilterGroup`
-  (`features/lists/`), "Entwurf", "Einkauf" and "Erledigt". Both are saved on the server in the
-  profile's `filter_hidden` (`useSaveFilter`, saves one after another): each change is saved at
-  once and loads the narrowed query again, and the screen hides the rows it hides right away. On
+  MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
+  (`features/savedFilters/`): `useUserFilterGroup`, one checkbox per user whose meals or lists are
+  visible, "Me" first, then the partner, and `useStateFilterGroup`, "Entwurf", "Einkauf" and
+  "Erledigt". They are saved on the server in the profile's `filter_hidden` (`useSaveFilter`,
+  saves one after another): each change is saved at once and loads the narrowed query again, and
+  the screen hides the rows it hides right away. Tests share the panel helpers in
+  `test/filters.ts`. On
   Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
   counts nothing then. At the largest text sizes the options and buttons wrap and the panel
   scrolls, its buttons staying in view.

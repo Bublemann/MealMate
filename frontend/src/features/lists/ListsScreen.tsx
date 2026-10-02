@@ -23,7 +23,7 @@ import { useCouple } from '@/features/couple/api';
 import { FirstLoginHints } from '@/features/hints/FirstLoginHints';
 import { useConnected, usePendingFinishes, useSyncEngine } from '@/features/sync/context';
 import { SyncIndicator } from '@/features/sync/SyncIndicator';
-import { useUserFilterGroup } from '@/features/userFilter/useUserFilterGroup';
+import { useUserFilterGroup } from '@/features/savedFilters/useUserFilterGroup';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
@@ -33,7 +33,7 @@ import { showsLocalCopy, useCreateList, useListFeed, type ListSummary } from './
 import { listDisplayName } from './format';
 import { FEED_KEY } from './keys';
 import type { ListViewState } from './ListScreen';
-import { useStateFilterGroup } from './useStateFilterGroup';
+import { useStateFilterGroup } from '@/features/savedFilters/useStateFilterGroup';
 
 /** What the saved user filter and state filter hide in the feed (UI-02). */
 interface FeedFilters {
@@ -60,7 +60,10 @@ export function ListsScreen() {
     label: t('lists.filter.users'),
     reloadKey: FEED_KEY,
   });
-  const stateFilter = useStateFilterGroup();
+  const stateFilter = useStateFilterGroup({
+    label: t('lists.filter.states'),
+    reloadKey: FEED_KEY,
+  });
   const filters: FeedFilters = {
     hides: (list) => userFilter.hidden.has(list.owner.id) || stateFilter.hidden.has(list.status),
     active: userFilter.group.active || stateFilter.group.active,
@@ -144,7 +147,8 @@ function ListFeed({ filters }: { filters: FeedFilters }) {
   const lists = connected
     ? feed.data?.pages.flatMap((page) => page.lists)
     : engine.copiedSummaries();
-  const filtered = connected && !showsLocalCopy(feed);
+  // The local copy ignores the saved filters (UI-02).
+  const filtersApply = connected && !showsLocalCopy(feed);
 
   if (!lists) {
     if (feed.error) return <LoadError error={feed.error} />;
@@ -156,12 +160,12 @@ function ListFeed({ filters }: { filters: FeedFilters }) {
     return <LoadingState />;
   }
   const shown = lists.filter(
-    (list) => !finishing.has(list.id) && !(filtered && filters.hides(list)),
+    (list) => !finishing.has(list.id) && !(filtersApply && filters.hides(list)),
   );
   if (shown.length === 0) {
     // An empty copy and a failed first page: whether there are lists at all is unknown.
     if (error) return <LoadError error={error} />;
-    if (filtered && filters.active) return <NoMatches onReset={filters.reset} />;
+    if (filtersApply && filters.active) return <NoMatches onReset={filters.reset} />;
     // The answer from before users or states were ticked again says nothing about the lists.
     if (filters.saving) return <LoadingState />;
     return <EmptyLine text={t('lists.empty')} />;

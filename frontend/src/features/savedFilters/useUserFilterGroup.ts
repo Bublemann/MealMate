@@ -1,32 +1,21 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { FilterGroup } from '@/components/FilterPanel';
 import { useCurrentUser } from '@/features/auth/context';
 import { userLabel } from '@/i18n/users';
-import { useSaveFilter, useVisibleUsers, type UserFilterKind } from './api';
-
-interface UserFilter {
-  /** The group for the filter panel. */
-  group: FilterGroup;
-  /** The unticked users, a change that is still being saved included. */
-  hidden: ReadonlySet<string>;
-  /** A change is being saved, or the results are loading again after it. */
-  saving: boolean;
-  /** Ticks every visible user again: part of "Zurücksetzen" and "Filter zurücksetzen". */
-  reset: () => void;
-}
+import { useSaveFilter, useVisibleUsers } from './api';
+import type { SavedFilterGroup, UserFilterKind } from './types';
 
 /**
  * The user filter on Meals or on Lists as a group of the filter panel (MEAL-10, UI-02): one
  * checkbox per user whose meals or lists are visible, "Me" first, ticked while their meals or
- * lists are shown. It is at its default while it hides none of them; users who can't be seen
- * right now stay hidden, also on a reset. Each change is saved on the server at once and loads
+ * lists are shown, `hidden` while not. It is at its default while it hides none of them; users
+ * who can't be seen right now stay hidden, also on a reset. Each change is saved on the server at once and loads
  * `reloadKey` again (`useSaveFilter`); a failed load or save shows in the group.
  */
 export function useUserFilterGroup(
   kind: UserFilterKind,
   { label, reloadKey }: { label: string; reloadKey: QueryKey },
-): UserFilter {
+): SavedFilterGroup<string> {
   const { t } = useTranslation();
   const me = useCurrentUser();
   const visible = useVisibleUsers(kind);

@@ -11,5 +11,11 @@ export const LISTS_KEY = ['lists'] as const;
 export const FEED_KEY = [...LISTS_KEY, 'feed'] as const;
 export const detailKey = (id: string) => [...LISTS_KEY, 'detail', id] as const;
 
+/**
+ * When the local copy in the feed's cache counts as loaded: never, so the feed is asked for anyway
+ * (the copy lacks read-only and done lists), and it can be told apart from the server's pages.
+ */
+export const COPY_UPDATED_AT = 0;
+
 /** The pages of the list feed loaded so far, each asked for with the cursor beside it. */
 export type FeedData = InfiniteData<components['schemas']['ListFeedPage'], string | null>;
