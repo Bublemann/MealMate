@@ -4,25 +4,45 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
-from app.domain.catalog import CUISINE_NAME_MAX_LENGTH, check_name
+from app.domain.catalog import CATEGORY_NAME_MAX_LENGTH, CUISINE_NAME_MAX_LENGTH, check_name
 from app.domain.units import Unit, UnitKind
+
+CategoryName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=CATEGORY_NAME_MAX_LENGTH),
+    AfterValidator(check_name),
+]
 
 
 class CategoryNames(BaseModel):
-    """A category's name in each UI language (I18N-04, D-31)."""
+    """A category's name in each UI language (I18N-04, D-31). Both are required; each is unique
+    in its language among the categories, ignoring case, umlauts and accents (REF-01)."""
 
-    de: str
-    en: str
+    de: CategoryName
+    en: CategoryName
 
 
 class Category(BaseModel):
     """Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking
-    order). `key` names a seeded category, e.g. `other` for *Other*."""
+    order). `key` names a seeded category, e.g. `other` for *Other*; the categories admins add
+    have none."""
 
     id: str
-    key: str
+    key: str | None
     names: CategoryNames
     sort_order: int
+
+
+class CategoryCreate(BaseModel):
+    """A new category; it goes last in the walking order (REF-01)."""
+
+    names: CategoryNames
+
+
+class CategoryRename(BaseModel):
+    """New names for a category, replacing both (REF-01)."""
+
+    names: CategoryNames
 
 
 class UnitInfo(BaseModel):

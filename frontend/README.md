@@ -450,7 +450,9 @@ aren't deleted, without _Uncategorized_.
 2. register it in `src/i18n/index.ts`: add the code to `LANGUAGES`, its own name to
    `LANGUAGE_NAMES` and the file to `resources`;
 3. add its `Intl` locale to `LOCALES` in `src/i18n/format.ts`;
-4. add the language to the backend's `language` enum (users store their choice, from M2 on).
+4. add the language to the backend's `language` enum (users store their choice, from M2 on);
+5. add its category name field to the category dialog (`features/admin/AdminCategoriesScreen.tsx`,
+   with its path in `NAME_PATHS`); the backend's side is in `CONTRIBUTING.md`.
 
 ## Icons
 
@@ -533,7 +535,8 @@ order.
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
 | `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
-| `saveCategoryOrder`      | `save-category-order`      | Admin: "Save order"                         |
+| `newCategory`            | `new-category`             | Admin: "New category" below the categories  |
+| `categoryDialog`         | `category-dialog`          | Admin: a category's names (new or edit)     |
 | `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                         |
 | `systemVersion`          | `system-version`           | Admin: running version (once loaded)        |
 | `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"      |

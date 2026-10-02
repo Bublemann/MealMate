@@ -15,6 +15,7 @@ import {
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
+import { CATEGORIES, CHEESE_COUNTER } from '@/test/ingredients';
 import { ME } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { SyncEngine } from '@/features/sync/engine';
@@ -643,6 +644,50 @@ describe('offline (SYNC-03)', () => {
     expect(screen.getByTestId(testIds.shopAgain)).toBeDisabled();
   });
 
+  it('adds a free-text item offline in a category an admin just added (REF-01)', async () => {
+    const categories = [...CATEGORIES, CHEESE_COUNTER];
+    const { user, fetchMock } = renderList({ 'GET /api/categories': categories });
+    await screen.findByTestId(testIds.shoppingLines);
+    goOffline(fetchMock);
+
+    await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
+    const form = screen.getByRole('form', { name: 'Add an item' });
+    const category = within(form).getByLabelText('Category');
+    // In walking order, where it is last.
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other', 'Cheese counter']);
+    await user.selectOptions(category, 'cat-cheese-counter');
+    await user.click(within(form).getByRole('button', { name: 'Add Feta' }));
+
+    const lines = screen.getByTestId(testIds.shoppingLines);
+    expect(await within(lines).findByRole('list', { name: 'Cheese counter' })).toHaveTextContent(
+      'Feta',
+    );
+
+    const answered = shoppingList({ version: 7 });
+    const online = mockApi({
+      ...LIST_ROUTES,
+      'GET /api/categories': categories,
+      [`GET ${BASE}`]: answered,
+      [`POST ${BASE}/ops`]: opsAnswer(answered),
+    });
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(requestsTo(online, `POST ${BASE}/ops`)).toHaveLength(1));
+    expect(await sentOps(online)).toEqual([
+      expect.objectContaining({
+        type: 'extra.add',
+        payload: { extra_id: A_UUID_V7, text: 'Feta', category_id: 'cat-cheese-counter' },
+      }),
+    ]);
+  });
+
   it('sends everything in order once the connection is back', async () => {
     const { user, fetchMock } = renderList();
     await screen.findByTestId(testIds.shoppingLines);
@@ -950,6 +995,18 @@ describe('done list (SHOP-05/06)', () => {
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /servings/ })).not.toBeInTheDocument();
     expect(screen.getByTestId(testIds.deleteList)).toBeVisible();
+  });
+
+  it('heads the lines with the categories’ current names, after a rename (REF-01)', async () => {
+    const renamed = CATEGORIES.map((category) =>
+      category.key === 'dairy_eggs'
+        ? { ...category, names: { de: 'Kühlregal', en: 'Chilled goods' } }
+        : category,
+    );
+    renderList({ [`GET ${BASE}`]: doneList(), 'GET /api/categories': renamed });
+
+    const lines = await screen.findByTestId(testIds.doneLines);
+    expect(within(lines).getByRole('list', { name: 'Chilled goods' })).toHaveTextContent('Milch');
   });
 
   it('shops again: a new draft, saying how many meals were left out', async () => {

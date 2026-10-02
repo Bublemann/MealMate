@@ -1,5 +1,5 @@
-"""Ingredients: create with brand and barcode, search, similar hint, own values, admin category
-order (seen on a shopping list), merge.
+"""Ingredients: create with brand and barcode, search, similar hint, own values, admin categories
+(order seen on a shopping list, adding, renaming), merge.
 
 ING-01..05, NUT-02, REF-01 (plan § 12, M3; one kind of ingredient since 2026-09-28). All tests of
 a run share one database, so names get a unique tag; the tag is the same in both spellings of a
@@ -275,8 +275,10 @@ def test_filter_panel_does_not_slide_under_reduce_motion(member_page: Page) -> N
     assert panel.evaluate("panel => getComputedStyle(panel).animationName") == "none"
 
 
-def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None:
-    """REF-01: a shopping list's lines follow the new order."""
+def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> None:
+    """REF-01, ADM-01: each arrow tap saves the order, and a shopping list's lines follow it; a
+    new category goes last, is renamed from its name and is offered in the ingredient form at
+    once."""
     original = [category["id"] for category in api.categories(admin)]
     first, second = api.categories(admin)[:2]
     tag = unique("e2e")
@@ -286,22 +288,88 @@ def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None
     for ingredient in (ingredient_a, ingredient_b):
         api.add_extra_item(admin, draft["id"], ingredient_id=ingredient["id"], amount=100, unit="g")
     first_name, second_name = first["names"]["en"], second["names"]["en"]
+    added, renamed = f"Counter {tag}", f"Cheese counter {tag}"
 
     try:
         sign_in(page.context, admin)
         page.goto("/me/admin/categories")
         order = page.get_by_test_id(TEST_IDS["adminCategoryList"])
         expect(order.get_by_role("listitem").first).to_contain_text(first_name)
-        page.get_by_role("button", name=text("admin.categories.moveUp", name=second_name)).click()
+        move_up = page.get_by_role("button", name=text("admin.categories.moveUp", name=second_name))
+        with page.expect_response(
+            lambda response: response.url.endswith("/api/admin/categories/order")
+        ) as saved:
+            move_up.click()
+        assert saved.value.ok
         expect(order.get_by_role("listitem").first).to_contain_text(second_name)
-        page.get_by_test_id(TEST_IDS["saveCategoryOrder"]).click()
-        expect(page.get_by_role("status")).to_have_text(text("admin.categories.saved"))
+
+        page.get_by_test_id(TEST_IDS["newCategory"]).click()
+        dialog = page.get_by_role("dialog", name=text("admin.categories.new"))
+        dialog.get_by_label(text("admin.categories.nameDe"), exact=True).fill(f"Theke {tag}")
+        dialog.get_by_label(text("admin.categories.nameEn"), exact=True).fill(added)
+        dialog.get_by_role("button", name=text("common.save")).click()
+        expect(dialog).to_be_hidden()
+        expect(order.get_by_role("listitem").last).to_contain_text(added)
+
+        order.get_by_role("button", name=added, exact=True).click()
+        dialog = page.get_by_role("dialog", name=text("admin.categories.editTitle"))
+        english = dialog.get_by_label(text("admin.categories.nameEn"), exact=True)
+        expect(english).to_have_value(added)
+        english.fill(renamed)
+        dialog.get_by_role("button", name=text("common.save")).click()
+        expect(dialog).to_be_hidden()
+        expect(order.get_by_role("listitem").last).to_contain_text(renamed)
 
         page.goto(f"/lists/{draft['id']}")
         lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
         expect(lines).to_contain_text([ingredient_b["name"], ingredient_a["name"]])
+
+        # The new category is the last choice in the ingredient form, and takes an ingredient.
+        page.goto("/ingredients")
+        page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+        form = page.get_by_role("dialog", name=text("ingredients.form.createTitle")).get_by_test_id(
+            TEST_IDS["ingredientForm"]
+        )
+        category = form.get_by_label(text("ingredients.field.category"), exact=True)
+        expect(category.get_by_role("option").last).to_have_text(renamed)
+        form.get_by_label(text("ingredients.field.name"), exact=True).fill(f"Feta {tag}")
+        category.select_option(label=renamed)
+        form.get_by_role("button", name=text("common.save")).click()
+        detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+        expect(detail).to_contain_text(renamed)
     finally:
-        api.order_categories(admin, original)
+        current = [category["id"] for category in api.categories(admin)]
+        api.order_categories(admin, [*original, *(id_ for id_ in current if id_ not in original)])
+
+
+def test_categories_fit_the_largest_text_size(page: Page, admin: Account) -> None:
+    """UI-01: at the largest iPhone text size (53 px body text, simulated here) the categories,
+    "New category" and the category dialog wrap instead of being clipped or widening the screen;
+    the dialog scrolls within it."""
+    sign_in(page.context, admin)
+    page.goto("/me/admin/categories")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+    viewport = page.viewport_size
+    assert viewport is not None
+    order = page.get_by_test_id(TEST_IDS["adminCategoryList"])
+    expect(order).to_be_visible()
+    assert order.evaluate("order => order.scrollWidth <= order.clientWidth")
+    new_category = page.get_by_test_id(TEST_IDS["newCategory"])
+    box = new_category.bounding_box()
+    assert box is not None
+    assert box["x"] + box["width"] <= viewport["width"]
+
+    new_category.click()
+    dialog = page.get_by_role("dialog", name=text("admin.categories.new"))
+    expect(dialog).to_be_visible()
+    assert dialog.evaluate("dialog => dialog.scrollWidth <= dialog.clientWidth")
+    box = dialog.bounding_box()
+    assert box is not None
+    assert box["y"] >= 0
+    assert box["y"] + box["height"] <= viewport["height"]
+    save = dialog.get_by_role("button", name=text("common.save"))
+    save.scroll_into_view_if_needed()
+    expect(save).to_be_in_viewport()
 
 
 def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:

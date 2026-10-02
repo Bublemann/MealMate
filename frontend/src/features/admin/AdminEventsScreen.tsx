@@ -24,7 +24,7 @@ export function AdminEventsScreen() {
         <ol data-testid={testIds.eventList} className="flex flex-col divide-y rounded-xl border">
           {events.data.map((event) => (
             <li key={event.id} className="flex flex-col gap-1 px-4 py-3">
-              <p>{describeEvent(t, event)}</p>
+              <p>{describeEvent(t, event, language)}</p>
               <p className="text-sm text-muted-foreground">
                 <time dateTime={event.created_at}>
                   {formatDateTime(event.created_at, language)}

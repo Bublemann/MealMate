@@ -25,6 +25,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Create Category
+         * @description Add a category with its German and English name; it goes last in the walking order. A
+         *     name another category has in that language is a `taken` field error.
+         */
+        post: operations["admin_create_category"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/categories/order": {
         parameters: {
             query?: never;
@@ -43,6 +64,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/admin/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Admin Rename Category
+         * @description Replace both names of a category, seeded ones included. A name another category has in
+         *     that language is a `taken` field error.
+         */
+        patch: operations["admin_rename_category"];
         trace?: never;
     };
     "/api/admin/events": {
@@ -1507,7 +1549,7 @@ export interface components {
          * @description What an admin (or the command line, with no actor) did.
          * @enum {string}
          */
-        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.reorder" | "ingredient.merge" | "ingredient.delete" | "system.backup_request";
+        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.create" | "category.rename" | "category.reorder" | "ingredient.merge" | "ingredient.delete" | "system.backup_request";
         /**
          * AdminEvent
          * @description `actor` is null for the command line or a deleted admin, `target` for a deleted user.
@@ -1619,20 +1661,29 @@ export interface components {
         /**
          * Category
          * @description Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking
-         *     order). `key` names a seeded category, e.g. `other` for *Other*.
+         *     order). `key` names a seeded category, e.g. `other` for *Other*; the categories admins add
+         *     have none.
          */
         Category: {
             /** Id */
             id: string;
             /** Key */
-            key: string;
+            key: string | null;
             names: components["schemas"]["CategoryNames"];
             /** Sort Order */
             sort_order: number;
         };
         /**
+         * CategoryCreate
+         * @description A new category; it goes last in the walking order (REF-01).
+         */
+        CategoryCreate: {
+            names: components["schemas"]["CategoryNames"];
+        };
+        /**
          * CategoryNames
-         * @description A category's name in each UI language (I18N-04, D-31).
+         * @description A category's name in each UI language (I18N-04, D-31). Both are required; each is unique
+         *     in its language among the categories, ignoring case, umlauts and accents (REF-01).
          */
         CategoryNames: {
             /** De */
@@ -1647,6 +1698,13 @@ export interface components {
         CategoryOrder: {
             /** Category Ids */
             category_ids: string[];
+        };
+        /**
+         * CategoryRename
+         * @description New names for a category, replacing both (REF-01).
+         */
+        CategoryRename: {
+            names: components["schemas"]["CategoryNames"];
         };
         /** CodeCheckRequest */
         CodeCheckRequest: {
@@ -3193,6 +3251,39 @@ export interface operations {
             };
         };
     };
+    admin_create_category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     admin_reorder_categories: {
         parameters: {
             query?: never;
@@ -3213,6 +3304,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Category"][];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_rename_category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
                 };
             };
             /** @description Error envelope; `code` names the error */

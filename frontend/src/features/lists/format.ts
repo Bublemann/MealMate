@@ -122,7 +122,7 @@ export function reminderText(t: TFunction, seed: number): string {
 
 /** The id of the category *Other*, where free-text items go unless another is chosen (LIST-06). */
 export function otherCategoryId(
-  categories: readonly { id: string; key: string }[] | undefined,
+  categories: readonly { id: string; key: string | null }[] | undefined,
 ): string {
   return categories?.find((category) => category.key === 'other')?.id ?? '';
 }

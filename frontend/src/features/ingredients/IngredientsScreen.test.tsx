@@ -1,7 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
-import { CATEGORIES, ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import {
+  CATEGORIES,
+  CATEGORIES_WITH_ADDED,
+  ingredient,
+  REFERENCE_ROUTES,
+  summary,
+} from '@/test/ingredients';
 import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -540,6 +546,33 @@ describe('IngredientFormDialog (create)', () => {
     expect(
       within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
     ).toBeVisible();
+  });
+
+  it('offers a category an admin added in walking order, and still starts with Other (REF-01)', async () => {
+    const created = ingredient({ id: 'ing-feta', name: 'Feta' });
+    const { fetchMock, user } = renderIngredients({
+      'GET /api/categories': CATEGORIES_WITH_ADDED,
+      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    });
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const category = within(dialog).getByLabelText('Category');
+    await waitFor(() => expect(category).toHaveDisplayValue('Other'));
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Cheese counter', 'Other']);
+    await user.type(within(dialog).getByLabelText('Name'), 'Feta');
+    await user.selectOptions(category, 'Cheese counter');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1));
+    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toMatchObject({
+      name: 'Feta',
+      category_id: 'cat-cheese-counter',
+    });
   });
 
   it('scans a barcode into the barcode field', async () => {

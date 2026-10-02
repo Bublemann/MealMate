@@ -1,5 +1,6 @@
 """Reference data: categories and their order, units, cuisines, tags (REF-01..04, ADM-01)."""
 
+import uuid
 from typing import Any
 
 import pytest
@@ -29,6 +30,8 @@ CATALOG_ROUTES = [
     ("POST", "/api/ingredients/x/pending-update/apply"),
     ("POST", "/api/ingredients/x/pending-update/ignore"),
     ("PUT", "/api/admin/categories/order"),
+    ("POST", "/api/admin/categories"),
+    ("PATCH", "/api/admin/categories/x"),
     ("POST", "/api/admin/ingredients/x/merge"),
     ("DELETE", "/api/admin/ingredients/x"),
 ]
@@ -256,3 +259,237 @@ async def test_only_admins_reorder(api: AsyncClient, anna: Account) -> None:
     assert error(response) == "common.forbidden"
     listed = (await api.get("/api/categories", headers=anna.headers)).json()
     assert [item["id"] for item in listed] == ids
+
+
+# --- adding and renaming categories (REF-01, ADM-01) -------------------------------------------
+
+
+async def post_category(api: AsyncClient, user: Account, de: str, en: str) -> Any:
+    return await api.post(
+        "/api/admin/categories", json={"names": {"de": de, "en": en}}, headers=user.headers
+    )
+
+
+async def patch_category(
+    api: AsyncClient, user: Account, category_id: str, de: str, en: str
+) -> Any:
+    return await api.patch(
+        f"/api/admin/categories/{category_id}",
+        json={"names": {"de": de, "en": en}},
+        headers=user.headers,
+    )
+
+
+async def listed_categories(api: AsyncClient, user: Account) -> list[Any]:
+    response = await api.get("/api/categories", headers=user.headers)
+    assert response.status_code == 200
+    categories: list[Any] = response.json()
+    return categories
+
+
+async def category_events(api: AsyncClient, admin: Account) -> list[tuple[str, Any]]:
+    """The category events of the activity log, oldest first."""
+    events = (await api.get("/api/admin/events", headers=admin.headers)).json()
+    return [
+        (event["action"], event["details"])
+        for event in reversed(events)
+        if event["action"].startswith("category.")
+    ]
+
+
+async def test_add_categories_at_the_end_of_the_order(
+    api: AsyncClient, admin: Account, anna: Account
+) -> None:
+    """REF-01: a new category has both names, no key, and goes last in the walking order."""
+    response = await post_category(api, admin, "  Käsetheke ", " Cheese counter  ")
+
+    assert response.status_code == 201
+    counter = response.json()
+    assert counter == {
+        "id": counter["id"],
+        "key": None,
+        "names": {"de": "Käsetheke", "en": "Cheese counter"},
+        "sort_order": len(CATEGORY_KEYS),
+    }
+    bakery = (await post_category(api, admin, "Backstube", "Bakehouse")).json()
+    assert bakery["sort_order"] == len(CATEGORY_KEYS) + 1
+    listed = await listed_categories(api, anna)
+    assert [item["key"] for item in listed] == [*CATEGORY_KEYS, None, None]
+    assert listed[-2:] == [counter, bakery]
+    assert [item["sort_order"] for item in listed] == list(range(len(listed)))
+    assert await category_events(api, admin) == [
+        ("category.create", {"name_de": "Käsetheke", "name_en": "Cheese counter"}),
+        ("category.create", {"name_de": "Backstube", "name_en": "Bakehouse"}),
+    ]
+
+
+async def test_a_new_category_takes_part_in_the_order(api: AsyncClient, admin: Account) -> None:
+    """ADM-01: the order is a permutation of every category, the new one included."""
+    counter = (await post_category(api, admin, "Käsetheke", "Cheese counter")).json()
+    ids = [item["id"] for item in await listed_categories(api, admin)]
+
+    assert (await put_order(api, admin, ids[:-1])).status_code == 422
+    response = await put_order(api, admin, [counter["id"], *ids[:-1]])
+
+    assert response.status_code == 200
+    listed = await listed_categories(api, admin)
+    assert [item["id"] for item in listed] == [counter["id"], *ids[:-1]]
+    assert listed[0]["sort_order"] == 0
+
+
+async def test_rename_a_seeded_category(api: AsyncClient, admin: Account, anna: Account) -> None:
+    """REF-01: seeded categories can be renamed too; both names are replaced, the key and the
+    place in the walking order stay."""
+    cheese = next(item for item in await listed_categories(api, anna) if item["key"] == "cheese")
+
+    response = await patch_category(api, admin, cheese["id"], " Käsetheke ", "Cheese counter")
+
+    assert response.status_code == 200
+    renamed = {**cheese, "names": {"de": "Käsetheke", "en": "Cheese counter"}}
+    assert response.json() == renamed
+    assert renamed in await listed_categories(api, anna)
+    assert await category_events(api, admin) == [
+        (
+            "category.rename",
+            {
+                "old_name_de": "Käse",
+                "old_name_en": "Cheese",
+                "name_de": "Käsetheke",
+                "name_en": "Cheese counter",
+            },
+        )
+    ]
+
+
+async def test_rename_an_added_category(api: AsyncClient, admin: Account) -> None:
+    counter = (await post_category(api, admin, "Käsetheke", "Cheese counter")).json()
+
+    response = await patch_category(api, admin, counter["id"], "Käsetheke", "Cheese bar")
+
+    assert response.status_code == 200
+    assert response.json() == {**counter, "names": {"de": "Käsetheke", "en": "Cheese bar"}}
+    assert (await listed_categories(api, admin))[-1] == response.json()
+
+
+async def test_a_category_keeps_its_own_name(api: AsyncClient, admin: Account) -> None:
+    """A category's own names never count as taken: it can change their spelling, and a rename
+    that changes nothing logs nothing."""
+    cheese = next(item for item in await listed_categories(api, admin) if item["key"] == "cheese")
+
+    unchanged = await patch_category(api, admin, cheese["id"], "Käse", "Cheese")
+    assert unchanged.status_code == 200
+    assert await category_events(api, admin) == []
+
+    respelled = await patch_category(api, admin, cheese["id"], "KÄSE", "cheese")
+    assert respelled.status_code == 200
+    assert respelled.json()["names"] == {"de": "KÄSE", "en": "cheese"}
+    assert [action for action, _ in await category_events(api, admin)] == ["category.rename"]
+
+
+@pytest.mark.parametrize(
+    ("de", "en", "taken"),
+    [
+        # Seeded names, ignoring case, umlauts and accents.
+        ("kaese", "Cheese counter", {"de"}),
+        ("Käsetheke", "CHEESE", {"en"}),
+        ("  SOSSEN, gewürze & öle ", "Sauces", {"de"}),
+        ("Getränke", "Drinks", {"de", "en"}),
+        # An added name, spelled differently.
+        ("Créme-Ecke", "Cream nook", {"de"}),
+        ("Sahne", "cream córner", {"en"}),
+    ],
+)
+async def test_names_are_unique_per_language(
+    app: FastAPI, api: AsyncClient, admin: Account, de: str, en: str, taken: set[str]
+) -> None:
+    """REF-01: a name another category has in the same language is a field error there."""
+    await post_category(api, admin, "Crème-Ecke", "Cream corner")
+    before = await listed_categories(api, admin)
+
+    response = await post_category(api, admin, de, en)
+
+    assert response.status_code == 422
+    assert error(response) == "common.validation"
+    assert fields(response) == {("body", "names", language): "taken" for language in taken}
+    assert await listed_categories(api, admin) == before
+    assert [action for action, _ in await category_events(api, admin)] == ["category.create"]
+
+
+async def test_a_name_may_repeat_across_languages(api: AsyncClient, admin: Account) -> None:
+    """Names are unique per language only: "Frozen" is a German name nobody uses yet."""
+    response = await post_category(api, admin, "Frozen", "Feinkost")
+    assert response.status_code == 201
+    response = await post_category(api, admin, "Feinkost", "Fine food")
+    assert response.status_code == 201
+
+
+async def test_a_rename_to_a_taken_name(api: AsyncClient, admin: Account) -> None:
+    categories = await listed_categories(api, admin)
+    cheese = next(item for item in categories if item["key"] == "cheese")
+
+    response = await patch_category(api, admin, cheese["id"], "Käse", "Other")
+
+    assert response.status_code == 422
+    assert fields(response) == {("body", "names", "en"): "taken"}
+    assert await listed_categories(api, admin) == categories
+    assert await category_events(api, admin) == []
+
+
+@pytest.mark.parametrize(
+    ("names", "problems"),
+    [
+        ({}, {("body", "names", "de"): "required", ("body", "names", "en"): "required"}),
+        ({"de": "Käsetheke"}, {("body", "names", "en"): "required"}),
+        ({"de": "", "en": "Cheese counter"}, {("body", "names", "de"): "too_short"}),
+        ({"de": "Käsetheke", "en": "   "}, {("body", "names", "en"): "too_short"}),
+        ({"de": "x" * 41, "en": "Cheese counter"}, {("body", "names", "de"): "too_long"}),
+        ({"de": "Käsetheke", "en": "Cheese‮"}, {("body", "names", "en"): "invalid_format"}),
+        ({"de": "́", "en": "Cheese counter"}, {("body", "names", "de"): "invalid_format"}),
+    ],
+)
+async def test_invalid_category_names(
+    app: FastAPI,
+    api: AsyncClient,
+    admin: Account,
+    names: dict[str, str],
+    problems: dict[tuple[str, ...], str],
+) -> None:
+    """Both names are required, trimmed and at most 40 characters."""
+    cheese = next(item for item in await listed_categories(api, admin) if item["key"] == "cheese")
+    for response in (
+        await api.post("/api/admin/categories", json={"names": names}, headers=admin.headers),
+        await api.patch(
+            f"/api/admin/categories/{cheese['id']}", json={"names": names}, headers=admin.headers
+        ),
+    ):
+        assert response.status_code == 422
+        assert fields(response) == problems
+    assert await scalars(app, select(AdminEvent.id)) == []
+
+
+async def test_names_of_40_characters(api: AsyncClient, admin: Account) -> None:
+    longest = "K" * 40
+    response = await post_category(api, admin, f" {longest} ", "Cheese counter")
+    assert response.status_code == 201
+    assert response.json()["names"]["de"] == longest
+
+
+async def test_rename_an_unknown_category(api: AsyncClient, admin: Account) -> None:
+    response = await patch_category(api, admin, str(uuid.uuid7()), "Käsetheke", "Cheese counter")
+    assert response.status_code == 404
+    assert error(response) == "common.not_found"
+
+
+async def test_only_admins_add_and_rename(app: FastAPI, api: AsyncClient, anna: Account) -> None:
+    """REF-01, ADM-01: the categories are shared, so only admins change them."""
+    categories = await listed_categories(api, anna)
+    cheese = next(item for item in categories if item["key"] == "cheese")
+
+    for response in (
+        await post_category(api, anna, "Käsetheke", "Cheese counter"),
+        await patch_category(api, anna, cheese["id"], "Käsetheke", "Cheese counter"),
+    ):
+        assert response.status_code == 403
+        assert error(response) == "common.forbidden"
+    assert await listed_categories(api, anna) == categories
+    assert await scalars(app, select(AdminEvent.id)) == []

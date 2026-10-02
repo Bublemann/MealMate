@@ -16,7 +16,7 @@ from app.schemas.admin import (
 )
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.ingredients import Ingredient, IngredientMerge
-from app.schemas.reference import Category, CategoryOrder
+from app.schemas.reference import Category, CategoryCreate, CategoryOrder, CategoryRename
 from app.services import admin, codes, ingredients, reference, system
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], responses=ERROR_RESPONSES)
@@ -90,6 +90,24 @@ async def admin_revoke_invite(
 async def admin_list_events(principal: CurrentAdmin, session: ReadSession) -> list[AdminEvent]:
     """The admin activity log, newest first (at most 200 entries)."""
     return await admin.list_events(session)
+
+
+@router.post("/categories", status_code=status.HTTP_201_CREATED)
+async def admin_create_category(
+    body: CategoryCreate, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> Category:
+    """Add a category with its German and English name; it goes last in the walking order. A
+    name another category has in that language is a `taken` field error."""
+    return await reference.create_category(session, principal, body.names, now=now)
+
+
+@router.patch("/categories/{category_id}")
+async def admin_rename_category(
+    category_id: str, body: CategoryRename, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> Category:
+    """Replace both names of a category, seeded ones included. A name another category has in
+    that language is a `taken` field error."""
+    return await reference.rename_category(session, principal, category_id, body.names, now=now)
 
 
 @router.put("/categories/order")
