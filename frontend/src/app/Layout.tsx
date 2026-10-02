@@ -7,6 +7,7 @@ import { TabMemoryProvider } from '@/lib/TabMemoryProvider';
 import { cn } from '@/lib/utils';
 import { testIds, type TestId } from '@/testIds';
 import { UpdatePrompt } from './UpdatePrompt';
+import { useKeyboardOpen } from './viewport';
 
 interface Tab {
   to: string;
@@ -29,6 +30,7 @@ const TABS: readonly Tab[] = [
  */
 export function Layout() {
   const { t } = useTranslation();
+  const keyboardOpen = useKeyboardOpen();
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -42,10 +44,12 @@ export function Layout() {
       <UpdatePrompt />
       {/*
        * Floats above the content, 16 px from the sides and no wider than the content column (the
-       * main's max-w-2xl less its px-4), so taps beside it reach what is behind (UI-01).
+       * main's max-w-2xl less its px-4), so taps beside it reach what is behind (UI-01). It hides
+       * while the keyboard is open, so it doesn't ride up above it.
        */}
       <nav
         aria-label={t('nav.label')}
+        hidden={keyboardOpen}
         className="frosted fixed inset-x-(--tab-bar-margin) bottom-(--tab-bar-bottom) z-10 mx-auto h-(--tab-bar-height) max-w-[calc(var(--container-2xl)-2rem)] rounded-full border border-frosted-border p-(--tab-bar-padding) shadow-frosted"
       >
         <ul className="flex h-full">

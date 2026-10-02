@@ -11,7 +11,10 @@ function AlertDialogTrigger(props: React.ComponentProps<typeof AlertDialogPrimit
   return <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />;
 }
 
-/** A confirmation that must be answered: no close button, Escape cancels. */
+/**
+ * A confirmation that must be answered: no close button, Escape cancels. Placed like DialogContent,
+ * in the visible area above the on-screen keyboard.
+ */
 function AlertDialogContent({
   className,
   ...props
@@ -25,7 +28,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-xl border bg-card p-5 text-card-foreground shadow-lg outline-none',
+          'fixed top-[calc(var(--visible-top)+var(--visible-height)/2)] left-1/2 z-50 flex max-h-[calc(var(--visible-height)-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-xl border bg-card p-5 text-card-foreground shadow-lg outline-none',
           className,
         )}
         {...props}

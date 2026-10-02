@@ -545,6 +545,7 @@ describe('ListScreen', () => {
 
       const edit = await screen.findByRole('dialog', { name: 'Edit item' });
       const amount = within(edit).getByLabelText('Amount (optional)');
+      expect(amount).toHaveFocus();
       expect(amount).toHaveValue('450');
       await user.clear(amount);
       await user.type(amount, '0,5');
@@ -578,6 +579,7 @@ describe('ListScreen', () => {
         within(dialog).getByRole('button', { name: 'Edit the item Geburtstagskerzen' }),
       );
       const edit = await screen.findByRole('dialog', { name: 'Edit item' });
+      expect(within(edit).getByLabelText('Name')).toHaveFocus();
       await user.clear(within(edit).getByLabelText('Name'));
       await user.type(within(edit).getByLabelText('Name'), 'Kerzen');
       await user.clear(within(edit).getByLabelText('Amount (optional)'));
@@ -700,6 +702,8 @@ describe('ListScreen', () => {
     await user.click(await screen.findByTestId(testIds.renameList));
     let dialog = await screen.findByRole('dialog', { name: 'Rename list' });
     const field = within(dialog).getByLabelText('Name');
+    // The cursor is in the name, so typing can start at once.
+    expect(field).toHaveFocus();
     expect(field).toHaveValue('Wochenende');
     await user.clear(field);
     await user.type(field, 'Grillabend');

@@ -55,7 +55,7 @@ frontend/
     ├── main.tsx            # entry: i18n, styles, service-worker registration, <App />
     ├── api/                # client.ts (openapi-fetch, timeouts, auth middleware), errors.ts
     │   └── generated/      # openapi.json + schema.ts, generated, never edited by hand
-    ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt
+    ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt, viewport
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
@@ -119,7 +119,12 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it leaves room
   for the content at the largest text sizes), and `--tab-bar-clearance` keeps the content's end
   and the update prompt above it. While the on-screen keyboard is open, the tab bar and the update
-  prompt hide and pop-ups fit into the space above the keyboard.
+  prompt hide and pop-ups fit into the space above the keyboard. iOS doesn't resize the page for
+  the keyboard, so `app/viewport.ts` (started in `AppProviders`) watches `visualViewport`
+  (`resize`, `scroll`): `useKeyboardOpen()` hides the two, and `--visible-top` and
+  `--keyboard-inset` on `<html>` give the dialogs their `--visible-height` (`tokens.css`).
+  Pinch-zoom (`scale` ≠ 1) doesn't count as a keyboard (A11Y-02); without the API (as in jsdom)
+  nothing changes. Tests stub `visualViewport` and fire its events (`app/viewport.test.tsx`).
 - **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
   same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
   it. It holds the search field (its label only for screen readers), a place for the filter button
