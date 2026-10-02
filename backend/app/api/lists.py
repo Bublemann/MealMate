@@ -1,16 +1,16 @@
-"""Shopping lists: the Lists home, drafts with meals, extra items and hidden lines, copies,
-shopping mode with its ops, finishing, reopening, shopping again and the history (LIST-01..15,
-SHOP, SYNC-05/06/08, CPL-02/03, VIS-03/06, UI-02)."""
+"""Shopping lists: the list feed, drafts with meals, extra items and hidden lines, copies,
+shopping mode with its ops, finishing, reopening and shopping again (LIST-01..15, SHOP,
+SYNC-05/06/08, CPL-02/03, VIS-03/06, UI-02)."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Path, Response, status
+from fastapi import APIRouter, Header, Path, Query, Response, status
 from pydantic_core import to_json
 
 from app.api.deps import CurrentUser, Db, ListResponses, Media, Now
 from app.core import etags
 from app.db.session import ReadSession, WriteSession
-from app.domain.lists import LINE_KEY_MAX_LENGTH, LINE_KEY_PATTERN, ListStatus
+from app.domain.lists import FEED_CURSOR_MAX_LENGTH, LINE_KEY_MAX_LENGTH, LINE_KEY_PATTERN
 from app.media import urls as media_urls
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.lists import (
@@ -19,11 +19,10 @@ from app.schemas.lists import (
     ListCopyResult,
     ListCreate,
     ListDetail,
+    ListFeedPage,
     ListMealAdd,
     ListMealUpdate,
-    ListScope,
     ListsSync,
-    ListSummary,
     ListUpdate,
     OpsRequest,
     OpsResponse,
@@ -49,22 +48,13 @@ LineKey = Annotated[
 async def list_lists(
     principal: CurrentUser,
     session: ReadSession,
-    scope: ListScope = "mine",
-    status: ListStatus | None = None,
-) -> list[ListSummary]:
-    """The lists for the Lists home, most recently edited first. `mine`: your lists and those
-    your partner shares with you; `others`: other lists you may see (read-only; public owners'
-    lists and your partner's unshared ones), without the owners you switched off in your list
-    filter chips (`filter_hidden.lists`). Without `status`: drafts and lists being shopped."""
-    return await lists.list_lists(session, principal, scope=scope, status=status)
-
-
-@router.get("/history")
-async def list_history(principal: CurrentUser, session: ReadSession) -> list[ListSummary]:
-    """The done lists of your history, most recently finished first (at most 200): your own
-    and those your partner shares with you (SHOP-05, CPL-02). Group them by the week of
-    `finished_at` in your time zone."""
-    return await lists.list_history(session, principal)
+    cursor: Annotated[str | None, Query(max_length=FEED_CURSOR_MAX_LENGTH)] = None,
+) -> ListFeedPage:
+    """The list feed (UI-02): every list you can see, in every state: your own, your
+    partner's (the unshared ones read-only) and those of users whose lists are public
+    (read-only). Newest created first, ties by id, so a list keeps its place when it is edited,
+    shopped or finished. 30 per page: send a page's `next_cursor` as `cursor` for the next."""
+    return await lists.list_feed(session, principal, cursor=cursor)
 
 
 @router.get(

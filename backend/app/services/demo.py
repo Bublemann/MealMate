@@ -17,11 +17,11 @@
   available", through the real hook); carl's public "Grillabend" with two of his private
   meals, which others see as "Private meal (N servings)" (VIS-06), and anna's Bolognese: its
   Barilla spaghetti and the De Cecco spaghetti of carl's aglio e olio are two lines.
-- M5b: shopping and history (`_insert_lists`, through the rules of `services.shopping`): anna's
+- M5b: shopping and done lists (`_insert_lists`, through the rules of `services.shopping`): anna's
   shared "Wocheneinkauf" being shopped, with lines checked off by anna and one by ben, a line
   that needs more (ben's meal got more servings after the onions were checked) and a new
-  line (coffee, added while shopping); two done lists in different weeks for the history:
-  anna's shared "Salatabend" (one line not bought) and carl's "Vorrat".
+  line (coffee, added while shopping); two done lists, finished in different weeks: anna's
+  shared "Salatabend" (one line not bought) and carl's "Vorrat".
 
 The content is fixed; only ids, the password, the invite code and the photo keys differ
 between runs; the times of shopping and finishing are relative to the time of seeding.

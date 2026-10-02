@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, connectAuth } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { createAuthSession, type AuthSession } from '@/features/auth/session';
-import { detailKey } from '@/features/lists/keys';
+import { detailKey, FEED_KEY } from '@/features/lists/keys';
 import i18n from '@/i18n';
 import { BEN, errorResponse, loginResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import { doneList, LIST_ID, shoppingList } from '@/test/lists';
@@ -418,9 +418,15 @@ describe('local copy (SYNC-02, SYNC-10)', () => {
     await vi.waitFor(() =>
       expect(queryClient.getQueryData(detailKey(LIST_ID))).toMatchObject({ id: LIST_ID }),
     );
-    expect(queryClient.getQueryData(['lists', 'summaries', 'mine'])).toEqual([
-      expect.objectContaining({ id: LIST_ID, status: 'shopping', meal_count: 3 }),
-    ]);
+    expect(queryClient.getQueryData(FEED_KEY)).toEqual({
+      pages: [
+        {
+          lists: [expect.objectContaining({ id: LIST_ID, status: 'shopping', meal_count: 3 })],
+          next_cursor: null,
+        },
+      ],
+      pageParams: [null],
+    });
     expect(engine.copiedSummaries()).toHaveLength(1);
     answer?.();
   });

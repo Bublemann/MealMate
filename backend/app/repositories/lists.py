@@ -9,10 +9,10 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Subquery, delete, func, or_, select, union, update
+from sqlalchemy import Subquery, and_, delete, func, or_, select, union, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.lists import ListStatus
+from app.domain.lists import FeedPosition, ListStatus
 from app.models import (
     ListExtraItem,
     ListLineState,
@@ -48,45 +48,24 @@ async def mine(
     return result.scalars().all()
 
 
-async def of_others(
+async def feed(
     session: AsyncSession,
     owner_ids: Collection[str],
-    partner_id: str | None,
-    statuses: Collection[ListStatus],
+    after: FeedPosition | None,
+    limit: int,
 ) -> Sequence[ShoppingList]:
-    """The lists of the given owners, except those the partner shares (they are the viewer's
-    own lists, `mine`), most recently edited first."""
-    if not owner_ids:
-        return []
-    statement = select(ShoppingList).where(
-        ShoppingList.owner_id.in_(owner_ids), ShoppingList.status.in_(statuses)
-    )
-    if partner_id is not None:
+    """At most `limit` lists of the given owners, in every state, in the order of the list feed
+    (UI-02): newest created first, ties by id; only those after `after` if given."""
+    statement = select(ShoppingList).where(ShoppingList.owner_id.in_(owner_ids))
+    if after is not None:
         statement = statement.where(
-            or_(ShoppingList.owner_id != partner_id, ShoppingList.shared_with_partner.is_(False))
+            or_(
+                ShoppingList.created_at < after.created_at,
+                and_(ShoppingList.created_at == after.created_at, ShoppingList.id < after.list_id),
+            )
         )
     result = await session.execute(
-        statement.order_by(ShoppingList.updated_at.desc(), ShoppingList.id.desc())
-    )
-    return result.scalars().all()
-
-
-async def history(
-    session: AsyncSession, user_id: str, partner_id: str | None, limit: int
-) -> Sequence[ShoppingList]:
-    """The done lists of the user and those their partner shares with them, most recently
-    finished first (SHOP-05)."""
-    condition = ShoppingList.owner_id == user_id
-    if partner_id is not None:
-        condition = or_(
-            condition,
-            (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
-        )
-    result = await session.execute(
-        select(ShoppingList)
-        .where(condition, ShoppingList.status == "done")
-        .order_by(ShoppingList.finished_at.desc(), ShoppingList.id.desc())
-        .limit(limit)
+        statement.order_by(ShoppingList.created_at.desc(), ShoppingList.id.desc()).limit(limit)
     )
     return result.scalars().all()
 

@@ -74,14 +74,16 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     sign_in(page.context, anna)
     page.goto("/lists")
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
-    # "+ New list" (here the empty state's action) creates a draft and opens the picker.
+    # The pinned block's "New list" tile creates a draft and opens the picker.
     page.get_by_test_id(TEST_IDS["newList"]).click()
     expect(page).to_have_url(LIST_URL)
     picker = page.get_by_role("dialog", name=text("lists.picker.title"))
     expect(picker).to_be_visible()
 
     picker.get_by_label(text("lists.picker.search"), exact=True).fill(tag)
-    results = picker.get_by_test_id(TEST_IDS["mealPickerResults"])
+    # The search applies after a short pause; until then the picker lists all meals, which may be
+    # just these two. A meal added from there moves into "Recently used", so wait for the search.
+    results = picker.get_by_role("list", name=text("lists.picker.results"), exact=True)
     expect(results.get_by_role("listitem")).to_have_count(2)
     # Meal A with 4 servings (2 + 2), meal B with 2 servings (4 - 2).
     add_from_picker(picker, tart["name"], 2, "lists.meals.more")
@@ -180,11 +182,15 @@ def test_partner_edits_a_shared_draft(
     sign_in(page.context, ben)
     page.goto("/lists")
     card = (
-        page.get_by_test_id(TEST_IDS["listDrafts"])
+        page.get_by_test_id(TEST_IDS["listFeed"])
         .get_by_test_id(TEST_IDS["listCard"])
         .filter(has_text=draft["name"])
     )
-    expect(card).to_contain_text(text("lists.card.by", name=anna.display_name))
+    # Anna's initial marks it as hers; the shared icon and text say Ben may change it (UI-02).
+    expect(card.get_by_role("img", name=anna.display_name)).to_have_text(anna.display_name[0])
+    expect(card).to_contain_text(text("lists.card.sharedBy", name=anna.display_name))
+    expect(card.get_by_role("img", name=text("lists.card.shared"), exact=True)).to_be_visible()
+    expect(card.get_by_role("img", name=text("lists.card.readOnly"), exact=True)).to_have_count(0)
     card.click()
     expect(page).to_have_url(re.compile(f"/lists/{draft['id']}$"))
 
@@ -226,8 +232,17 @@ def test_others_list_is_read_only_and_copies_what_i_can_see(
 
     sign_in(page.context, carl)
     page.goto("/lists")
-    others = page.get_by_test_id(TEST_IDS["othersLists"])
-    others.get_by_test_id(TEST_IDS["listCard"]).filter(has_text=party["name"]).click()
+    card = (
+        page.get_by_test_id(TEST_IDS["listFeed"])
+        .get_by_test_id(TEST_IDS["listCard"])
+        .filter(has_text=party["name"])
+    )
+    # A read-only list: Anna's marker, "by Anna" and a lock (UI-02).
+    expect(card.get_by_role("img", name=anna.display_name)).to_be_visible()
+    expect(card).to_contain_text(text("lists.card.by", name=anna.display_name))
+    expect(card).not_to_contain_text(text("lists.card.sharedBy", name=anna.display_name))
+    expect(card.get_by_role("img", name=text("lists.card.readOnly"), exact=True)).to_be_visible()
+    card.click()
     expect(page).to_have_url(re.compile(f"/lists/{party['id']}$"))
 
     expect(page.get_by_test_id(TEST_IDS["listReadOnly"])).to_contain_text(

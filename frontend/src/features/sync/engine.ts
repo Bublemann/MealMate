@@ -9,7 +9,7 @@ import {
 } from '@/api/client';
 import { ApiError, isApiError } from '@/api/errors';
 import type { AuthSession, SessionEnd } from '@/features/auth/session';
-import { detailKey, summariesKey } from '@/features/lists/keys';
+import { detailKey, FEED_KEY, type FeedData } from '@/features/lists/keys';
 import { listDisplayName } from '@/features/lists/format';
 import { CATEGORIES_KEY } from '@/features/reference/api';
 import type { Language } from '@/i18n';
@@ -66,6 +66,16 @@ function summaryOf(list: ListDetail) {
     meal_count: list.meals.length,
     line_count: list.lines.filter((line) => !line.hidden).length,
   };
+}
+
+/**
+ * The order of the list feed (UI-02): newest created first, ties by id. The times are compared as
+ * times: the server writes fractions of a second only when there are any.
+ */
+function newestCreatedFirst(a: ListDetail, b: ListDetail): number {
+  const byTime = Date.parse(b.created_at) - Date.parse(a.created_at);
+  if (byTime !== 0) return byTime;
+  return a.id === b.id ? 0 : a.id < b.id ? 1 : -1;
 }
 
 /** Whether a list belongs in the local copy: editable, and a draft or being shopped (SYNC-02). */
@@ -367,10 +377,11 @@ export class SyncEngine {
         cache.setQueryData(detailKey(detail.id), detail, { updatedAt: storedAt });
       }
     }
-    // Only a copy that was ever complete stands for "my lists" (an empty one too).
-    const summaries = this.copiedSummaries();
-    if (summaries && cache.getQueryData(summariesKey('mine')) === undefined) {
-      cache.setQueryData(summariesKey('mine'), summaries, { updatedAt: this.copiedSummariesAt() });
+    // Only a copy that was ever complete stands in for the feed (an empty one too).
+    const feed = this.copiedFeed();
+    if (feed && cache.getQueryData(FEED_KEY) === undefined) {
+      // Stale at once: the copy lacks read-only and done lists, so the feed is asked for anyway.
+      cache.setQueryData(FEED_KEY, feed, { updatedAt: 0 });
     }
     if (categories && cache.getQueryData(CATEGORIES_KEY) === undefined) {
       cache.setQueryData(CATEGORIES_KEY, categories.categories, {
@@ -418,18 +429,19 @@ export class SyncEngine {
     return this.copy.get(listId)?.storedAt;
   }
 
-  /** When the copy was last complete: the age of `copiedSummaries()`. */
-  copiedSummariesAt(): number | undefined {
-    return this.syncedAt ?? undefined;
-  }
-
-  /** My lists as on the Lists home, from the copy, once it was complete (UI-02, SYNC-09). */
+  /** The lists of the copy as rows of the list feed, in its order, once complete (SYNC-09). */
   copiedSummaries() {
     if (this.syncedAt === null) return undefined;
     return [...this.copy.values()]
       .map((entry) => entry.detail)
-      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .sort(newestCreatedFirst)
       .map(summaryOf);
+  }
+
+  /** The first page of the list feed from the copy, shown until the server answers (SYNC-09). */
+  copiedFeed(): FeedData | undefined {
+    const lists = this.copiedSummaries();
+    return lists && { pages: [{ lists, next_cursor: null }], pageParams: [null] };
   }
 
   private mergeOutbox(entries: readonly OutboxEntry[]): void {
@@ -666,7 +678,7 @@ export class SyncEngine {
       notifyManager.schedule(() => this.removeFromOutbox(seqs));
     });
     this.keepInCopy(userId, list);
-    void this.queryClient.invalidateQueries({ queryKey: summariesKey('mine') });
+    void this.queryClient.invalidateQueries({ queryKey: FEED_KEY });
     const rejected = new Map<string, number>();
     for (const result of results) {
       if (result.status !== 'rejected') continue;
@@ -695,7 +707,7 @@ export class SyncEngine {
     this.removeFromOutbox(seqs);
     this.toast((t) => t('sync.discarded', { count: dropped.length }));
     void this.queryClient.invalidateQueries({ queryKey: detailKey(listId) });
-    void this.queryClient.invalidateQueries({ queryKey: summariesKey('mine') });
+    void this.queryClient.invalidateQueries({ queryKey: FEED_KEY });
   }
 
   private async onInvalid(

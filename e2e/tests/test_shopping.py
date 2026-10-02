@@ -1,4 +1,5 @@
-"""Shopping together: check-off, live updates, needs more, finish and history (QA-04 journey 11).
+"""Shopping together: check-off, live updates, needs more, finish and done lists (QA-04
+journey 11).
 
 LIST-11/12, SHOP-01/04/05/06, SYNC-06/08 (plan § 12, M5b). The partners use two browser contexts,
 like two phones; changes of the other one arrive through polling (every 5 s), never a reload.
@@ -8,7 +9,7 @@ are separate lines (owner decision 2026-09-28).
 
 import re
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from playwright.sync_api import BrowserContext, Locator, Page, expect
@@ -50,9 +51,15 @@ def open_cart(page: Page, count: int) -> None:
     summary.click()
 
 
-def history_card(page: Page, name: str) -> Locator:
-    screen = page.get_by_test_id(TEST_IDS["screenHistory"])
-    return screen.get_by_test_id(TEST_IDS["listCard"]).filter(has_text=name)
+def feed_row(page: Page, name: str) -> Locator:
+    """The row of the list `name` in the list feed on the Lists tab (UI-02)."""
+    feed = page.get_by_test_id(TEST_IDS["listFeed"])
+    return feed.get_by_test_id(TEST_IDS["listCard"]).filter(has_text=name)
+
+
+def row_icon(row: Locator, key: str) -> Locator:
+    """The icon of a feed row named by the translation `key` (shopping, done, read-only)."""
+    return row.get_by_role("img", name=text(key), exact=True)
 
 
 def test_couple_shops_together(
@@ -93,9 +100,11 @@ def test_couple_shops_together(
     expect(shopping_line(anna_page, flour["name"])).to_contain_text("200 g")
     expect(anna_page.get_by_test_id(TEST_IDS["syncStatus"])).to_have_text(text("lists.sync.saved"))
 
-    # Ben finds it at the top of his Lists and checks the flour off on his phone (SHOP-01).
+    # Ben finds it on his Lists with a cart and checks the flour off on his phone (SHOP-01).
     ben_page = open_page(new_context(), ben, "/lists")
-    ben_page.get_by_test_id(TEST_IDS["continueShopping"]).filter(has_text=shared["name"]).click()
+    row = feed_row(ben_page, shared["name"])
+    expect(row_icon(row, "lists.card.shopping")).to_be_visible()
+    row.click()
     expect(ben_page).to_have_url(re.compile(f"{list_path}$"))
     ben_page.get_by_role("checkbox", name=check_flour).click()
     open_cart(ben_page, 1)
@@ -145,19 +154,16 @@ def test_couple_shops_together(
     # Ben's phone shows it finished too.
     expect(ben_page.get_by_test_id(TEST_IDS["listDone"])).to_be_visible(timeout=POLLED)
 
-    # The list is in both partners' history, under the week it was finished (SHOP-05).
+    # The list stays in both partners' feeds, marked as done, without a lock (SHOP-05).
     finished = datetime.fromisoformat(api.get_list(anna, shared["id"])["finished_at"])
-    finished = finished.astimezone(TIME_ZONE)
-    monday = finished - timedelta(days=finished.weekday())
-    week_heading = text("lists.history.week", date=monday.strftime("%d/%m"))
-    bought_on = text("lists.card.boughtOn", date=finished.strftime("%d/%m"))
+    bought_on = text("lists.card.boughtOn", date=finished.astimezone(TIME_ZONE).strftime("%d/%m"))
     for page in (anna_page, ben_page):
         page.goto("/lists")
-        page.get_by_test_id(TEST_IDS["historyLink"]).click()
-        card = history_card(page, shared["name"])
-        expect(card).to_contain_text(bought_on)
-        week = page.get_by_test_id(TEST_IDS["historyWeek"]).filter(has_text=shared["name"])
-        expect(week.get_by_role("heading", level=2)).to_have_text(week_heading)
+        row = feed_row(page, shared["name"])
+        expect(row).to_contain_text(bought_on)
+        expect(row_icon(row, "lists.card.done")).to_be_visible()
+        expect(row_icon(row, "lists.card.shopping")).to_have_count(0)
+        expect(row_icon(row, "lists.card.readOnly")).to_have_count(0)
 
 
 def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
@@ -178,8 +184,10 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     api.finish_list(anna, done["id"])
 
     sign_in(page.context, anna)
+    # The former history address leads to the Lists tab, where the done list is (UI-02).
     page.goto("/lists/history")
-    history_card(page, done["name"]).click()
+    expect(page).to_have_url(re.compile("/lists$"))
+    feed_row(page, done["name"]).click()
     expect(page).to_have_url(re.compile(f"/lists/{done['id']}$"))
     bought = page.get_by_test_id(TEST_IDS["doneLines"]).get_by_role("listitem")
     expect(bought.filter(has_text=rice["name"])).to_contain_text(f"({text('lists.done.bought')})")
@@ -208,9 +216,9 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
         )
     ).to_be_checked()
     page.goto("/lists")
-    expect(
-        page.get_by_test_id(TEST_IDS["continueShopping"]).filter(has_text=done["name"])
-    ).to_be_visible()
+    row = feed_row(page, done["name"])
+    expect(row_icon(row, "lists.card.shopping")).to_be_visible()
+    expect(row_icon(row, "lists.card.done")).to_have_count(0)
 
 
 def test_two_brands_are_two_lines(

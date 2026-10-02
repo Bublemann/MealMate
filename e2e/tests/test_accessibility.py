@@ -34,8 +34,9 @@ SCREENS = [
     Screen("/login", "anonymous", (TEST_IDS["screenLogin"],)),
     # The invite code is appended in the test: /join#<code>.
     Screen("/join", "anonymous", (TEST_IDS["screenJoin"],)),
-    # A draft of the member's and another user's public list are created in the test.
-    Screen("/lists", "member", (TEST_IDS["listDrafts"], TEST_IDS["othersLists"])),
+    # A draft and a done list of the member's and another user's public list are created in the
+    # test, so the feed shows a row of each kind.
+    Screen("/lists", "member", (TEST_IDS["newList"], TEST_IDS["listFeed"])),
     # A list with meals, lines and a removed line is created in the test: /lists/<id>.
     Screen(
         "/lists/:id",
@@ -54,8 +55,6 @@ SCREENS = [
         "member",
         (TEST_IDS["offlineBanner"], TEST_IDS["linePending"], TEST_IDS["syncStatus"]),
     ),
-    # A done list of the member's is created in the test; its week is awaited there.
-    Screen("/lists/history", "member", (TEST_IDS["screenHistory"],)),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/ingredients", "member", (TEST_IDS["screenIngredients"],)),
     # An ingredient with brand, barcode and package is created in the test: /ingredients/<id>.
@@ -99,7 +98,7 @@ def test_no_serious_violations(
 ) -> None:
     page.emulate_media(color_scheme=color_scheme)
     path = screen.path
-    history_list = ""  # the name of the done list created for the history screen
+    feed_lists: list[str] = []  # the names of the lists created for "/lists"
     if screen.visitor != "anonymous":
         account: Account = request.getfixturevalue(screen.visitor)
         sign_in(page.context, account)
@@ -142,9 +141,21 @@ def test_no_serious_violations(
 
     if path == "/lists":
         api = request.getfixturevalue("api")
-        api.create_list(account, unique("A11y list"))
-        # The admin's lists are public: one of them shows under Others' lists.
-        api.create_list(request.getfixturevalue("admin"), unique("A11y others"))
+        draft = api.create_list(account, unique("A11y list"))
+        ingredient = api.create_ingredient(account, unique("A11y rice"))
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            ingredients=[{"ingredient_id": ingredient["id"], "amount": 150, "unit": "g"}],
+        )
+        done = api.create_list(account, unique("A11y done"))
+        api.add_list_meal(account, done["id"], meal["id"])
+        api.start_shopping(account, done["id"])
+        api.finish_list(account, done["id"])
+        # The admin's lists are public: one shows as a read-only list, with a lock.
+        read_only = api.create_list(request.getfixturevalue("admin"), unique("A11y read-only"))
+        feed_lists = [draft["name"], done["name"], read_only["name"]]
     if path == "/lists/:id":
         api = request.getfixturevalue("api")
         onions = api.create_ingredient(
@@ -205,21 +216,6 @@ def test_no_serious_violations(
         api.start_shopping(account, offline["id"])
         offline_line = onions["name"]
         path = f"/lists/{offline['id']}"
-    if path == "/lists/history":
-        api = request.getfixturevalue("api")
-        ingredient = api.create_ingredient(account, unique("A11y rice"))
-        meal = api.create_meal(
-            account,
-            unique("A11y meal"),
-            servings=2,
-            ingredients=[{"ingredient_id": ingredient["id"], "amount": 150, "unit": "g"}],
-        )
-        done = api.create_list(account, unique("A11y done"))
-        api.add_list_meal(account, done["id"], meal["id"])
-        api.start_shopping(account, done["id"])
-        api.finish_list(account, done["id"])
-        history_list = done["name"]
-
     page.goto(path)
     if screen.path == "/join":
         # The form appears once the code has been checked.
@@ -257,11 +253,11 @@ def test_no_serious_violations(
         removed = page.get_by_test_id(TEST_IDS["hiddenLines"])
         removed.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
         expect(removed.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
-    if screen.path == "/lists/history":
-        # The member's done lists of all runs are there, maybe in two weeks (the light and the
-        # dark run can straddle Sunday midnight): wait for the week with this run's list.
-        weeks = page.get_by_test_id(TEST_IDS["historyWeek"])
-        expect(weeks.filter(has_text=history_list).get_by_role("heading", level=2)).to_be_visible()
+    if screen.path == "/lists":
+        # The newest lists come first: this run's lists are on the first page.
+        rows = page.get_by_test_id(TEST_IDS["listFeed"]).get_by_test_id(TEST_IDS["listCard"])
+        for name in feed_lists:
+            expect(rows.filter(has_text=name)).to_be_visible()
     if screen.path == "/lists/:id/shopping":
         # The new and the needs-more line, and the checked one in the opened cart.
         lines = page.get_by_test_id(TEST_IDS["shoppingLines"])

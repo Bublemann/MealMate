@@ -2489,6 +2489,35 @@
         "title": "ListDetail",
         "type": "object"
       },
+      "ListFeedPage": {
+        "description": "A page of the list feed (UI-02): up to 30 lists, newest created first (ties by id).\n`next_cursor` asks for the next page (`GET /api/lists?cursor=`); null on the last one.",
+        "properties": {
+          "lists": {
+            "items": {
+              "$ref": "#/components/schemas/ListSummary"
+            },
+            "title": "Lists",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "lists",
+          "next_cursor"
+        ],
+        "title": "ListFeedPage",
+        "type": "object"
+      },
       "ListFinishOp": {
         "description": "Finish shopping (SHOP-04): the list is done, `finished_at` is `at` (but not before\n`shopping_started_at` nor after the server's time). Already done: applied without effect;\na draft: `list.not_shopping`; an `at` out of range in UTC: `common.validation`.",
         "properties": {
@@ -2803,7 +2832,7 @@
         "type": "object"
       },
       "ListSummary": {
-        "description": "A list on the Lists home (UI-02) or in the history (SHOP-05, by `finished_at`);\n`line_count` counts the lines that are not hidden.",
+        "description": "A list in the list feed (UI-02); `line_count` counts the lines that are not hidden.\n`finished_at` is the day a done list was bought (SHOP-05).",
         "properties": {
           "can_edit": {
             "title": "Can Edit",
@@ -6494,42 +6523,24 @@
     },
     "/api/lists": {
       "get": {
-        "description": "The lists for the Lists home, most recently edited first. `mine`: your lists and those\nyour partner shares with you; `others`: other lists you may see (read-only; public owners'\nlists and your partner's unshared ones), without the owners you switched off in your list\nfilter chips (`filter_hidden.lists`). Without `status`: drafts and lists being shopped.",
+        "description": "The list feed (UI-02): every list you can see, in every state: your own, your\npartner's (the unshared ones read-only) and those of users whose lists are public\n(read-only). Newest created first, ties by id, so a list keeps its place when it is edited,\nshopped or finished. 30 per page: send a page's `next_cursor` as `cursor` for the next.",
         "operationId": "list_lists",
         "parameters": [
           {
             "in": "query",
-            "name": "scope",
-            "required": false,
-            "schema": {
-              "default": "mine",
-              "enum": [
-                "mine",
-                "others"
-              ],
-              "title": "Scope",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
+            "name": "cursor",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "draft",
-                    "shopping",
-                    "done"
-                  ],
+                  "maxLength": 120,
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Status"
+              "title": "Cursor"
             }
           }
         ],
@@ -6538,11 +6549,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ListSummary"
-                  },
-                  "title": "Response List Lists",
-                  "type": "array"
+                  "$ref": "#/components/schemas/ListFeedPage"
                 }
               }
             },
@@ -6610,47 +6617,6 @@
           }
         ],
         "summary": "Create List",
-        "tags": [
-          "lists"
-        ]
-      }
-    },
-    "/api/lists/history": {
-      "get": {
-        "description": "The done lists of your history, most recently finished first (at most 200): your own\nand those your partner shares with you (SHOP-05, CPL-02). Group them by the week of\n`finished_at` in your time zone.",
-        "operationId": "list_history",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ListSummary"
-                  },
-                  "title": "Response List History",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "List History",
         "tags": [
           "lists"
         ]

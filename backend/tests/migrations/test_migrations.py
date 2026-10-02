@@ -418,7 +418,9 @@ async def _visit_everything(settings: Settings) -> int:
             for kind in ("meals", "lists"):
                 response = await client.get(f"/api/{kind}", headers=user.headers)
                 assert response.status_code == 200, response.text
-                for item in response.json():
+                # The list feed's first page holds every demo list one sees.
+                items = response.json()["lists"] if kind == "lists" else response.json()
+                for item in items:
                     item_response = await client.get(
                         f"/api/{kind}/{item['id']}", headers=user.headers
                     )

@@ -808,10 +808,10 @@ export interface paths {
         };
         /**
          * List Lists
-         * @description The lists for the Lists home, most recently edited first. `mine`: your lists and those
-         *     your partner shares with you; `others`: other lists you may see (read-only; public owners'
-         *     lists and your partner's unshared ones), without the owners you switched off in your list
-         *     filter chips (`filter_hidden.lists`). Without `status`: drafts and lists being shopped.
+         * @description The list feed (UI-02): every list you can see, in every state: your own, your
+         *     partner's (the unshared ones read-only) and those of users whose lists are public
+         *     (read-only). Newest created first, ties by id, so a list keeps its place when it is edited,
+         *     shopped or finished. 30 per page: send a page's `next_cursor` as `cursor` for the next.
          */
         get: operations["list_lists"];
         put?: never;
@@ -820,28 +820,6 @@ export interface paths {
          * @description A new draft of yours; it is shared with your partner if you have one.
          */
         post: operations["create_list"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/lists/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List History
-         * @description The done lists of your history, most recently finished first (at most 200): your own
-         *     and those your partner shares with you (SHOP-05, CPL-02). Group them by the week of
-         *     `finished_at` in your time zone.
-         */
-        get: operations["list_history"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2421,6 +2399,17 @@ export interface components {
             version: number;
         };
         /**
+         * ListFeedPage
+         * @description A page of the list feed (UI-02): up to 30 lists, newest created first (ties by id).
+         *     `next_cursor` asks for the next page (`GET /api/lists?cursor=`); null on the last one.
+         */
+        ListFeedPage: {
+            /** Lists */
+            lists: components["schemas"]["ListSummary"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
          * ListFinishOp
          * @description Finish shopping (SHOP-04): the list is done, `finished_at` is `at` (but not before
          *     `shopping_started_at` nor after the server's time). Already done: applied without effect;
@@ -2545,8 +2534,8 @@ export interface components {
         };
         /**
          * ListSummary
-         * @description A list on the Lists home (UI-02) or in the history (SHOP-05, by `finished_at`);
-         *     `line_count` counts the lines that are not hidden.
+         * @description A list in the list feed (UI-02); `line_count` counts the lines that are not hidden.
+         *     `finished_at` is the day a done list was bought (SHOP-05).
          */
         ListSummary: {
             /** Can Edit */
@@ -4508,8 +4497,7 @@ export interface operations {
     list_lists: {
         parameters: {
             query?: {
-                scope?: "mine" | "others";
-                status?: ("draft" | "shopping" | "done") | null;
+                cursor?: string | null;
             };
             header?: never;
             path?: never;
@@ -4523,7 +4511,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListSummary"][];
+                    "application/json": components["schemas"]["ListFeedPage"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -4557,35 +4545,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListDetail"];
-                };
-            };
-            /** @description Error envelope; `code` names the error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_history: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListSummary"][];
                 };
             };
             /** @description Error envelope; `code` names the error */

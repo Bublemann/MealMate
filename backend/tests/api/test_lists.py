@@ -4,6 +4,7 @@ UI-02, MEAL-09)."""
 
 import hashlib
 import uuid
+from base64 import urlsafe_b64encode
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -32,12 +33,16 @@ from tests.lists import (
     add_extra,
     add_meal,
     added,
+    applied,
     create_list,
     detail,
     extra_added,
+    feed_page,
     get_list,
     line,
+    op,
     set_status,
+    start_shopping,
     summaries,
 )
 from tests.meals import create_meal, jpeg, upload
@@ -351,10 +356,10 @@ async def test_deactivated_partner_keeps_the_shared_lists(
     assert await probe(api, anna, shopping_list["id"]) == EDITOR
 
 
-# --- the Lists home (UI-02) -----------------------------------------------------------------
+# --- the Lists feed (UI-02) -----------------------------------------------------------------
 
 
-async def test_summaries(
+async def test_the_feed_shows_every_list_one_can_see_in_every_state(
     api: AsyncClient,
     anna: Account,
     ben: Account,
@@ -372,8 +377,11 @@ async def test_summaries(
     clock.advance(minutes=1)
     unshared = await create_list(api, ben, "Ben privat")
     await patch(api, ben, unshared["id"], shared_with_partner=False)
+    await start_shopping(api, ben, unshared["id"])
     clock.advance(minutes=1)
-    await create_list(api, carl, "Carl")
+    carls = await create_list(api, carl, "Carl")
+    await start_shopping(api, carl, carls["id"])
+    await applied(api, carl, carls["id"], op("list.finish", at=clock.now))
     clock.advance(minutes=1)
     await create_list(api, dora, "Dora")
     meal = await create_meal(api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"]}])
@@ -382,9 +390,20 @@ async def test_summaries(
     await extra_added(api, anna, own["id"], text="Servietten")
     await hide(api, anna, own["id"], f"i:{flour['id']}")
 
-    mine = await summaries(api, anna)
-    assert names(mine) == ["Anna", "Ben geteilt"]  # most recently edited first
-    assert mine[0] == {
+    feed = await summaries(api, anna)
+    # Newest created first; Dora's lists are private, Carl's done list is public.
+    assert names(feed) == ["Carl", "Ben privat", "Ben geteilt", "Anna"]
+    assert [
+        (item["status"], item["is_owner"], item["can_edit"], item["shared_with_partner"])
+        for item in feed
+    ] == [
+        ("done", False, False, False),
+        ("shopping", False, False, False),
+        ("draft", False, True, True),
+        ("draft", True, True, True),
+    ]
+    assert feed[0]["finished_at"] == "2026-09-27T12:03:00Z"
+    assert feed[3] == {
         "id": own["id"],
         "name": "Anna",
         "status": "draft",
@@ -398,52 +417,67 @@ async def test_summaries(
         "meal_count": 1,
         "line_count": 2,  # the flour line is hidden
     }
-    assert (mine[1]["is_owner"], mine[1]["can_edit"]) == (False, True)
-    assert names(await summaries(api, anna, scope="mine")) == ["Anna", "Ben geteilt"]
-    others = await summaries(api, anna, scope="others")
-    assert names(others) == ["Carl", "Ben privat"]
-    assert [(item["is_owner"], item["can_edit"]) for item in others] == [(False, False)] * 2
-
-    assert names(await summaries(api, ben)) == ["Anna", "Ben privat", "Ben geteilt"]
-    assert names(await summaries(api, ben, scope="others")) == ["Carl"]
-    assert names(await summaries(api, carl)) == ["Carl"]
-    assert names(await summaries(api, carl, scope="others")) == ["Anna"]
-    assert names(await summaries(api, dora, scope="others")) == ["Anna", "Carl"]
+    assert names(await summaries(api, ben)) == ["Carl", "Ben privat", "Ben geteilt", "Anna"]
+    assert names(await summaries(api, carl)) == ["Carl", "Anna"]
+    assert names(await summaries(api, dora)) == ["Dora", "Carl", "Anna"]
 
 
-async def test_others_follow_the_list_filter_chips(
-    api: AsyncClient, anna: Account, ben: Account, carl: Account
+async def test_a_list_keeps_its_place_in_the_feed(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
     await make_couple(api, anna, ben)
-    await create_list(api, carl, "Carl")
-    unshared = await create_list(api, ben, "Ben")
-    await patch(api, ben, unshared["id"], shared_with_partner=False)
+    first = await create_list(api, anna, "Erste")
+    clock.advance(minutes=1)
+    second = await create_list(api, ben, "Zweite")
+    # Created at the same time: the higher id comes first.
+    third = await create_list(api, anna, "Dritte")
+    order = [third["id"], second["id"], first["id"]]
+    assert [item["id"] for item in await summaries(api, anna)] == order
 
-    hidden = {"filter_hidden": {"meals": [], "lists": [carl.id]}}
-    assert (await api.patch("/api/me", json=hidden, headers=anna.headers)).status_code == 200
-    assert names(await summaries(api, anna, scope="others")) == ["Ben"]
-    hidden = {"filter_hidden": {"meals": [], "lists": [carl.id, ben.id]}}
-    await api.patch("/api/me", json=hidden, headers=anna.headers)
-    assert await summaries(api, anna, scope="others") == []
-    # The chips never hide one's own lists or those the partner shares.
-    shared = await create_list(api, ben, "Geteilt")
-    assert names(await summaries(api, anna)) == [shared["name"]]
+    clock.advance(minutes=1)
+    assert (await patch(api, anna, first["id"], name="Erste!")).status_code == 200
+    await extra_added(api, ben, first["id"], text="Kerzen")
+    assert [item["id"] for item in await summaries(api, anna)] == order
+    await start_shopping(api, anna, first["id"])
+    assert [item["id"] for item in await summaries(api, anna)] == order
+    await applied(api, ben, first["id"], op("list.finish", at=clock.now))
+    feed = await summaries(api, ben)
+    assert [(item["id"], item["status"]) for item in feed] == [
+        (third["id"], "draft"),
+        (second["id"], "draft"),
+        (first["id"], "done"),
+    ]
 
 
-async def test_status_filter(app: FastAPI, api: AsyncClient, anna: Account) -> None:
-    draft = await create_list(api, anna, "Entwurf")
-    shopping = await create_list(api, anna, "Unterwegs")
-    done = await create_list(api, anna, "Erledigt")
-    await set_status(app, shopping["id"], "shopping")
-    await set_status(app, done["id"], "done")
+async def test_the_feed_comes_in_pages_of_30(
+    api: AsyncClient, anna: Account, clock: FakeClock
+) -> None:
+    created = []
+    for index in range(32):
+        # Two lists per second: the first page ends between two lists created together.
+        if index % 2 == 1:
+            clock.advance(seconds=1)
+        created.append((await create_list(api, anna, f"Liste {index}"))["id"])
+    newest_first = created[::-1]
 
-    assert sorted(names(await summaries(api, anna))) == [draft["name"], shopping["name"]]
-    assert names(await summaries(api, anna, status="done")) == [done["name"]]
-    assert names(await summaries(api, anna, status="draft")) == [draft["name"]]
-    response = await api.get("/api/lists", params={"status": "open"}, headers=anna.headers)
-    assert fields(response) == {("query", "status"): "invalid"}
-    response = await api.get("/api/lists", params={"scope": "all"}, headers=anna.headers)
-    assert fields(response) == {("query", "scope"): "invalid"}
+    first = await feed_page(api, anna)
+    assert [item["id"] for item in first["lists"]] == newest_first[:30]
+    assert first["next_cursor"] is not None
+    # A list created meanwhile shows on the first page, not on the next.
+    await create_list(api, anna, "Neu")
+    second = await feed_page(api, anna, first["next_cursor"])
+    assert [item["id"] for item in second["lists"]] == newest_first[30:]
+    assert second["next_cursor"] is None
+
+    # Not base64, empty, a time without an id, a time without a zone, an empty id, too long.
+    made_up = [
+        urlsafe_b64encode(raw.encode()).decode()
+        for raw in ("2026-09-27", "2026-09-27T12:00:00 x", "2026-09-27T12:00:00+00:00 ")
+    ]
+    for cursor in ["kaputt!", "", *made_up, "x" * 200]:
+        response = await api.get("/api/lists", params={"cursor": cursor}, headers=anna.headers)
+        assert response.status_code == 422, cursor
+        assert set(fields(response)) == {("query", "cursor")}
 
 
 # --- meals on a list (LIST-03, LIST-04, VIS-06) ---------------------------------------------
@@ -1150,7 +1184,7 @@ async def test_a_list_takes_a_fixed_number_of_queries(
     assert len(body["lines"]) == 40
     assert len(body["meals"]) == 16
     with counted_queries(app) as summary_queries:
-        assert len(await summaries(api, carl, scope="others")) == 2
+        assert len(await summaries(api, carl)) == 2
 
     # Authentication, access (the couple once), the eight content queries, visibility and
     # users (two BEGINs).

@@ -620,7 +620,10 @@ async def test_finish_and_reopen(
 
     assert (body["status"], body["finished_at"]) == ("done", "2026-09-27T12:30:00Z")
     assert line(body, "Mehl")["checked_by"] == ref(anna)
-    assert [item["name"] for item in await summaries(api, anna)] == []  # not on the Lists home
+    # It keeps its place in the feed, marked as done (SHOP-05).
+    assert [(item["id"], item["status"]) for item in await summaries(api, anna)] == [
+        (list_id, "done")
+    ]
 
     def reopen(user: Account, target: str = list_id) -> Any:
         return api.post(f"/api/lists/{target}/reopen", headers=user.headers)
@@ -727,11 +730,10 @@ async def test_shop_again(
     assert (await again(ben)).status_code == 201  # the partner sees every list
 
 
-# --- history (SHOP-05, CPL-02, CPL-05) ------------------------------------------------------
+# --- done lists in the feed (SHOP-05, CPL-02, CPL-05, UI-02) -------------------------------
 
 
-async def test_history(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_done_lists_stay_in_the_feed(
     api: AsyncClient,
     anna: Account,
     ben: Account,
@@ -743,7 +745,7 @@ async def test_history(
     meal = await create_meal(api, anna, "Brot", ingredients=[row(flour, 100, "g")])
     annas = await done_list(api, anna, "Anna", meal=meal)
     await later(api, clock, anna, ben, carl, days=1)
-    shared = await done_list(api, ben, "Ben geteilt")
+    await done_list(api, ben, "Ben geteilt")
     await later(api, clock, anna, ben, carl, days=1)
     unshared = await create_list(api, ben, "Ben privat")
     await api.patch(
@@ -752,54 +754,77 @@ async def test_history(
     await start_shopping(api, ben, unshared["id"])
     await finish(api, ben, unshared["id"])
     await later(api, clock, anna, ben, carl, days=1)
-    await done_list(api, carl, "Carl")  # public, but not in anna's history
-    draft = await create_list(api, anna, "Entwurf")
+    await done_list(api, carl, "Carl")  # public
+    await create_list(api, anna, "Entwurf")
     shopping_list = await create_list(api, anna, "Unterwegs")
     await start_shopping(api, anna, shopping_list["id"])
 
-    async def history(user: Account) -> list[Any]:
-        response = await api.get("/api/lists/history", headers=user.headers)
-        assert response.status_code == 200, response.text
-        return [(item["name"], item["finished_at"]) for item in response.json()]
+    async def feed(user: Account) -> list[Any]:
+        return [
+            (item["name"], item["status"], item["is_owner"], item["can_edit"])
+            for item in await summaries(api, user)
+        ]
 
-    assert await history(anna) == [
-        ("Ben geteilt", "2026-09-28T12:00:00Z"),
-        ("Anna", "2026-09-27T12:00:00Z"),
+    # Newest created first, done lists in their place; Carl's and Ben's unshared ones read-only.
+    assert await feed(anna) == [
+        ("Unterwegs", "shopping", True, True),
+        ("Entwurf", "draft", True, True),
+        ("Carl", "done", False, False),
+        ("Ben privat", "done", False, False),
+        ("Ben geteilt", "done", False, True),
+        ("Anna", "done", True, True),
     ]
-    assert await history(ben) == [
-        ("Ben privat", "2026-09-29T12:00:00Z"),
-        ("Ben geteilt", "2026-09-28T12:00:00Z"),
-        ("Anna", "2026-09-27T12:00:00Z"),
+    items = await summaries(api, anna)
+    assert [item["finished_at"] for item in items] == [
+        None,
+        None,
+        "2026-09-30T12:00:00Z",
+        "2026-09-29T12:00:00Z",
+        "2026-09-28T12:00:00Z",
+        "2026-09-27T12:00:00Z",
     ]
-    assert [name for name, _ in await history(carl)] == ["Carl"]
-    [first, second] = (await api.get("/api/lists/history", headers=anna.headers)).json()
-    assert (first["id"], first["status"], first["is_owner"], first["can_edit"]) == (
-        shared["id"],
-        "done",
-        False,
-        True,
-    )
-    assert (second["id"], second["meal_count"], second["line_count"]) == (annas["id"], 1, 1)
-    # The Lists home shows drafts and lists being shopped ("Continue shopping").
-    home = [(item["name"], item["status"]) for item in await summaries(api, anna)]
-    assert home == [("Unterwegs", "shopping"), ("Entwurf", "draft")]
-    done = await summaries(api, anna, status="done")
-    assert [item["id"] for item in done] == [shared["id"], annas["id"]]
-    assert draft["finished_at"] is None
-    monkeypatch.setattr("app.services.lists.HISTORY_LIMIT", 1)
-    assert await history(ben) == [("Ben privat", "2026-09-29T12:00:00Z")]
-    monkeypatch.undo()
+    assert (items[5]["id"], items[5]["meal_count"], items[5]["line_count"]) == (annas["id"], 1, 1)
+    assert await feed(ben) == [
+        ("Unterwegs", "shopping", False, True),
+        ("Entwurf", "draft", False, True),
+        ("Carl", "done", False, False),
+        ("Ben privat", "done", True, True),
+        ("Ben geteilt", "done", True, True),
+        ("Anna", "done", False, True),
+    ]
+    assert [(name, can_edit) for name, _, _, can_edit in await feed(carl)] == [
+        ("Unterwegs", False),
+        ("Entwurf", False),
+        ("Carl", True),
+        ("Ben privat", False),
+        ("Ben geteilt", False),
+        ("Anna", False),
+    ]
 
-    # CPL-05: when the couple ends, each keeps only their own lists.
+    # CPL-05: when the couple ends, each keeps their own lists; the other's are only there
+    # while they are public, read-only.
+    await set_privacy(api, ben, lists_public=False)
     await api.delete("/api/couple", headers=ben.headers)
-    assert [name for name, _ in await history(anna)] == ["Anna"]
-    assert [name for name, _ in await history(ben)] == ["Ben privat", "Ben geteilt"]
+    assert await feed(anna) == [
+        ("Unterwegs", "shopping", True, True),
+        ("Entwurf", "draft", True, True),
+        ("Carl", "done", False, False),
+        ("Anna", "done", True, True),
+    ]
+    assert [(name, can_edit) for name, _, _, can_edit in await feed(ben)] == [
+        ("Unterwegs", False),
+        ("Entwurf", False),
+        ("Carl", False),
+        ("Ben privat", True),
+        ("Ben geteilt", True),
+        ("Anna", False),
+    ]
 
 
 # --- demo data (seed-demo) ------------------------------------------------------------------
 
 
-async def test_demo_shopping_and_history(
+async def test_demo_shopping_and_done_lists(
     app: FastAPI, api: AsyncClient, make_settings: SettingsFactory, clock: FakeClock
 ) -> None:
     settings: Settings = make_settings(public_url=PUBLIC_URL)
@@ -837,11 +862,12 @@ async def test_demo_shopping_and_history(
     assert states["Kaffee"] == (False, None, True, None)
     assert states["Küchenrolle"] == (False, None, False, None)
 
-    history = (await api.get("/api/lists/history", headers=ben.headers)).json()
-    assert [(item["name"], item["owner"]["display_name"]) for item in history] == [
-        ("Salatabend", "Anna")
+    done = [item for item in await summaries(api, ben) if item["status"] == "done"]
+    assert [(item["name"], item["owner"]["display_name"], item["can_edit"]) for item in done] == [
+        ("Salatabend", "Anna", True),
+        ("Vorrat", "Carl", False),
     ]
-    [salad] = history
+    salad = done[0]
     assert salad["finished_at"] == (clock.now - timedelta(days=2)).isoformat().replace(
         "+00:00", "Z"
     )
@@ -859,7 +885,9 @@ async def test_demo_shopping_and_history(
         ("Spaghetti", "Barilla"),
         ("Spaghetti", "De Cecco"),
     ]
-    [carls] = (await api.get("/api/lists/history", headers=carl.headers)).json()
+    [carls] = [
+        item for item in await summaries(api, carl) if item["status"] == "done" and item["is_owner"]
+    ]
     assert carls["name"] == "Vorrat"
     week = timedelta(days=7)
     assert (clock.now - week).isoformat().replace("+00:00", "Z") > carls["finished_at"]

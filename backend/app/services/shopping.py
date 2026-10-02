@@ -125,15 +125,15 @@ async def set_checked(
 
 
 def finish(shopping_list: ShoppingList, *, at: datetime, now: datetime) -> None:
-    """The list is done (SHOP-04): read-only, in the history. It counts as finished at the
-    tap (`at`, so a finish sent later lands in the right week), but not before shopping
-    started nor after `now`."""
+    """The list is done (SHOP-04): read-only, marked as done in the list feed (SHOP-05). It
+    counts as finished at the tap (`at`, so a finish sent later shows the right day), but not
+    before shopping started nor after `now`."""
     started_at = shopping_list.shopping_started_at
     shopping_list.status = "done"
     shopping_list.finished_at = min(at if started_at is None else max(at, started_at), now)
 
 
 def reopen(shopping_list: ShoppingList) -> None:
-    """Back to shopping (SHOP-06); it leaves the history until it is finished again."""
+    """Back to shopping (SHOP-06); it is no longer done until it is finished again."""
     shopping_list.status = "shopping"
     shopping_list.finished_at = None

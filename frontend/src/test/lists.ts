@@ -252,39 +252,93 @@ export function listSummary(
   };
 }
 
-export const MY_LISTS: Schemas['ListSummary'][] = [
-  listSummary({ shared_with_partner: true }),
+/**
+ * One row of every kind in my feed (UI-02), newest created first. I am Anna, in a couple with Ben;
+ * Carl's lists are public.
+ */
+export const FEED_LISTS: Schemas['ListSummary'][] = [
+  // My shared list, being shopped.
+  listSummary({ status: 'shopping', shared_with_partner: true }),
+  // My own draft.
+  listSummary({
+    id: 'list-vorrat',
+    name: 'Vorrat',
+    created_at: '2026-09-25T10:00:00Z',
+    meal_count: 1,
+    line_count: 2,
+  }),
+  // Ben's list, shared with me.
   listSummary({
     id: 'list-ben',
     name: null,
-    created_at: '2026-09-20T10:00:00Z',
+    created_at: '2026-09-24T10:00:00Z',
     owner: BEN,
     is_owner: false,
     shared_with_partner: true,
     meal_count: 1,
     line_count: 1,
   }),
-];
-
-export const OTHERS_LISTS: Schemas['ListSummary'][] = [
+  // Ben's unshared list: read-only.
+  listSummary({
+    id: 'list-ben-private',
+    name: 'Party',
+    created_at: '2026-09-23T10:00:00Z',
+    owner: BEN,
+    is_owner: false,
+    can_edit: false,
+    meal_count: 4,
+    line_count: 12,
+  }),
+  // Carl's public list: read-only.
   listSummary({
     id: 'list-carl',
     name: 'Grillabend',
+    created_at: '2026-09-22T10:00:00Z',
     owner: CARL,
     is_owner: false,
     can_edit: false,
     meal_count: 2,
     line_count: 7,
   }),
+  // My done list.
+  listSummary({
+    id: 'list-done',
+    name: 'Salatabend',
+    status: 'done',
+    created_at: '2026-09-19T10:00:00Z',
+    finished_at: '2026-09-20T17:00:00Z',
+    meal_count: 1,
+    line_count: 4,
+  }),
+  // Carl's done list: read-only as well.
+  listSummary({
+    id: 'list-carl-done',
+    name: 'Vorrat',
+    status: 'done',
+    created_at: '2026-09-12T10:00:00Z',
+    finished_at: '2026-09-13T09:00:00Z',
+    owner: CARL,
+    is_owner: false,
+    can_edit: false,
+    meal_count: 1,
+    line_count: 3,
+  }),
 ];
+
+/** A page of the list feed: the last one unless `nextCursor` asks for another. */
+export function feedPage(
+  lists: Schemas['ListSummary'][],
+  nextCursor: string | null = null,
+): Schemas['ListFeedPage'] {
+  return { lists, next_cursor: nextCursor };
+}
 
 /** Answers for the reference data, users and meals the list screens load. */
 export const LIST_ROUTES: Record<string, unknown> = {
   ...MEAL_ROUTES,
   'GET /api/categories': CATEGORIES,
   'GET /api/users/visible': [ME, BEN, CARL],
-  'GET /api/lists?scope=mine': MY_LISTS,
-  'GET /api/lists?scope=others': OTHERS_LISTS,
+  'GET /api/lists': feedPage(FEED_LISTS),
   [`GET /api/lists/${LIST_ID}`]: listDetail(),
   'GET /api/meals/recent': [],
 };

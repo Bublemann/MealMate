@@ -1,6 +1,7 @@
 import { Check, CircleCheck, Pencil, ShoppingBasket } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import { InitialMarker } from '@/components/InitialMarker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,14 +21,7 @@ import { testIds } from '@/testIds';
 import { shoppingOps, stampOp } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { ExtraItemInput } from './ExtraItemInput';
-import {
-  groupByCategory,
-  initialOf,
-  lineAmount,
-  lineLabel,
-  needsMoreTexts,
-  reminderText,
-} from './format';
+import { groupByCategory, lineAmount, lineLabel, needsMoreTexts, reminderText } from './format';
 import { ListMeals } from './ListMeals';
 import { Reminder } from './Reminder';
 
@@ -360,14 +354,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
         </span>
         {checkedBy && (
           <>
-            <span
-              data-testid={testIds.lineCheckedBy}
-              aria-hidden="true"
-              title={userLabel(t, checkedBy)}
-              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground"
-            >
-              {initialOf(checkedBy.display_name)}
-            </span>
+            <InitialMarker user={checkedBy} decorative testId={testIds.lineCheckedBy} />
             <span className="sr-only">
               {t('lists.shop.checkedBy', { name: userLabel(t, checkedBy) })}
             </span>

@@ -187,9 +187,12 @@ async def test_ending_a_couple(
     assert meal_states(body) == [("Brot", False, None), ("Suppe", False, None)]
     assert (await detail(api, carl, carls_list["id"]))["shared_with_partner"] is False
     # Each keeps their own lists; the other's are now only public ones, read-only.
-    assert [item["id"] for item in await summaries(api, anna)] == [annas_list["id"]]
-    others = await summaries(api, anna, scope="others")
-    assert {item["id"] for item in others} == {bens_list["id"], carls_list["id"]}
+    feed = {item["id"]: (item["is_owner"], item["can_edit"]) for item in await summaries(api, anna)}
+    assert feed == {
+        annas_list["id"]: (True, True),
+        bens_list["id"]: (False, False),
+        carls_list["id"]: (False, False),
+    }
     response = await api.patch(
         f"/api/lists/{bens_list['id']}", json={"name": "x"}, headers=anna.headers
     )
@@ -263,7 +266,8 @@ async def test_deleting_a_user(
         body = await detail(api, user, shopping_list["id"])
         assert meal_states(body) == [(None, True, "deleted")]
         assert lines(body) == {"Mehl": ([(100, "g")], False)}
-    assert {item["id"] for item in await summaries(api, anna)} == {shared["id"], annas_list["id"]}
+    feed = {item["id"]: item["is_owner"] for item in await summaries(api, anna)}
+    assert feed == {shared["id"]: True, annas_list["id"]: True, carls_list["id"]: False}
     assert await scalars(app, select(Meal.name)) == ["Brot"]
     assert (await api.post(f"/api/lists/{shared['id']}/copy", headers=anna.headers)).json()[
         "left_out"

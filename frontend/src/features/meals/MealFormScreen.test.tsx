@@ -554,7 +554,7 @@ describe('MealFormScreen (edit)', () => {
         'POST /api/meals': Response.json(bareMeal({ name: 'Suppe' }), { status: 201 }),
         [`POST ${LIST}/meals`]: listDetail(),
         [`GET ${LIST}`]: listDetail(),
-        'GET /api/lists?scope=mine': [],
+        'GET /api/lists': { lists: [], next_cursor: null },
         ...routes,
       });
     }

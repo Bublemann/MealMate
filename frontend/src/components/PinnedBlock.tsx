@@ -18,6 +18,8 @@ interface NewTileProps {
   /** "Neue Zutat", or "„Quitten“ anlegen" while a search text is present. */
   label: string;
   onClick: () => void;
+  /** E.g. "Neue Liste" offline: creating it needs the server (UI-02). */
+  disabled?: boolean;
   testId: TestId;
 }
 
@@ -83,11 +85,12 @@ function SearchField({ label, placeholder, value, onChange, testId }: SearchFiel
 }
 
 /** Shaped like a row of the tab's list, in the primary green; a long name wraps. */
-function NewTile({ label, onClick, testId }: NewTileProps) {
+function NewTile({ label, onClick, disabled = false, testId }: NewTileProps) {
   return (
     <Button
       data-testid={testId}
       onClick={onClick}
+      disabled={disabled}
       className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.75em] text-left text-[1em]"
     >
       <Plus aria-hidden="true" className="size-[1.25em]" />
