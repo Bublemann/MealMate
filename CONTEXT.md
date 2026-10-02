@@ -66,7 +66,7 @@ A list owned by one user, built from meals (each with a chosen number of serving
 _Avoid_: cart, list (on its own, where it could mean any list)
 
 **Owner**:
-The user who created a shopping list or meal. Ownership never moves to another user; copying creates a new item with a new owner.
+The user who created a shopping list or meal. Ownership stays with them, with one exception: when a user is deleted, the lists they share with their partner move to the partner. Copying creates a new item with a new owner.
 _Avoid_: creator, author
 
 **Shared list**:
@@ -78,7 +78,7 @@ Another user's shopping list that one can see but not edit: the public list of s
 _Avoid_: others' list, foreign list
 
 **User filter**:
-A user's saved choice of whose meals, and separately whose shopping lists, they see, including their own and their partner's. It follows them across devices.
+A user's saved choice of whose meals, and separately whose shopping lists, they see. It follows them across devices.
 _Avoid_: person filter, user chips, meal chips, list chips
 
 **Draft**:
