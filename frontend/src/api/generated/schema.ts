@@ -1240,9 +1240,10 @@ export interface paths {
         /**
          * List Meals
          * @description The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
-         *     and cuisines ignoring case and umlauts. Without `owner_ids`, owners you switched off in your
-         *     filter chips (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those
-         *     owners' meals are listed.
+         *     and cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal
+         *     matches if its cuisine is any of the given ones and it has every given tag. Without
+         *     `owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are
+         *     left out; with `owner_ids` (repeatable), only those owners' meals are listed.
          */
         get: operations["list_meals"];
         put?: never;
@@ -1288,7 +1289,7 @@ export interface paths {
         /**
          * List Meal Tags
          * @description The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no
-         *     limit and ignores your filter chips.
+         *     limit; your user filter on Meals doesn't narrow it.
          */
         get: operations["list_meal_tags"];
         put?: never;
@@ -5342,8 +5343,8 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
-                cuisine_id?: string | null;
-                tag_id?: string | null;
+                cuisine_id?: string[] | null;
+                tag_id?: string[] | null;
                 owner_ids?: string[] | null;
             };
             header?: never;

@@ -57,6 +57,19 @@ def based_on_text(name: str, owner: str) -> str:
     return text("meals.detail.basedOn").replace("<mealLink/>", name).replace("<owner/>", owner)
 
 
+def open_user_filter(page: Page) -> Locator:
+    """Opens the filter panel on Meals and returns its user filter (MEAL-10)."""
+    page.get_by_test_id(TEST_IDS["filterButton"]).click()
+    panel = page.get_by_role("dialog", name=text("filter.title"))
+    return panel.get_by_role("group", name=text("meals.filter.users"), exact=True)
+
+
+def close_filter_panel(page: Page) -> None:
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+    panel.get_by_role("button", name=text("filter.done"), exact=True).click()
+    expect(panel).to_be_hidden()
+
+
 def soup(api: Api, owner: Account, tag: str) -> dict[str, Any]:
     """A public meal of `owner` with one ingredient row."""
     lentils = api.create_ingredient(owner, f"Linsen {tag}", nutrients={"kcal": 350})
@@ -93,15 +106,16 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
 
     page.goto("/meals")
     expect(page.get_by_test_id(TEST_IDS["screenMeals"])).to_be_visible()
-    # "New meal", or the empty state's action while the member sees no meals yet.
-    create = re.compile(
-        f"^({re.escape(text('meals.new'))}|{re.escape(text('meals.empty.action'))})$"
-    )
-    page.get_by_role("button", name=create).click()
-    expect(page).to_have_url(re.compile(r"/meals/new$"))
+    # The "New meal" tile offers to create what was searched for, with that name (MEAL-09).
+    tile = page.get_by_test_id(TEST_IDS["newMeal"])
+    expect(tile).to_have_accessible_name(text("meals.new"))
+    page.get_by_test_id(TEST_IDS["mealSearch"]).fill(name)
+    expect(tile).to_have_accessible_name(text("meals.createNamed", name=name))
+    tile.click()
+    expect(page).to_have_url(re.compile(r"/meals/new\?name="))
 
     form = page.get_by_test_id(TEST_IDS["mealForm"])
-    form.get_by_label(text("meals.field.name"), exact=True).fill(name)
+    expect(form.get_by_label(text("meals.field.name"), exact=True)).to_have_value(name)
     form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True).click()
     expect(form.get_by_label(text("meals.field.servings"), exact=True)).to_have_value("2")
     add_row(page, flour["name"], "200", "g")
@@ -204,7 +218,8 @@ def test_private_meals_are_hidden_except_from_the_partner(
     invite_user: Callable[..., Account],
     make_couple: Callable[[Account, Account], None],
 ) -> None:
-    """Journey 9 (VIS-02, CPL-04, MEAL-10): "meals public" off hides meals and chip."""
+    """Journey 9 (VIS-02, CPL-04, MEAL-10): "meals public" off hides the meals and the user in
+    the user filter."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     partner = invite_user(unique("paul"), unique("Paul"))
@@ -214,11 +229,12 @@ def test_private_meals_are_hidden_except_from_the_partner(
     # Carl's own meal: his list is never empty, whatever other tests left in the database.
     own = api.create_meal(carl, f"Eintopf {tag}")
 
-    # Carl sees Anna's meal and her chip.
+    # Carl sees Anna's meal, and her in the user filter, ticked.
     sign_in(page.context, carl)
     page.goto("/meals")
-    chips = page.get_by_test_id(TEST_IDS["mealUserChips"])
-    expect(chips.get_by_role("button", name=anna.display_name, exact=True)).to_be_visible()
+    users = open_user_filter(page)
+    expect(users.get_by_role("checkbox", name=anna.display_name, exact=True)).to_be_checked()
+    close_filter_panel(page)
     page.get_by_test_id(TEST_IDS["mealSearch"]).fill(tag)
     cards = page.get_by_test_id(TEST_IDS["mealList"]).get_by_test_id(TEST_IDS["mealCard"])
     expect(cards).to_have_count(2)
@@ -235,11 +251,13 @@ def test_private_meals_are_hidden_except_from_the_partner(
     expect(switch).not_to_be_checked()
     expect(switch).to_be_enabled()
 
-    # Carl no longer sees the meal, the chip or the meal's page.
+    # Carl no longer sees the meal, her in the user filter or the meal's page.
     page.reload()
     expect(page.get_by_test_id(TEST_IDS["screenMeals"])).to_be_visible()
-    expect(chips.get_by_role("button", name=text("meals.chips.me"), exact=True)).to_be_visible()
-    expect(chips.get_by_role("button", name=anna.display_name, exact=True)).to_have_count(0)
+    users = open_user_filter(page)
+    expect(users.get_by_role("checkbox", name=text("filter.me"), exact=True)).to_be_checked()
+    expect(users.get_by_role("checkbox", name=anna.display_name, exact=True)).to_have_count(0)
+    close_filter_panel(page)
     page.get_by_test_id(TEST_IDS["mealSearch"]).fill(tag)
     expect(cards).to_have_count(1)
     expect(cards).to_contain_text(own["name"])
@@ -254,5 +272,7 @@ def test_private_meals_are_hidden_except_from_the_partner(
     partner_detail = partner_page.get_by_test_id(TEST_IDS["screenMeal"])
     expect(partner_detail.get_by_role("heading", level=1)).to_have_text(meal["name"])
     partner_page.goto("/meals")
-    partner_chips = partner_page.get_by_test_id(TEST_IDS["mealUserChips"])
-    expect(partner_chips.get_by_role("button", name=anna.display_name, exact=True)).to_be_visible()
+    partner_users = open_user_filter(partner_page)
+    expect(
+        partner_users.get_by_role("checkbox", name=anna.display_name, exact=True)
+    ).to_be_checked()

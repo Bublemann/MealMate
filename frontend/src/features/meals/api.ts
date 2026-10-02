@@ -7,7 +7,6 @@ import {
 } from '@tanstack/react-query';
 import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components, paths } from '@/api/generated/schema';
-import { useAuthSession, useCurrentUser } from '@/features/auth/context';
 import { photoFormData, preparePhoto } from './photo';
 
 export type Meal = components['schemas']['Meal'];
@@ -19,31 +18,33 @@ export type MealIngredientInput = components['schemas']['MealIngredientInput'];
 export type MealNutrition = components['schemas']['MealNutrition'];
 export type MealNutritionMissing = components['schemas']['MealNutritionMissing'];
 export type Tag = components['schemas']['Tag'];
-export type UserRef = components['schemas']['UserRef'];
 
 type PhotoUpload = NonNullable<
   paths['/api/meals/{meal_id}/photo']['put']['requestBody']
 >['content']['multipart/form-data'];
 
-/** The Meals tab's search and filters; empty values mean "any". */
+/**
+ * The Meals tab's search and filters (MEAL-09): a meal in any of `cuisineIds` that has every one
+ * of `tagIds`; empty values mean "any".
+ */
 export interface MealFilters {
   q: string;
-  cuisineId: string;
-  tagId: string;
+  cuisineIds: readonly string[];
+  tagIds: readonly string[];
 }
 
 const MEALS_KEY = ['meals'] as const;
-const LIST_KEY = [...MEALS_KEY, 'list'] as const;
+/** Every search of the meals: the user filter on Meals loads them again once it is saved. */
+export const MEAL_SEARCH_KEY = [...MEALS_KEY, 'list'] as const;
 const detailKey = (id: string) => [...MEALS_KEY, 'detail', id] as const;
 const MEAL_TAGS_KEY = [...MEALS_KEY, 'tags'] as const;
 const TAGS_KEY = ['reference', 'tags'] as const;
-const VISIBLE_USERS_KEY = ['users', 'visible', 'meals'] as const;
 
 /** Photos can be large and phone uploads slow: more time than the default for writes. */
 export const PHOTO_UPLOAD_TIMEOUT_MS = 60_000;
 
 function invalidateLists(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+  void queryClient.invalidateQueries({ queryKey: MEAL_SEARCH_KEY });
 }
 
 /** A meal was saved, copied or deleted: its tags may be new, or no longer used anywhere. */
@@ -60,17 +61,17 @@ function remember(queryClient: QueryClient, meal: Meal) {
 }
 
 /**
- * The visible meals matching the filters, A–Z (MEAL-09). The server leaves out the owners whose
- * chip is switched off (MEAL-10). The previous result stays while the next one loads.
+ * The visible meals matching the filters, A–Z (MEAL-09). The server leaves out the owners the user
+ * filter on Meals hides (MEAL-10). The previous result stays while the next one loads.
  */
-export function useMeals({ q, cuisineId, tagId }: MealFilters) {
+export function useMeals({ q, cuisineIds, tagIds }: MealFilters) {
   const query = {
     ...(q.trim() ? { q: q.trim() } : {}),
-    ...(cuisineId ? { cuisine_id: cuisineId } : {}),
-    ...(tagId ? { tag_id: tagId } : {}),
+    ...(cuisineIds.length ? { cuisine_id: [...cuisineIds] } : {}),
+    ...(tagIds.length ? { tag_id: [...tagIds] } : {}),
   };
   return useQuery({
-    queryKey: [...LIST_KEY, query],
+    queryKey: [...MEAL_SEARCH_KEY, query],
     queryFn: ({ signal }) => unwrap(api.GET('/api/meals', { params: { query }, signal })),
     placeholderData: keepPreviousData,
   });
@@ -168,67 +169,6 @@ export function useDeleteMealPhoto() {
       unwrap(api.DELETE('/api/meals/{meal_id}/photo', { params: { path: { meal_id: mealId } } })),
     onSuccess: (_, mealId) => {
       void queryClient.invalidateQueries({ queryKey: detailKey(mealId) });
-      invalidateLists(queryClient);
-    },
-  });
-}
-
-/** Everyone whose meals the user can see, the user first (MEAL-10, VIS-02). */
-export function useMealUsers() {
-  return useQuery({
-    queryKey: VISIBLE_USERS_KEY,
-    queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/users/visible', { params: { query: { for: 'meals' } }, signal })),
-  });
-}
-
-/**
- * The saves of `filter_hidden` from the meal and list chips (MEAL-10, UI-02): they run one after
- * another, as each sends both lists of hidden users.
- */
-export const FILTER_HIDDEN_KEY = ['me', 'filter-hidden'] as const;
-
-/**
- * Switches a user's meal chip (MEAL-10). The chip changes at once (optimistic), the choice is
- * saved on the server in `filter_hidden.meals` so it follows the user to other devices, and the
- * meals load again once it is saved. Toggles run one after another, each sending the whole list;
- * the saved state only replaces the chips once no other toggle is waiting, as it doesn't know
- * those yet. When saving fails, the profile and meals are loaded again: going back to a snapshot
- * could undo a toggle queued after the failed one.
- */
-export function useToggleMealChip() {
-  const session = useAuthSession();
-  const user = useCurrentUser();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationKey: FILTER_HIDDEN_KEY,
-    scope: { id: FILTER_HIDDEN_KEY.join('-') },
-    mutationFn: (hidden: string[]) =>
-      unwrap(
-        api.PATCH('/api/me', {
-          body: {
-            filter_hidden: {
-              meals: hidden,
-              lists: session.getState().user?.filter_hidden.lists ?? [],
-            },
-          },
-        }),
-      ),
-    onMutate: (hidden) => {
-      const current = session.getState().user ?? user;
-      session.setUser({ ...current, filter_hidden: { ...current.filter_hidden, meals: hidden } });
-    },
-    onError: async () => {
-      invalidateLists(queryClient);
-      try {
-        session.setUser(await unwrap(api.GET('/api/me')));
-      } catch {
-        // Offline: the chips stay as they are until the next successful load.
-      }
-    },
-    onSuccess: (me) => {
-      // This save still counts as running here.
-      if (queryClient.isMutating({ mutationKey: FILTER_HIDDEN_KEY }) <= 1) session.setUser(me);
       invalidateLists(queryClient);
     },
   });

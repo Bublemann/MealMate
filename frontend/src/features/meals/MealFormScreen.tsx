@@ -42,9 +42,11 @@ export function MealFormScreen() {
   const [params] = useSearchParams();
   const addToList = params.get('addToList');
   if (id) return <EditMeal key={id} id={id} />;
+  // From the "New meal" tile while searching (MEAL-09): the searched name is filled in.
+  const name = params.get('name')?.trim() ?? '';
   // From the meal picker (LIST-03): the new meal goes onto that list, and back there. Only a list
   // id goes into the paths; anything else in the URL is ignored.
-  return addToList && isUuid(addToList) ? <MealFormView addToList={addToList} /> : <MealFormView />;
+  return <MealFormView addToList={addToList && isUuid(addToList) ? addToList : ''} name={name} />;
 }
 
 function EditMeal({ id }: { id: string }) {
@@ -70,7 +72,14 @@ function EditMeal({ id }: { id: string }) {
   return <MealFormView meal={meal.data} />;
 }
 
-function MealFormView({ meal, addToList = '' }: { meal?: Meal; addToList?: string }) {
+interface MealFormViewProps {
+  meal?: Meal;
+  addToList?: string;
+  /** A new meal's name to start with. */
+  name?: string;
+}
+
+function MealFormView({ meal, addToList = '', name = '' }: MealFormViewProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const navigate = useNavigate();
@@ -80,7 +89,7 @@ function MealFormView({ meal, addToList = '' }: { meal?: Meal; addToList?: strin
   const deletePhoto = useDeleteMealPhoto();
   const addToListMeal = useAddListMeal(addToList);
   const mutation = meal ? update : create;
-  const [values, setValues] = useState<FormValues>(() => initialValues(meal, language));
+  const [values, setValues] = useState<FormValues>(() => initialValues(meal, language, name));
   const [photo, setPhoto] = useState<PhotoChange>({ kind: 'keep' });
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
