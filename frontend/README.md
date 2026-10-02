@@ -450,7 +450,9 @@ aren't deleted, without _Uncategorized_.
 2. register it in `src/i18n/index.ts`: add the code to `LANGUAGES`, its own name to
    `LANGUAGE_NAMES` and the file to `resources`;
 3. add its `Intl` locale to `LOCALES` in `src/i18n/format.ts`;
-4. add the language to the backend's `language` enum (users store their choice, from M2 on).
+4. add the language to the backend's `language` enum (users store their choice, from M2 on);
+5. add its category name field to the category dialog (`features/admin/AdminCategoriesScreen.tsx`,
+   with its path in `NAME_PATHS`); the backend's side is in `CONTRIBUTING.md`.
 
 ## Icons
 

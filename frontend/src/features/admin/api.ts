@@ -123,8 +123,17 @@ export function useReorderCategories() {
   const queryClient = useQueryClient();
   return useMutation({
     scope: CATEGORIES_SCOPE,
-    mutationFn: (categoryIds: string[]) =>
-      unwrap(api.PUT('/api/admin/categories/order', { body: { category_ids: categoryIds } })),
+    mutationFn: (categoryIds: string[]) => {
+      // A category added after the tap was saved before this order (the scope): it stays last.
+      const added = (queryClient.getQueryData<Category[]>(CATEGORIES_KEY) ?? [])
+        .map(({ id }) => id)
+        .filter((id) => !categoryIds.includes(id));
+      return unwrap(
+        api.PUT('/api/admin/categories/order', {
+          body: { category_ids: [...categoryIds, ...added] },
+        }),
+      );
+    },
     onSuccess: async (categories) => {
       // A reload after an earlier failure must not overwrite this newer order.
       await queryClient.cancelQueries({ queryKey: CATEGORIES_KEY });
@@ -145,7 +154,9 @@ export function useCreateCategory() {
     scope: CATEGORIES_SCOPE,
     mutationFn: (names: CategoryNames) =>
       unwrap(api.POST('/api/admin/categories', { body: { names } })),
-    onSuccess: (category) => {
+    onSuccess: async (category) => {
+      // A reload after a failed order must not overwrite the new category.
+      await queryClient.cancelQueries({ queryKey: CATEGORIES_KEY });
       queryClient.setQueryData<Category[]>(
         CATEGORIES_KEY,
         (categories) => categories && [...categories, category],
@@ -167,7 +178,9 @@ export function useRenameCategory(categoryId: string) {
           body: { names },
         }),
       ),
-    onSuccess: (category) => {
+    onSuccess: async (category) => {
+      // A reload after a failed order must not overwrite the new names.
+      await queryClient.cancelQueries({ queryKey: CATEGORIES_KEY });
       queryClient.setQueryData<Category[]>(CATEGORIES_KEY, (categories) =>
         categories?.map((existing) => (existing.id === category.id ? category : existing)),
       );

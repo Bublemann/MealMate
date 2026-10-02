@@ -12,7 +12,7 @@ type Category = components['schemas']['Category'];
 async function reordered(request: Request) {
   const { category_ids } = (await request.json()) as { category_ids: string[] };
   return category_ids.map((id, index) => ({
-    ...CATEGORIES.find((category) => category.id === id),
+    ...[...CATEGORIES, CHEESE_COUNTER].find((category) => category.id === id),
     sort_order: index,
   }));
 }
@@ -161,6 +161,45 @@ describe('AdminCategoriesScreen', () => {
       'cat-dairy_eggs',
       'cat-cheese',
     ]);
+  });
+
+  it('names a category still being added in an order tapped meanwhile (REF-01)', async () => {
+    let answerAdd: (() => void) | undefined;
+    const { fetchMock, user } = renderCategories({
+      'POST /api/admin/categories': async () => {
+        await new Promise<void>((resolve) => (answerAdd = resolve));
+        return Response.json(CHEESE_COUNTER, { status: 201 });
+      },
+    });
+    await screen.findByTestId(testIds.adminCategoryList);
+    await user.click(screen.getByTestId(testIds.newCategory));
+    const dialog = await screen.findByRole('dialog', { name: 'New category' });
+    await user.type(within(dialog).getByLabelText('Name in German'), 'Käsetheke');
+    await user.type(within(dialog).getByLabelText('Name in English'), 'Cheese counter');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(answerAdd).toBeDefined());
+
+    // Closed before the new category is saved, then a move: it waits for the new category.
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Move Other up' }));
+    expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(0);
+    act(() => answerAdd?.());
+
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(1),
+    );
+    expect(await sentOrders(fetchMock)).toEqual([
+      ['cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-other', 'cat-cheese', 'cat-cheese-counter'],
+    ]);
+    await waitFor(() =>
+      expect(names()).toEqual([
+        '1Fruit & vegetables',
+        '2Dairy & eggs',
+        '3Other',
+        '4Cheese',
+        '5Cheese counter',
+      ]),
+    );
   });
 
   it('puts the order back and says why when saving fails', async () => {
