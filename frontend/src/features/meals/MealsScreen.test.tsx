@@ -590,7 +590,7 @@ describe('MealsScreen', () => {
     );
   });
 
-  it('forgets a ticked tag once no meal I can see has it any more (MEAL-09)', async () => {
+  it('stops filtering by a ticked tag once no meal I can see has it (MEAL-09)', async () => {
     let tags = TAGS;
     const { queryClient, user } = renderMeals({ 'GET /api/meals/tags': () => tags });
     await screen.findByTestId(testIds.mealList);
