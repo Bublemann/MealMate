@@ -148,9 +148,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   ING-03); Meals the user filter (MEAL-10), the cuisines (any of them) and the tags (all of them,
   MEAL-09). The user filter is `useUserFilterGroup` (`features/userFilter/`), one checkbox per
   user whose meals or lists are visible, "Me" first; each change is saved on the server at once
-  and loads the narrowed query again, and the screen hides an unticked user's rows right away. At
-  the largest text sizes the options and buttons wrap and the panel scrolls, its buttons staying
-  in view.
+  and loads the narrowed query again, and the screen hides an unticked user's rows right away. The
+  meal picker ignores it: `usePickerMeals` asks for the meals of everyone visible, under a query
+  key of its own (MEAL-09). At the largest text sizes the options and buttons wrap and the panel
+  scrolls, its buttons staying in view.
 - **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
   `InitialMarker`, a round marker with the owner's initial, one's own rows included; screen readers
   read it as the owner's full name. Meal rows put it after the name, so the meal is read first.

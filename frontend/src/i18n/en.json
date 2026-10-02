@@ -348,7 +348,6 @@
   "meals.filter.tags": "Tags",
   "meals.filter.users": "Meals by",
   "meals.listLabel": "Meals",
-  "meals.card.by": "by {{name}}",
   "meals.form.createTitle": "New meal",
   "meals.form.editTitle": "Edit {{name}}",
   "meals.form.create": "Create meal",

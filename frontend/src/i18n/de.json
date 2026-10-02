@@ -348,7 +348,6 @@
   "meals.filter.tags": "Tags",
   "meals.filter.users": "Gerichte von",
   "meals.listLabel": "Gerichte",
-  "meals.card.by": "von {{name}}",
   "meals.form.createTitle": "Neues Gericht",
   "meals.form.editTitle": "{{name}} bearbeiten",
   "meals.form.create": "Gericht anlegen",
