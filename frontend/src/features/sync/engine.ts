@@ -68,6 +68,16 @@ function summaryOf(list: ListDetail) {
   };
 }
 
+/**
+ * The order of the list feed (UI-02): newest created first, ties by id. The times are compared as
+ * times: the server writes fractions of a second only when there are any.
+ */
+function newestCreatedFirst(a: ListDetail, b: ListDetail): number {
+  const byTime = Date.parse(b.created_at) - Date.parse(a.created_at);
+  if (byTime !== 0) return byTime;
+  return a.id === b.id ? 0 : a.id < b.id ? 1 : -1;
+}
+
 /** Whether a list belongs in the local copy: editable, and a draft or being shopped (SYNC-02). */
 function belongsInCopy(list: ListDetail): boolean {
   return list.can_edit && list.status !== 'done';
@@ -427,7 +437,7 @@ export class SyncEngine {
     if (this.syncedAt === null) return undefined;
     return [...this.copy.values()]
       .map((entry) => entry.detail)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
+      .sort(newestCreatedFirst)
       .map(summaryOf);
   }
 

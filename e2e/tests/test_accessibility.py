@@ -152,8 +152,8 @@ def test_no_serious_violations(
         api.start_shopping(account, done["id"])
         api.finish_list(account, done["id"])
         # The admin's lists are public: one shows as a read-only list, with a lock.
-        others = api.create_list(request.getfixturevalue("admin"), unique("A11y others"))
-        feed_lists = [draft["name"], done["name"], others["name"]]
+        read_only = api.create_list(request.getfixturevalue("admin"), unique("A11y read-only"))
+        feed_lists = [draft["name"], done["name"], read_only["name"]]
     if path == "/lists/:id":
         api = request.getfixturevalue("api")
         onions = api.create_ingredient(

@@ -134,9 +134,10 @@ describe('ListsScreen', () => {
     expect(rows[6]).toHaveAttribute('href', '/lists/list-carl-done');
   });
 
-  it('does not say "shared" without a partner', async () => {
+  it('marks my shared list at once and names the partner once the couple is known', async () => {
+    const couple = heldRoute();
     renderLists({
-      'GET /api/couple': { ...IN_COUPLE, partner: null, since: null },
+      'GET /api/couple': couple.route,
       'GET /api/lists': feedPage([listSummary({ shared_with_partner: true })]),
     });
 
@@ -146,8 +147,12 @@ describe('ListsScreen', () => {
     expect(rowOf(row!)).toEqual({
       owner: 'Anna',
       text: 'Wochenende (26/09/2026)3 meals · 5 items',
-      icons: [],
+      icons: ['Shared'],
     });
+    await couple.answer(IN_COUPLE);
+    await waitFor(() =>
+      expect(rowOf(row!).text).toBe('Wochenende (26/09/2026)3 meals · 5 items · Shared with Ben'),
+    );
   });
 
   it('loads the next 30 lists when the end of the feed comes into view (UI-02)', async () => {

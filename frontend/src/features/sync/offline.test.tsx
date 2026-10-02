@@ -4,7 +4,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import { CATEGORIES } from '@/test/ingredients';
 import { FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listDetail, shoppingList } from '@/test/lists';
 import { renderApp } from '@/test/render';
@@ -117,12 +117,13 @@ describe('lists from the local copy (SYNC-09)', () => {
     const storage = await storeCopy(
       listDetail({ name: 'Vorrat', created_at: '2026-09-20T10:00:00Z' }),
     );
-    await storage.putList({
-      id: 'list-two',
-      userId: TEST_USER.id,
-      detail: listDetail({ id: 'list-two', name: 'Grillen', updated_at: '2026-09-20T11:00:00Z' }),
-      storedAt: 1_000,
-    });
+    for (const detail of [
+      listDetail({ id: 'list-two', name: 'Grillen', updated_at: '2026-09-20T11:00:00Z' }),
+      // A quarter of a second later than "Grillen": the server writes fractions only if any.
+      listDetail({ id: 'list-three', name: 'Brunch', created_at: '2026-09-26T10:00:00.25Z' }),
+    ]) {
+      await storage.putList({ id: detail.id, userId: TEST_USER.id, detail, storedAt: 1_000 });
+    }
     // Online, but the server is slow: the copy shows first (SYNC-09, UI-02).
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
@@ -132,13 +133,29 @@ describe('lists from the local copy (SYNC-09)', () => {
     const copied = within(await screen.findByTestId(testIds.listFeed)).getAllByTestId(
       testIds.listCard,
     );
-    expect(copied).toHaveLength(2);
-    expect(copied[0]).toHaveTextContent('Grillen (26/09/2026)');
-    expect(copied[1]).toHaveTextContent('Vorrat (20/09/2026)');
+    expect(copied).toHaveLength(3);
+    expect(copied[0]).toHaveTextContent('Brunch (26/09/2026)');
+    expect(copied[1]).toHaveTextContent('Grillen (26/09/2026)');
+    expect(copied[2]).toHaveTextContent('Vorrat (20/09/2026)');
     await feed.answer(feedPage(FEED_LISTS));
     await waitFor(() =>
       expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
     );
+  });
+
+  it('says why the feed did not load while it shows the copy', async () => {
+    await storeCopy(listDetail({ name: 'Vorrat' }));
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent('Vorrat (26/09/2026)');
+
+    await feed.answer(errorResponse(503, 'common.service_unavailable'));
+
+    expect(
+      await screen.findByText('MealMate is unavailable right now. Please try again later.'),
+    ).toBeVisible();
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Vorrat (26/09/2026)');
   });
 
   it('leaves out a list finished here whose *Finish* waits to be sent', async () => {

@@ -112,6 +112,8 @@ function ListFeed() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* E.g. the first page failed while the copy is shown; offline the sync notice says it. */}
+      <LoadError error={connected && !feed.isFetchNextPageError ? feed.error : null} />
       <ul
         data-testid={testIds.listFeed}
         aria-label={t('lists.feedLabel')}
@@ -181,13 +183,13 @@ function ListRow({ list }: { list: ListSummary }) {
   const { t } = useTranslation();
   const language = useLanguage();
   const partner = useCouple().data?.partner;
-  // My list with a partner to share it with, or my partner's that I may change.
-  const shared = list.is_owner ? list.shared_with_partner && !!partner : list.can_edit;
+  // My list shared with my partner, or my partner's that I may change.
+  const shared = list.is_owner ? list.shared_with_partner : list.can_edit;
   const details = [
     t('lists.card.meals', { count: list.meal_count }),
     t('lists.card.items', { count: list.line_count }),
     list.is_owner
-      ? shared
+      ? shared && partner
         ? t('lists.card.sharedWith', { name: userLabel(t, partner) })
         : null
       : t(shared ? 'lists.card.sharedBy' : 'lists.card.by', { name: userLabel(t, list.owner) }),

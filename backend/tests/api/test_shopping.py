@@ -765,7 +765,7 @@ async def test_done_lists_stay_in_the_feed(
             for item in await summaries(api, user)
         ]
 
-    # Newest created first, done lists in their place, others' done lists read-only.
+    # Newest created first, done lists in their place; another user's done list is read-only.
     assert await feed(anna) == [
         ("Unterwegs", "shopping", True, True),
         ("Entwurf", "draft", True, True),
