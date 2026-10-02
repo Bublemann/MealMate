@@ -10,7 +10,8 @@ Merging rules (AGG-03), deliberately simple:
    pieces and spoons stay a volume, nothing is converted;
 3. otherwise every part is converted strictly (no 1 g/ml estimate) to the ingredient's base
    unit where its attributes allow it; the others stay in their own kind's segment, so
-   "500 g + 2 Stk." appears only while the ingredient has no piece weight.
+   "500 g + 2 Stk." appears while a g ingredient has no piece weight, and always beside the
+   pieces of a `piece` ingredient, which takes nothing but pieces (`units.convert`).
 
 Sums use `math.fsum`, so they do not depend on the order of the parts (AGG-05).
 

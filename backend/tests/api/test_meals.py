@@ -395,6 +395,60 @@ async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
     assert meal["ingredients"][2]["ingredient"]["brand"] == "Barilla"
 
 
+async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) -> None:
+    """NUT-05: pieces of a Stück ingredient, and an amount without a unit, count with the piece
+    weight against the values per 100 g. Without a piece weight they are unknown and named as
+    such; other units of a Stück ingredient can't be converted."""
+    eggs = await create_ingredient(
+        api,
+        anna,
+        "Eier",
+        base_unit="piece",
+        piece_weight_g=60,
+        nutrients=values(155, 13, 1.1, 1.1, 11),
+    )
+    rolls = await create_ingredient(
+        api, anna, "Brötchen", base_unit="piece", nutrients=values(270, 9, 50, 3, 3)
+    )
+    meal = await create_meal(
+        api,
+        anna,
+        "Frühstück",
+        servings=2,
+        ingredients=[
+            {"ingredient_id": eggs["id"], "amount": 2, "unit": "piece"},
+            {"ingredient_id": eggs["id"], "amount": 1},
+            {"ingredient_id": rolls["id"], "amount": 4, "unit": "piece"},
+            {"ingredient_id": eggs["id"], "amount": 50, "unit": "g"},
+        ],
+    )
+
+    nutrition = meal["nutrition"]
+    # 3 eggs of 60 g: 180 g.
+    assert nutrition["per_meal"] == pytest.approx(values(279, 23.4, 1.98, 1.98, 19.8))
+    assert nutrition["per_serving"] == pytest.approx(values(139.5, 11.7, 0.99, 0.99, 9.9))
+    assert (nutrition["incomplete"], nutrition["estimate"]) == (True, False)
+    assert [(item["ingredient_name"], item["reason"]) for item in nutrition["missing"]] == [
+        ("Brötchen", "no_piece_weight"),
+        ("Eier", "not_convertible"),
+    ]
+    assert [(row["amount"], row["unit"]) for row in meal["ingredients"]] == [
+        (2, "piece"),
+        (1, "piece"),
+        (4, "piece"),
+        (50, "g"),
+    ]
+
+    response = await api.patch(
+        f"/api/ingredients/{rolls['id']}", json={"piece_weight_g": 60}, headers=anna.headers
+    )
+    assert response.status_code == 200
+    nutrition = (await get_meal(api, anna, meal["id"])).json()["nutrition"]
+    # 4 rolls of 60 g: 240 g more.
+    assert nutrition["per_meal"]["kcal"] == pytest.approx(279 + 648)
+    assert [item["reason"] for item in nutrition["missing"]] == ["not_convertible"]
+
+
 async def test_unknown_values_are_listed_per_nutrient(api: AsyncClient, anna: Account) -> None:
     cream = await create_ingredient(api, anna, "Sahne", base_unit="ml", nutrients={"kcal": 300})
     meal = await create_meal(

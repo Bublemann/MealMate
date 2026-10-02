@@ -115,6 +115,13 @@ describe('MealDetailScreen', () => {
               reason: 'unknown_value',
               nutrient: null,
             },
+            {
+              ingredient_id: 'ing-z',
+              ingredient_name: 'Brötchen',
+              ingredient_brand: null,
+              reason: 'no_piece_weight',
+              nutrient: null,
+            },
           ],
         },
       }),
@@ -128,6 +135,7 @@ describe('MealDetailScreen', () => {
       'Eier: davon Zucker und Fett unbekannt',
       'Rübe: Menge lässt sich nicht umrechnen (Stückgewicht oder Dichte fehlt)',
       'Zimt: Nährwerte unbekannt',
+      'Brötchen: Gewicht pro Stück fehlt',
     ]);
     expect(screen.getByTestId(testIds.mealEstimate)).toHaveTextContent('Schätzung');
   });

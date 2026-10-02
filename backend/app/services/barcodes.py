@@ -10,22 +10,30 @@ ingredient form prefilled with it, and the user may correct values before saving
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode
-from app.domain.units import Unit
+from app.domain.units import BaseUnit, Unit
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, OffClient, OffProduct
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import users as users_repo
-from app.schemas.ingredients import BarcodeLookup, ProductProposal
+from app.schemas.ingredients import BarcodeLookup, NutritionBasisName, ProductProposal
 from app.schemas.nutrition import NutrientValues
 from app.services import ingredients
-from app.services.ingredients import base_unit_name
 from app.services.off_refresh import DEFAULT_LANGUAGE
 from app.services.principal import Principal
+
+
+def _nutrition_basis_name(basis: BaseUnit | None) -> NutritionBasisName | None:
+    match basis:
+        case None:
+            return None
+        case BaseUnit.ML:
+            return "ml"
+        case _:
+            return "g"
 
 
 def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
     """The API view of a product from Open Food Facts, named in `language` if possible."""
     pack_quantity, pack_unit = found.pack
-    basis = found.nutrition_basis
     return ProductProposal(
         barcode=barcode,
         name=found.name(language),
@@ -33,7 +41,7 @@ def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
         quantity_text=found.quantity,
         pack_quantity=pack_quantity,
         pack_unit=None if pack_unit is None else Unit(pack_unit.value),
-        nutrition_basis=None if basis is None else base_unit_name(basis.value),
+        nutrition_basis=_nutrition_basis_name(found.nutrition_basis),
         nutrients=NutrientValues.model_validate(found.nutrients),
         category_key=found.category_key,
         off_last_modified_at=found.last_modified_at,

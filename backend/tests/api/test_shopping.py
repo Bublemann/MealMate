@@ -282,6 +282,46 @@ async def test_changes_of_meals_and_ingredients_leave_shopping_lists_alone(
     assert draft["meals"][0]["name"] == "Neues Brot"
 
 
+async def test_a_piece_ingredient_is_frozen_with_its_piece_weight(
+    app: FastAPI, api: AsyncClient, anna: Account, categories: dict[str, str]
+) -> None:
+    """LIST-11: freezing copies the base unit Stück and the piece weight, and the frozen rows
+    and extra items keep calculating with them, in whole pieces (AGG-04), however the
+    ingredient changes."""
+    eggs = await create_ingredient(
+        api,
+        anna,
+        "Eier",
+        category_id=categories["dairy_eggs"],
+        base_unit="piece",
+        piece_weight_g=60,
+    )
+    meal = await create_meal(api, anna, "Rührei", ingredients=[row(eggs, 2.5, "piece")])
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    await added(api, anna, list_id, meal["id"])
+    await extra_added(api, anna, list_id, ingredient_id=eggs["id"], amount=1, unit="piece")
+
+    before = await start_shopping(api, anna, list_id)
+
+    assert line(before, "Eier")["amounts"] == [{"value": 4, "unit": "piece"}]
+    [frozen] = await scalars(app, select(ListMealIngredient))
+    assert (frozen.base_unit_snapshot, frozen.piece_weight_g_snapshot) == ("piece", 60)
+    [snapshot] = await scalars(app, select(ListExtraItem.attrs_snapshot))
+    assert (snapshot["base_unit"], snapshot["piece_weight_g"]) == ("piece", 60)
+
+    changes = {"name": "Hühnereier", "base_unit": "g"}
+    response = await api.patch(f"/api/ingredients/{eggs['id']}", json=changes, headers=anna.headers)
+    assert (response.json()["base_unit"], response.json()["piece_weight_g"]) == ("g", None)
+    assert shown(await detail(api, anna, list_id)) == shown(before)
+
+    # A checked line that needs another egg says so in pieces (LIST-12).
+    await run_ops(api, anna, list_id, check(key(eggs)))
+    body = await extra_added(api, anna, list_id, ingredient_id=eggs["id"], amount=1, unit="piece")
+    assert line(body, "Eier")["amounts"] == [{"value": 5, "unit": "piece"}]
+    assert line(body, "Eier")["needs_more"]["grown"] == [{"value": 1, "unit": "piece"}]
+
+
 async def test_two_brands_of_the_same_thing_are_two_lines(
     api: AsyncClient, anna: Account, categories: dict[str, str]
 ) -> None:

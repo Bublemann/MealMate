@@ -248,6 +248,36 @@ async def test_nutrients_on_another_basis_are_left_alone(
     assert (body["quantity_text"], body["pack_unit"]) == ("0,5 l", "ml")
 
 
+async def test_a_piece_ingredient_refreshes_its_values_per_100_g(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """Switched to Stück before saving, the proposal's values stay per 100 g (ING-02), so Open
+    Food Facts' values per 100 g go on updating them; values per 100 ml don't."""
+    product = await saved_oats(api, anna, edited=[], base_unit="piece", piece_weight_g=40)
+    assert (product["base_unit"], product["nutrients"]) == ("piece", OATS_NUTRIENTS)
+    newer = oats(nutriments={"energy-kcal_100g": 368}, last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=newer)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert body["nutrients"] == OATS_NUTRIENTS | {"kcal": 368}
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 40)
+
+    per_ml = oats(
+        product_quantity_unit="ml",
+        nutriments={"energy-kcal_100g": 50},
+        last_modified_t=modified(60),
+    )
+    route(off_api, OATS).respond(json=per_ml)
+    await refresh(app, clock, product["id"])
+    assert (await get(api, anna, product["id"]))["nutrients"]["kcal"] == 368
+
+
 async def test_lone_surrogates_are_not_stored(
     app: FastAPI,
     api: AsyncClient,

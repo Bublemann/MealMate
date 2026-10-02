@@ -150,6 +150,67 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     assert source.path.startswith("/api/media/")
 
 
+def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Account) -> None:
+    """A Stück journey (ING-02, ING-03, NUT-05, AGG-04, D-32): "Eier" counted in pieces of
+    60 g, "3 Stk." in a meal, nutrition from the piece weight, a list line in whole pieces."""
+    page = member_page
+    tag = unique("e2e")
+    name = f"Eier {tag}"
+
+    page.goto("/ingredients")
+    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
+    form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
+    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(
+        label=text("category.dairy_eggs")
+    )
+    # The weight per piece shows only for Stück.
+    piece_weight = form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)
+    expect(piece_weight).to_have_count(0)
+    form.get_by_role("radio", name=text("ingredients.baseUnit.piece"), exact=True).check()
+    piece_weight.fill("60")
+    for key, value in (("kcal", "155"), ("protein", "13"), ("carbs", "1"), ("sugar", "1"),
+                       ("fat", "11")):  # fmt: skip
+        form.get_by_label(text(f"nutrient.{key}"), exact=True).fill(value)
+    form.get_by_role("button", name=text("common.save")).click()
+
+    detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+    expect(detail.get_by_role("heading", level=1)).to_have_text(name)
+    expect(detail).to_contain_text(text("ingredients.baseUnit.piece"))
+    expect(detail).to_contain_text("60 g")
+
+    # The grey line on the Ingredients tab names the pieces.
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
+    row = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role(
+        "link", name=re.compile(f"^{re.escape(name)} ")
+    )
+    expect(row).to_contain_text(f"{text('category.dairy_eggs')} · {text('unit.piece')}")
+
+    # 3 eggs for 2 servings: 3 x 60 g = 180 g, x 155 kcal / 100 g = 279 kcal; nothing missing.
+    page.goto("/meals/new")
+    meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
+    meal_form.get_by_label(text("meals.field.name"), exact=True).fill(f"Rührei {tag}")
+    meal_form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True).click()
+    add_row(page, name, "3", "piece")
+    meal_form.get_by_role("button", name=text("meals.form.create"), exact=True).click()
+    expect(page).to_have_url(MEAL_URL)
+    expect(nutrient_row(page, "kcal")).to_contain_text("279 kcal")
+    expect(page.get_by_test_id(TEST_IDS["mealIncomplete"])).to_have_count(0)
+
+    # Made for 3 on a list: 4.5 eggs, bought as 5.
+    shopping_list = api.create_list(member, f"Frühstück {tag}")
+    api.add_list_meal(member, shopping_list["id"], meal_id(page), servings=3)
+    page.goto(f"/lists/{shopping_list['id']}")
+    line = (
+        page.get_by_test_id(TEST_IDS["listLines"])
+        .get_by_test_id(TEST_IDS["listLine"])
+        .filter(has_text=name)
+    )
+    expect(line).to_contain_text(f"5 {text('unit.piece')}")
+
+
 def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
     """Journey 5 (MEAL-07, MEAL-08, VIS-04): copy a public meal, edit the copy only."""
     tag = unique("e2e")

@@ -38,7 +38,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
 from app.domain.text import normalize
-from app.domain.units import Unit
+from app.domain.units import BaseUnit, Unit
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import reference as reference_repo
@@ -76,7 +76,13 @@ _PLAIN_OFF_FIELDS = ("quantity_text", "pack_quantity")
 
 
 def base_unit_name(value: str) -> BaseUnitName:
-    return "ml" if value == "ml" else "g"
+    match value:
+        case "ml":
+            return "ml"
+        case "piece":
+            return "piece"
+        case _:
+            return "g"
 
 
 def source_name(value: str) -> IngredientSource:
@@ -276,7 +282,8 @@ async def update_ingredient(
     """Change the fields that were sent and record who changed it last (ING-01). On an
     ingredient from Open Food Facts, the Open Food Facts fields sent become user-edited and
     their pending values go (BAR-04, BAR-06); a new base unit drops the pending nutrients,
-    which were per the old one. Clearing or changing the barcode makes it a manual ingredient
+    which were per the old one, and leaving `piece` clears the piece weight unless one is sent
+    along (ING-02). Clearing or changing the barcode makes it a manual ingredient
     (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
@@ -312,6 +319,8 @@ async def update_ingredient(
             row.category_id = body.category_id
         decided = list(edited)
         if body.base_unit is not None and body.base_unit != row.base_unit:
+            if row.base_unit == BaseUnit.PIECE:
+                row.piece_weight_g = None
             row.base_unit = body.base_unit
             decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
         if "piece_weight_g" in sent:
