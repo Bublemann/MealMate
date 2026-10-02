@@ -40,6 +40,8 @@
 
   --radius: 0.75rem;
   --duration-fast: 150ms;
+  /* How long the sheet takes to slide in or out; it doesn't slide under Reduce Motion. */
+  --duration-sheet: 250ms;
 
   /*
    * Sizes grow with the iPhone text size (rem) but never fall below what touch needs: 44 pt tap

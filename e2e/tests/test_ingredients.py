@@ -140,6 +140,141 @@ def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
     assert box["y"] + box["height"] < viewport["height"] * 0.75
 
 
+def test_member_filters_by_categories(member_page: Page, api: Api, member: Account) -> None:
+    """UI-01, UI-03, ING-03, D-23: the filter panel lists every category; ticked ones apply at
+    once and show the ingredients of any of them; the button counts the group; "Reset" and
+    "Reset filters" clear them; the choice stays while the app is open."""
+    page = member_page
+    tag = unique("e2e")
+    for name, category in (
+        (f"Kirschen {tag}", "fruit_vegetables"),
+        (f"Quark {tag}", "dairy_eggs"),
+        (f"Senf {tag}", "sauces_spices_oils"),
+    ):
+        api.create_ingredient(member, name, category_key=category)
+    fruit = text("category.fruit_vegetables")
+    dairy = text("category.dairy_eggs")
+    sauces = text("category.sauces_spices_oils")
+
+    page.goto("/ingredients")
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
+    rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
+    expect(rows).to_have_count(3)
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    expect(button).to_have_accessible_name(text("filter.button"))
+
+    button.click()
+    panel = page.get_by_role("dialog", name=text("filter.title"))
+    expect(panel).to_have_attribute("data-testid", TEST_IDS["filterPanel"])
+    group = panel.get_by_test_id(TEST_IDS["filterGroup"])
+    expect(group).to_have_accessible_name(text("ingredients.filter.categories"))
+    expect(group.get_by_role("checkbox")).to_have_count(len(api.categories(member)))
+
+    # Each tick applies at once, behind the open panel; several show any of them. The button
+    # counts the group (its name is read once the panel, which hides the page from screen
+    # readers, is closed).
+    group.get_by_role("checkbox", name=fruit, exact=True).check()
+    expect(rows).to_have_count(1)
+    expect(rows).to_contain_text([f"Kirschen {tag}"])
+    expect(button).to_have_text("1")
+    group.get_by_role("checkbox", name=dairy, exact=True).check()
+    expect(rows).to_contain_text([f"Kirschen {tag}", f"Quark {tag}"])
+    expect(button).to_have_text("1")
+
+    # "Reset" unticks every group and keeps the search.
+    panel.get_by_role("button", name=text("filter.reset"), exact=True).click()
+    expect(group.get_by_role("checkbox", checked=True)).to_have_count(0)
+    expect(rows).to_have_count(3)
+    expect(button).to_have_text("")
+
+    group.get_by_role("checkbox", name=sauces, exact=True).check()
+    panel.get_by_role("button", name=text("filter.done"), exact=True).click()
+    expect(panel).to_be_hidden()
+    expect(button).to_be_focused()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    expect(rows).to_contain_text([f"Senf {tag}"])
+
+    # Kept while the app is open: open the ingredient and come back.
+    rows.first.click()
+    expect(page.get_by_test_id(TEST_IDS["screenIngredient"])).to_be_visible()
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    expect(rows).to_contain_text([f"Senf {tag}"])
+
+    # Nothing in that category matches: "Reset filters" clears the search and the categories.
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(f"Kirschen {tag}")
+    expect(page.get_by_text(text("common.noMatches"), exact=True)).to_be_visible()
+    page.get_by_role("button", name=text("common.resetFilters")).click()
+    expect(page.get_by_test_id(TEST_IDS["ingredientSearch"])).to_have_value("")
+    expect(button).to_have_accessible_name(text("filter.button"))
+    expect(page.get_by_test_id(TEST_IDS["ingredientList"])).to_be_visible()
+
+
+def test_filter_panel_fits_the_largest_text_size(
+    member_page: Page, api: Api, member: Account
+) -> None:
+    """UI-01: at the largest iPhone text size (53 px body text, simulated here) the filter
+    panel's groups, "Reset" and "Done" wrap instead of being clipped or widening the page, and
+    the panel scrolls; its buttons stay in view."""
+    page = member_page
+    page.goto("/ingredients")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
+    viewport = page.viewport_size
+    assert viewport is not None
+    # The button sits beside the search field, not below it.
+    button_box, search_box = button.bounding_box(), search.bounding_box()
+    assert button_box is not None
+    assert search_box is not None
+    assert button_box["y"] < search_box["y"] + search_box["height"]
+    assert button_box["x"] + button_box["width"] <= viewport["width"]
+
+    button.click()
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+    expect(panel).to_be_visible()
+    # Measured once it has slid in.
+    panel.evaluate("panel => Promise.all(panel.getAnimations().map((a) => a.finished))")
+
+    assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
+    assert panel.evaluate("panel => panel.scrollWidth <= panel.clientWidth")
+    assert panel.evaluate("panel => panel.scrollHeight > panel.clientHeight")
+    box = panel.bounding_box()
+    assert box is not None
+    assert box["y"] >= 0
+    assert box["y"] + box["height"] <= viewport["height"]
+    for name in ("filter.reset", "filter.done"):
+        action = panel.get_by_role("button", name=text(name), exact=True)
+        expect(action).to_be_in_viewport()
+        assert action.evaluate("action => action.scrollWidth <= action.clientWidth")
+    # The last category can be scrolled to and ticked; every name wraps within the panel.
+    boxes = panel.get_by_role("checkbox")
+    boxes.last.check()
+    expect(boxes.last).to_be_checked()
+    for category in api.categories(member):
+        name = panel.get_by_text(text(f"category.{category['key']}"), exact=True)
+        assert name.evaluate("name => name.scrollWidth <= name.clientWidth")
+
+
+def test_filter_panel_does_not_slide_under_reduce_motion(member_page: Page) -> None:
+    """UI-01, A11Y-02: the panel slides up, but not under Reduce Motion."""
+    page = member_page
+    page.goto("/ingredients")
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+
+    button.click()
+    expect(panel).to_be_visible()
+    assert panel.evaluate("panel => getComputedStyle(panel).animationName") != "none"
+    page.keyboard.press("Escape")
+    expect(panel).to_be_hidden()
+
+    page.emulate_media(reduced_motion="reduce")
+    button.click()
+    expect(panel).to_be_visible()
+    assert panel.evaluate("panel => getComputedStyle(panel).animationName") == "none"
+
+
 def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None:
     """REF-01: a shopping list's lines follow the new order."""
     original = [category["id"] for category in api.categories(admin)]

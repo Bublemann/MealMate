@@ -29,7 +29,8 @@ export type EditedField = Ingredient['user_edited_fields'][number];
 export const OFF_TIMEOUT_MS = 25_000;
 
 const INGREDIENTS_KEY = ['ingredients'] as const;
-const listKey = (query: string) => [...INGREDIENTS_KEY, 'list', query] as const;
+const listKey = (query: string, categoryIds: readonly string[]) =>
+  [...INGREDIENTS_KEY, 'list', query, categoryIds] as const;
 const detailKey = (id: string) => [...INGREDIENTS_KEY, 'detail', id] as const;
 
 /** Lists and similarity hints show names, categories and counts, which may have changed. */
@@ -46,14 +47,29 @@ export function toSummary(ingredient: Ingredient): IngredientSummary {
 
 /**
  * Ingredients matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
- * it is empty, sorted by the server. The previous result stays while the next one loads.
+ * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories.
+ * The previous result stays while the next one loads.
  */
-export function useIngredients(query: string, { enabled = true }: { enabled?: boolean } = {}) {
+export function useIngredients(
+  query: string,
+  { enabled = true, categoryIds = [] }: { enabled?: boolean; categoryIds?: readonly string[] } = {},
+) {
   const q = query.trim();
   return useQuery({
-    queryKey: listKey(q),
+    queryKey: listKey(q, categoryIds),
     queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/ingredients', { params: { query: q ? { q } : {} }, signal })),
+      unwrap(
+        api.GET('/api/ingredients', {
+          // Left out when empty: `category_id=a&category_id=b` for several (ING-03).
+          params: {
+            query: {
+              q: q || undefined,
+              category_id: categoryIds.length > 0 ? [...categoryIds] : undefined,
+            },
+          },
+          signal,
+        }),
+      ),
     placeholderData: keepPreviousData,
     enabled,
   });

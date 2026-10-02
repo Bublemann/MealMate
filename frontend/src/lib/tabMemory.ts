@@ -1,17 +1,19 @@
 import { createContext, useContext, type Dispatch, type SetStateAction } from 'react';
 
 /**
- * What a tab keeps while the app is open (UI-01): its search text, and later its cuisine, tag and
- * category choices. The user filter and the state filter are saved on the server instead.
+ * What a tab keeps while the app is open (UI-01): its search text and its category choices, and
+ * later the cuisine and tag choices. The user filter and the state filter are saved on the server
+ * instead.
  */
 export interface TabMemories {
-  ingredients: { search: string };
+  /** `categoryIds`: the categories ticked in the filter panel; none shows every category. */
+  ingredients: { search: string; categoryIds: string[] };
 }
 
 export type TabWithMemory = keyof TabMemories;
 
 export const INITIAL_TAB_MEMORIES: TabMemories = {
-  ingredients: { search: '' },
+  ingredients: { search: '', categoryIds: [] },
 };
 
 export const TabMemoryContext = createContext<{

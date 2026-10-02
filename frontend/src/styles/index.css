@@ -29,6 +29,33 @@
   --radius-xl: calc(var(--radius) + 0.25rem);
 
   --default-transition-duration: var(--duration-fast);
+
+  /* The sheet (UI-01) slides up from the bottom edge over a fading overlay, and back down. */
+  --animate-sheet-in: sheet-in var(--duration-sheet) ease-out;
+  --animate-sheet-out: sheet-out var(--duration-sheet) ease-in;
+  --animate-fade-in: fade-in var(--duration-sheet) ease-out;
+  --animate-fade-out: fade-out var(--duration-sheet) ease-in;
+
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
 }
 
 /* A frosted surface (UI-01): the translucent --frosted colour over a blurred backdrop. */

@@ -41,7 +41,8 @@ export function PinnedBlock({ search, filter, newTile }: PinnedBlockProps) {
     // Spans the content column across the Layout's px-4, so nothing shows beside it.
     <div className="frosted pinned sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em]">
       {search && (
-        <div className="flex flex-wrap gap-[0.5em]">
+        // The filter button stays beside the search field, which gives way at large text sizes.
+        <div className="flex gap-[0.5em]">
           <SearchField {...search} />
           {filter}
         </div>

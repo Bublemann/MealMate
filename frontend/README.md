@@ -66,8 +66,8 @@ frontend/
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
-    ├── components/ui/      # shadcn/ui building blocks
-    ├── components/         # shared app components (Screen, PinnedBlock, FormField, ShareLink, …)
+    ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
+    ├── components/         # shared app components (Screen, PinnedBlock, FilterPanel, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
     ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, tab memory, user agent)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
@@ -127,8 +127,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   nothing changes. Tests stub `visualViewport` and fire its events (`app/viewport.test.tsx`).
 - **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
   same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
-  it. It holds the search field (its label only for screen readers), a place for the filter button
-  and the green, row-shaped "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is
+  it. It holds the search field (its label only for screen readers), the filter button and the
+  green, row-shaped "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is
   present and opens the new form with that name. A tab renders it at once and puts its state
   below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
   Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
@@ -137,11 +137,19 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and
   its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the
   first accessibility size, D-29), and its spacing is in `em` of that text.
-- **Tab memory** (UI-01): a tab's search text, and later its cuisine, tag and category choices,
-  live in `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
-  survives opening a detail and coming back, and is gone when the app closes or the session ends;
-  never put it in the URL or browser storage. The user filter and the state filter are server
-  state (`/me`).
+- **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
+  it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
+  Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
+  the design tokens whose label is the tap target, MNT-05), each with whether it is at its
+  default, and a reset for all of them. Each tick applies at once; "Zurücksetzen" resets every group and keeps the search;
+  "Fertig" closes the panel. The button shows how many groups are not at their default, also in
+  its accessible name. Ingredients offers the categories (any of them, ING-03). At the largest
+  text sizes the options and buttons wrap and the panel scrolls, its buttons staying in view.
+- **Tab memory** (UI-01): a tab's search text and category choices, and later its cuisine and tag
+  choices, live in `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout`
+  holds. It survives opening a detail and coming back, and is gone when the app closes or the
+  session ends; never put it in the URL or browser storage. The user filter and the state filter
+  are server state (`/me`).
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
@@ -444,6 +452,9 @@ order.
 | `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients        |
 | `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                   |
 | `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
+| `filterButton`           | `filter-button`            | Filter button in a tab's pinned block       |
+| `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)    |
+| `filterGroup`            | `filter-group`             | One checkbox group in the filter panel      |
 | `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |

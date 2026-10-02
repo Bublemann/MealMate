@@ -18,6 +18,7 @@ References from meals and lists go through `services.hooks`: `ingredient_referen
 deletion (and is shown as the usage), and `on_ingredients_merged` repoints them when merging.
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -158,14 +159,15 @@ async def _other_category_id(session: AsyncSession) -> str:
 
 
 async def search(
-    session: AsyncSession, *, query: str | None, category_id: str | None
+    session: AsyncSession, *, query: str | None, category_ids: Sequence[str]
 ) -> list[IngredientSummary]:
     """Search name and brand ignoring case, umlaut spelling and accents (ING-03): an exact
     name first, then names starting with the query, then the rest, each in dictionary order by
-    name and brand. Without a query: every ingredient (at most 1000) in that order."""
+    name and brand. Without a query: every ingredient (at most 1000) in that order. With
+    `category_ids`, only ingredients in any of those categories (UI-01, D-23)."""
     async with session.begin():
         rows = await ingredients_repo.search(
-            session, query=normalize(query or ""), category_id=category_id, limit=SEARCH_LIMIT
+            session, query=normalize(query or ""), category_ids=category_ids, limit=SEARCH_LIMIT
         )
     return [summary(row) for row in rows]
 

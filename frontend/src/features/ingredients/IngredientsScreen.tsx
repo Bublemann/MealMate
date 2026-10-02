@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyLine } from '@/components/EmptyLine';
+import { FilterPanel } from '@/components/FilterPanel';
 import { LoadError } from '@/components/LoadError';
 import { LoadingState } from '@/components/LoadingState';
 import { NoMatches } from '@/components/NoMatches';
 import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
 import { useCategories, type Category } from '@/features/reference/api';
+import { categoryName } from '@/features/reference/labels';
 import { useTabMemory } from '@/lib/tabMemory';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
@@ -19,19 +21,22 @@ import { IngredientName } from './IngredientName';
 
 /**
  * The Ingredients tab (ING-01, ING-03, UI-01, UI-03): the pinned block with the search (name and
- * brand) and the "New ingredient" tile, which offers to create what was searched for. Below it one
- * list in the server's order (dictionary order, best matches first when searching), one line when
- * there are no ingredients yet, or "No matches". The scanner is not linked from here (BAR-01).
+ * brand), the filter panel (several categories, any of them) and the "New ingredient" tile, which
+ * offers to create what was searched for. Below it one list in the server's order (dictionary
+ * order, best matches first when searching), one line when there are no ingredients yet, or "No
+ * matches". The scanner is not linked from here (BAR-01).
  */
 export function IngredientsScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  // The search stays when the user opens an ingredient and comes back (UI-01).
-  const [{ search }, remember] = useTabMemory('ingredients');
+  // The search and the categories stay when the user opens an ingredient and comes back (UI-01).
+  const [{ search, categoryIds }, remember] = useTabMemory('ingredients');
   const [creating, setCreating] = useState(false);
   const searchText = search.trim();
   const debounced = useDebouncedValue(searchText);
-  const ingredients = useIngredients(debounced);
+  // The categories apply at once; only the typed search waits for a pause (UI-01).
+  const ingredients = useIngredients(debounced, { categoryIds });
+  const filtered = debounced !== '' || categoryIds.length > 0;
   const categories = useCategories();
   // The rows name their category, so the list waits for the categories as well.
   const loaded =
@@ -49,6 +54,23 @@ export function IngredientsScreen() {
           onChange: (value) => remember({ search: value }),
           testId: testIds.ingredientSearch,
         }}
+        filter={
+          <FilterPanel
+            groups={[
+              {
+                label: t('ingredients.filter.categories'),
+                options: categories.data?.map((category) => ({
+                  id: category.id,
+                  label: categoryName(t, category.key),
+                })),
+                checked: categoryIds,
+                active: categoryIds.length > 0,
+                onChange: (checked) => remember({ categoryIds: checked }),
+              },
+            ]}
+            onReset={() => remember({ categoryIds: [] })}
+          />
+        }
         newTile={{
           label: searchText
             ? t('ingredients.createNamed', { name: searchText })
@@ -69,16 +91,16 @@ export function IngredientsScreen() {
           <LoadError error={ingredients.error ?? categories.error} />
           {loaded.ingredients.length > 0 ? (
             <IngredientList {...loaded} />
-          ) : debounced === '' ? (
-            // An earlier search's empty answer, shown while the full list loads, says nothing
-            // about whether there are ingredients at all.
+          ) : !filtered ? (
+            // An earlier search's or filter's empty answer, shown while the full list loads, says
+            // nothing about whether there are ingredients at all.
             ingredients.isPlaceholderData ? (
               <LoadingState />
             ) : (
               <EmptyLine text={t('ingredients.empty')} />
             )
           ) : (
-            <NoMatches onReset={() => remember({ search: '' })} />
+            <NoMatches onReset={() => remember({ search: '', categoryIds: [] })} />
           )}
         </>
       )}
