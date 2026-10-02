@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0007"
+HEAD = "0008"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +59,7 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients.
+# 0007 merges the products into the ingredients; 0008 only adds columns.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -127,6 +127,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0006")
     assert tables(database_path) == TABLES_0006
     command.upgrade(config, "0007")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0008")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0007")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0006")
     assert tables(database_path) == TABLES_0006
@@ -316,12 +320,16 @@ def test_demo_data_at_0006_survives_the_earlier_migrations(tmp_path: Path) -> No
     assert_clean(path)
 
 
-def ingredients_by_name(path: Path) -> dict[str, list[dict[str, object]]]:
+def rows_of(path: Path, table: str) -> list[dict[str, object]]:
     with closing(sqlite3.connect(path)) as connection:
         connection.row_factory = sqlite3.Row
-        rows = [dict(row) for row in connection.execute("SELECT * FROM ingredients ORDER BY id")]
+        statement = f'SELECT * FROM "{table}" ORDER BY id'  # noqa: S608
+        return [dict(row) for row in connection.execute(statement)]
+
+
+def ingredients_by_name(path: Path) -> dict[str, list[dict[str, object]]]:
     by_name: dict[str, list[dict[str, object]]] = {}
-    for row in rows:
+    for row in rows_of(path, "ingredients"):
         by_name.setdefault(str(row["name"]), []).append(row)
     return by_name
 
@@ -430,6 +438,63 @@ def test_meals_and_lists_keep_working_after_0007(tmp_path: Path) -> None:
     upgrade_database(data_dir)
 
     assert asyncio.run(_visit_everything(demo_settings(data_dir))) > 10
+
+
+# --- 0008 -----------------------------------------------------------------------------------
+
+
+def meals_and_ingredients(path: Path) -> dict[str, list[dict[str, object]]]:
+    return {table: rows_of(path, table) for table in ("meals", "ingredients")}
+
+
+def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0007 → 0008 (D-27): every meal and ingredient gets the sort key of its
+    name, and an ingredient with a brand that of its brand; no row and no other value changes,
+    and the downgrade drops the keys again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0007")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = meals_and_ingredients(path)
+
+    command.upgrade(config, "0008")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    after = meals_and_ingredients(path)
+    for table, rows in after.items():
+        without_keys = [
+            {column: value for column, value in row.items() if not column.endswith("_sort")}
+            for row in rows
+        ]
+        assert without_keys == before[table]
+    assert {row["name"]: row["name_sort"] for row in after["meals"]} == {
+        "Hähnchen-Reis-Pfanne": "hahnchen-reis-pfanne",
+        "Käsebrot": "kasebrot",
+        "Ofenkartoffeln mit Kräuterjoghurt": "ofenkartoffeln mit krauterjoghurt",
+        "Pfannkuchen": "pfannkuchen",
+        "Spaghetti Bolognese": "spaghetti bolognese",
+        "Tofu-Gemüse-Curry": "tofu-gemuse-curry",
+        "Tomatensalat": "tomatensalat",
+    }
+    ingredients = {
+        (row["name"], row["brand"]): (row["name_sort"], row["brand_sort"])
+        for row in after["ingredients"]
+    }
+    assert ingredients[("Äpfel", None)] == ("apfel", None)
+    assert ingredients[("Hähnchenbrust", None)] == ("hahnchenbrust", None)
+    assert ingredients[("Erbsen (TK)", None)] == ("erbsen (tk)", None)
+    assert ingredients[("Olivenöl", "Bertolli")] == ("olivenol", "bertolli")
+    assert ingredients[("Spaghetti n.12", "De Cecco")] == ("spaghetti n.12", "de cecco")
+    assert all(name_sort for name_sort, _ in ingredients.values())
+    assert all((brand is None) == (keys[1] is None) for (_, brand), keys in ingredients.items())
+
+    command.downgrade(config, "0007")
+    assert meals_and_ingredients(path) == before
+    assert row_counts(path) == counts
+    assert_clean(path)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
@@ -824,6 +889,7 @@ def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -
                 "ingredients",
                 name="Milch",
                 name_norm="milch",
+                name_sort="milch",
                 brand=brand,
                 category_id=category_id,
                 base_unit="ml",

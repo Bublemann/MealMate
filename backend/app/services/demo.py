@@ -41,7 +41,7 @@ from app.core.passwords import hash_password
 from app.db.ids import new_id
 from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
-from app.domain.text import normalize
+from app.domain.text import normalize, sort_key
 from app.domain.units import Unit
 from app.media.store import MediaStore
 from app.models import (
@@ -63,6 +63,7 @@ from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
 from app.services import accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
+from app.services.off_fields import set_brand, set_name
 
 DEMO_USERS: tuple[tuple[str, str, Role, Language], ...] = (
     ("admin", "Admin", "admin", "de"),
@@ -518,10 +519,6 @@ async def _insert_catalog(
         creator = user_ids[item.creator]
         quantity_text, pack_quantity, pack_unit = item.pack or (None, None, None)
         ingredient = Ingredient(
-            name=item.name,
-            name_norm=normalize(item.name),
-            brand=item.brand,
-            brand_norm=None if item.brand is None else normalize(item.brand),
             barcode=item.barcode,
             category_id=categories[item.category],
             base_unit=item.base_unit,
@@ -537,6 +534,8 @@ async def _insert_catalog(
             created_at=now,
             updated_at=now,
         )
+        set_name(ingredient, item.name)
+        set_brand(ingredient, item.brand)
         ingredient.set_nutrients({key: item.nutrients.get(key) for key in NUTRIENT_KEYS})
         session.add(ingredient)
     await session.flush()
@@ -640,6 +639,7 @@ async def _insert_meals(
             owner_id=user_ids[demo.owner],
             name=source.name,
             name_norm=normalize(source.name),
+            name_sort=sort_key(source.name),
             instructions=source.instructions,
             source_url=source.source_url,
             servings=source.servings,
@@ -674,6 +674,7 @@ async def _insert_deleted_meal(
         owner_id=user_ids[demo.owner],
         name=demo.name,
         name_norm=normalize(demo.name),
+        name_sort=sort_key(demo.name),
         servings=demo.servings,
         created_at=now,
         updated_at=now,

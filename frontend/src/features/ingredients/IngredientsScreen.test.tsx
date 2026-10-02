@@ -6,11 +6,13 @@ import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const ALL = [
-  // The server's order; the screen groups by the categories' walking order.
-  summary('Butter', 'dairy_eggs', { brand: 'Kerrygold', barcode: '5011038133535', source: 'off' }),
-  summary('Salz', 'other'),
+  // The server's dictionary order (ING-03), which the screen keeps, although "Other" comes last
+  // in the categories' walking order.
+  summary('Alufolie', 'other'),
   summary('Äpfel', 'fruit_vegetables'),
+  summary('Butter', 'dairy_eggs', { brand: 'Kerrygold', barcode: '5011038133535', source: 'off' }),
   summary('Milch', 'dairy_eggs', { base_unit: 'ml' }),
+  summary('Salz', 'other'),
 ];
 
 // jsdom has no camera: the barcode field's scanner shows its manual input.
@@ -22,7 +24,7 @@ vi.mock('@/features/scanner/decoder', () => ({
 function listIngredients(request: Request) {
   const q = new URL(request.url).searchParams.get('q');
   if (!q) return ALL;
-  return q === 'aepfel' ? [ALL[2]] : [];
+  return q === 'aepfel' ? [ALL[1]] : [];
 }
 
 function renderIngredients(routes: Record<string, unknown> = {}) {
@@ -56,21 +58,19 @@ describe('IngredientsScreen', () => {
     expect(screen.queryByLabelText('Search ingredients')).toBeNull();
   });
 
-  it('groups the ingredients under their categories in walking order, with brand and barcode', async () => {
+  it('shows one A–Z list with category and base unit in the grey line, brand and barcode (ING-03)', async () => {
     renderIngredients();
 
     const list = await screen.findByTestId(testIds.ingredientList);
-    const headings = within(list).getAllByRole('heading', { level: 2 });
-    expect(headings.map((heading) => heading.textContent)).toEqual([
-      'Fruit & vegetables',
-      'Dairy & eggs',
-      'Other',
-    ]);
-    const dairy = within(list).getByRole('region', { name: 'Dairy & eggs' });
-    const rows = within(dairy).getAllByTestId(testIds.ingredientRow);
+    expect(list).toHaveAccessibleName('Ingredients');
+    expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
+    const rows = within(list).getAllByTestId(testIds.ingredientRow);
     expect(rows.map((row) => row.textContent)).toEqual([
-      'Butter (Kerrygold) with barcodeg',
-      'Milchml',
+      'AlufolieOther · g',
+      'ÄpfelFruit & vegetables · g',
+      'Butter (Kerrygold) with barcodeDairy & eggs · g',
+      'MilchDairy & eggs · ml',
+      'SalzOther · g',
     ]);
     expect(within(list).getByRole('link', { name: /^Äpfel/ })).toHaveAttribute(
       'href',
@@ -90,7 +90,9 @@ describe('IngredientsScreen', () => {
     await waitFor(() => expect(searchTerms(fetchMock)).toEqual([null, 'aepfel']));
     const list = screen.getByTestId(testIds.ingredientList);
     await waitFor(() => expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(1));
-    expect(within(list).getByRole('heading', { level: 2 })).toHaveTextContent('Fruit & vegetables');
+    expect(within(list).getByTestId(testIds.ingredientRow)).toHaveTextContent(
+      'ÄpfelFruit & vegetables · g',
+    );
   });
 
   it('offers to create what was searched for when nothing matches', async () => {
@@ -276,7 +278,7 @@ describe('IngredientFormDialog (create)', () => {
   it('points to similar ingredients while typing the name (ING-03)', async () => {
     const { fetchMock, user } = renderIngredients({
       'GET /api/ingredients/similar': (request: Request) =>
-        new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[2]] : [],
+        new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[1]] : [],
     });
 
     await user.click(await screen.findByTestId(testIds.newIngredient));

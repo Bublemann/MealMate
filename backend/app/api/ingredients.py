@@ -43,8 +43,8 @@ async def list_ingredients(
     category_id: Annotated[str | None, Query(max_length=36)] = None,
 ) -> list[IngredientSummary]:
     """Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
-    then names starting with `q`, then by name and brand; without `q`, all ingredients by
-    category order, name and brand (at most 1000)."""
+    then names starting with `q`, then the rest, each in dictionary order by name and brand
+    (Ä sorts as A); without `q`, all ingredients in that order (at most 1000)."""
     return await ingredients.search(session, query=q, category_id=category_id)
 
 

@@ -64,8 +64,13 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     name_norm: Mapped[str] = mapped_column(
         String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
     )
+    # Dictionary order by name, then brand (ING-03, `domain.text.sort_key`).
+    name_sort: Mapped[str] = mapped_column(
+        String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
+    )
     brand: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
     brand_norm: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH * NAME_NORM_FACTOR))
+    brand_sort: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH * NAME_NORM_FACTOR))
     barcode: Mapped[str | None] = mapped_column(String(14), unique=True)
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True

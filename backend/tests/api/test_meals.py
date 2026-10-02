@@ -836,6 +836,52 @@ async def test_search(api: AsyncClient, anna: Account, cuisines: dict[str, str])
     assert await list_meals(api, anna, q="nichts") == []
 
 
+async def test_dictionary_order(api: AsyncClient, anna: Account) -> None:
+    """MEAL-09, D-27: Ä sorts as A, so "Äpfel im Schlafrock" sits next to "Apfelstrudel"; real
+    letter pairs keep their place ("Feuer" before "Feurige", "Paella" before "Palatschinken")."""
+    for name in (
+        "Palatschinken",
+        "Feurige Nudeln",
+        "Apfelstrudel",
+        "Paella",
+        "Äpfel im Schlafrock",
+        "Feuertopf",
+        "Ananas-Curry",
+    ):
+        await create_meal(api, anna, name)
+
+    assert await list_meals(api, anna) == [
+        "Ananas-Curry",
+        "Äpfel im Schlafrock",
+        "Apfelstrudel",
+        "Feuertopf",
+        "Feurige Nudeln",
+        "Paella",
+        "Palatschinken",
+    ]
+
+
+async def test_renamed_and_copied_meals_keep_dictionary_order(
+    api: AsyncClient, anna: Account
+) -> None:
+    await create_meal(api, anna, "Apfelstrudel")
+    meal = await create_meal(api, anna, "Bratäpfel")
+    await create_meal(api, anna, "Ananas-Curry")
+
+    await api.patch(
+        f"/api/meals/{meal['id']}", json={"name": "Äpfel im Schlafrock"}, headers=anna.headers
+    )
+    copy = await api.post(f"/api/meals/{meal['id']}/copy", headers=anna.headers)
+
+    assert copy.status_code == 201
+    assert await list_meals(api, anna) == [
+        "Ananas-Curry",
+        "Äpfel im Schlafrock",
+        "Äpfel im Schlafrock",
+        "Apfelstrudel",
+    ]
+
+
 async def test_filters(api: AsyncClient, anna: Account, cuisines: dict[str, str]) -> None:
     curry = await create_meal(api, anna, "Curry", cuisine_id=cuisines["indian"], tags=["Scharf"])
     await create_meal(api, anna, "Dal", cuisine_id=cuisines["indian"])

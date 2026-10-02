@@ -161,8 +161,8 @@ async def search(
     session: AsyncSession, *, query: str | None, category_id: str | None
 ) -> list[IngredientSummary]:
     """Search name and brand ignoring case, umlaut spelling and accents (ING-03): an exact
-    name first, then names starting with the query, then by name and brand. Without a query:
-    every ingredient (at most 1000) by category order, name and brand."""
+    name first, then names starting with the query, then the rest, each in dictionary order by
+    name and brand. Without a query: every ingredient (at most 1000) in that order."""
     async with session.begin():
         rows = await ingredients_repo.search(
             session, query=normalize(query or ""), category_id=category_id, limit=SEARCH_LIMIT

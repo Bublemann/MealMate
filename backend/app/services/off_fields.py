@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.domain.catalog import OFF_FIELDS, nutrient_field
-from app.domain.text import normalize
+from app.domain.text import normalize, sort_key
 from app.models import Ingredient as IngredientRow
 from app.schemas.ingredients import PendingUpdate, PendingUpdateField
 
@@ -49,14 +49,16 @@ def set_field_value(row: IngredientRow, field: str, value: Any) -> None:
 
 
 def set_name(row: IngredientRow, name: str) -> None:
-    """Set the name together with its normalised form (search, similarity hints)."""
-    row.name, row.name_norm = name, normalize(name)
+    """Set the name together with its normalised form (search, similarity hints) and its sort
+    key (dictionary order)."""
+    row.name, row.name_norm, row.name_sort = name, normalize(name), sort_key(name)
 
 
 def set_brand(row: IngredientRow, brand: str | None) -> None:
-    """Set the brand together with its normalised form (search)."""
+    """Set the brand together with its normalised form (search) and its sort key."""
     row.brand = brand
     row.brand_norm = None if brand is None else normalize(brand) or None
+    row.brand_sort = None if brand is None else sort_key(brand) or None
 
 
 def ignored_entries(row: IngredientRow) -> dict[str, Any]:

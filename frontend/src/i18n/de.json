@@ -454,7 +454,7 @@
   "ingredients.search.label": "Zutaten suchen",
   "ingredients.search.placeholder": "z. B. Äpfel",
   "ingredients.new": "Neue Zutat",
-  "ingredients.listLabel": "Zutaten nach Kategorie",
+  "ingredients.listLabel": "Zutaten",
   "ingredients.noResults": "Keine Zutat passt zu „{{query}}“.",
   "ingredients.createNamed": "„{{name}}“ anlegen",
   "ingredients.form.createTitle": "Neue Zutat",

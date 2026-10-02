@@ -608,30 +608,106 @@ async def test_search_by_brand(api: AsyncClient, anna: Account) -> None:
     ]
 
 
-async def test_list_by_category_order_then_name(api: AsyncClient, anna: Account) -> None:
+async def test_list_in_dictionary_order(api: AsyncClient, anna: Account) -> None:
+    """ING-03, D-27: by name, then brand, whatever the category. Ä sorts as A, ß as ss and è as
+    e; real letter pairs keep their place ("Paella" before "Pak", "Sauer" before "Saure")."""
     categories = await category_ids(api, anna)
-    await create_ingredient(api, anna, "Salz", category_id=categories["sauces_spices_oils"])
-    await create_ingredient(api, anna, "Zwiebeln", category_id=categories["fruit_vegetables"])
-    await create_ingredient(api, anna, "Äpfel", category_id=categories["fruit_vegetables"])
-    await create_ingredient(api, anna, "Alufolie")
-    await create_ingredient(api, anna, "Gouda", brand="Milram", category_id=categories["cheese"])
-    await create_ingredient(
-        api, anna, "Gouda", brand="Frau Antje", category_id=categories["cheese"]
-    )
+    fruit = categories["fruit_vegetables"]
+    for name, brand, category in (
+        ("Salz", None, "sauces_spices_oils"),
+        ("Zwiebeln", None, "fruit_vegetables"),
+        ("Saure Sahne", None, "dairy_eggs"),
+        ("Äpfel", None, "fruit_vegetables"),
+        ("Pak Choi", None, "fruit_vegetables"),
+        ("Milch", "Müller", "dairy_eggs"),
+        ("Alufolie", None, "other"),
+        ("Sauerkraut", None, "canned_jars"),
+        ("Milch", None, "dairy_eggs"),
+        ("Apfelessig", None, "sauces_spices_oils"),
+        ("Paella-Reis", None, "pasta_rice_grains"),
+        ("Milch", "MUH", "dairy_eggs"),
+        ("Weizenmehl", None, "baking"),
+        ("Croissant", None, "bread_bakery"),
+        ("Ananas", None, "fruit_vegetables"),
+        ("Weißkohl", None, "fruit_vegetables"),
+        ("Crème fraîche", None, "dairy_eggs"),
+    ):
+        await create_ingredient(api, anna, name, brand=brand, category_id=categories[category])
 
     assert await search(api, anna) == [
-        "Äpfel",
-        "Zwiebeln",
-        "Gouda (Frau Antje)",
-        "Gouda (Milram)",
-        "Salz",
         "Alufolie",
+        "Ananas",
+        "Äpfel",
+        "Apfelessig",
+        "Crème fraîche",
+        "Croissant",
+        "Milch",
+        "Milch (MUH)",
+        "Milch (Müller)",
+        "Paella-Reis",
+        "Pak Choi",
+        "Salz",
+        "Sauerkraut",
+        "Saure Sahne",
+        "Weißkohl",
+        "Weizenmehl",
+        "Zwiebeln",
     ]
     assert await search(api, anna, q="  ") == await search(api, anna)
-    fruit = categories["fruit_vegetables"]
-    assert await search(api, anna, category_id=fruit) == ["Äpfel", "Zwiebeln"]
+    assert await search(api, anna, category_id=fruit) == [
+        "Ananas",
+        "Äpfel",
+        "Pak Choi",
+        "Weißkohl",
+        "Zwiebeln",
+    ]
     assert await search(api, anna, category_id=fruit, q="zw") == ["Zwiebeln"]
     assert await search(api, anna, category_id="unknown") == []
+
+
+async def test_renaming_moves_the_ingredient(api: AsyncClient, anna: Account) -> None:
+    await create_ingredient(api, anna, "Apfelessig")
+    apples = await create_ingredient(api, anna, "Bratäpfel")
+    await create_ingredient(api, anna, "Milch", brand="MUH")
+    milk = await create_ingredient(api, anna, "Milch", brand="Alnatura")
+
+    assert (await patch(api, anna, apples["id"], name="Äpfel")).status_code == 200
+    assert (await patch(api, anna, milk["id"], brand="Müller")).status_code == 200
+
+    assert await search(api, anna) == ["Äpfel", "Apfelessig", "Milch (MUH)", "Milch (Müller)"]
+
+
+async def test_search_ranks_then_dictionary_order(api: AsyncClient, anna: Account) -> None:
+    """ING-03: the best matches first ("Milch" above "Buttermilch"), each rank in dictionary
+    order."""
+    for name, brand in (
+        ("Buttermilch", None),
+        ("Milch", "Müller"),
+        ("Milchreis", None),
+        ("Milch", "MUH"),
+        ("Milch", None),
+        ("Pflaumenmus", None),
+        ("Müsli", None),
+        ("Hummus", None),
+        ("Muskatnuss", None),
+        ("Apfelmus", None),
+    ):
+        await create_ingredient(api, anna, name, brand=brand)
+
+    assert await search(api, anna, q="milch") == [
+        "Milch",
+        "Milch (MUH)",
+        "Milch (Müller)",
+        "Milchreis",
+        "Buttermilch",
+    ]
+    assert await search(api, anna, q="mus") == [
+        "Muskatnuss",
+        "Müsli",
+        "Apfelmus",
+        "Hummus",
+        "Pflaumenmus",
+    ]
 
 
 async def test_summaries(api: AsyncClient, anna: Account) -> None:
