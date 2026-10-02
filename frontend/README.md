@@ -95,8 +95,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   (`src/i18n/format.ts`: `formatNumber`, `formatDate`, `parseAmount`).
 - **Ingredient names** are shown with their brand: `ingredientLabel(name, brand)` from
   `features/ingredients/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
-  export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode icon). Two
-  brands of the same thing are different ingredients and separate list lines.
+  export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode icon), with
+  `IngredientCategoryUnit` ("Milchprodukte & Eier · ml") as the grey line below. Two brands of the
+  same thing are different ingredients and separate list lines.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps

@@ -14,7 +14,7 @@ import { useCategories, type Category } from '@/features/reference/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import { useIngredients, type IngredientSummary } from './api';
-import { IngredientDetails } from './IngredientDetails';
+import { IngredientCategoryUnit } from './IngredientCategoryUnit';
 import { IngredientFormDialog } from './IngredientFormDialog';
 import { IngredientName } from './IngredientName';
 
@@ -150,7 +150,7 @@ function IngredientList({
           >
             <span className="flex min-w-0 flex-1 flex-col">
               <IngredientName ingredient={ingredient} />
-              <IngredientDetails ingredient={ingredient} categoryKeys={categoryKeys} />
+              <IngredientCategoryUnit ingredient={ingredient} categoryKeys={categoryKeys} />
             </span>
             <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
           </Link>

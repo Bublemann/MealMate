@@ -7,7 +7,7 @@ import type { IngredientSummary } from './api';
  * "Milchprodukte & Eier · ml" (ING-03), so it shows where the ingredient sorts on a shopping
  * list. `categoryKeys` maps category ids to keys; while a category is unknown, only the unit shows.
  */
-export function IngredientDetails({
+export function IngredientCategoryUnit({
   ingredient,
   categoryKeys,
 }: {

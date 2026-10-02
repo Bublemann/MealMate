@@ -443,6 +443,10 @@ def test_meals_and_lists_keep_working_after_0007(tmp_path: Path) -> None:
 # --- 0008 -----------------------------------------------------------------------------------
 
 
+def meals_and_ingredients(path: Path) -> dict[str, list[dict[str, object]]]:
+    return {table: rows_of(path, table) for table in ("meals", "ingredients")}
+
+
 def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> None:
     """seed-demo data at 0007 → 0008 (D-27): every meal and ingredient gets the sort key of its
     name, and an ingredient with a brand that of its brand; no row and no other value changes,
@@ -452,14 +456,14 @@ def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> Non
     load_demo_0006(path)
     command.upgrade(config, "0007")
     counts, references = row_counts(path), non_null_foreign_keys(path)
-    before = {table: rows_of(path, table) for table in ("meals", "ingredients")}
+    before = meals_and_ingredients(path)
 
     command.upgrade(config, "0008")
 
     assert row_counts(path) == counts
     assert non_null_foreign_keys(path) == references
     assert_clean(path)
-    after = {table: rows_of(path, table) for table in ("meals", "ingredients")}
+    after = meals_and_ingredients(path)
     for table, rows in after.items():
         without_keys = [
             {column: value for column, value in row.items() if not column.endswith("_sort")}
@@ -488,7 +492,7 @@ def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> Non
     assert all((brand is None) == (keys[1] is None) for (_, brand), keys in ingredients.items())
 
     command.downgrade(config, "0007")
-    assert {table: rows_of(path, table) for table in ("meals", "ingredients")} == before
+    assert meals_and_ingredients(path) == before
     assert row_counts(path) == counts
     assert_clean(path)
 

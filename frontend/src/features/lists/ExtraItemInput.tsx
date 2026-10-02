@@ -7,7 +7,7 @@ import { RemovableChip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useIngredients, type IngredientSummary } from '@/features/ingredients/api';
-import { IngredientDetails } from '@/features/ingredients/IngredientDetails';
+import { IngredientCategoryUnit } from '@/features/ingredients/IngredientCategoryUnit';
 import { IngredientName } from '@/features/ingredients/IngredientName';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { useCategories, type Unit } from '@/features/reference/api';
@@ -232,7 +232,7 @@ export function ExtraItemInput({
                   className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
                 >
                   <IngredientName ingredient={ingredient} />
-                  <IngredientDetails ingredient={ingredient} categoryKeys={categoryKeys} />
+                  <IngredientCategoryUnit ingredient={ingredient} categoryKeys={categoryKeys} />
                 </button>
               </li>
             ))}

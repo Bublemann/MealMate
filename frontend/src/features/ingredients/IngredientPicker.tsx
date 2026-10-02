@@ -8,8 +8,8 @@ import { useCategories } from '@/features/reference/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import { toSummary, useIngredients, type IngredientSummary } from './api';
+import { IngredientCategoryUnit } from './IngredientCategoryUnit';
 import { IngredientFormDialog } from './IngredientFormDialog';
-import { IngredientDetails } from './IngredientDetails';
 import { IngredientName } from './IngredientName';
 
 /** More matches than this are left out: the search narrows them down. */
@@ -112,7 +112,7 @@ export function IngredientPicker({
                 className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
               >
                 <IngredientName ingredient={ingredient} />
-                <IngredientDetails ingredient={ingredient} categoryKeys={categoryKeys} />
+                <IngredientCategoryUnit ingredient={ingredient} categoryKeys={categoryKeys} />
               </button>
             </li>
           ))}
