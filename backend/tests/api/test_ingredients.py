@@ -163,6 +163,9 @@ async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Ac
         ({"name": "Äp\nfel"}, "name", "invalid_format"),
         ({"name": "́"}, "name", "invalid_format"),
         ({"base_unit": "kg"}, "base_unit", "invalid"),
+        ({"base_unit": "pieces"}, "base_unit", "invalid"),
+        ({"base_unit": "piece", "piece_weight_g": 0}, "piece_weight_g", "out_of_range"),
+        ({"base_unit": "piece", "piece_weight_g": 10_000.5}, "piece_weight_g", "out_of_range"),
         ({"piece_weight_g": 0}, "piece_weight_g", "out_of_range"),
         ({"piece_weight_g": 10_000.5}, "piece_weight_g", "out_of_range"),
         ({"density_g_per_ml": 0.09}, "density_g_per_ml", "out_of_range"),
@@ -847,6 +850,61 @@ async def test_the_base_unit_changes_freely(api: AsyncClient, anna: Account) -> 
     oil = await create_ingredient(api, anna, "Olivenöl", barcode=EAN_13, nutrients={"fat": 92})
     body = (await patch(api, anna, oil["id"], base_unit="ml")).json()
     assert (body["base_unit"], body["nutrients"]["fat"]) == ("ml", 92)
+
+
+# --- base unit Stück (ING-02, D-32) -----------------------------------------------------------
+
+
+async def test_a_piece_ingredient_with_a_piece_weight(api: AsyncClient, anna: Account) -> None:
+    eggs = await create_ingredient(
+        api, anna, "Eier", base_unit="piece", piece_weight_g=60, nutrients={"kcal": 155}
+    )
+    assert (eggs["base_unit"], eggs["piece_weight_g"], eggs["nutrients"]["kcal"]) == (
+        "piece",
+        60,
+        155,
+    )
+    assert await get(api, anna, eggs["id"]) == eggs
+    response = await api.get("/api/ingredients", params={"q": "eier"}, headers=anna.headers)
+    assert [(item["name"], item["base_unit"]) for item in response.json()] == [("Eier", "piece")]
+
+    body = (await patch(api, anna, eggs["id"], piece_weight_g=10_000)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 10_000)
+    body = (await patch(api, anna, eggs["id"], piece_weight_g=None)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
+    without = await create_ingredient(api, anna, "Brötchen", base_unit="piece")
+    assert (without["base_unit"], without["piece_weight_g"]) == ("piece", None)
+
+
+async def test_counting_an_ingredient_in_pieces(api: AsyncClient, anna: Account) -> None:
+    """Nothing is converted: the piece weight stays, the values are per 100 g as before."""
+    rolls = await create_ingredient(
+        api, anna, "Brötchen", piece_weight_g=50, nutrients={"kcal": 270}
+    )
+    body = (await patch(api, anna, rolls["id"], base_unit="piece")).json()
+    assert (body["base_unit"], body["piece_weight_g"], body["nutrients"]["kcal"]) == (
+        "piece",
+        50,
+        270,
+    )
+
+
+@pytest.mark.parametrize("base_unit", ["g", "ml"])
+async def test_leaving_pieces_clears_the_piece_weight(
+    api: AsyncClient, anna: Account, base_unit: str
+) -> None:
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    assert (await patch(api, anna, eggs["id"], name="Eier (M)")).json()["piece_weight_g"] == 60
+    same = (await patch(api, anna, eggs["id"], base_unit="piece")).json()
+    assert same["piece_weight_g"] == 60
+
+    body = (await patch(api, anna, eggs["id"], base_unit=base_unit)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == (base_unit, None)
+
+    # One sent along is kept: a g or ml ingredient may still have one.
+    again = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    body = (await patch(api, anna, again["id"], base_unit=base_unit, piece_weight_g=55)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == (base_unit, 55)
 
 
 async def test_invalid_updates(api: AsyncClient, anna: Account) -> None:

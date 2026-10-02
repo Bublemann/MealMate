@@ -24,6 +24,9 @@ ML = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=None)
 ML_PIECE = IngredientAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=None)
 ML_FULL = IngredientAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=1.03)
 G_ZERO = IngredientAttrs(BaseUnit.G, piece_weight_g=0, density_g_per_ml=0)
+EGGS = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
+EGGS_BARE = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=None, density_g_per_ml=None)
+EGGS_DENSE = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=1.03)
 
 
 def test_units_in_display_order() -> None:
@@ -35,7 +38,12 @@ def test_units_in_display_order() -> None:
         Unit.TBSP,
         Unit.TSP,
     ]
-    assert BASE_KIND == {BaseUnit.G: UnitKind.MASS, BaseUnit.ML: UnitKind.VOLUME}
+    assert [base_unit.value for base_unit in BaseUnit] == ["g", "ml", "piece"]
+    assert BASE_KIND == {
+        BaseUnit.G: UnitKind.MASS,
+        BaseUnit.ML: UnitKind.VOLUME,
+        BaseUnit.PIECE: UnitKind.COUNT,
+    }
 
 
 @pytest.mark.parametrize(
@@ -73,6 +81,15 @@ def test_in_kind_base(amount: float, unit: Unit, expected: float) -> None:
         (103, Unit.G, ML_FULL, False, Converted(100, estimate=False)),
         (1, Unit.KG, ML_FULL, False, Converted(1000 / 1.03, estimate=False)),
         (1, Unit.PIECE, ML_FULL, False, Converted(1000, estimate=False)),
+        # piece ingredient: pieces stay pieces, with or without a piece weight; grams and
+        # millilitres don't say how many pieces they are, not even with a density.
+        (2, Unit.PIECE, EGGS, False, Converted(2, estimate=False)),
+        (0.5, Unit.PIECE, EGGS_BARE, False, Converted(0.5, estimate=False)),
+        (120, Unit.G, EGGS, True, None),
+        (1, Unit.KG, EGGS_DENSE, True, None),
+        (100, Unit.ML, EGGS_DENSE, True, None),
+        (1, Unit.TBSP, EGGS, True, None),
+        (1, Unit.TSP, EGGS_BARE, True, None),
         # A zero piece weight or density counts as missing.
         (1, Unit.PIECE, G_ZERO, True, None),
         (1, Unit.ML, G_ZERO, False, None),
@@ -102,6 +119,7 @@ def test_convert(
         ("ml", 1, Unit.L, 1000),
         ("ml", 103, Unit.G, 100),
         ("ml", 1, Unit.PIECE, 60 / 1.03),
+        ("piece", 3, Unit.PIECE, 3),
     ],
 )
 def test_base_unit_as_a_plain_string(
@@ -159,3 +177,16 @@ def test_the_base_kind_always_converts_without_estimate(
     if result is not None and result.estimate:
         assert unit in {Unit.TBSP, Unit.TSP}
         assert attrs.base_unit is BaseUnit.G
+
+
+@given(amount=st.floats(0.001, 100_000), unit=st.sampled_from(Unit), attrs=attrs_strategy)
+def test_a_piece_ingredient_converts_only_pieces(
+    amount: float, unit: Unit, attrs: IngredientAttrs
+) -> None:
+    """Whatever piece weight and density it has (REF-02, D-32)."""
+    piece = IngredientAttrs(BaseUnit.PIECE, attrs.piece_weight_g, attrs.density_g_per_ml)
+    result = convert(amount, unit, piece, allow_estimate=True)
+    if unit is Unit.PIECE:
+        assert result == Converted(amount, estimate=False)
+    else:
+        assert result is None

@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { Language } from '@/i18n';
 import { formatNumber, parseAmount } from '@/i18n/format';
-import type { NutrientValues } from './api';
+import type { BaseUnit, NutrientValues } from './api';
 
 export type NutrientKey = keyof NutrientValues;
 
@@ -19,6 +19,14 @@ void allNutrientsListed;
 
 export function nutrientLabel(t: TFunction, key: NutrientKey): string {
   return t(`nutrient.${key}`);
+}
+
+/**
+ * What an ingredient's nutrition values are per 100 of: g, or ml for an ingredient counted in
+ * ml. Pieces count through the piece weight, so their values are per 100 g (ING-02).
+ */
+export function nutritionUnit(baseUnit: BaseUnit): 'g' | 'ml' {
+  return baseUnit === 'ml' ? 'ml' : 'g';
 }
 
 /** "52 kcal" / "0,3 g": a value per 100 g or ml, formatted in the UI language. */

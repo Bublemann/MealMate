@@ -117,7 +117,7 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
         CheckConstraint("position >= 0", name="position"),
         CheckConstraint("amount IS NULL OR amount > 0", name="amount"),
         CheckConstraint("unit IS NULL OR amount IS NOT NULL", name="unit_needs_amount"),
-        CheckConstraint("base_unit_snapshot IN ('g', 'ml')", name="base_unit_snapshot"),
+        CheckConstraint("base_unit_snapshot IN ('g', 'ml', 'piece')", name="base_unit_snapshot"),
         UniqueConstraint("list_meal_id", "position"),
     )
 
@@ -130,7 +130,7 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
     )
     ingredient_name_snapshot: Mapped[str] = mapped_column(String(INGREDIENT_NAME_MAX_LENGTH))
     ingredient_brand_snapshot: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
-    base_unit_snapshot: Mapped[str] = mapped_column(String(2))
+    base_unit_snapshot: Mapped[str] = mapped_column(String(5))
     piece_weight_g_snapshot: Mapped[float | None] = mapped_column(Float)
     density_snapshot: Mapped[float | None] = mapped_column(Float)
     category_id_snapshot: Mapped[str] = mapped_column(

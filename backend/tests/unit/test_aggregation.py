@@ -32,6 +32,8 @@ APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=180, density_g_per_ml=None)
 APPLES_ML = IngredientAttrs(BaseUnit.ML, piece_weight_g=180, density_g_per_ml=1.0)
 HEAVY_APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=200, density_g_per_ml=None)
 HONEY = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=1.4)
+EGGS = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
+APPLE_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=180, density_g_per_ml=None)
 MEAL = SourceRef("meal", "m1")
 
 
@@ -86,6 +88,33 @@ def seg(**values: float) -> dict[UnitKind, float]:
             False,
             True,
         ),
+        # A piece ingredient: its pieces add up; other kinds sit beside them, even with a
+        # piece weight (AGG-03).
+        ([part(2, Unit.PIECE, EGGS), part(1.5, Unit.PIECE, EGGS)], seg(count=3.5), False, False),
+        (
+            [part(2, Unit.PIECE, EGGS), part(120, Unit.G, EGGS)],
+            seg(mass=120, count=2),
+            False,
+            False,
+        ),
+        (
+            [part(2, Unit.PIECE, EGGS), part(1, Unit.TBSP, EGGS)],
+            seg(volume=15, count=2),
+            False,
+            True,
+        ),
+        # Frozen as a g ingredient with a piece weight, live as a piece ingredient: the frozen
+        # parts keep converting, the live pieces stay pieces.
+        (
+            [
+                part(100, Unit.G, APPLES),
+                part(2, Unit.PIECE, APPLES),
+                part(1, Unit.PIECE, APPLE_PIECES),
+            ],
+            seg(mass=460, count=1),
+            False,
+            False,
+        ),
         # Free text (no attributes) and parts without an amount.
         ([part(2, Unit.PIECE, None), part(10, Unit.G, None)], seg(mass=10, count=2), False, False),
         ([part(500, Unit.G), part(None, None), part(1, None)], seg(mass=500), True, False),
@@ -110,6 +139,8 @@ def test_totals(
         ([part(500, Unit.G), part(None, None), part(1, None)], 500, BaseUnit.G),
         ([part(92, Unit.G, OIL), part(1, Unit.TBSP, OIL)], 115, BaseUnit.ML),
         ([part(1, Unit.L, MILK), part(1, Unit.PIECE, MILK)], 2000, BaseUnit.ML),
+        ([part(2, Unit.PIECE, EGGS), part(1.5, Unit.PIECE, EGGS)], 3.5, BaseUnit.PIECE),
+        ([part(2, Unit.PIECE, EGGS), part(None, None, EGGS)], 2, BaseUnit.PIECE),
         # Otherwise none: nothing measured, a part that does not convert, free text, or
         # parts with different base units.
         ([], None, None),
@@ -119,6 +150,8 @@ def test_totals(
         ([part(1, Unit.TBSP)], None, None),  # no 1 g/ml estimate
         ([part(2, Unit.PIECE, None)], None, None),
         ([part(100, Unit.G), part(100, Unit.ML, OIL)], None, None),
+        ([part(2, Unit.PIECE, EGGS), part(120, Unit.G, EGGS)], None, None),
+        ([part(2, Unit.PIECE, APPLES), part(1, Unit.PIECE, APPLE_PIECES)], None, None),
     ],
 )
 def test_base_total(
@@ -234,6 +267,14 @@ def test_aggregate_groups_sorts_and_keeps_sources() -> None:
     assert oil.sources == [MEAL, extra]
 
 
+def test_a_piece_ingredient_is_shown_in_whole_pieces_rounded_up() -> None:
+    """AGG-04: 1.5 + 1 eggs are 3 Stk."""
+    parts = [part(1.5, Unit.PIECE, EGGS, key="i:eggs"), part(1, Unit.PIECE, EGGS, key="i:eggs")]
+    [eggs] = aggregate(parts, lambda _key: (0, "eier"))
+    assert eggs.display == [DisplayAmount(3, Unit.PIECE)]
+    assert (eggs.totals.base_total, eggs.totals.base_unit) == (2.5, BaseUnit.PIECE)
+
+
 def test_equal_sort_keys_fall_back_to_the_line_key() -> None:
     parts = [part(1, Unit.G, key=key) for key in ("i:b", "i:c", "i:a")]
     lines = aggregate(parts, lambda _key: (0, "same"))
@@ -344,6 +385,17 @@ def apples(
             apples((2, Unit.PIECE), (1, Unit.TBSP)),
             NeedsMore(needed=True, new_segments=[MASS, VOLUME]),
         ),
+        # A piece ingredient compares in pieces; another kind beside them, segment by segment.
+        (
+            totals([part(2, Unit.PIECE, EGGS)]),
+            totals([part(3, Unit.PIECE, EGGS)]),
+            NeedsMore(needed=True, grown={COUNT: 1}),
+        ),
+        (
+            totals([part(2, Unit.PIECE, EGGS), part(120, Unit.G, EGGS)]),
+            totals([part(2, Unit.PIECE, EGGS)]),
+            NeedsMore(needed=False),
+        ),
         # Free text has no base total.
         (
             totals([part(2, Unit.PIECE, None)]),
@@ -389,6 +441,11 @@ def test_snapshot_json() -> None:
         CheckSnapshot({COUNT: 2}, False)
     )
 
+    in_pieces = CheckSnapshot.of(totals([part(2.5, Unit.PIECE, EGGS)]))
+    data = in_pieces.to_json()
+    assert data == {"count": 2.5, "has_unspecified": False, "base_total": 2.5, "base_unit": "piece"}
+    assert CheckSnapshot.from_json(data).base_unit is BaseUnit.PIECE
+
 
 @pytest.mark.parametrize(
     ("before", "after", "shown"),
@@ -422,6 +479,11 @@ def test_snapshot_json() -> None:
             totals([part(1, Unit.TBSP, OIL), part(92, Unit.G, OIL)]),
             totals([part(0.2, Unit.L, OIL)]),
             [(85, Unit.ML)],
+        ),
+        (
+            totals([part(2, Unit.PIECE, EGGS)]),
+            totals([part(2.5, Unit.PIECE, EGGS)]),
+            [(1, Unit.PIECE)],
         ),
         # Of different kinds, the difference is in the base unit.
         (apples((2, Unit.PIECE)), apples((2, Unit.PIECE), (100, Unit.G)), [(100, Unit.G)]),

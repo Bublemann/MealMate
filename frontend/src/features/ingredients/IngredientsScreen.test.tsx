@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import { CATEGORIES, ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -99,6 +100,18 @@ describe('IngredientsScreen', () => {
     expect(
       within(list).getByRole('link', { name: /^Butter \(Kerrygold\) with barcode/ }),
     ).toHaveAttribute('href', '/ingredients/ing-butter');
+  });
+
+  it('shows “Stk.” in the grey line of an ingredient counted in pieces (ING-03)', async () => {
+    await i18n.changeLanguage('de');
+    renderIngredients({
+      'GET /api/ingredients': [summary('Eier', 'dairy_eggs', { base_unit: 'piece' })],
+    });
+
+    const list = await screen.findByTestId(testIds.ingredientList);
+    expect(within(list).getByTestId(testIds.ingredientRow)).toHaveTextContent(
+      'EierMilchprodukte & Eier · Stk.',
+    );
   });
 
   it('searches on the server once typing pauses', async () => {
@@ -464,6 +477,69 @@ describe('IngredientFormDialog (create)', () => {
       nutrients: { kcal: 57, fat: 0.4 },
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Birnen (Hofgut)' })).toBeVisible();
+  });
+
+  it('counts an ingredient in pieces: “Pieces” shows the weight per piece, nutrition per 100 g (ING-02)', async () => {
+    const created = ingredient({ id: 'ing-eier', name: 'Eier', base_unit: 'piece' });
+    const { fetchMock, user } = renderIngredients({
+      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    });
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    await user.type(within(form).getByLabelText('Name'), 'Eier');
+    const baseUnit = within(form).getByRole('group', { name: 'Base unit' });
+    expect(
+      within(baseUnit)
+        .getAllByRole('radio')
+        .map((radio) => radio.closest('label')?.textContent),
+    ).toEqual(['Grams (g)', 'Millilitres (ml)', 'Pieces (pcs)']);
+    expect(within(form).queryByLabelText('Weight per piece (g)')).not.toBeInTheDocument();
+    // Grams and millilitres keep their fields as they were.
+    expect(within(form).getByLabelText('Weight of one piece (g)')).toBeVisible();
+    expect(within(form).getByLabelText('Density (g/ml)')).toBeVisible();
+
+    await user.click(within(baseUnit).getByLabelText('Pieces (pcs)'));
+
+    const pieceWeight = within(form).getByLabelText('Weight per piece (g)');
+    expect(pieceWeight).toHaveAttribute('inputmode', 'decimal');
+    expect(within(form).queryByLabelText('Weight of one piece (g)')).not.toBeInTheDocument();
+    expect(within(form).queryByLabelText('Density (g/ml)')).not.toBeInTheDocument();
+    expect(
+      within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
+    ).toBeVisible();
+    await user.type(pieceWeight, '60');
+    await user.type(within(form).getByLabelText('Calories'), '155');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+      name: 'Eier',
+      base_unit: 'piece',
+      category_id: 'cat-other',
+      piece_weight_g: 60,
+      nutrients: { kcal: 155 },
+    });
+  });
+
+  it('clears the weight per piece when leaving “Pieces”, keeps one of grams (ING-02)', async () => {
+    const { user } = renderIngredients();
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const form = within(await screen.findByRole('dialog')).getByTestId(testIds.ingredientForm);
+    await user.click(within(form).getByLabelText('Pieces (pcs)'));
+    await user.type(within(form).getByLabelText('Weight per piece (g)'), '60');
+    await user.click(within(form).getByLabelText('Grams (g)'));
+
+    expect(within(form).getByLabelText('Weight of one piece (g)')).toHaveValue('');
+    await user.type(within(form).getByLabelText('Weight of one piece (g)'), '55');
+    await user.click(within(form).getByLabelText('Pieces (pcs)'));
+    expect(within(form).getByLabelText('Weight per piece (g)')).toHaveValue('55');
+    await user.click(within(form).getByLabelText('Grams (g)'));
+    expect(
+      within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
+    ).toBeVisible();
   });
 
   it('scans a barcode into the barcode field', async () => {

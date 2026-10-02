@@ -236,6 +236,35 @@ async def test_different_kinds_stay_side_by_side_until_they_convert(
     assert lines(await detail(api, anna, shopping_list["id"]))["Brötchen"] == ([(600, "g")], False)
 
 
+async def test_a_piece_ingredient_in_whole_pieces(
+    api: AsyncClient, anna: Account, categories: dict[str, str]
+) -> None:
+    """AGG-03/04: a Stück ingredient's pieces, with or without the unit, merge into one total in
+    Stk., rounded up; amounts in other units sit beside it, even with a piece weight."""
+    eggs = await create_ingredient(
+        api,
+        anna,
+        "Eier",
+        category_id=categories["dairy_eggs"],
+        base_unit="piece",
+        piece_weight_g=60,
+    )
+    meal = await create_meal(
+        api, anna, "Rührei", servings=4, ingredients=[row(eggs, 3, "piece"), row(eggs, 2)]
+    )
+    shopping_list = await create_list(api, anna)
+
+    # 5 eggs for 4 servings, made for 3: 3.75.
+    body = await added(api, anna, shopping_list["id"], meal["id"], servings=3)
+    assert lines(body)["Eier"] == ([(4, "piece")], False)
+    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=2)
+    assert lines(body)["Eier"] == ([(6, "piece")], False)
+    body = await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=100, unit="g"
+    )
+    assert lines(body)["Eier"] == ([(100, "g"), (6, "piece")], False)
+
+
 async def test_live_meals_follow_their_meal(
     api: AsyncClient, anna: Account, ingredients: dict[str, Any], meal_b: Any
 ) -> None:

@@ -44,8 +44,9 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     of ingredient: typed by hand ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and
     taken from Open Food Facts with its barcode.
 
-    The nutrient columns are the ingredient's own values per 100 g or 100 ml of its base unit
-    (NUT-02); null is unknown. Names are not unique: two brands of the same thing are two
+    The nutrient columns are the ingredient's own values per 100 g, or per 100 ml for base unit
+    `ml` (NUT-02); null is unknown. A `piece` ingredient's pieces count through its piece weight
+    (NUT-05). Names are not unique: two brands of the same thing are two
     ingredients with the same name. A barcode belongs to at most one ingredient.
 
     The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
@@ -56,7 +57,7 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
 
     __tablename__ = "ingredients"
     __table_args__ = (
-        CheckConstraint("base_unit IN ('g', 'ml')", name="base_unit"),
+        CheckConstraint("base_unit IN ('g', 'ml', 'piece')", name="base_unit"),
         CheckConstraint("source IN ('off', 'manual')", name="source"),
     )
 
@@ -75,7 +76,7 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
-    base_unit: Mapped[str] = mapped_column(String(2), default="g")
+    base_unit: Mapped[str] = mapped_column(String(5), default="g")
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
     density_g_per_ml: Mapped[float | None] = mapped_column(Float)
     quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))

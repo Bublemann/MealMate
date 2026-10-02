@@ -19,7 +19,7 @@ import { useIngredient, type Ingredient } from './api';
 import { IngredientAdminActions } from './IngredientAdminActions';
 import { IngredientFormDialog } from './IngredientFormDialog';
 import { ingredientLabel } from './label';
-import { formatNutrient, NUTRIENT_KEYS, nutrientLabel } from './nutrients';
+import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, nutritionUnit } from './nutrients';
 import { OffAttribution } from './OffAttribution';
 import { PendingUpdateHint } from './PendingUpdateHint';
 
@@ -101,18 +101,23 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
               unit: unitLabel(t, 'g'),
             }),
     },
-    {
-      label: t('ingredients.detail.density'),
-      value:
-        ingredient.density_g_per_ml === null
-          ? notSet
-          : t('common.amount', {
-              value: formatNumber(ingredient.density_g_per_ml, language, {
-                maximumFractionDigits: 3,
-              }),
-              unit: t('ingredients.densityUnit'),
-            }),
-    },
+    // A density means nothing for pieces: they only count through the piece weight.
+    ...(ingredient.base_unit === 'piece'
+      ? []
+      : [
+          {
+            label: t('ingredients.detail.density'),
+            value:
+              ingredient.density_g_per_ml === null
+                ? notSet
+                : t('common.amount', {
+                    value: formatNumber(ingredient.density_g_per_ml, language, {
+                      maximumFractionDigits: 3,
+                    }),
+                    unit: t('ingredients.densityUnit'),
+                  }),
+          },
+        ]),
     { label: t('ingredients.detail.barcode'), value: ingredient.barcode ?? notSet },
     { label: t('ingredients.detail.pack'), value: pack ?? notSet },
     {
@@ -199,7 +204,9 @@ function NutritionCard({ ingredient }: { ingredient: Ingredient }) {
     <Card>
       <CardHeader>
         <CardTitle>
-          {t('ingredients.nutrition.title', { unit: unitLabel(t, ingredient.base_unit) })}
+          {t('ingredients.nutrition.title', {
+            unit: unitLabel(t, nutritionUnit(ingredient.base_unit)),
+          })}
         </CardTitle>
       </CardHeader>
       <CardContent>

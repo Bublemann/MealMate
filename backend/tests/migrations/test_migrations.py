@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0009"
+HEAD = "0010"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +59,8 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients; 0008 and 0009 only add columns.
+# 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
+# one.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -131,6 +132,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0009")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0010")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0009")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
@@ -582,6 +587,79 @@ def test_category_names_are_unique_per_language(
             f"UPDATE categories SET {column} = "  # noqa: S608
             f"(SELECT {column} FROM categories WHERE key = 'other') WHERE key = 'cheese'"
         )
+
+
+# --- 0010 -----------------------------------------------------------------------------------
+
+# Counting the demo's onions in pieces, as an ingredient and in the frozen rows (LIST-11).
+COUNTED_IN_PIECES = (
+    "UPDATE ingredients SET base_unit = 'piece', piece_weight_g = 150 WHERE name = 'Zwiebeln'",
+    "UPDATE list_meal_ingredients SET base_unit_snapshot = 'piece' "
+    "WHERE ingredient_name_snapshot = 'Zwiebeln'",
+)
+
+
+def execute(path: Path, statement: str) -> None:
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(statement)
+
+
+def base_unit_tables(path: Path) -> dict[str, list[dict[str, object]]]:
+    return {table: rows_of(path, table) for table in ("ingredients", "list_meal_ingredients")}
+
+
+def test_0010_widens_the_base_unit_and_changes_no_data(tmp_path: Path) -> None:
+    """seed-demo data at 0009 → 0010 (D-32): only the allowed base units widen, every row and
+    reference stays as it is, also after the downgrade."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = base_unit_tables(path)
+
+    command.upgrade(config, "0010")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert base_unit_tables(path) == before
+    assert_clean(path)
+    command.downgrade(config, "0009")
+    assert row_counts(path) == counts
+    assert base_unit_tables(path) == before
+    assert_clean(path)
+
+
+def test_0010_lets_ingredients_and_frozen_rows_be_counted_in_pieces(tmp_path: Path) -> None:
+    """Up to 0009 the base unit is g or ml; from 0010 on also piece, for an ingredient and for
+    the copy in frozen rows. The downgrade refuses while anything is counted in pieces, and
+    changes nothing."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    for statement in COUNTED_IN_PIECES:
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+            execute(path, statement)
+
+    command.upgrade(config, "0010")
+    for statement in COUNTED_IN_PIECES:
+        execute(path, statement)
+    assert query(path, "SELECT count(*) FROM ingredients WHERE base_unit = 'piece'") == [(1,)]
+    assert_clean(path)
+
+    counted = base_unit_tables(path)
+    with pytest.raises(RuntimeError, match=r"1 ingredient and 5 frozen rows are counted in"):
+        command.downgrade(config, "0009")
+    assert current_revision(path) == "0010"
+    assert base_unit_tables(path) == counted
+    execute(path, "UPDATE ingredients SET base_unit = 'g' WHERE base_unit = 'piece'")
+    with pytest.raises(RuntimeError, match=r"0 ingredients and 5 frozen rows"):
+        command.downgrade(config, "0009")
+    execute(path, "UPDATE list_meal_ingredients SET base_unit_snapshot = 'g'")
+    command.downgrade(config, "0009")
+    assert current_revision(path) == "0009"
+    assert_clean(path)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
