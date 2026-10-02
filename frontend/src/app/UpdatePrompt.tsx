@@ -13,7 +13,7 @@ export function UpdatePrompt() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-20 px-4"
     >
       {available && (
         <Card

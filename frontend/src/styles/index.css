@@ -17,6 +17,10 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-ring: var(--ring);
+  --color-frosted-border: var(--frosted-border);
+  --color-tab-active: var(--tab-active);
+
+  --shadow-frosted: var(--frosted-shadow);
 
   --radius-sm: calc(var(--radius) - 0.25rem);
   --radius-md: calc(var(--radius) - 0.125rem);
@@ -24,6 +28,12 @@
   --radius-xl: calc(var(--radius) + 0.25rem);
 
   --default-transition-duration: var(--duration-fast);
+}
+
+/* A frosted surface (UI-01): the translucent --frosted colour over a blurred backdrop. */
+@utility frosted {
+  background-color: var(--frosted);
+  backdrop-filter: var(--frosted-filter);
 }
 
 @layer base {

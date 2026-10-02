@@ -20,6 +20,17 @@
   --destructive-foreground: #ffffff;
   --ring: #2e7d32;
 
+  /*
+   * Frosted surfaces (UI-01): about 70 % opaque over a blurred, more saturated backdrop (the
+   * `frosted` utility in index.css), with a hairline border and a soft shadow. The active tab's
+   * pill is lighter than the bar.
+   */
+  --frosted: rgb(241 244 241 / 0.7);
+  --frosted-border: rgb(23 32 26 / 0.12);
+  --frosted-shadow: 0 0.5rem 1.5rem rgb(23 32 26 / 0.12), 0 1px 2px rgb(23 32 26 / 0.08);
+  --frosted-filter: blur(20px) saturate(180%);
+  --tab-active: rgb(255 255 255 / 0.9);
+
   --radius: 0.75rem;
   --duration-fast: 150ms;
 
@@ -29,6 +40,19 @@
    */
   --tap-target: max(2.75rem, 44px);
   --control-font-size: max(1rem, 16px);
+
+  /*
+   * The floating tab bar (UI-01) keeps 16 px from the sides and sits above the bottom edge by the
+   * safe area (the home indicator), by at least as much as at the sides on iPhones without one.
+   * Its height and icons grow a little with the text size, but stop short of crowding out the
+   * content at the largest sizes; the tabs keep their 44 pt. --tab-bar-clearance, how far the bar
+   * reaches up from the bottom edge, places the main content's end and the update prompt.
+   */
+  --tab-bar-margin: 16px;
+  --tab-bar-bottom: max(env(safe-area-inset-bottom), var(--tab-bar-margin));
+  --tab-bar-height: clamp(56px, 3.5rem, 72px);
+  --tab-bar-icon: clamp(24px, 1.5rem, 32px);
+  --tab-bar-clearance: calc(var(--tab-bar-bottom) + var(--tab-bar-height));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,6 +72,11 @@
     --destructive: #ef5350;
     --destructive-foreground: #1f0707;
     --ring: #66bb6a;
+
+    --frosted: rgb(29 37 32 / 0.7);
+    --frosted-border: rgb(255 255 255 / 0.1);
+    --frosted-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.4);
+    --tab-active: rgb(255 255 255 / 0.12);
   }
 }
 
