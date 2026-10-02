@@ -81,7 +81,9 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     expect(picker).to_be_visible()
 
     picker.get_by_label(text("lists.picker.search"), exact=True).fill(tag)
-    results = picker.get_by_test_id(TEST_IDS["mealPickerResults"])
+    # The search applies after a short pause; until then the picker lists all meals, which may be
+    # just these two. A meal added from there moves into "Recently used", so wait for the search.
+    results = picker.get_by_role("list", name=text("lists.picker.results"), exact=True)
     expect(results.get_by_role("listitem")).to_have_count(2)
     # Meal A with 4 servings (2 + 2), meal B with 2 servings (4 - 2).
     add_from_picker(picker, tart["name"], 2, "lists.meals.more")
