@@ -64,8 +64,11 @@ function searches(fetchMock: ReturnType<typeof mockApi>) {
   return requestsTo(fetchMock, 'GET /api/meals').map((request) => new URL(request.url).search);
 }
 
+/** The bodies of the profile saves, read from copies so a waitFor can read them again. */
 async function savedFilters(fetchMock: ReturnType<typeof mockApi>) {
-  return Promise.all(requestsTo(fetchMock, 'PATCH /api/me').map((request) => request.json()));
+  return Promise.all(
+    requestsTo(fetchMock, 'PATCH /api/me').map((request) => request.clone().json()),
+  );
 }
 
 /** The rows' texts, also while the filter panel hides the list from screen readers. */
@@ -510,6 +513,116 @@ describe('MealsScreen', () => {
     renderMeals();
     expect(await screen.findByLabelText('Search meals')).toHaveValue('');
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
+  });
+
+  it('does not call a filled tab empty while all meals load again (UI-03)', async () => {
+    const again = heldRoute();
+    let fullLoads = 0;
+    const { queryClient, user } = renderMeals({
+      'GET /api/meals': (request: Request) => {
+        if (new URL(request.url).searchParams.get('q')) return [];
+        fullLoads += 1;
+        return fullLoads === 1 ? ALL : again.route();
+      },
+    });
+    await screen.findByTestId(testIds.mealList);
+    await user.type(screen.getByLabelText('Search meals'), 'Quitten');
+    expect(await screen.findByText('No matches')).toBeVisible();
+
+    // The cache has dropped the unused full list (after its gcTime), so it is loaded again.
+    queryClient.removeQueries({ queryKey: ['meals', 'list', {}], exact: true });
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await waitFor(() => expect(fullLoads).toBe(2));
+
+    expect(screen.queryByText('No meals yet')).toBeNull();
+    expect(screen.getByTestId(testIds.loadingState)).toBeVisible();
+    await again.answer(ALL);
+    await waitFor(() => expect(rowTexts()).toHaveLength(ALL.length));
+  });
+
+  it('does not call the tab empty while the meals load again after ticking users (MEAL-10, UI-03)', async () => {
+    const again = heldRoute();
+    let loads = 0;
+    const { user } = renderMeals(
+      { 'GET /api/meals': () => (++loads === 1 ? [] : again.route()) },
+      { ...TEST_USER, filter_hidden: { meals: [ME.id, BEN.id, CARL.id], lists: [] } },
+    );
+    expect(await screen.findByText('No matches')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+
+    // The answer from before ticked nobody: it says nothing about the meals of everyone.
+    expect(screen.queryByText('No meals yet')).toBeNull();
+    await waitFor(() => expect(loads).toBe(2));
+    expect(screen.queryByText('No meals yet')).toBeNull();
+    expect(screen.getByTestId(testIds.loadingState)).toBeVisible();
+    await again.answer(ALL);
+    await waitFor(() => expect(rowTexts()).toHaveLength(ALL.length));
+  });
+
+  it('keeps users hidden who can’t be seen right now (MEAL-10)', async () => {
+    // Someone unticked earlier has made their meals private since.
+    const { fetchMock, user } = renderMeals(
+      {},
+      { ...TEST_USER, filter_hidden: { meals: ['user-private'], lists: [] } },
+    );
+    await screen.findByTestId(testIds.mealList);
+    const button = screen.getByTestId(testIds.filterButton);
+    const panel = await openPanel(user);
+    const users = group(panel, 'Meals by');
+    await within(users).findByRole('checkbox', { name: 'Ben' });
+    // Everyone visible is ticked: the group is at its default, and "Reset" has nothing to save.
+    expect(button).toHaveAccessibleName('Filters');
+    await user.click(within(panel).getByRole('button', { name: 'Reset' }));
+    expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(0);
+
+    await user.click(within(users).getByRole('checkbox', { name: 'Ben' }));
+    await waitFor(async () =>
+      expect(await savedFilters(fetchMock)).toEqual([
+        { filter_hidden: { meals: ['user-private', BEN.id], lists: [] } },
+      ]),
+    );
+    await user.click(within(panel).getByRole('button', { name: 'Reset' }));
+    await waitFor(async () =>
+      expect((await savedFilters(fetchMock)).at(-1)).toEqual({
+        filter_hidden: { meals: ['user-private'], lists: [] },
+      }),
+    );
+  });
+
+  it('forgets a ticked tag once no meal I can see has it any more (MEAL-09)', async () => {
+    let tags = TAGS;
+    const { queryClient, user } = renderMeals({ 'GET /api/meals/tags': () => tags });
+    await screen.findByTestId(testIds.mealList);
+    const button = screen.getByTestId(testIds.filterButton);
+    const panel = await openPanel(user);
+    await user.click(
+      await within(group(panel, 'Tags')).findByRole('checkbox', { name: 'vegetarisch' }),
+    );
+    await waitFor(() => expect(rowTexts()).toEqual(['LasagneItalianB', 'PfannkuchenA']));
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+
+    // Meanwhile the last vegetarian meals lost the tag.
+    tags = [TAGS[0]!];
+    await queryClient.invalidateQueries({ queryKey: ['meals', 'tags'] });
+
+    await waitFor(() => expect(button).toHaveAccessibleName('Filters'));
+    await waitFor(() => expect(rowTexts()).toHaveLength(ALL.length));
+  });
+
+  it('shows in the panel when a group’s choices cannot be loaded', async () => {
+    const { user } = renderMeals({
+      'GET /api/users/visible': errorResponse(503, 'common.service_unavailable'),
+    });
+    await screen.findByTestId(testIds.mealList);
+
+    const users = group(await openPanel(user), 'Meals by');
+
+    expect(
+      await within(users).findByText('MealMate is unavailable right now. Please try again later.'),
+    ).toBeVisible();
+    expect(within(users).queryByTestId(testIds.loadingState)).toBeNull();
+    expect(within(users).queryAllByRole('checkbox')).toEqual([]);
   });
 
   it('shows a translated error when the meals cannot be loaded', async () => {

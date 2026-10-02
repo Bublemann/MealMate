@@ -50,7 +50,7 @@ async def list_meals(
 @router.get("/tags")
 async def list_meal_tags(principal: CurrentUser, session: ReadSession) -> list[Tag]:
     """The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no
-    limit and ignores your filter chips."""
+    limit; your user filter on Meals doesn't narrow it."""
     return await meals.list_meal_tags(session, principal)
 
 

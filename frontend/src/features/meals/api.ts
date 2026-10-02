@@ -35,7 +35,7 @@ export interface MealFilters {
 
 const MEALS_KEY = ['meals'] as const;
 /** Every search of the meals: the user filter on Meals loads them again once it is saved. */
-export const MEAL_LIST_KEY = [...MEALS_KEY, 'list'] as const;
+export const MEAL_SEARCH_KEY = [...MEALS_KEY, 'list'] as const;
 const detailKey = (id: string) => [...MEALS_KEY, 'detail', id] as const;
 const MEAL_TAGS_KEY = [...MEALS_KEY, 'tags'] as const;
 const TAGS_KEY = ['reference', 'tags'] as const;
@@ -44,7 +44,7 @@ const TAGS_KEY = ['reference', 'tags'] as const;
 export const PHOTO_UPLOAD_TIMEOUT_MS = 60_000;
 
 function invalidateLists(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: MEAL_LIST_KEY });
+  void queryClient.invalidateQueries({ queryKey: MEAL_SEARCH_KEY });
 }
 
 /** A meal was saved, copied or deleted: its tags may be new, or no longer used anywhere. */
@@ -71,7 +71,7 @@ export function useMeals({ q, cuisineIds, tagIds }: MealFilters) {
     ...(tagIds.length ? { tag_id: [...tagIds] } : {}),
   };
   return useQuery({
-    queryKey: [...MEAL_LIST_KEY, query],
+    queryKey: [...MEAL_SEARCH_KEY, query],
     queryFn: ({ signal }) => unwrap(api.GET('/api/meals', { params: { query }, signal })),
     placeholderData: keepPreviousData,
   });

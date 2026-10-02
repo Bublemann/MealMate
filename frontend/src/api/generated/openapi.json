@@ -8056,7 +8056,7 @@
     },
     "/api/meals/tags": {
       "get": {
-        "description": "The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no\nlimit and ignores your filter chips.",
+        "description": "The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no\nlimit; your user filter on Meals doesn't narrow it.",
         "operationId": "list_meal_tags",
         "responses": {
           "200": {

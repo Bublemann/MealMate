@@ -24,41 +24,48 @@ const SAVE_KEY = ['me', 'filter-hidden'] as const;
 /**
  * Saves whom the user filter on Meals or on Lists hides (MEAL-10, UI-02). The choice changes at
  * once (optimistic), is saved on the server in `filter_hidden` so it follows the user to other
- * devices, and `reload` (the query the filter narrows) loads again once it is saved. Saves run one
- * after another, each sending the whole list; the saved state only replaces the choice once no
- * other save is waiting, as it doesn't know those yet. When saving fails, the profile and `reload`
- * are loaded again: going back to a snapshot could undo a change queued after the failed one.
+ * devices, and `reloadKey` (the query the filter narrows) loads again once it is saved; the last
+ * waiting save stays pending until that answer is in. Saves run one after another, each sending
+ * the whole list; the saved state only replaces the choice once no other save is waiting, as it
+ * doesn't know those yet. When saving fails, the profile and `reloadKey` are loaded again: going
+ * back to a snapshot could undo a change queued after the failed one.
  */
-export function useSaveUserFilter(kind: UserFilterKind, reload: QueryKey) {
+export function useSaveUserFilter(kind: UserFilterKind, reloadKey: QueryKey) {
   const session = useAuthSession();
   const user = useCurrentUser();
   const queryClient = useQueryClient();
-  const reloadResults = () => void queryClient.invalidateQueries({ queryKey: reload });
+  const current = () => session.getState().user ?? user;
+  const reload = () => queryClient.invalidateQueries({ queryKey: reloadKey });
   return useMutation({
     mutationKey: SAVE_KEY,
     scope: { id: SAVE_KEY.join('-') },
-    mutationFn: (hidden: string[]) => {
-      const current = (session.getState().user ?? user).filter_hidden;
-      return unwrap(
-        api.PATCH('/api/me', { body: { filter_hidden: { ...current, [kind]: hidden } } }),
-      );
-    },
+    mutationFn: (hidden: string[]) =>
+      unwrap(
+        api.PATCH('/api/me', {
+          body: { filter_hidden: { ...current().filter_hidden, [kind]: hidden } },
+        }),
+      ),
     onMutate: (hidden) => {
-      const current = session.getState().user ?? user;
-      session.setUser({ ...current, filter_hidden: { ...current.filter_hidden, [kind]: hidden } });
+      const me = current();
+      session.setUser({ ...me, filter_hidden: { ...me.filter_hidden, [kind]: hidden } });
     },
     onError: async () => {
-      reloadResults();
+      void reload();
       try {
         session.setUser(await unwrap(api.GET('/api/me')));
       } catch {
         // Offline: the choice stays as it is until the next successful load.
       }
     },
-    onSuccess: (me) => {
+    onSuccess: async (me) => {
       // This save still counts as running here.
-      if (queryClient.isMutating({ mutationKey: SAVE_KEY }) <= 1) session.setUser(me);
-      reloadResults();
+      if (queryClient.isMutating({ mutationKey: SAVE_KEY }) > 1) {
+        void reload();
+        return;
+      }
+      session.setUser(me);
+      // Until the results follow the choice, the screen can't tell "nothing to show" yet.
+      await reload();
     },
   });
 }

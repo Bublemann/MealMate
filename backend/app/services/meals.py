@@ -318,7 +318,7 @@ async def recent_meals(
 ) -> list[MealSummary]:
     """The meals the principal added to lists, most recently added first and each once, as
     far as they still exist and are visible to them (MEAL-09: "recently used" in the meal
-    picker); at most 10. Filter chips do not apply."""
+    picker); at most 10. The user filter on Meals does not apply."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         meal_ids = await lists_repo.recent_meal_ids(
@@ -330,8 +330,8 @@ async def recent_meals(
 
 async def list_meal_tags(session: AsyncSession, principal: Principal) -> list[Tag]:
     """The tags on the meals the principal may see (VIS-01/02, CPL-04), by name: the choices of
-    the Meals tab's tag filter (MEAL-09). Filter chips (MEAL-10) do not narrow them, and tags
-    only used on meals the principal cannot see are left out."""
+    the Meals tab's tag filter (MEAL-09). The user filter on Meals (MEAL-10) does not narrow
+    them, and tags only used on meals the principal cannot see are left out."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         tags = await meals_repo.tags_of_owners(session, visible)

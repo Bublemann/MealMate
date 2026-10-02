@@ -1289,7 +1289,7 @@ export interface paths {
         /**
          * List Meal Tags
          * @description The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no
-         *     limit and ignores your filter chips.
+         *     limit; your user filter on Meals doesn't narrow it.
          */
         get: operations["list_meal_tags"];
         put?: never;

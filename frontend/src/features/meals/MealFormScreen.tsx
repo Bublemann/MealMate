@@ -46,11 +46,7 @@ export function MealFormScreen() {
   const name = params.get('name')?.trim() ?? '';
   // From the meal picker (LIST-03): the new meal goes onto that list, and back there. Only a list
   // id goes into the paths; anything else in the URL is ignored.
-  return addToList && isUuid(addToList) ? (
-    <MealFormView addToList={addToList} name={name} />
-  ) : (
-    <MealFormView name={name} />
-  );
+  return <MealFormView addToList={addToList && isUuid(addToList) ? addToList : ''} name={name} />;
 }
 
 function EditMeal({ id }: { id: string }) {
