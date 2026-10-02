@@ -25,8 +25,20 @@ _Avoid_: spouse, co-owner
 ### Food
 
 **Ingredient**:
-A food item shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit (g or ml) and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
+A food item shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
 _Avoid_: product, food, article
+
+**Base unit**:
+What an ingredient is counted in, chosen once for it: grams, millilitres or pieces (Stück). Its amounts in meals and on shopping lists use units of that kind only; an ingredient counted in grams may also be measured in spoons. Nothing is converted between grams, millilitres and pieces.
+_Avoid_: unit (on its own), format, measure
+
+**Piece weight**:
+What one piece of an ingredient counted in pieces weighs (e.g. one egg = 60 g). It only serves to work out that ingredient's nutrition, which is given per 100 g like any other.
+_Avoid_: unit weight, piece size
+
+**Pack size**:
+The amount printed on a package ("500 g", "6 × 1,5 l"), as OFF reports it. Information only, never typed in and never used in a calculation; not the same as a piece weight.
+_Avoid_: package, quantity, content
 
 **Brand**:
 The brand name on an ingredient (e.g. "Weihenstephan", "REWE"). It is optional, with or without a barcode, and always shown after the ingredient's name.
