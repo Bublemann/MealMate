@@ -170,15 +170,14 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     page = member_page
     tag = unique("e2e")
     name = f"Eier {tag}"
+    dairy = api.category_name(member, "dairy_eggs")
 
     page.goto("/ingredients")
     page.get_by_test_id(TEST_IDS["newIngredient"]).click()
     dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
     form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
     form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
-    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(
-        label=text("category.dairy_eggs")
-    )
+    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=dairy)
     # The weight per piece shows only for Stück.
     piece_weight = form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)
     expect(piece_weight).to_have_count(0)
@@ -200,7 +199,7 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     row = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role(
         "link", name=re.compile(f"^{re.escape(name)} ")
     )
-    expect(row).to_contain_text(f"{text('category.dairy_eggs')} · {text('unit.piece')}")
+    expect(row).to_contain_text(f"{dairy} · {text('unit.piece')}")
 
     # 2 eggs for 4 servings: 2 x 60 g = 120 g, x 155 kcal / 100 g = 186 kcal; nothing missing.
     page.goto("/meals/new")
