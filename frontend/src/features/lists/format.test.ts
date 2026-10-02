@@ -88,9 +88,8 @@ describe('sourceAmount', () => {
 });
 
 describe('groupByCategory', () => {
-  it('keeps the server’s order and translates the headings', () => {
-    const keys = new Map(CATEGORIES.map((category) => [category.id, category.key]));
-    const groups = groupByCategory(LINES, keys, en);
+  it('keeps the server’s order and names the headings in the UI language', () => {
+    const groups = groupByCategory(LINES, CATEGORIES, 'en');
 
     expect(groups.map(({ name, lines }) => [name, lines.map((line) => line.name)])).toEqual([
       ['Fruit & vegetables', ['Zwiebeln']],
@@ -99,9 +98,9 @@ describe('groupByCategory', () => {
     ]);
   });
 
-  it('puts lines of an unknown category under Other', () => {
-    const [group] = groupByCategory(LINES.slice(0, 1), new Map(), de);
-    expect(group?.name).toBe('Sonstiges');
+  it('names a category it doesn’t know like Other', () => {
+    const [group] = groupByCategory([{ ...LINES[0]!, category_id: 'cat-new' }], CATEGORIES, 'de');
+    expect(group).toMatchObject({ categoryId: 'cat-new', name: 'Sonstiges' });
   });
 });
 

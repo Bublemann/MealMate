@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { useLanguage } from '@/i18n';
 import { cn } from '@/lib/utils';
+import type { Category } from '@/features/reference/api';
 import { useConnected } from '@/features/sync/context';
 import { testIds } from '@/testIds';
 import {
@@ -32,8 +33,8 @@ const SWIPE_DISTANCE = 96;
 
 interface ListLinesProps {
   list: ListDetail;
-  /** Category keys by id, for the headings. */
-  categoryKeys: ReadonlyMap<string, string>;
+  /** The categories, for the headings. */
+  categories: readonly Category[];
   /** Lines can be removed and restored, and extra items changed (editors of a draft). */
   editable: boolean;
 }
@@ -45,8 +46,9 @@ interface ListLinesProps {
  * collapsed "Removed" section (LIST-07). The reminder is the last row (LIST-14). Offline these
  * changes are disabled (SYNC-03).
  */
-export function ListLines({ list, categoryKeys, editable }: ListLinesProps) {
+export function ListLines({ list, categories, editable }: ListLinesProps) {
   const { t } = useTranslation();
+  const language = useLanguage();
   const offline = !useConnected();
   const headingId = useId();
   const setHidden = useSetLineHidden(list.id);
@@ -54,7 +56,7 @@ export function ListLines({ list, categoryKeys, editable }: ListLinesProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const shown = list.lines.filter((line) => !line.hidden);
   const hidden = list.lines.filter((line) => line.hidden);
-  const groups = groupByCategory(shown, categoryKeys, t);
+  const groups = groupByCategory(shown, categories, language);
   const open = list.lines.find((line) => line.key === openKey) ?? null;
   const editing = list.extra_items.find((item) => item.id === editingId) ?? null;
   const editingName =

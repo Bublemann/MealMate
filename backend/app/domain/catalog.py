@@ -1,4 +1,5 @@
-"""Input rules for ingredients, cuisines and tags (ING-02, REF-03, REF-04, BAR-10).
+"""Input rules for ingredients, categories, cuisines and tags (ING-02, REF-01, REF-03, REF-04,
+BAR-10).
 
 Names are stored as typed (trimmed) and compared through `normalize()` (`*_norm` columns).
 Typed text with control, format, surrogate, private-use or unassigned characters is refused
@@ -11,6 +12,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
 
 INGREDIENT_NAME_MAX_LENGTH = 60
+CATEGORY_NAME_MAX_LENGTH = 40
 CUISINE_NAME_MAX_LENGTH = 40
 TAG_NAME_MAX_LENGTH = 30
 BRAND_MAX_LENGTH = 80

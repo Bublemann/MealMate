@@ -263,7 +263,9 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   start, when the app comes to the foreground, when the connection returns and a second after any
   successful change; lists that are no longer returned disappear. Lists opened on screen and the
   categories are kept too: the category list holds every category's names, deleted ones included
-  (D-30), so stored lists show every heading offline. The copy seeds the query cache
+  (D-30), so stored lists show every heading offline. It is loaded again with the copy once it is
+  stale (`categoriesQuery`, 5 minutes), whichever screen is open; a cached list without names, left
+  by an app version before D-31, is not used. The copy seeds the query cache
   (`initialData` of `useList` and of the list feed's first page on the Lists tab), so they show at
   once and stay when the server can't be reached.
 - **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always

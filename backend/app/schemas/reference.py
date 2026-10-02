@@ -8,11 +8,20 @@ from app.domain.catalog import CUISINE_NAME_MAX_LENGTH, check_name
 from app.domain.units import Unit, UnitKind
 
 
+class CategoryNames(BaseModel):
+    """A category's name in each UI language (I18N-04, D-31)."""
+
+    de: str
+    en: str
+
+
 class Category(BaseModel):
-    """Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order)."""
+    """Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking
+    order). `key` names a seeded category, e.g. `other` for *Other*."""
 
     id: str
     key: str
+    names: CategoryNames
     sort_order: int
 
 

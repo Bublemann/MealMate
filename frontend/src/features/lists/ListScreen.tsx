@@ -7,7 +7,7 @@ import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useCategories } from '@/features/reference/api';
+import { useCategories, type Category } from '@/features/reference/api';
 import type { PendingList } from '@/features/sync/applyPending';
 import { useConnected, usePendingList, useSyncEngine } from '@/features/sync/context';
 import { ListOfflineBanner } from '@/features/sync/ListOfflineBanner';
@@ -119,7 +119,7 @@ function ListView({ id }: { id: string }) {
       {shown && categories.data && (
         <ListContent
           list={shown}
-          categoryKeys={new Map(categories.data.map((category) => [category.id, category.key]))}
+          categories={categories.data}
           openPicker={initial.openPicker === true}
           onRefresh={() => {
             void engine.flush();
@@ -133,12 +133,12 @@ function ListView({ id }: { id: string }) {
 
 interface ListContentProps {
   list: PendingList;
-  categoryKeys: ReadonlyMap<string, string>;
+  categories: readonly Category[];
   openPicker: boolean;
   onRefresh: () => void;
 }
 
-function ListContent({ list, categoryKeys, openPicker, onRefresh }: ListContentProps) {
+function ListContent({ list, categories, openPicker, onRefresh }: ListContentProps) {
   const { t } = useTranslation();
   const connected = useConnected();
   // Meals and extra items can change while shopping too (LIST-12); a done list is read-only.
@@ -153,7 +153,7 @@ function ListContent({ list, categoryKeys, openPicker, onRefresh }: ListContentP
       {/* SYNC-07, SHOP-03; "Refresh" while shopping, when the partner's changes matter most. */}
       <SyncIndicator onRefresh={list.status === 'shopping' ? onRefresh : undefined} />
       <ListOfflineBanner shopping={list.status === 'shopping' && list.can_edit} />
-      <ListActions list={list} categoryKeys={categoryKeys} />
+      <ListActions list={list} categories={categories} />
       {draft && list.can_edit && (
         <div className="flex flex-col gap-3">
           <Button
@@ -172,13 +172,13 @@ function ListContent({ list, categoryKeys, openPicker, onRefresh }: ListContentP
         <>
           <ListMeals list={list} editable={editable} onAddMeals={openPickerNow} />
           {editable && <ExtraItemInput listId={list.id} />}
-          <ListLines list={list} categoryKeys={categoryKeys} editable={editable} />
+          <ListLines list={list} categories={categories} editable={editable} />
         </>
       )}
       {list.status === 'shopping' && (
-        <ShoppingView list={list} categoryKeys={categoryKeys} onAddMeals={openPickerNow} />
+        <ShoppingView list={list} categories={categories} onAddMeals={openPickerNow} />
       )}
-      {list.status === 'done' && <DoneView list={list} categoryKeys={categoryKeys} />}
+      {list.status === 'done' && <DoneView list={list} categories={categories} />}
       {editable && <MealPicker listId={list.id} open={pickerOpen} onOpenChange={setPickerOpen} />}
     </>
   );

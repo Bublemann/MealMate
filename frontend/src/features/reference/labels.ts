@@ -1,16 +1,22 @@
 import type { TFunction } from 'i18next';
-import i18n from '@/i18n';
+import i18n, { type Language } from '@/i18n';
+import type { Category } from './api';
 
-// Seeded reference data is translated through keys (I18N-04). The keys come from the server as
-// plain strings, so a key this app version doesn't know yet is shown as it is.
+// Units and seeded cuisines are translated through keys (I18N-04). The keys come from the server
+// as plain strings, so a key this app version doesn't know yet is shown as it is.
 function translated(t: TFunction, key: string, fallback: string): string {
   // The key is checked at runtime; the cast only satisfies the typed `t`.
-  return i18n.exists(key) ? t(key as 'category.other') : fallback;
+  return i18n.exists(key) ? t(key as 'unit.g') : fallback;
 }
 
-/** "Obst & Gemüse" for `fruit_vegetables` (REF-01). */
-export function categoryName(t: TFunction, key: string): string {
-  return translated(t, `category.${key}`, key);
+/**
+ * A category's name in the UI language, else in English (I18N-01): category names are data from
+ * the server, not translations (I18N-04, D-31), so admins can add and rename categories.
+ */
+export function categoryName(category: Pick<Category, 'names'>, language: Language): string {
+  // Widened: a UI language added later has no names until admins fill them in.
+  const names: Partial<Record<string, string | null>> = category.names;
+  return names[language] || category.names.en;
 }
 
 /** "Stk." / "pcs" for `piece` (REF-02). */

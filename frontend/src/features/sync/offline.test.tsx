@@ -101,6 +101,63 @@ describe('lists from the local copy (SYNC-09)', () => {
     );
   });
 
+  it('heads the lines of a stored list with the stored category names (LIST-11)', async () => {
+    await storeCopy(listDetail());
+    serverGone(FAIL);
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    const lines = await screen.findByTestId(testIds.listLines);
+    expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
+  });
+
+  it('loads the categories again over ones an older app version stored without names', async () => {
+    const storage = await storeCopy(listDetail());
+    await storage.setMeta(userMetaKey('categories', TEST_USER.id), {
+      categories: CATEGORIES.map(({ id, key, sort_order }) => ({ id, key, sort_order })),
+      storedAt: 1_000,
+    });
+    const categories = heldRoute();
+    mockApi({
+      ...LIST_ROUTES,
+      'GET /api/categories': categories.route,
+      [`GET /api/lists/${LIST_ID}`]: NEVER,
+      'GET /api/lists/sync': NEVER,
+    });
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    // The list comes from the copy, the categories wait for the server.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' }),
+    ).toBeVisible();
+    expect(screen.getByText('Loading…')).toBeVisible();
+    await categories.answer(CATEGORIES);
+    const lines = await screen.findByTestId(testIds.listLines);
+    expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
+  });
+
+  it('keeps the stored categories current with the copy, whichever screen is open', async () => {
+    const storage = await storeCopy(listDetail());
+    const renamed = CATEGORIES.map((category) => ({
+      ...category,
+      names: { ...category.names, en: `${category.names.en} (renamed)` },
+    }));
+    mockApi({
+      ...LIST_ROUTES,
+      'GET /api/categories': renamed,
+      'GET /api/lists/sync': { lists: [listDetail()] },
+    });
+
+    renderApp('/lists');
+
+    await waitFor(async () =>
+      expect(await storage.getMeta(userMetaKey('categories', TEST_USER.id))).toMatchObject({
+        categories: renamed,
+      }),
+    );
+  });
+
   it('says a list that isn’t stored needs a connection', async () => {
     await storeCopy(shoppingList({ id: 'another-list' }));
     serverGone(FAIL);

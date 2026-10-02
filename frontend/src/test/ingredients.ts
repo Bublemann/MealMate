@@ -3,12 +3,19 @@ import { BEN, TEST_USER, userRef } from './api';
 
 type Schemas = components['schemas'];
 
-const KEYS = ['fruit_vegetables', 'dairy_eggs', 'cheese', 'other'] as const;
+const NAMES = {
+  fruit_vegetables: { de: 'Obst & Gemüse', en: 'Fruit & vegetables' },
+  dairy_eggs: { de: 'Milchprodukte & Eier', en: 'Dairy & eggs' },
+  cheese: { de: 'Käse', en: 'Cheese' },
+  other: { de: 'Sonstiges', en: 'Other' },
+} as const;
+const KEYS = Object.keys(NAMES) as (keyof typeof NAMES)[];
 
-/** A few categories in their walking order (the real seed has 17). */
+/** A few categories in their walking order, named as seeded (the real seed has 17). */
 export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   id: `cat-${key}`,
   key,
+  names: NAMES[key],
   sort_order: index,
 }));
 

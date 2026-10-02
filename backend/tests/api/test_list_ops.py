@@ -507,14 +507,15 @@ async def test_add_free_text_items(
         extra_id=ids[0],
         text=" Kerzen ",
         amount_text="1 Packung",
-        category_key="household_hygiene",
+        category_id=categories["household_hygiene"],
     )
+    unknown = str(uuid.uuid7())
     body = await applied(
         api,
         ben,
         list_id,
         candles,
-        op("extra.add", extra_id=ids[1].upper(), text="Grillkohle", category_key="nope"),
+        op("extra.add", extra_id=ids[1].upper(), text="Grillkohle", category_id=unknown),
         op("extra.add", extra_id=ids[2], text="Servietten"),
     )
 
@@ -553,6 +554,27 @@ async def test_add_free_text_items(
     response = await send_ops(api, anna, list_id, op("extra.add", extra_id=op_id(9), text="x"))
     assert results(response) == [("rejected", "list.done")]
     assert await scalars(app, select(ListExtraItem.id).where(ListExtraItem.id == op_id(9))) == []
+
+
+async def test_an_older_client_names_the_category_by_key(
+    api: AsyncClient, anna: Account, shopping: Any
+) -> None:
+    """LIST-06, plan § 5.8: an app version from before D-31 sends the category's key instead of
+    its id; an unknown key falls back to *Other* as well."""
+    categories = await category_ids(api, anna)
+    candles, charcoal = op_id(1), op_id(2)
+
+    body = await applied(
+        api,
+        anna,
+        shopping["id"],
+        op("extra.add", extra_id=candles, text="Kerzen", category_key="household_hygiene"),
+        op("extra.add", extra_id=charcoal, text="Grillkohle", category_key="nope"),
+    )
+
+    items = {item["id"]: item["category_id"] for item in body["extra_items"]}
+    assert items[candles] == categories["household_hygiene"]
+    assert items[charcoal] == categories["other"]
 
 
 async def test_update_and_delete_free_text_items(

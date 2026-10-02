@@ -1,25 +1,28 @@
 import { useTranslation } from 'react-i18next';
+import type { Category } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
+import { useLanguage } from '@/i18n';
 import type { IngredientSummary } from './api';
 
 /**
  * The grey line under an ingredient's name in the lists and pickers: its category and base unit,
  * "Milchprodukte & Eier · ml" (ING-03), so it shows where the ingredient sorts on a shopping
- * list. `categoryKeys` maps category ids to keys; while a category is unknown, only the unit shows.
+ * list. While its category is unknown (not loaded yet), only the unit shows.
  */
 export function IngredientCategoryUnit({
   ingredient,
-  categoryKeys,
+  categories,
 }: {
   ingredient: Pick<IngredientSummary, 'category_id' | 'base_unit'>;
-  categoryKeys: ReadonlyMap<string, string>;
+  categories: readonly Category[];
 }) {
   const { t } = useTranslation();
-  const key = categoryKeys.get(ingredient.category_id);
+  const language = useLanguage();
+  const category = categories.find(({ id }) => id === ingredient.category_id);
 
   return (
     <span className="text-sm text-muted-foreground">
-      {key ? `${categoryName(t, key)} · ` : ''}
+      {category ? `${categoryName(category, language)} · ` : ''}
       {unitLabel(t, ingredient.base_unit)}
     </span>
   );
