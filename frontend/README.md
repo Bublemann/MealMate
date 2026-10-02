@@ -262,9 +262,10 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 - **Local copy** (SYNC-02): `GET /api/lists/sync` (with its ETag) replaces the user's copy at
   start, when the app comes to the foreground, when the connection returns and a second after any
   successful change; lists that are no longer returned disappear. Lists opened on screen and the
-  categories are kept too. The copy seeds the query cache (`initialData` of `useList` and of the
-  list feed's first page on the Lists tab), so they show at once and stay when the server can't be
-  reached.
+  categories are kept too: the category list holds every category's names, deleted ones included
+  (D-30), so stored lists show every heading offline. The copy seeds the query cache
+  (`initialData` of `useList` and of the list feed's first page on the Lists tab), so they show at
+  once and stay when the server can't be reached.
 - **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
   queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
   user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush
@@ -385,12 +386,18 @@ translation test fails if a key is missing in one file, if a translation is empt
 has no `error.<code>` translation. German texts are written as a German would say them, not
 translated word for word.
 
-**Seeded reference data** is translated by key (I18N-04): `category.<key>`, `cuisine.<key>`,
-`unit.<unit>`, `nutrient.<key>` and `nutrientUnit.<key>`; `features/reference/labels.ts` shows an
-unknown key as it is. **Adding a nutrient** (MNT-06), frontend side: after `make openapi`, `tsc`
-fails until the key is added to `NUTRIENT_KEYS` in `features/ingredients/nutrients.ts`; then add
-`nutrient.<key>` and `nutrientUnit.<key>` to both files. A new category or cuisine only needs its
-translations.
+**Seeded reference data** is translated by key (I18N-04): `cuisine.<key>`, `unit.<unit>`,
+`nutrient.<key>` and `nutrientUnit.<key>`; `features/reference/labels.ts` shows an unknown key as
+it is. **Adding a nutrient** (MNT-06), frontend side: after `make openapi`, `tsc` fails until the
+key is added to `NUTRIENT_KEYS` in `features/ingredients/nutrients.ts`; then add `nutrient.<key>`
+and `nutrientUnit.<key>` to both files. A new cuisine only needs its translations.
+
+**Category names** are data, not translation keys (I18N-04, D-31): they come from the API, one per
+UI language (`names.de`, `names.en` in `GET /api/categories`), and one helper shows a category's
+name in the UI language, else in English. Admins add, rename and delete categories (REF-01), so
+there is nothing to add to the language files. The category list also returns deleted categories,
+for the headings of lists being shopped and done lists; pickers offer only the categories that
+aren't deleted, without _Uncategorized_.
 
 **Adding a language** (I18N-01):
 

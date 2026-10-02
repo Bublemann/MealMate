@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -135,10 +135,13 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 ### 4.4 Reference data: categories, units, cuisines, tags (REF)
 
-- **REF-01** **Categories** are seeded once, globally, with translation keys, in a default German-supermarket walking order. The seed list is in the [appendix](#appendix-a--seed-data).
-  - Admins can **reorder** categories to match the store.
-  - Adding or renaming categories needs a new app version.
-  - `Other / Sonstiges` always exists.
+- **REF-01** **Categories** are seeded once, globally, with a German and an English name, in a default German-supermarket walking order. The seed list is in the [appendix](#appendix-a--seed-data).
+  - Admins **add**, **rename**, **delete** and **reorder** categories to match the store (ADM-01). A new category goes to the end of the walking order. A rename shows on every list, old ones included (LIST-11).
+  - **Names:** both are required, at most 40 characters each, and unique per language among the categories that aren't deleted, ignoring case, umlauts and accents. Seeded names count.
+  - `Other / Sonstiges` and `Uncategorized / Ohne Kategorie` always exist. *Other* can be renamed and moved, but not deleted. *Uncategorized* can only be moved, and is never picked by hand (ING-02, LIST-06).
+  - **Deleting** a category moves its ingredients to *Uncategorized*, so the lines of drafts, which follow the ingredients, move there too; only detached meals (LIST-15), which are frozen, keep it. Free-text items on drafts move to *Other* (LIST-06). Lists being shopped and done lists keep the deleted category (LIST-11, D-30).
+  - A deleted category can't be restored, and its names can be reused.
+  - The Open Food Facts category guess (BAR-03) only ever names a seeded category; a guess of a deleted one falls back to *Other*.
 - **REF-02** **Units:** `g`, `kg`, `ml`, `l`, `piece`, `tbsp`, `tsp`. They are fixed and shown translated (`Stk.`/`pcs`, `EL`/`tbsp`, `TL`/`tsp`).
   - Conversions: 1 kg = 1000 g, 1 l = 1000 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml.
 - **REF-03** **Cuisines:** a seeded, translated pick-list. Any user can add further cuisines as plain text. A meal has 0 or 1 cuisine.
@@ -150,7 +153,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **ING-02** An ingredient has:
   - a **name** (stored as typed, not translated). Names don't have to be unique: "Milch" can exist once per brand, and by hand;
   - an optional **brand** and an optional **barcode** (EAN/UPC, unique when set), plus the pack size as information;
-  - a **category** (required, default *Other*);
+  - a **category** (required, default *Other*), picked from the categories that aren't deleted, in walking order. *Uncategorized* is never offered: an ingredient is only put there when an admin deletes its category (REF-01). An uncategorized ingredient can be saved without picking a new category, so its other fields can be edited;
   - a **base unit** (`g` or `ml`, required, default `g`);
   - an optional **weight of one piece** in g (e.g. egg = 60 g);
   - an optional **density** in g per ml;
@@ -248,7 +251,8 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **LIST-05** The list view shows at the **top** the meals with their servings, and **below** the aggregated lines grouped by category in category order (AGG).
 - **LIST-06** **Extra items** are added through one input with autocomplete over ingredients:
   - picking an ingredient adds a linked extra item (optional amount and unit) that merges with the same ingredient from meals;
-  - anything else becomes a **free-text** item with an optional free-text amount. It goes into *Other* unless the user picks a category.
+  - anything else becomes a **free-text** item with an optional free-text amount. It goes into *Other* unless the user picks a category. The choices are the categories that aren't deleted, in walking order, without *Uncategorized* (REF-01).
+  - **When an admin deletes a category**, the free-text items in it move to *Other* on drafts and keep the deleted category on lists being shopped and done lists. "Shop again" (SHOP-06) and "Copy to my lists" (VIS-03) put them into *Other*. A free-text item added offline whose category was deleted before it was sent also lands in *Other*, so sending it never fails (SYNC-04).
 - **LIST-07** In a draft, a calculated line can be **removed for this list only** (swipe), e.g. "still have rice". It moves to a collapsed "Removed" section and can be restored. Nothing is remembered for future lists (there is no pantry logic).
 - **LIST-08** Tapping a line shows which meals and extra items it comes from. Meals the viewer can't see show as "Private meal" (VIS-06).
 - **LIST-09** Every change is saved to the server immediately. A draft can be continued on another device, even after closing the app or restarting the phone. Offline behaviour is covered in SYNC.
@@ -262,7 +266,9 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 - **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the ingredient data needed to calculate them (unit conversions, category).
   - From then on, edits to the meal, deletion of the meal, or wiki edits of the ingredients no longer change this list or its history.
-  - A meal or linked extra item added while shopping is frozen at the moment it's added.
+  - A meal or linked extra item added while shopping is frozen at the moment it's added, under the ingredient's category at that moment, *Uncategorized* included.
+  - **Deleted categories** (REF-01, D-30): frozen lines and the extra items of lists being shopped and done lists keep their category when an admin deletes it. The list keeps showing that heading with its name, near the place it had in the walking order: right after the category that took over its place ([plan § 5.6](plan.md#56-units-nutrition-and-aggregation-domain)). This holds online, offline and in the export.
+  - Category names are not frozen, so a rename shows here too.
 - **LIST-12** **Editing while shopping** (online only): add or remove meals, change servings, add or remove extra items. This lets a partner at home change the list while the other person is in the store.
   - A new line appears unchecked and marked "new".
   - A **checked** line becomes **unchecked** again when it later needs more:
@@ -362,10 +368,10 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 ### 4.14 Languages and formatting (I18N)
 
-- **I18N-01** The UI is in **German and English**, with a language switch in settings. The choice is stored per user on the server. Adding a language must only require adding one translation file (plus seed translations).
+- **I18N-01** The UI is in **German and English**, with a language switch in settings. The choice is stored per user on the server. Adding a language must only require adding one translation file (plus seed translations and its empty category name columns, [plan § 6](plan.md#6-data-model)). Category names are data (I18N-04): a new language shows the English category names until admins fill in names in it.
 - **I18N-02** Before login, the phone or browser language is used (German if it starts with `de`, otherwise English). The chosen language is saved at registration.
 - **I18N-03** The backend never returns user-facing text. Errors are **codes** with parameters, e.g. `meal.not_found`, and the frontend translates them. Every error code must have a German and an English translation, enforced by a test.
-- **I18N-04** Seeded data (categories, units, cuisines) and the reminder texts are translated through keys. User-created text (meal, ingredient and tag names, instructions) is never translated.
+- **I18N-04** Units, seeded cuisines and the reminder texts are translated through keys. **Category names** are data, not translation keys: each category has one name per UI language, which admins maintain (REF-01, D-31). User-created text (meal, ingredient and tag names, instructions) is never translated.
 - **I18N-05** **Formats follow the UI language:**
   - German: `26.09.2026`, `1,5 kg`;
   - English: `26/09/2026`, `1.5 kg` (day first).
@@ -381,10 +387,10 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - listing users;
   - promoting and demoting admins;
   - deactivating, reactivating and deleting users;
-  - reordering categories;
+  - adding, renaming, deleting and reordering categories (REF-01);
   - merging and deleting ingredients;
   - system info: app version, last successful backup, free disk space;
-  - an **admin activity log** showing invites, reset links, role changes, deactivations, deletions and merges, each with who and when.
+  - an **admin activity log** showing invites, reset links, role changes, deactivations, deletions and merges, and categories added, renamed, deleted (with how many ingredients and free-text items moved) and reordered, each with who and when.
 
   At least one **active** admin must always remain, and admins cannot deactivate or delete themselves.
 - **ADM-02** **Deactivating** a user:
@@ -609,7 +615,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - interactive elements get accessible names and test IDs, kept in one file;
   - UI building blocks live in `src/components/ui/`.
 - **MNT-05** UI building blocks (dialogs, sheets, dropdowns, toasts, chips) come from **shadcn/ui**, whose source is copied into the repo, so it can be restyled freely without lock-in. Styling uses Tailwind design tokens.
-- **MNT-06** Adding a nutrient, a unit conversion, a category, a cuisine or a language follows a documented checklist.
+- **MNT-06** Adding a nutrient, a unit conversion, a cuisine or a language follows a documented checklist.
 
 ### 5.7 Testing and quality gates (QA)
 
@@ -678,7 +684,7 @@ These are not in v2.0. The data model should not make them hard.
 | Scan a barcode to check an item off in the store | |
 | Public access without the Tailscale app (Tailscale Funnel) | would need extra hardening |
 | Storybook / visual regression tests for the frontend developer | |
-| Admin-editable categories, cuisines and reminder texts | |
+| Admin-editable cuisines and reminder texts | |
 
 ## 7. Decision log
 
@@ -713,6 +719,8 @@ These are not in v2.0. The data model should not make them hard.
 | D-27 | Meals and ingredients sort in dictionary order, by a key built from the original name (lowercase, ä/ö/ü → a/o/u, ß → ss, accents stripped), not from the `ae`-style normalized name. The Ingredients tab becomes one A–Z list (best match first while searching) with category and base unit in each row instead of category groups, and loses its scan button until creating ingredients is redesigned (2026-10-02) | "Äpfel im Schlafrock" belongs next to "Apfelstrudel"; folding "ae" back would also change real letter pairs ("Quelle", "Feuer", "Aloe"); people look for an ingredient by its name; the row still shows where it sorts on the shopping list |
 | D-28 | A floating, frosted tab bar with icons only (names for screen readers); the active tab gets a lighter pill and a green icon with a thicker stroke. The tab bar and the update banner hide while the keyboard is open, and pop-ups fit into the visible area above it. The keyboard is detected from the visual viewport, ignoring pinch-zoom; no viewport-meta or VirtualKeyboard approach and no iOS "Liquid Glass" (2026-10-02) | the owner wants a lighter, see-through bar; on the iPhone the keyboard hid the Save buttons of pop-ups and the tab bar rode up above it; iOS supports neither the viewport-meta setting nor the VirtualKeyboard API, and the CSP rules out inline scripts |
 | D-29 | The pinned block's text and controls grow with the iPhone text size only up to about the first accessibility size (text up to 28 px, tap targets up to 64 px); the content below it keeps growing (2026-10-02, owner decision on #41) | the block stays at the top while the content scrolls under it: text that kept growing would make it taller than the screen at the largest sizes and hide the list; iOS's own bars stop growing at the accessibility sizes too |
+| D-30 | A deleted category stays in the database, marked as deleted. Pickers and the walking order hide it, but lists being shopped and done lists keep showing it with its name, near its old place; their frozen lines are not rewritten to another category. It can't be restored, and its names can be reused (2026-10-02) | frozen lines and the extra items on those lists still point to it, so history stays true (D-08) and lines keep their heading while someone shops; rewriting them would change done lists after the fact; nothing is removed, so the foreign keys stay strict |
+| D-31 | Category names move from the translation files into the database, one name per UI language; a language without a name shows the English one. Seeded cuisines and units keep translation keys (2026-10-02) | admins can add and rename categories without a new app version, and the server can check that names are unique per language; nobody edits seeded cuisines or units, so keys are still enough for them |
 
 ## 8. Owner decisions
 
@@ -726,7 +734,7 @@ Items that can only be settled on the real hardware are tracked as open points i
 
 ## Appendix A — Seed data
 
-**Categories** (default order; key → German / English):
+**Categories** (default order; key → German / English). This is only the starting point: admins add, rename, delete and reorder categories (REF-01). *Other* and *Uncategorized* always exist.
 
 | # | Key | Deutsch | English |
 |---|---|---|---|
@@ -747,6 +755,7 @@ Items that can only be settled on the real hardware are tracked as open points i
 | 15 | `drinks` | Getränke | Drinks |
 | 16 | `household_hygiene` | Drogerie & Haushalt | Household & toiletries |
 | 17 | `other` | Sonstiges | Other |
+| 18 | `uncategorized` | Ohne Kategorie | Uncategorized |
 
 **Cuisines:** german, italian, french, greek, turkish, mediterranean, american, mexican, indian, chinese, japanese, thai, other (translated). Users can add more as plain text.
 

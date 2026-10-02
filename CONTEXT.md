@@ -37,8 +37,20 @@ The EAN or UPC number printed on a package. An ingredient has at most one, and n
 _Avoid_: EAN, code, product
 
 **Category**:
-The supermarket section an ingredient belongs to (e.g. "Obst & Gemüse"). Admins put categories in the store's walking order.
+The supermarket section an ingredient belongs to (e.g. "Obst & Gemüse"), with a German and an English name. Admins add, rename and delete categories and put them in the store's walking order.
 _Avoid_: aisle, section, department
+
+**Other**:
+The category for things that belong in no other section ("Sonstiges"), and the default for new ingredients and free-text extra items.
+_Avoid_: misc, uncategorized
+
+**Uncategorized**:
+The built-in category ("Ohne Kategorie") that holds ingredients whose category an admin deleted, until someone gives each one a new category. Nothing is put there on purpose.
+_Avoid_: Other, no category, unsorted
+
+**Deleted category**:
+A category an admin deleted. It can no longer be picked or ordered, but shopping lists that were already being shopped or done keep showing it.
+_Avoid_: retired category, archived category
 
 **Meal**:
 A recipe owned by one user: ingredients with amounts, instructions, photo, source link, and "makes N servings".
