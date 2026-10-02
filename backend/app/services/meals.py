@@ -31,7 +31,6 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.repositories import users as users_repo
 from app.schemas.meals import (
     Meal,
     MealBasedOn,
@@ -50,7 +49,7 @@ from app.services import access, hooks
 from app.services.ingredients import summary as ingredient_summary
 from app.services.principal import Principal
 from app.services.reference import cuisine
-from app.services.users import user_refs
+from app.services.users import hidden_by, user_refs
 
 
 def _nutrient_values(values: dict[str, float | None]) -> NutrientValues:
@@ -300,9 +299,7 @@ async def list_meals(
         if owner_ids is not None:
             owners = visible & set(owner_ids)
         else:
-            viewer = await users_repo.get(session, principal.user_id)
-            hidden = set() if viewer is None else set(viewer.filter_hidden.get("meals", []))
-            owners = visible - hidden
+            owners = visible - await hidden_by(session, principal.user_id, "meals")
         rows = await meals_repo.search(
             session,
             owner_ids=owners,

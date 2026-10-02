@@ -85,7 +85,8 @@ class MealIngredientRow(BaseModel):
 
 class MealNutritionMissing(BaseModel):
     """Why a row does not (fully) count: no amount, an amount that cannot be converted to the
-    ingredient's base unit, or an unknown value for `nutrient` (NUT-04)."""
+    ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown
+    value for `nutrient` (NUT-04)."""
 
     ingredient_id: str
     ingredient_name: str

@@ -213,6 +213,8 @@ def test_nutrition_basis(per: Any, unit: str | None, expected: BaseUnit | None) 
         (250, "g" + " " * 20 + "x", (None, None)),
         (250, 1, (None, None)),
         (500, "kg", (None, None)),
+        # Pieces are a base unit, not a pack unit Open Food Facts gives (D-38).
+        (6, "piece", (None, None)),
         (500, None, (None, None)),
         (None, "g", (None, None)),
         (0, "g", (None, None)),

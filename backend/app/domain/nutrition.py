@@ -1,8 +1,9 @@
 """Nutrition of meals (NUT-03..06, plan § 5.6).
 
-An ingredient's value per nutrient is its own column (NUT-02, null is unknown). Meal totals are
-not stored: they are computed when requested, so wiki edits of an ingredient show up everywhere
-at once (NUT-06). Unknown is never treated as 0.
+An ingredient's value per nutrient is its own column (NUT-02, null is unknown), per 100 g, or
+per 100 ml for an ml ingredient. A `piece` ingredient's pieces count with its piece weight
+(NUT-05). Meal totals are not stored: they are computed when requested, so wiki edits of an
+ingredient show up everywhere at once (NUT-06). Unknown is never treated as 0.
 """
 
 import math
@@ -11,9 +12,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.domain.nutrients import NUTRIENT_KEYS
-from app.domain.units import IngredientAttrs, Unit, convert
+from app.domain.units import BaseUnit, IngredientAttrs, Unit, convert
 
-MissingReason = Literal["no_amount", "not_convertible", "unknown_value"]
+MissingReason = Literal["no_amount", "not_convertible", "no_piece_weight", "unknown_value"]
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,8 @@ class MealRow:
 @dataclass(frozen=True)
 class Missing:
     """Why a row does not (fully) count: no amount, an amount that cannot be converted to the
-    ingredient's base unit, or an unknown value for `nutrient`."""
+    ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an
+    unknown value for `nutrient`."""
 
     ingredient_id: str
     ingredient_name: str
@@ -56,8 +58,9 @@ class MealNutrition:
 
 
 def meal_nutrition(rows: Sequence[MealRow], servings: int) -> MealNutrition:
-    """The sum over rows of (amount in base unit) / 100 * value, with what could not be counted
-    (NUT-03, NUT-04). Rows keep their order in `missing`."""
+    """The sum over rows of (amount in g or ml) / 100 * value, with what could not be counted
+    (NUT-03, NUT-04). A `piece` ingredient's pieces weigh their number times the piece weight
+    (NUT-05). Rows keep their order in `missing`."""
     if servings < 1:
         raise ValueError("servings must be at least 1")
     contributions: dict[str, list[float]] = {key: [] for key in NUTRIENT_KEYS}
@@ -71,6 +74,12 @@ def meal_nutrition(rows: Sequence[MealRow], servings: int) -> MealNutrition:
         if converted is None:
             missing.append(Missing(row.ingredient_id, row.ingredient_name, "not_convertible"))
             continue
+        quantity = converted.value
+        if row.attrs.base_unit == BaseUnit.PIECE:
+            if not row.attrs.piece_weight_g:
+                missing.append(Missing(row.ingredient_id, row.ingredient_name, "no_piece_weight"))
+                continue
+            quantity *= row.attrs.piece_weight_g
         estimate = estimate or converted.estimate
         for key in NUTRIENT_KEYS:
             value = row.values.get(key)
@@ -79,7 +88,7 @@ def meal_nutrition(rows: Sequence[MealRow], servings: int) -> MealNutrition:
                     Missing(row.ingredient_id, row.ingredient_name, "unknown_value", key)
                 )
             else:
-                contributions[key].append(converted.value / 100 * value)
+                contributions[key].append(quantity / 100 * value)
     totals = {key: math.fsum(parts) if parts else None for key, parts in contributions.items()}
     per_serving = {
         key: None if total is None else total / servings for key, total in totals.items()

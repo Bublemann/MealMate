@@ -8,8 +8,8 @@ existing value changes.
 The downgrade refuses with a clear error while categories without a key exist, rather than
 inventing keys for them (plan § 6): below 0009 a key is all a category has.
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0012
+Revises: 0011
 Create Date: 2026-10-02 00:00:00+00:00
 """
 
@@ -18,8 +18,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0010"
-down_revision: str | None = "0009"
+revision: str = "0012"
+down_revision: str | None = "0011"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -43,9 +43,9 @@ def _check_every_category_has_a_key(connection: sa.Connection) -> None:
     )
     if names:
         raise CategoriesWithoutKeyError(
-            "cannot downgrade below 0010: admins added categories, which have no key "
+            "cannot downgrade below 0012: admins added categories, which have no key "
             f"({', '.join(repr(name) for name in names)}), but every category needs one before "
-            "0010"
+            "0012"
         )
 
 

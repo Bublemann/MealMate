@@ -1,10 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
-import type { components } from '@/api/generated/schema';
 import { useAuthSession, useCurrentUser } from '@/features/auth/context';
-
-/** Whose meals (MEAL-10) or whose lists (UI-02) a user filter chooses. */
-export type UserFilterKind = keyof components['schemas']['FilterHidden'];
+import type { SavedFilters, UserFilterKind } from './types';
 
 /** Everyone whose meals or lists the user can see, the user first (MEAL-10, UI-02, VIS-02). */
 export function useVisibleUsers(kind: UserFilterKind) {
@@ -16,21 +13,22 @@ export function useVisibleUsers(kind: UserFilterKind) {
 }
 
 /**
- * The saves of both user filters, which share `filter_hidden`: they run one after another, as
- * each sends both lists of hidden users.
+ * The saves of every saved filter, which share `filter_hidden`: they run one after another, as
+ * each sends all of it.
  */
 const SAVE_KEY = ['me', 'filter-hidden'] as const;
 
 /**
- * Saves whom the user filter on Meals or on Lists hides (MEAL-10, UI-02). The choice changes at
- * once (optimistic), is saved on the server in `filter_hidden` so it follows the user to other
+ * Saves what one of the saved filters hides: whom the user filter on Meals or on Lists hides
+ * (MEAL-10, UI-02), or which states the state filter on Lists hides (UI-02). The choice changes
+ * at once (optimistic), is saved on the server in `filter_hidden` so it follows the user to other
  * devices, and `reloadKey` (the query the filter narrows) loads again once it is saved; the last
  * waiting save stays pending until that answer is in. Saves run one after another, each sending
- * the whole list; the saved state only replaces the choice once no other save is waiting, as it
+ * every filter; the saved state only replaces the choice once no other save is waiting, as it
  * doesn't know those yet. When saving fails, the profile and `reloadKey` are loaded again: going
  * back to a snapshot could undo a change queued after the failed one.
  */
-export function useSaveUserFilter(kind: UserFilterKind, reloadKey: QueryKey) {
+export function useSaveFilter<K extends keyof SavedFilters>(kind: K, reloadKey: QueryKey) {
   const session = useAuthSession();
   const user = useCurrentUser();
   const queryClient = useQueryClient();
@@ -39,7 +37,7 @@ export function useSaveUserFilter(kind: UserFilterKind, reloadKey: QueryKey) {
   return useMutation({
     mutationKey: SAVE_KEY,
     scope: { id: SAVE_KEY.join('-') },
-    mutationFn: (hidden: string[]) =>
+    mutationFn: (hidden: SavedFilters[K]) =>
       unwrap(
         api.PATCH('/api/me', {
           body: { filter_hidden: { ...current().filter_hidden, [kind]: hidden } },

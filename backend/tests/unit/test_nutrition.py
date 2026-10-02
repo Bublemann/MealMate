@@ -11,6 +11,8 @@ from app.domain.units import BaseUnit, IngredientAttrs, Unit
 G = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
 EGG = IngredientAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
 MILK = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=1.03)
+EGG_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
+BARE_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=None, density_g_per_ml=None)
 FULL = dict.fromkeys(NUTRIENT_KEYS, 10.0)
 
 
@@ -68,6 +70,30 @@ def test_what_cannot_be_counted() -> None:
     assert result.estimate  # 1 tbsp of sugar counted as 15 g (NUT-05)
 
 
+def test_pieces_of_a_piece_ingredient() -> None:
+    """NUT-05: pieces times the piece weight against the values per 100 g; without a piece
+    weight they count as unknown and the marker names it; other units can't be converted."""
+    egg_values = {"kcal": 155, "protein": 13, "carbs": 1, "sugar": 1, "fat": 11}
+    rows = [
+        row("Eier", 2, Unit.PIECE, EGG_PIECES, values=egg_values),
+        row("Eier", 0.5, Unit.PIECE, EGG_PIECES, values=egg_values),
+        row("Brötchen", 3, Unit.PIECE, BARE_PIECES),
+        row("Eier", 100, Unit.G, EGG_PIECES, values=egg_values),
+        row("Eier", 1, Unit.TBSP, EGG_PIECES, values=egg_values),
+    ]
+
+    result = meal_nutrition(rows, servings=1)
+
+    assert result.totals["kcal"] == pytest.approx(150 / 100 * 155)
+    assert result.totals["fat"] == pytest.approx(150 / 100 * 11)
+    assert result.missing == [
+        Missing("brötchen", "Brötchen", "no_piece_weight"),
+        Missing("eier", "Eier", "not_convertible"),
+        Missing("eier", "Eier", "not_convertible"),
+    ]
+    assert not result.estimate  # spoons of a piece ingredient are no 1 g/ml estimate
+
+
 def test_an_empty_meal() -> None:
     result = meal_nutrition([], servings=1)
     assert result.totals == dict.fromkeys(NUTRIENT_KEYS)
@@ -87,7 +113,7 @@ rows_strategy = st.lists(
         name=st.sampled_from(["A", "B", "C"]),
         amount=st.none() | st.floats(0, 5000),
         unit=st.none() | st.sampled_from(Unit),
-        attrs=st.sampled_from([G, EGG, MILK]),
+        attrs=st.sampled_from([G, EGG, MILK, EGG_PIECES, BARE_PIECES]),
         values=st.dictionaries(st.sampled_from(NUTRIENT_KEYS), st.none() | st.floats(0, 100)),
     ),
     max_size=8,

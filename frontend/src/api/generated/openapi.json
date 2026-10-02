@@ -1328,8 +1328,21 @@
         "type": "string"
       },
       "FilterHidden": {
-        "description": "User filter chips this user has switched off, per screen (MEAL-10, UI-02).",
+        "description": "What this user's saved filters hide; empty shows everything. `meals` and `lists` are the\nusers unticked in the user filter on Meals (MEAL-10) and on Lists (UI-02), `list_states` the\nstates unticked in the state filter on Lists (UI-02).",
         "properties": {
+          "list_states": {
+            "items": {
+              "enum": [
+                "draft",
+                "shopping",
+                "done"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "List States",
+            "type": "array"
+          },
           "lists": {
             "items": {
               "maxLength": 36,
@@ -1351,7 +1364,8 @@
         },
         "required": [
           "meals",
-          "lists"
+          "lists",
+          "list_states"
         ],
         "title": "FilterHidden",
         "type": "object"
@@ -1371,7 +1385,7 @@
         "type": "object"
       },
       "Ingredient": {
-        "description": "An ingredient with its own nutrition per 100 g or 100 ml of `base_unit` (NUT-02; null\nis unknown, never 0).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe\nthe pack (information only). `created_by` / `updated_by` are null for a deleted user\n(ING-06).",
+        "description": "An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count\nwith `piece_weight_g` (NUT-05).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe\nthe pack (information only). `created_by` / `updated_by` are null for a deleted user\n(ING-06).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1387,7 +1401,8 @@
           "base_unit": {
             "enum": [
               "g",
-              "ml"
+              "ml",
+              "piece"
             ],
             "title": "Base Unit",
             "type": "string"
@@ -1611,7 +1626,7 @@
         "type": "object"
       },
       "IngredientCreate": {
-        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g or 100 ml of the base\nunit. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are\nignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E\nexpanded first), an EAN-8 as it is; a barcode another ingredient has is 409\n`ingredient.barcode_taken`.\n\nWith `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs\nits `barcode` (422 `required` without). Names need not be unique: the \"similar ingredient\nexists\" hint (`GET /api/ingredients/similar`) is only a hint.",
+        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g, or per 100 ml for\nbase unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are\nignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E\nexpanded first), an EAN-8 as it is; a barcode another ingredient has is 409\n`ingredient.barcode_taken`.\n\nWith `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs\nits `barcode` (422 `required` without). Names need not be unique: the \"similar ingredient\nexists\" hint (`GET /api/ingredients/similar`) is only a hint.",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1630,7 +1645,8 @@
             "default": "g",
             "enum": [
               "g",
-              "ml"
+              "ml",
+              "piece"
             ],
             "title": "Base Unit",
             "type": "string"
@@ -1826,7 +1842,8 @@
           "base_unit": {
             "enum": [
               "g",
-              "ml"
+              "ml",
+              "piece"
             ],
             "title": "Base Unit",
             "type": "string"
@@ -1876,7 +1893,7 @@
         "type": "object"
       },
       "IngredientUpdate": {
-        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.",
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it away from `piece` clears the piece weight, unless the request sets one.",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1896,7 +1913,8 @@
               {
                 "enum": [
                   "g",
-                  "ml"
+                  "ml",
+                  "piece"
                 ],
                 "type": "string"
               },
@@ -3588,7 +3606,7 @@
         "type": "object"
       },
       "MealNutritionMissing": {
-        "description": "Why a row does not (fully) count: no amount, an amount that cannot be converted to the\ningredient's base unit, or an unknown value for `nutrient` (NUT-04).",
+        "description": "Why a row does not (fully) count: no amount, an amount that cannot be converted to the\ningredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown\nvalue for `nutrient` (NUT-04).",
         "properties": {
           "ingredient_brand": {
             "anyOf": [
@@ -3624,6 +3642,7 @@
             "enum": [
               "no_amount",
               "not_convertible",
+              "no_piece_weight",
               "unknown_value"
             ],
             "title": "Reason",
@@ -8775,7 +8794,7 @@
     },
     "/api/users/visible": {
       "get": {
-        "description": "Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,\nyour partner, and everyone whose matching privacy switch is public.",
+        "description": "Users whose meals (`for=meals`) or lists (`for=lists`) you can see, the choices of the\nuser filter on Meals or Lists: yourself first, your partner, then everyone whose matching\nprivacy switch is public, by display name.",
         "operationId": "list_visible_users",
         "parameters": [
           {

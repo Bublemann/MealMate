@@ -9,7 +9,7 @@ import {
 } from '@/api/client';
 import { ApiError, isApiError } from '@/api/errors';
 import type { AuthSession, SessionEnd } from '@/features/auth/session';
-import { detailKey, FEED_KEY, type FeedData } from '@/features/lists/keys';
+import { COPY_UPDATED_AT, detailKey, FEED_KEY, type FeedData } from '@/features/lists/keys';
 import { listDisplayName } from '@/features/lists/format';
 import { CATEGORIES_KEY, categoriesQuery } from '@/features/reference/api';
 import type { Language } from '@/i18n';
@@ -385,8 +385,7 @@ export class SyncEngine {
     // Only a copy that was ever complete stands in for the feed (an empty one too).
     const feed = this.copiedFeed();
     if (feed && cache.getQueryData(FEED_KEY) === undefined) {
-      // Stale at once: the copy lacks read-only and done lists, so the feed is asked for anyway.
-      cache.setQueryData(FEED_KEY, feed, { updatedAt: 0 });
+      cache.setQueryData(FEED_KEY, feed, { updatedAt: COPY_UPDATED_AT });
     }
     if (categories && hasNames(categories) && cache.getQueryData(CATEGORIES_KEY) === undefined) {
       cache.setQueryData(CATEGORIES_KEY, categories.categories, {

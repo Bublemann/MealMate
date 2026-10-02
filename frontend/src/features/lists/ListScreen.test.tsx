@@ -1,7 +1,7 @@
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BEN, CARL, errorResponse, mockApi, requestsTo } from '@/test/api';
+import { BEN, CARL, errorResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import {
   emptyList,
   LIST_ID,
@@ -210,14 +210,20 @@ describe('ListScreen', () => {
     const CHILI = mealSummary('Chili', { servings: 4 });
     const LASAGNE = mealSummary('Lasagne', { owner: BEN });
     const PANCAKES = mealSummary('Pfannkuchen');
+    const MEALS = [CHILI, LASAGNE, PANCAKES];
+
+    /** The meals of one of the picker's sections, by their rows' names. */
+    function rowNames(section: HTMLElement) {
+      return within(section)
+        .getAllByRole('listitem')
+        .map((item) => item.getAttribute('aria-label'));
+    }
 
     function pickerRoutes(routes: Record<string, unknown> = {}) {
       return {
         'GET /api/meals/recent': [CHILI],
         'GET /api/meals': (request: Request) =>
-          new URL(request.url).searchParams.get('q') === 'lasagne'
-            ? [LASAGNE]
-            : [CHILI, LASAGNE, PANCAKES],
+          new URL(request.url).searchParams.get('q') === 'lasagne' ? [LASAGNE] : MEALS,
         [`POST ${BASE}/meals`]: listDetail(),
         ...routes,
       };
@@ -231,23 +237,64 @@ describe('ListScreen', () => {
 
       const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
       expect(recent).toHaveAccessibleName('Recently used');
-      expect(
-        within(recent)
-          .getAllByRole('listitem')
-          .map((item) => item.getAttribute('aria-label')),
-      ).toEqual(['Chili']);
+      expect(rowNames(recent)).toEqual(['Chili']);
       const all = await within(dialog).findByTestId(testIds.mealPickerResults);
       expect(all).toHaveAccessibleName('All meals');
-      expect(
-        within(all)
-          .getAllByRole('listitem')
-          .map((item) => item.getAttribute('aria-label')),
-      ).toEqual(['Lasagne', 'Pfannkuchen']);
-      expect(within(all).getByText('by Ben')).toBeVisible();
+      expect(rowNames(all)).toEqual(['Lasagne', 'Pfannkuchen']);
+      // Whose meal it is shows as the owner's marker, one's own included (UI-02).
+      const lasagne = within(all).getByRole('listitem', { name: 'Lasagne' });
+      expect(within(lasagne).getByRole('img', { name: 'Ben' })).toHaveTextContent('B');
+      const pancakes = within(all).getByRole('listitem', { name: 'Pfannkuchen' });
+      expect(within(pancakes).getByRole('img', { name: 'Anna' })).toHaveTextContent('A');
+      expect(within(dialog).queryByText('by Ben')).not.toBeInTheDocument();
       expect(within(dialog).getByTestId(testIds.mealPickerCreate)).toHaveAttribute(
         'href',
         `/meals/new?addToList=${LIST_ID}`,
       );
+    });
+
+    it('opens without the keyboard: the search field is not focused (MEAL-09)', async () => {
+      const { user } = renderList(pickerRoutes());
+
+      await user.click(await screen.findByTestId(testIds.addMeals));
+      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
+
+      await within(dialog).findByTestId(testIds.mealPickerRecent);
+      expect(within(dialog).getByLabelText('Search meals')).not.toHaveFocus();
+      // The focus is in the picker, so screen readers announce it.
+      expect(dialog).toHaveFocus();
+    });
+
+    it('offers the meals of users the Meals tab hides (MEAL-09, MEAL-10)', async () => {
+      const hidingBen = {
+        ...TEST_USER,
+        filter_hidden: { meals: [BEN.id], lists: [], list_states: [] },
+      };
+      mockApi({
+        ...LIST_ROUTES,
+        ...pickerRoutes({
+          'GET /api/me': hidingBen,
+          // Like the server: the user filter on Meals applies unless owners are asked for.
+          'GET /api/meals': (request: Request) => {
+            const owners = new URL(request.url).searchParams.getAll('owner_ids');
+            return owners.length > 0
+              ? MEALS.filter((meal) => owners.includes(meal.owner.id))
+              : MEALS.filter((meal) => meal.owner.id !== BEN.id);
+          },
+        }),
+      });
+      const { router, user } = renderApp('/meals', { user: hidingBen });
+      const list = await screen.findByTestId(testIds.mealList);
+      expect(within(list).queryByText('Lasagne')).not.toBeInTheDocument();
+
+      await act(() => router.navigate(`/lists/${LIST_ID}`));
+      await user.click(await screen.findByTestId(testIds.addMeals));
+      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
+
+      const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
+      expect(rowNames(recent)).toEqual(['Chili']);
+      const all = await within(dialog).findByTestId(testIds.mealPickerResults);
+      await waitFor(() => expect(rowNames(all)).toEqual(['Lasagne', 'Pfannkuchen']));
     });
 
     it('adds a meal with the chosen servings and stays open for more (LIST-03/04)', async () => {
@@ -284,13 +331,7 @@ describe('ListScreen', () => {
       await user.type(within(dialog).getByLabelText('Search meals'), 'lasagne');
 
       const results = await within(dialog).findByRole('list', { name: 'Matching meals' });
-      await waitFor(() =>
-        expect(
-          within(results)
-            .getAllByRole('listitem')
-            .map((item) => item.getAttribute('aria-label')),
-        ).toEqual(['Lasagne']),
-      );
+      await waitFor(() => expect(rowNames(results)).toEqual(['Lasagne']));
       expect(within(dialog).queryByTestId(testIds.mealPickerRecent)).not.toBeInTheDocument();
     });
 

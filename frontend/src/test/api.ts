@@ -18,7 +18,7 @@ export const TEST_USER: Schemas['Me'] = {
   language: 'en',
   meals_public: true,
   lists_public: true,
-  filter_hidden: { meals: [], lists: [] },
+  filter_hidden: { meals: [], lists: [], list_states: [] },
   created_at: '2026-09-01T10:00:00Z',
 };
 

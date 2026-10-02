@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0010"
+HEAD = "0012"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +59,8 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients; 0008 to 0010 only change columns.
+# 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
+# one, 0011 changes only values, 0012 makes one optional.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -133,6 +134,14 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0009")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0010")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0011")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0012")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0011")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0010")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0009")
     assert tables(database_path) == HEAD_TABLES
@@ -590,6 +599,147 @@ def test_category_names_are_unique_per_language(
 
 # --- 0010 -----------------------------------------------------------------------------------
 
+# Counting the demo's onions in pieces, as an ingredient and in the frozen rows (LIST-11).
+COUNTED_IN_PIECES = (
+    "UPDATE ingredients SET base_unit = 'piece', piece_weight_g = 150 WHERE name = 'Zwiebeln'",
+    "UPDATE list_meal_ingredients SET base_unit_snapshot = 'piece' "
+    "WHERE ingredient_name_snapshot = 'Zwiebeln'",
+)
+
+
+def execute(path: Path, statement: str) -> None:
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(statement)
+
+
+def base_unit_tables(path: Path) -> dict[str, list[dict[str, object]]]:
+    return {table: rows_of(path, table) for table in ("ingredients", "list_meal_ingredients")}
+
+
+def test_0010_widens_the_base_unit_and_changes_no_data(tmp_path: Path) -> None:
+    """seed-demo data at 0009 → 0010 (D-32): only the allowed base units widen, every row and
+    reference stays as it is, also after the downgrade."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = base_unit_tables(path)
+
+    command.upgrade(config, "0010")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert base_unit_tables(path) == before
+    assert_clean(path)
+    command.downgrade(config, "0009")
+    assert row_counts(path) == counts
+    assert base_unit_tables(path) == before
+    assert_clean(path)
+
+
+def test_0010_lets_ingredients_and_frozen_rows_be_counted_in_pieces(tmp_path: Path) -> None:
+    """Up to 0009 the base unit is g or ml; from 0010 on also piece, for an ingredient and for
+    the copy in frozen rows. The downgrade refuses while anything is counted in pieces, and
+    changes nothing."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    for statement in COUNTED_IN_PIECES:
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+            execute(path, statement)
+
+    command.upgrade(config, "0010")
+    for statement in COUNTED_IN_PIECES:
+        execute(path, statement)
+    assert query(path, "SELECT count(*) FROM ingredients WHERE base_unit = 'piece'") == [(1,)]
+    assert_clean(path)
+
+    counted = base_unit_tables(path)
+    with pytest.raises(RuntimeError, match=r"1 ingredient and 5 frozen rows are counted in"):
+        command.downgrade(config, "0009")
+    assert current_revision(path) == "0010"
+    assert base_unit_tables(path) == counted
+    execute(path, "UPDATE ingredients SET base_unit = 'g' WHERE base_unit = 'piece'")
+    with pytest.raises(RuntimeError, match=r"0 ingredients and 5 frozen rows"):
+        command.downgrade(config, "0009")
+    execute(path, "UPDATE list_meal_ingredients SET base_unit_snapshot = 'g'")
+    command.downgrade(config, "0009")
+    assert current_revision(path) == "0009"
+    assert_clean(path)
+
+
+# --- 0011 -----------------------------------------------------------------------------------
+
+
+def saved_filters(path: Path) -> dict[str, dict[str, list[str]]]:
+    return {
+        str(row["username"]): json.loads(str(row["filter_hidden"]))
+        for row in rows_of(path, "users")
+    }
+
+
+def users_but_filters(path: Path) -> list[dict[str, object]]:
+    return [
+        {column: value for column, value in row.items() if column != "filter_hidden"}
+        for row in rows_of(path, "users")
+    ]
+
+
+def dump_without(path: Path, *tables: str) -> list[str]:
+    """The database as SQL, without the rows of `tables`."""
+    skipped = tuple(f'INSERT INTO "{table}"' for table in tables)
+    with closing(sqlite3.connect(path)) as connection:
+        return [line for line in connection.iterdump() if not line.startswith(skipped)]
+
+
+def test_0011_gives_every_user_an_empty_state_filter_and_changes_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """seed-demo data at 0010 → 0011 (D-26): every user's saved filters gain the state filter on
+    Lists, empty, so every state shows; what the user filters hide stays, and no row and no other
+    value changes. The downgrade drops the state filter again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0010")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        [(ben_id,)] = connection.execute("SELECT id FROM users WHERE username = 'ben'")
+        [(carl_id,)] = connection.execute("SELECT id FROM users WHERE username = 'carl'")
+        connection.execute(
+            "UPDATE users SET filter_hidden = ? WHERE username = 'anna'",
+            (json.dumps({"meals": [ben_id], "lists": [carl_id, ben_id]}),),
+        )
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = saved_filters(path)
+    rest = dump_without(path, "users", "alembic_version")
+    users = users_but_filters(path)
+
+    command.upgrade(config, "0011")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    assert saved_filters(path) == {
+        username: {**hidden, "list_states": []} for username, hidden in before.items()
+    }
+    assert saved_filters(path)["anna"] == {
+        "meals": [ben_id],
+        "lists": [carl_id, ben_id],
+        "list_states": [],
+    }
+    assert dump_without(path, "users", "alembic_version") == rest
+    assert users_but_filters(path) == users
+
+    command.downgrade(config, "0010")
+    assert saved_filters(path) == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+# --- 0012 -----------------------------------------------------------------------------------
+
 
 def key_column_nullable(path: Path) -> bool:
     [(notnull,)] = query(path, "SELECT \"notnull\" FROM pragma_table_info('categories') "
@@ -597,18 +747,18 @@ def key_column_nullable(path: Path) -> bool:
     return notnull == 0
 
 
-def test_0010_makes_the_key_optional_and_changes_nothing_else(tmp_path: Path) -> None:
-    """seed-demo data at 0009 → 0010 (REF-01): the key becomes optional, for the categories
+def test_0012_makes_the_key_optional_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0011 → 0012 (REF-01): the key becomes optional, for the categories
     admins add; no row and no value changes, and the downgrade makes it required again."""
     path = tmp_path / "data" / "mealmate.db"
     config = alembic_config(path)
     load_demo_0006(path)
-    command.upgrade(config, "0009")
+    command.upgrade(config, "0011")
     counts, references = row_counts(path), non_null_foreign_keys(path)
     before = rows_of(path, "categories")
     assert not key_column_nullable(path)
 
-    command.upgrade(config, "0010")
+    command.upgrade(config, "0012")
 
     assert key_column_nullable(path)
     assert rows_of(path, "categories") == before
@@ -616,7 +766,7 @@ def test_0010_makes_the_key_optional_and_changes_nothing_else(tmp_path: Path) ->
     assert non_null_foreign_keys(path) == references
     assert_clean(path)
 
-    command.downgrade(config, "0009")
+    command.downgrade(config, "0011")
     assert not key_column_nullable(path)
     assert rows_of(path, "categories") == before
     assert row_counts(path) == counts
@@ -626,7 +776,7 @@ def test_0010_makes_the_key_optional_and_changes_nothing_else(tmp_path: Path) ->
 def test_the_downgrade_refuses_categories_without_a_key(
     config: Config, database_path: Path
 ) -> None:
-    """An admin-added category has no key, which a category needs below 0010: the downgrade
+    """An admin-added category has no key, which a category needs below 0012: the downgrade
     fails with a clear message and changes nothing."""
     command.upgrade(config, "head")
     with closing(sqlite3.connect(database_path)) as connection, connection:
@@ -645,14 +795,14 @@ def test_the_downgrade_refuses_categories_without_a_key(
     with pytest.raises(
         RuntimeError, match=r"admins added categories, which have no key \('Cheese counter'\)"
     ):
-        command.downgrade(config, "0009")
+        command.downgrade(config, "0011")
 
     assert current_revision(database_path) == HEAD
     assert key_column_nullable(database_path)
     assert rows_of(database_path, "categories") == before
     with closing(sqlite3.connect(database_path)) as connection, connection:
         connection.execute("DELETE FROM categories WHERE key IS NULL")
-    command.downgrade(config, "0009")
+    command.downgrade(config, "0011")
     assert not key_column_nullable(database_path)
 
 

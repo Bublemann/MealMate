@@ -79,7 +79,7 @@ async def test_login_returns_tokens_and_sets_the_refresh_cookie(
         "language": "en",
         "meals_public": True,
         "lists_public": True,
-        "filter_hidden": {"meals": [], "lists": []},
+        "filter_hidden": {"meals": [], "lists": [], "list_states": []},
         "created_at": "2026-09-27T12:00:00Z",
     }
     pair, attributes = cookie_attributes(response.headers["set-cookie"])

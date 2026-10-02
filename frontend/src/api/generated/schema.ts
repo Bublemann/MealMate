@@ -1507,8 +1507,9 @@ export interface paths {
         };
         /**
          * List Visible Users
-         * @description Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,
-         *     your partner, and everyone whose matching privacy switch is public.
+         * @description Users whose meals (`for=meals`) or lists (`for=lists`) you can see, the choices of the
+         *     user filter on Meals or Lists: yourself first, your partner, then everyone whose matching
+         *     privacy switch is public, by display name.
          */
         get: operations["list_visible_users"];
         put?: never;
@@ -2025,9 +2026,13 @@ export interface components {
         FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username";
         /**
          * FilterHidden
-         * @description User filter chips this user has switched off, per screen (MEAL-10, UI-02).
+         * @description What this user's saved filters hide; empty shows everything. `meals` and `lists` are the
+         *     users unticked in the user filter on Meals (MEAL-10) and on Lists (UI-02), `list_states` the
+         *     states unticked in the state filter on Lists (UI-02).
          */
         FilterHidden: {
+            /** List States */
+            list_states: ("draft" | "shopping" | "done")[];
             /** Lists */
             lists: string[];
             /** Meals */
@@ -2043,8 +2048,9 @@ export interface components {
         };
         /**
          * Ingredient
-         * @description An ingredient with its own nutrition per 100 g or 100 ml of `base_unit` (NUT-02; null
-         *     is unknown, never 0).
+         * @description An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
+         *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count
+         *     with `piece_weight_g` (NUT-05).
          *
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
@@ -2060,7 +2066,7 @@ export interface components {
              * Base Unit
              * @enum {string}
              */
-            base_unit: "g" | "ml";
+            base_unit: "g" | "ml" | "piece";
             /** Brand */
             brand: string | null;
             /** Category Id */
@@ -2120,8 +2126,8 @@ export interface components {
          * @description A new ingredient (ING-02), in one request also when it was scanned.
          *
          *     `category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:
-         *     0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g or 100 ml of the base
-         *     unit. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are
+         *     0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g, or per 100 ml for
+         *     base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are
          *     ignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E
          *     expanded first), an EAN-8 as it is; a barcode another ingredient has is 409
          *     `ingredient.barcode_taken`.
@@ -2138,7 +2144,7 @@ export interface components {
              * @default g
              * @enum {string}
              */
-            base_unit: "g" | "ml";
+            base_unit: "g" | "ml" | "piece";
             /** Brand */
             brand?: string | null;
             /** Category Id */
@@ -2191,7 +2197,7 @@ export interface components {
              * Base Unit
              * @enum {string}
              */
-            base_unit: "g" | "ml";
+            base_unit: "g" | "ml" | "piece";
             /** Brand */
             brand: string | null;
             /** Category Id */
@@ -2217,12 +2223,13 @@ export interface components {
          *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
+         *     Changing it away from `piece` clears the piece weight, unless the request sets one.
          */
         IngredientUpdate: {
             /** Barcode */
             barcode?: string | null;
             /** Base Unit */
-            base_unit?: ("g" | "ml") | null;
+            base_unit?: ("g" | "ml" | "piece") | null;
             /** Brand */
             brand?: string | null;
             /** Category Id */
@@ -2867,7 +2874,8 @@ export interface components {
         /**
          * MealNutritionMissing
          * @description Why a row does not (fully) count: no amount, an amount that cannot be converted to the
-         *     ingredient's base unit, or an unknown value for `nutrient` (NUT-04).
+         *     ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown
+         *     value for `nutrient` (NUT-04).
          */
         MealNutritionMissing: {
             /** Ingredient Brand */
@@ -2882,7 +2890,7 @@ export interface components {
              * Reason
              * @enum {string}
              */
-            reason: "no_amount" | "not_convertible" | "unknown_value";
+            reason: "no_amount" | "not_convertible" | "no_piece_weight" | "unknown_value";
         };
         /**
          * MealPhoto
