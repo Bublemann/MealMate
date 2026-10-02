@@ -210,14 +210,20 @@ describe('ListScreen', () => {
     const CHILI = mealSummary('Chili', { servings: 4 });
     const LASAGNE = mealSummary('Lasagne', { owner: BEN });
     const PANCAKES = mealSummary('Pfannkuchen');
+    const MEALS = [CHILI, LASAGNE, PANCAKES];
+
+    /** The meals of one of the picker's sections, by their rows' names. */
+    function rowNames(section: HTMLElement) {
+      return within(section)
+        .getAllByRole('listitem')
+        .map((item) => item.getAttribute('aria-label'));
+    }
 
     function pickerRoutes(routes: Record<string, unknown> = {}) {
       return {
         'GET /api/meals/recent': [CHILI],
         'GET /api/meals': (request: Request) =>
-          new URL(request.url).searchParams.get('q') === 'lasagne'
-            ? [LASAGNE]
-            : [CHILI, LASAGNE, PANCAKES],
+          new URL(request.url).searchParams.get('q') === 'lasagne' ? [LASAGNE] : MEALS,
         [`POST ${BASE}/meals`]: listDetail(),
         ...routes,
       };
@@ -231,18 +237,10 @@ describe('ListScreen', () => {
 
       const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
       expect(recent).toHaveAccessibleName('Recently used');
-      expect(
-        within(recent)
-          .getAllByRole('listitem')
-          .map((item) => item.getAttribute('aria-label')),
-      ).toEqual(['Chili']);
+      expect(rowNames(recent)).toEqual(['Chili']);
       const all = await within(dialog).findByTestId(testIds.mealPickerResults);
       expect(all).toHaveAccessibleName('All meals');
-      expect(
-        within(all)
-          .getAllByRole('listitem')
-          .map((item) => item.getAttribute('aria-label')),
-      ).toEqual(['Lasagne', 'Pfannkuchen']);
+      expect(rowNames(all)).toEqual(['Lasagne', 'Pfannkuchen']);
       // Whose meal it is shows as the owner's marker, one's own included (UI-02).
       const lasagne = within(all).getByRole('listitem', { name: 'Lasagne' });
       expect(within(lasagne).getByRole('img', { name: 'Ben' })).toHaveTextContent('B');
@@ -269,7 +267,6 @@ describe('ListScreen', () => {
 
     it('offers the meals of users the Meals tab hides (MEAL-09, MEAL-10)', async () => {
       const hidingBen = { ...TEST_USER, filter_hidden: { meals: [BEN.id], lists: [] } };
-      const meals = [CHILI, LASAGNE, PANCAKES];
       mockApi({
         ...LIST_ROUTES,
         ...pickerRoutes({
@@ -278,8 +275,8 @@ describe('ListScreen', () => {
           'GET /api/meals': (request: Request) => {
             const owners = new URL(request.url).searchParams.getAll('owner_ids');
             return owners.length > 0
-              ? meals.filter((meal) => owners.includes(meal.owner.id))
-              : meals.filter((meal) => meal.owner.id !== BEN.id);
+              ? MEALS.filter((meal) => owners.includes(meal.owner.id))
+              : MEALS.filter((meal) => meal.owner.id !== BEN.id);
           },
         }),
       });
@@ -292,19 +289,9 @@ describe('ListScreen', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
 
       const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
-      expect(
-        within(recent)
-          .getAllByRole('listitem')
-          .map((item) => item.getAttribute('aria-label')),
-      ).toEqual(['Chili']);
+      expect(rowNames(recent)).toEqual(['Chili']);
       const all = await within(dialog).findByTestId(testIds.mealPickerResults);
-      await waitFor(() =>
-        expect(
-          within(all)
-            .getAllByRole('listitem')
-            .map((item) => item.getAttribute('aria-label')),
-        ).toEqual(['Lasagne', 'Pfannkuchen']),
-      );
+      await waitFor(() => expect(rowNames(all)).toEqual(['Lasagne', 'Pfannkuchen']));
     });
 
     it('adds a meal with the chosen servings and stays open for more (LIST-03/04)', async () => {
@@ -341,13 +328,7 @@ describe('ListScreen', () => {
       await user.type(within(dialog).getByLabelText('Search meals'), 'lasagne');
 
       const results = await within(dialog).findByRole('list', { name: 'Matching meals' });
-      await waitFor(() =>
-        expect(
-          within(results)
-            .getAllByRole('listitem')
-            .map((item) => item.getAttribute('aria-label')),
-        ).toEqual(['Lasagne']),
-      );
+      await waitFor(() => expect(rowNames(results)).toEqual(['Lasagne']));
       expect(within(dialog).queryByTestId(testIds.mealPickerRecent)).not.toBeInTheDocument();
     });
 

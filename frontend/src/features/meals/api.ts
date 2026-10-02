@@ -84,7 +84,8 @@ export function useMeals({ q, cuisineIds, tagIds }: MealFilters) {
 /**
  * The meal picker's search (MEAL-09): every meal the user can see that matches `q`, A–Z, whatever
  * the user filter on Meals says. It asks for the meals of everyone whose meals are visible, so the
- * server doesn't apply that filter. The previous result stays while the next one loads.
+ * server doesn't apply that filter. The previous result stays while the next one loads. Unlike the
+ * other hooks it returns only what the picker reads, as it waits for two queries.
  */
 export function usePickerMeals(q: string) {
   const owners = useVisibleUsers('meals');
@@ -99,6 +100,7 @@ export function usePickerMeals(q: string) {
   return {
     data: meals.data,
     error: owners.error ?? meals.error,
+    // Without the owners the meals never load: the error shows instead of "Loading…".
     isPending: meals.isPending && !owners.error,
   };
 }
