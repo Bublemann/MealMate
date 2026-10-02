@@ -44,18 +44,19 @@ function searchTerms(fetchMock: ReturnType<typeof mockApi>) {
 }
 
 describe('IngredientsScreen', () => {
-  it('shows only a quiet placeholder until it knows whether there are ingredients (UI-03)', async () => {
+  it('shows the pinned block at once and the placeholder only below it (UI-01, UI-03)', async () => {
     const ingredients = heldRoute();
     renderIngredients({ 'GET /api/ingredients': ingredients.route });
 
     expect(await screen.findByText('Loading…')).toBeVisible();
-    expect(screen.queryByLabelText('Search ingredients')).toBeNull();
-    expect(screen.queryByTestId(testIds.newIngredient)).toBeNull();
+    expect(screen.getByLabelText('Search ingredients')).toBeVisible();
+    expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('New ingredient');
 
     await ingredients.answer([]);
     expect(await screen.findByText('No ingredients yet')).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
-    expect(screen.queryByLabelText('Search ingredients')).toBeNull();
+    expect(screen.getByLabelText('Search ingredients')).toBeVisible();
+    expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('New ingredient');
   });
 
   it('shows one A–Z list with category and base unit in the grey line, brand and barcode (ING-03)', async () => {
@@ -95,37 +96,98 @@ describe('IngredientsScreen', () => {
     );
   });
 
-  it('offers to create what was searched for when nothing matches', async () => {
+  it('turns the tile into “Create …” while searching, filled in as the new name (ING-03)', async () => {
     const { user } = renderIngredients();
     await screen.findByTestId(testIds.ingredientList);
+    const search = screen.getByLabelText('Search ingredients');
+    const tile = screen.getByTestId(testIds.newIngredient);
 
-    await user.type(screen.getByTestId(testIds.ingredientSearch), 'Quitten');
-
-    expect(await screen.findByText('No ingredient matches “Quitten”.')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Create “Quitten”' }));
+    await user.type(search, ' Quitten ');
+    expect(tile).toHaveAccessibleName('Create “Quitten”');
+    await user.click(tile);
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Quitten');
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await user.clear(search);
+    expect(tile).toHaveAccessibleName('New ingredient');
   });
 
-  it('shows one sentence and one action when there are no ingredients yet (UI-03)', async () => {
+  it('keeps the search until the app closes, but not in the address or browser storage (UI-01)', async () => {
+    const { router, unmount, user } = renderIngredients({
+      'GET /api/ingredients/ing-%C3%A4pfel': ingredient({ id: 'ing-äpfel', name: 'Äpfel' }),
+    });
+    await screen.findByTestId(testIds.ingredientList);
+    await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
+    const rows = () =>
+      within(screen.getByTestId(testIds.ingredientList)).getAllByTestId(testIds.ingredientRow);
+    await waitFor(() => expect(rows()).toHaveLength(1));
+
+    // Open the ingredient and come back through the tab bar.
+    await user.click(rows()[0]!);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Äpfel' })).toBeVisible();
+    await user.click(screen.getByTestId(testIds.tabIngredients));
+
+    expect(await screen.findByLabelText('Search ingredients')).toHaveValue('aepfel');
+    expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('Create “aepfel”');
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(router.state.location.search).toBe('');
+    const stored = [localStorage, sessionStorage].flatMap((storage) =>
+      Object.keys(storage).map((key) => `${key}=${storage.getItem(key)}`),
+    );
+    expect(stored.join('\n')).not.toContain('aepfel');
+
+    // Started again, the app has forgotten it.
+    unmount();
+    renderIngredients();
+    expect(await screen.findByLabelText('Search ingredients')).toHaveValue('');
+  });
+
+  it('shows “No matches” with “Reset filters”, which clears the search (UI-03)', async () => {
+    const { user } = renderIngredients();
+    await screen.findByTestId(testIds.ingredientList);
+    const search = screen.getByLabelText('Search ingredients');
+
+    await user.type(search, 'Quitten');
+    expect(await screen.findByText('No matches')).toBeVisible();
+    expect(screen.queryByTestId(testIds.ingredientList)).toBeNull();
+    // The tile offers to create it; there is no other "Create" button any more.
+    expect(screen.getAllByRole('button', { name: 'Create “Quitten”' })).toEqual([
+      screen.getByTestId(testIds.newIngredient),
+    ]);
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+
+    expect(search).toHaveValue('');
+    const list = await screen.findByTestId(testIds.ingredientList);
+    expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
+    expect(screen.queryByText('No matches')).toBeNull();
+  });
+
+  it('shows one line under the pinned block when there are no ingredients yet (UI-03)', async () => {
     const { user } = renderIngredients({ 'GET /api/ingredients': [] });
 
     expect(await screen.findByText('No ingredients yet')).toBeVisible();
-    expect(screen.queryByTestId(testIds.ingredientSearch)).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Add ingredient' }));
+    const tab = screen.getByTestId(testIds.screenIngredients);
+    expect(within(tab).queryAllByRole('heading', { level: 2 })).toEqual([]);
+    // The tile is the only action; the scanner is no longer linked from the tab (BAR-01).
+    expect(
+      within(tab)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['New ingredient']);
+    expect(within(tab).queryByRole('link')).toBeNull();
+    await user.click(screen.getByTestId(testIds.newIngredient));
 
     expect(await screen.findByRole('dialog', { name: 'New ingredient' })).toBeVisible();
   });
 
-  it.each([
-    ['with ingredients', listIngredients],
-    ['without ingredients', []],
-  ])('offers the barcode scanner %s (BAR-01)', async (_case, answer) => {
-    renderIngredients({ 'GET /api/ingredients': answer });
+  it('no longer links the barcode scanner from the tab (BAR-01)', async () => {
+    renderIngredients();
 
-    const link = await screen.findByRole('link', { name: 'Scan barcode' });
-    expect(link).toHaveAttribute('href', '/scan');
-    expect(link).toHaveAttribute('data-testid', testIds.scanBarcode);
+    await screen.findByTestId(testIds.ingredientList);
+    expect(screen.queryByRole('link', { name: 'Scan barcode' })).toBeNull();
+    expect(screen.queryByTestId(testIds.scanBarcode)).toBeNull();
   });
 
   it('shows a translated error when the list cannot be loaded', async () => {

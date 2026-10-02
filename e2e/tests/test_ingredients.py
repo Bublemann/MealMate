@@ -33,11 +33,8 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
 
     page.goto("/ingredients")
     expect(page.get_by_test_id(TEST_IDS["screenIngredients"])).to_be_visible()
-    # "New ingredient", or the empty state's action while there are no ingredients yet.
-    create = re.compile(
-        f"^({re.escape(text('ingredients.new'))}|{re.escape(text('ingredients.empty.action'))})$"
-    )
-    page.get_by_role("button", name=create).click()
+    # The "New ingredient" tile, also while there are no ingredients yet (UI-03).
+    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
     dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
     form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
     form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
@@ -76,21 +73,29 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
     search.fill(f"aepfel {tag}")
     expect(row).to_be_visible()
 
+    # While a search text is present, the tile offers to create it, with that name (ING-03).
+    tile = page.get_by_test_id(TEST_IDS["newIngredient"])
+    expect(tile).to_have_text(text("ingredients.createNamed", name=f"aepfel {tag}"))
+    tile.click()
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    name_field = dialog.get_by_label(text("ingredients.field.name"), exact=True)
+    expect(name_field).to_have_value(f"aepfel {tag}")
+
     # Creating "Apfel …" points to the existing "Äpfel …", a hint only: another brand of the
     # same thing is another ingredient, with the same name.
-    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
-    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
-    dialog.get_by_label(text("ingredients.field.name"), exact=True).fill(f"Apfel {tag}")
+    name_field.fill(f"Apfel {tag}")
     hint = dialog.get_by_test_id(TEST_IDS["ingredientSimilar"])
     expect(hint).to_contain_text(text("ingredients.similar.title"))
     expect(hint.get_by_role("link", name=label)).to_be_visible()
-    dialog.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
+    name_field.fill(name)
     dialog.get_by_label(text("ingredients.field.brand"), exact=True).fill(f"Bio {tag}")
     dialog.get_by_role("button", name=text("common.save")).click()
     other = ingredient_label(name, f"Bio {tag}")
     expect(page.get_by_role("heading", level=1)).to_have_text(other)
+    # Back on the tab, the search is still there (UI-01).
     page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
-    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
+    expect(search).to_have_value(f"aepfel {tag}")
+    search.fill(tag)
     expect(
         page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role(
             "link", name=re.compile(f"^{re.escape(name)} ")
@@ -106,6 +111,31 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
     expect(dialog).to_be_hidden()
     expect(nutrient_row(page, "kcal")).to_contain_text("60 kcal")
     expect(nutrient_row(page, "fat")).to_contain_text(text("ingredients.nutrition.noValue"))
+
+
+def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
+    """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
+    wraps a long "Create …" tile instead of clipping it or widening the page, and leaves room for
+    the content below it."""
+    page = member_page
+    page.goto("/ingredients")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+    name = f"Quittengelee mit Zimt {unique('aus dem Garten')}"
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(name)
+
+    tile = page.get_by_test_id(TEST_IDS["newIngredient"])
+    expect(tile).to_have_text(text("ingredients.createNamed", name=name))
+    reset = page.get_by_role("button", name=text("common.resetFilters"))
+    expect(reset).to_be_visible()
+    viewport = page.viewport_size
+    assert viewport is not None
+    assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
+    assert tile.evaluate("tile => tile.scrollWidth <= tile.clientWidth")
+    box = tile.bounding_box()
+    assert box is not None
+    assert box["x"] + box["width"] <= viewport["width"]
+    # The tile is the pinned block's last row.
+    assert box["y"] + box["height"] < viewport["height"] * 0.75
 
 
 def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None:

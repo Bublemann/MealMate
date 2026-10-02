@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
 import { SyncBanners } from '@/features/sync/SyncBanners';
 import { SyncToasts } from '@/features/sync/SyncToasts';
+import { TabMemoryProvider } from '@/lib/TabMemoryProvider';
 import { cn } from '@/lib/utils';
 import { testIds, type TestId } from '@/testIds';
 import { UpdatePrompt } from './UpdatePrompt';
@@ -23,7 +24,8 @@ const TABS: readonly Tab[] = [
 
 /**
  * App shell: the current screen above a floating tab bar for one-handed use (UI-01), with the
- * sync module's banners and messages (SYNC-07).
+ * sync module's banners and messages (SYNC-07). The tabs' memory (search texts, UI-01) lives as
+ * long as the shell, i.e. until the app closes or the session ends.
  */
 export function Layout() {
   const { t } = useTranslation();
@@ -32,7 +34,9 @@ export function Layout() {
     <div className="flex min-h-dvh flex-col">
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(var(--tab-bar-clearance)+1.5rem)]">
         <SyncBanners />
-        <Outlet />
+        <TabMemoryProvider>
+          <Outlet />
+        </TabMemoryProvider>
       </main>
       <SyncToasts />
       <UpdatePrompt />

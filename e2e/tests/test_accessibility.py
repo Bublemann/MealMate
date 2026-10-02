@@ -223,9 +223,7 @@ def test_no_serious_violations(
         # The form appears once the code has been checked.
         expect(page.get_by_role("button", name=text("auth.join.submit"))).to_be_visible()
     if screen.path == "/ingredients/new":
-        page.get_by_test_id(TEST_IDS["newIngredient"]).or_(
-            page.get_by_role("button", name=text("ingredients.empty.action"))
-        ).click()
+        page.get_by_test_id(TEST_IDS["newIngredient"]).click()
         form = page.get_by_test_id(TEST_IDS["ingredientForm"])
         form.get_by_text(text("ingredients.form.more"), exact=True).click()
         expect(form.get_by_label(text("ingredients.field.packUnit"), exact=True)).to_be_visible()
