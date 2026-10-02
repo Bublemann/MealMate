@@ -34,18 +34,22 @@ OffSearchQuery = Annotated[
     Query(),
 ]
 
+# A category id (a UUID). The list takes up to 100 of them; the seed has 17 categories.
+CategoryId = Annotated[str, StringConstraints(max_length=36)]
+
 
 @router.get("")
 async def list_ingredients(
     principal: CurrentUser,
     session: ReadSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
-    category_id: Annotated[str | None, Query(max_length=36)] = None,
+    category_id: Annotated[list[CategoryId] | None, Query(max_length=100)] = None,
 ) -> list[IngredientSummary]:
     """Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
     then names starting with `q`, then the rest, each in dictionary order by name and brand
-    (Ä sorts as A); without `q`, all ingredients in that order (at most 1000)."""
-    return await ingredients.search(session, query=q, category_id=category_id)
+    (Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`
+    is repeatable: an ingredient matches if it is in any of the given categories."""
+    return await ingredients.search(session, query=q, category_ids=category_id or [])
 
 
 @router.get("/similar")

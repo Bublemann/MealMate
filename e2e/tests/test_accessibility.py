@@ -61,6 +61,8 @@ SCREENS = [
     Screen("/ingredients/:id", "member", (TEST_IDS["ingredientNutrition"],)),
     # The ingredient form of "New ingredient", with "More" (the package) opened in the test.
     Screen("/ingredients/new", "member", (TEST_IDS["ingredientForm"],)),
+    # The filter panel, opened in the test, with a category ticked.
+    Screen("/ingredients/filter", "member", (TEST_IDS["filterPanel"],)),
     Screen("/meals/new", "member", (TEST_IDS["mealForm"], TEST_IDS["ingredientPicker"])),
     # No camera in CI (denied or missing): the scanner shows its manual input (BAR-01).
     Screen("/scan", "member", (TEST_IDS["screenScan"], TEST_IDS["barcodeInput"])),
@@ -116,7 +118,7 @@ def test_no_serious_violations(
             nutrients={"kcal": 52},
         )
         path = f"/ingredients/{ingredient['id']}"
-    if path == "/ingredients/new":
+    if path in ("/ingredients/new", "/ingredients/filter"):
         path = "/ingredients"
     if path == "/scan/new":
         path = "/scan"
@@ -223,6 +225,12 @@ def test_no_serious_violations(
         form = page.get_by_test_id(TEST_IDS["ingredientForm"])
         form.get_by_text(text("ingredients.form.more"), exact=True).click()
         expect(form.get_by_label(text("ingredients.field.packUnit"), exact=True)).to_be_visible()
+    if screen.path == "/ingredients/filter":
+        page.get_by_test_id(TEST_IDS["filterButton"]).click()
+        panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+        panel.get_by_role("checkbox", name=text("category.other"), exact=True).check()
+        # Counted on the button, behind the open panel.
+        expect(page.get_by_test_id(TEST_IDS["filterButton"])).to_have_text("1")
     if screen.path == "/scan/new":
         page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(new_barcode())
         page.get_by_test_id(TEST_IDS["barcodeLookup"]).click()

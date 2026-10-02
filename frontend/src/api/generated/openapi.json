@@ -5958,7 +5958,7 @@
     },
     "/api/ingredients": {
       "get": {
-        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); without `q`, all ingredients in that order (at most 1000).",
+        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`\nis repeatable: an ingredient matches if it is in any of the given categories.",
         "operationId": "list_ingredients",
         "parameters": [
           {
@@ -5985,8 +5985,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 36,
-                  "type": "string"
+                  "items": {
+                    "maxLength": 36,
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
                 },
                 {
                   "type": "null"

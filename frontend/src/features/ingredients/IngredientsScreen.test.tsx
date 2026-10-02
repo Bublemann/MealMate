@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
-import { ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import { CATEGORIES, ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -21,10 +21,16 @@ vi.mock('@/features/scanner/decoder', () => ({
   decodeVideoFrame: () => Promise.resolve(null),
 }));
 
+/** The server's answer: any of the categories asked for (ING-03), then the search. */
 function listIngredients(request: Request) {
-  const q = new URL(request.url).searchParams.get('q');
-  if (!q) return ALL;
-  return q === 'aepfel' ? [ALL[1]] : [];
+  const params = new URL(request.url).searchParams;
+  const categories = params.getAll('category_id');
+  const inCategories = categories.length
+    ? ALL.filter((ingredient) => categories.includes(ingredient.category_id))
+    : ALL;
+  const q = params.get('q');
+  if (!q) return inCategories;
+  return q === 'aepfel' ? inCategories.filter((ingredient) => ingredient === ALL[1]) : [];
 }
 
 function renderIngredients(routes: Record<string, unknown> = {}) {
@@ -35,6 +41,19 @@ function renderIngredients(routes: Record<string, unknown> = {}) {
     ...routes,
   });
   return { fetchMock, ...renderApp('/ingredients') };
+}
+
+function categoriesAskedFor(fetchMock: ReturnType<typeof mockApi>) {
+  return requestsTo(fetchMock, 'GET /api/ingredients').map((request) =>
+    new URL(request.url).searchParams.getAll('category_id'),
+  );
+}
+
+/** The rows, also while the filter panel hides the list from screen readers. */
+function rowTexts() {
+  return within(screen.getByTestId(testIds.ingredientList))
+    .getAllByTestId(testIds.ingredientRow)
+    .map((row) => row.textContent);
 }
 
 function searchTerms(fetchMock: ReturnType<typeof mockApi>) {
@@ -114,12 +133,16 @@ describe('IngredientsScreen', () => {
     expect(tile).toHaveAccessibleName('New ingredient');
   });
 
-  it('keeps the search until the app closes, but not in the address or browser storage (UI-01)', async () => {
+  it('keeps the search and the categories until the app closes, but not in the address or browser storage (UI-01)', async () => {
     const { router, unmount, user } = renderIngredients({
       'GET /api/ingredients/ing-%C3%A4pfel': ingredient({ id: 'ing-äpfel', name: 'Äpfel' }),
     });
     await screen.findByTestId(testIds.ingredientList);
     await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
+    await user.click(screen.getByTestId(testIds.filterButton));
+    const panel = await screen.findByTestId(testIds.filterPanel);
+    await user.click(within(panel).getByRole('checkbox', { name: 'Fruit & vegetables' }));
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
     const rows = () =>
       within(screen.getByTestId(testIds.ingredientList)).getAllByTestId(testIds.ingredientRow);
     await waitFor(() => expect(rows()).toHaveLength(1));
@@ -131,17 +154,162 @@ describe('IngredientsScreen', () => {
 
     expect(await screen.findByLabelText('Search ingredients')).toHaveValue('aepfel');
     expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('Create “aepfel”');
+    expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
     await waitFor(() => expect(rows()).toHaveLength(1));
+    await user.click(screen.getByTestId(testIds.filterButton));
+    expect(
+      within(await screen.findByTestId(testIds.filterPanel)).getByRole('checkbox', {
+        name: 'Fruit & vegetables',
+      }),
+    ).toBeChecked();
     expect(router.state.location.search).toBe('');
     const stored = [localStorage, sessionStorage].flatMap((storage) =>
       Object.keys(storage).map((key) => `${key}=${storage.getItem(key)}`),
     );
     expect(stored.join('\n')).not.toContain('aepfel');
+    expect(stored.join('\n')).not.toContain('cat-fruit_vegetables');
 
-    // Started again, the app has forgotten it.
+    // Started again, the app has forgotten them.
     unmount();
     renderIngredients();
     expect(await screen.findByLabelText('Search ingredients')).toHaveValue('');
+    expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
+  });
+
+  it('opens the filter panel from next to the search, with every category (UI-01)', async () => {
+    const { user } = renderIngredients();
+    await screen.findByTestId(testIds.ingredientList);
+    const button = screen.getByTestId(testIds.filterButton);
+    expect(button).toHaveAccessibleName('Filters');
+
+    await user.click(button);
+
+    const panel = await screen.findByRole('dialog', { name: 'Filters' });
+    expect(panel).toBe(screen.getByTestId(testIds.filterPanel));
+    const group = within(panel).getByRole('group', { name: 'Categories' });
+    expect(group).toBe(within(panel).getByTestId(testIds.filterGroup));
+    // In the categories' walking order, none ticked: every ingredient shows.
+    const boxes = within(group).getAllByRole('checkbox');
+    ['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other'].forEach((name, index) => {
+      expect(boxes[index]).toHaveAccessibleName(name);
+      expect(boxes[index]).not.toBeChecked();
+    });
+    expect(boxes).toHaveLength(4);
+  });
+
+  it('shows the placeholder in the panel until the categories have loaded (UI-03)', async () => {
+    const categories = heldRoute();
+    const { user } = renderIngredients({ 'GET /api/categories': categories.route });
+
+    await user.click(await screen.findByTestId(testIds.filterButton));
+
+    const group = within(await screen.findByTestId(testIds.filterPanel)).getByRole('group', {
+      name: 'Categories',
+    });
+    expect(await within(group).findByText('Loading…')).toBeVisible();
+    expect(within(group).queryAllByRole('checkbox')).toEqual([]);
+    await categories.answer(CATEGORIES);
+    await waitFor(() => expect(within(group).getAllByRole('checkbox')).toHaveLength(4));
+    expect(within(group).queryByText('Loading…')).toBeNull();
+  });
+
+  it('applies each ticked category at once and counts the group on the button (UI-01, ING-03)', async () => {
+    const { fetchMock, user } = renderIngredients();
+    await screen.findByTestId(testIds.ingredientList);
+    const button = screen.getByTestId(testIds.filterButton);
+    await user.click(button);
+    const group = within(await screen.findByTestId(testIds.filterPanel)).getByRole('group', {
+      name: 'Categories',
+    });
+
+    await user.click(within(group).getByRole('checkbox', { name: 'Dairy & eggs' }));
+
+    // The list behind the open panel follows at once.
+    await waitFor(() =>
+      expect(rowTexts()).toEqual([
+        'Butter (Kerrygold) with barcodeDairy & eggs · g',
+        'MilchDairy & eggs · ml',
+      ]),
+    );
+    expect(button).toHaveAccessibleName('Filters, 1 active');
+    expect(button).toHaveTextContent('1');
+
+    // Several categories show the ingredients of any of them; it is still one group.
+    await user.click(within(group).getByRole('checkbox', { name: 'Fruit & vegetables' }));
+    await waitFor(() =>
+      expect(rowTexts()).toEqual([
+        'ÄpfelFruit & vegetables · g',
+        'Butter (Kerrygold) with barcodeDairy & eggs · g',
+        'MilchDairy & eggs · ml',
+      ]),
+    );
+    expect(categoriesAskedFor(fetchMock)).toEqual([
+      [],
+      ['cat-dairy_eggs'],
+      ['cat-fruit_vegetables', 'cat-dairy_eggs'],
+    ]);
+    expect(button).toHaveAccessibleName('Filters, 1 active');
+    expect(within(group).getByRole('checkbox', { name: 'Dairy & eggs' })).toBeChecked();
+    expect(within(group).getByRole('checkbox', { name: 'Cheese' })).not.toBeChecked();
+  });
+
+  it('resets every group but keeps the search, and closes with “Done” (UI-01)', async () => {
+    const { user } = renderIngredients();
+    await screen.findByTestId(testIds.ingredientList);
+    const search = screen.getByLabelText('Search ingredients');
+    await user.type(search, 'aepfel');
+    await waitFor(() => expect(rowTexts()).toEqual(['ÄpfelFruit & vegetables · g']));
+    const button = screen.getByTestId(testIds.filterButton);
+    await user.click(button);
+    const panel = await screen.findByRole('dialog', { name: 'Filters' });
+    await user.click(within(panel).getByRole('checkbox', { name: 'Dairy & eggs' }));
+    await user.click(within(panel).getByRole('checkbox', { name: 'Cheese' }));
+    await waitFor(() => expect(screen.queryByTestId(testIds.ingredientList)).toBeNull());
+    expect(button).toHaveAccessibleName('Filters, 1 active');
+
+    await user.click(within(panel).getByRole('button', { name: 'Reset' }));
+
+    within(panel)
+      .getAllByRole('checkbox')
+      .forEach((box) => expect(box).not.toBeChecked());
+    expect(button).toHaveAccessibleName('Filters');
+    expect(button).not.toHaveTextContent('1');
+    expect(search).toHaveValue('aepfel');
+    await screen.findByTestId(testIds.ingredientList);
+    expect(rowTexts()).toEqual(['ÄpfelFruit & vegetables · g']);
+    // The panel stays open until "Done", which gives the focus back to the button.
+    expect(panel).toBeVisible();
+
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+
+    await waitFor(() => expect(panel).not.toBeInTheDocument());
+    expect(button).toHaveFocus();
+  });
+
+  it('says “No matches” when the categories hide everything; “Reset filters” clears search and categories (UI-03)', async () => {
+    const { user } = renderIngredients();
+    await screen.findByTestId(testIds.ingredientList);
+    const search = screen.getByLabelText('Search ingredients');
+    const button = screen.getByTestId(testIds.filterButton);
+    await user.click(button);
+    const panel = await screen.findByRole('dialog', { name: 'Filters' });
+    // No ingredient is in "Cheese": that is no match, not an empty tab.
+    await user.click(within(panel).getByRole('checkbox', { name: 'Cheese' }));
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+    expect(await screen.findByText('No matches')).toBeVisible();
+    expect(screen.queryByText('No ingredients yet')).toBeNull();
+    await user.type(search, 'Quitten');
+
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+
+    expect(search).toHaveValue('');
+    expect(button).toHaveAccessibleName('Filters');
+    const list = await screen.findByTestId(testIds.ingredientList);
+    expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
+    await user.click(button);
+    within(await screen.findByRole('dialog', { name: 'Filters' }))
+      .getAllByRole('checkbox')
+      .forEach((box) => expect(box).not.toBeChecked());
   });
 
   it('shows “No matches” with “Reset filters”, which clears the search (UI-03)', async () => {
@@ -179,7 +347,7 @@ describe('IngredientsScreen', () => {
     expect(await screen.findByText('No matches')).toBeVisible();
 
     // The cache has dropped the unused full list (after its gcTime), so it is loaded again.
-    queryClient.removeQueries({ queryKey: ['ingredients', 'list', ''], exact: true });
+    queryClient.removeQueries({ queryKey: ['ingredients', 'list', '', []], exact: true });
     await user.click(screen.getByRole('button', { name: 'Reset filters' }));
     await waitFor(() => expect(fullLoads).toBe(2));
 
@@ -196,12 +364,12 @@ describe('IngredientsScreen', () => {
     expect(await screen.findByText('No ingredients yet')).toBeVisible();
     const tab = screen.getByTestId(testIds.screenIngredients);
     expect(within(tab).queryAllByRole('heading', { level: 2 })).toEqual([]);
-    // The tile is the only action; the scanner is no longer linked from the tab (BAR-01).
-    expect(
-      within(tab)
-        .getAllByRole('button')
-        .map((button) => button.textContent),
-    ).toEqual(['New ingredient']);
+    // Only the pinned block's filter button and tile; the scanner is no longer linked from the
+    // tab (BAR-01).
+    expect(within(tab).getAllByRole('button')).toEqual([
+      screen.getByTestId(testIds.filterButton),
+      screen.getByTestId(testIds.newIngredient),
+    ]);
     expect(within(tab).queryByRole('link')).toBeNull();
     await user.click(screen.getByTestId(testIds.newIngredient));
 
