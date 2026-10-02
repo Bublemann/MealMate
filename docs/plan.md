@@ -178,6 +178,7 @@ MealMate/
 - **Primary keys:** UUIDv7 strings (`uuid.uuid7()`). The server accepts any valid UUID for client-supplied IDs (offline extra items, op IDs) and never relies on their embedded timestamp.
 - **Timestamps:** UTC in the database.
 - **`*_norm` columns:** lowercase, `ä→ae ö→oe ü→ue ß→ss`, accents stripped, whitespace collapsed. They are used for uniqueness and search (ING-03, REF-04, ACC-05).
+- **Dictionary order** (ING-03, MEAL-09, D-27): meals and ingredients sort by a key built from the original name: lowercase, `ä→a ö→o ü→u ß→ss`, accents stripped. It is not derived from `*_norm`: folding `ae`/`oe`/`ue` back would also change real letter pairs ("Quelle", "Feuer", "Aloe").
 
 ### 5.3 Errors and headers (I18N-03, SEC-06)
 
@@ -237,7 +238,7 @@ All permission checks live in one module, `services/access.py`:
 | Meal | owner · partner · everyone if owner.meals_public | owner only |
 | List | owner · partner (while in a couple; read-only if not `shared_with_partner`) · everyone (read-only) if owner.lists_public | owner · partner if `shared_with_partner` (not delete/share switch) |
 | Meal *embedded in a list* (VIS-06) | if the viewer may view the meal itself (rule above): full details; otherwise "Private meal (N servings)" without name, photo, link or sources | n/a |
-| Ingredient / product | everyone | everyone; delete/merge: admin |
+| Ingredient | everyone | everyone; delete/merge: admin |
 | Photo | same as its meal (checked when the signed URL is issued) | owner |
 | Admin endpoints | admin (active) | admin; never private meals/lists; no self-deactivation/deletion; ≥ 1 active admin |
 
@@ -403,7 +404,7 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `users` | `username`, `username_norm` (unique), `display_name`, `display_name_norm` (unique), `password_hash`, `role` (`user`/`admin`), `language` (`de`/`en`), `is_active`, `meals_public`, `lists_public`, `filter_hidden` (JSON `{meals: [ids], lists: [ids]}`), `last_seen_at`, `password_changed_at`, `password_reset_by`, `password_reset_at` | |
+| `users` | `username`, `username_norm` (unique), `display_name`, `display_name_norm` (unique), `password_hash`, `role` (`user`/`admin`), `language` (`de`/`en`), `is_active`, `meals_public`, `lists_public`, `filter_hidden` (JSON `{meals: [user ids], lists: [user ids], list_states: [states]}`), `last_seen_at`, `password_changed_at`, `password_reset_by`, `password_reset_at` | `filter_hidden` holds the saved filter preferences as what they hide: `meals` the user filter on Meals (MEAL-10), `lists` the user filter on Lists and `list_states` the state filter next to it (`draft`/`shopping`/`done`, UI-02). Empty shows everything; a row saved before the state filter existed shows every state |
 | `sessions` | `user_id` FK cascade, `revoked_at`, `last_used_at`, `user_agent` | One per device/login |
 | `session_tokens` | `session_id` FK cascade, `token_hmac` (unique), `issued_at`, `superseded_at`, `forked_at`, `expires_at` | Refresh-token rotation with grace and one-time fork (§ 5.4) |
 | `one_time_codes` | `kind` (`invite`/`reset`), `code_hmac` (unique), `created_by` FK set null, `target_user_id` FK cascade (reset), `expires_at`, `used_at`, `used_by` FK set null, `revoked_at`, `tailscale_share_url` (invite, optional) | |
@@ -448,13 +449,13 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 |---|---|
 | System | `GET /health` (DB + disk writable) · `GET /version` (version, commit, source URL) |
 | Auth | `POST /auth/login` · `/auth/refresh` (`{fork?}`) · `/auth/logout` · `/auth/logout-all` · `/auth/codes/check` · `/auth/join` · `/auth/reset` |
-| Me | `GET/PATCH /me` (display name, language, privacy, filter chips) · `POST /me/password` · `GET /me/sessions` · `DELETE /me/sessions/{id}` · `GET /me/security` (reset notices) |
+| Me | `GET/PATCH /me` (display name, language, privacy, and in `filter_hidden` the user filter for meals and for lists and the state filter, § 6) · `POST /me/password` · `GET /me/sessions` · `DELETE /me/sessions/{id}` · `GET /me/security` (reset notices) |
 | Couple | `GET /couple` · `POST /couple/requests` · `POST /couple/requests/{id}/accept\|decline\|cancel` · `DELETE /couple` |
-| Users | `GET /users` (active users: id + display name, for the couple picker) · `GET /users/visible?for=meals\|lists` (filter chips) |
+| Users | `GET /users` (active users: id + display name, for the couple picker) · `GET /users/visible?for=meals\|lists` (the choices of the user filter on Meals or Lists: oneself first, the partner, then everyone whose matching privacy switch is public, VIS-02) |
 | Reference | `GET /categories` · `GET /units` · `GET/POST /cuisines` · `GET /tags?q=` |
-| Ingredients | `GET /ingredients?q=&category_id=` (name and brand) · `POST` · `GET/PATCH /ingredients/{id}` · `GET /ingredients/similar?name=&brand=` · `GET /ingredients/lookup?barcode=` · `GET /ingredients/off-search?q=&page=` · `POST /ingredients/{id}/barcode` (link a barcode to an ingredient without one; 409 otherwise) · `POST /ingredients/{id}/pending-update/apply\|ignore` |
-| Meals | `GET /meals?q=&users=&cuisine=&tag=&sort=` · `POST` · `GET/PATCH/DELETE /meals/{id}` · `POST /meals/{id}/copy` · `PUT/DELETE /meals/{id}/photo` · `GET /media/{key}` |
-| Lists | `GET /lists?scope=mine\|others&status=` · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` · `GET /lists/history` · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
+| Ingredients | `GET /ingredients?q=&category_id=` (`q` searches name and brand; `category_id` is repeatable and matches any of them; without `q` sorted in dictionary order by name, then brand (§ 5.2); with `q` the best matches first, then the same order) · `POST` · `GET/PATCH /ingredients/{id}` · `GET /ingredients/similar?name=&brand=` · `GET /ingredients/lookup?barcode=` · `GET /ingredients/off-search?q=&page=` · `POST /ingredients/{id}/barcode` (link a barcode to an ingredient without one; 409 otherwise) · `POST /ingredients/{id}/pending-update/apply\|ignore` |
+| Meals | `GET /meals?q=&cuisine_id=&tag_id=&owner_ids=` (`cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given ones and it has every given tag; sorted in dictionary order (§ 5.2); without `owner_ids` the user filter on Meals applies, with `owner_ids` (repeatable) only those owners' meals are listed) · `GET /meals/tags` (the tags of all visible meals: the choices of the tag filter) · `GET /meals/recent` (the picker's "recently used") · `POST` · `GET/PATCH/DELETE /meals/{id}` · `POST /meals/{id}/copy` · `PUT/DELETE /meals/{id}/photo` · `GET /media/{key}` |
+| Lists | `GET /lists?cursor=` (the list feed, UI-02: every list you can see, in every state, with your user filter and state filter applied; newest created first, ties by id; 30 per page, with a `next_cursor` for the next page, null on the last) · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
 | Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/events` · `GET /admin/system` (version, plus backup and disk status read from the read-only `/status/*.json`) · `POST /admin/backup` (creates `/data/status/backup-request`, picked up by a systemd path unit) |
 | Diagnostics (M1 only, removed in M9) | `POST /auth/diag/set\|check` (cookie carry-over test, under `/api/auth` so the cookie path matches) · `GET /auth/diag/request` (the client address, scheme and forwarding headers as the app sees them, O-3) |
 
@@ -462,11 +463,13 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 
 - **Routing** (react-router):
   - tabs `/lists`, `/meals`, `/ingredients`, `/me`;
-  - `/lists/:id` (draft view / shopping view), `/lists/history`, `/meals/:id`, `/meals/:id/edit`, `/ingredients/:id`;
+  - `/lists/:id` (draft view / shopping view), `/meals/new` (the "Neues Gericht" tile can pass a name to prefill, MEAL-09), `/meals/:id`, `/meals/:id/edit`, `/ingredients/:id`, `/scan` (the scanner; no tab links to it for now, BAR-01);
+  - the former history route `/lists/history` redirects to the Lists tab (UI-02);
   - `/join`, `/reset`, `/login`, `/me/admin/*`. The code is read from `location.hash` and removed from the URL immediately.
 - **Server state:** TanStack Query per feature (`features/*/api.ts`), all calls through `src/api/client.ts` (openapi-fetch).
   - The client gives every request an `AbortController` timeout: 8 s for reads, 15 s for ops and uploads, and 25 s for the barcode lookup and the OFF name search. A timeout counts as "can't reach MealMate" (SYNC-09). A lookup timeout instead shows "Open Food Facts is slow – try again or enter the values yourself".
   - The auth middleware refreshes **single-flight**: one shared promise, plus `navigator.locks.request('mm-refresh')` across tabs, then retries once on 401. No API call is sent before the startup refresh has settled.
+- **Per-tab memory** (UI-01): the search text and the cuisine, tag and category choices live in an in-memory, app-wide store keyed by tab, not in the URL or browser storage, so they are lost when the app closes. The user filter and the state filter are server state (`/me`).
 - **Auth:**
   - The access token lives in memory.
   - On start: render the cached profile and lists from IndexedDB **first**, then refresh in the background.
@@ -474,6 +477,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - The server tells "session revoked / user deactivated" apart from "expired" with distinct error codes, which drive SYNC-10.
 - **Sync module** (`features/sync/`):
   - an IndexedDB store `lists` for the offline copy (SYNC-02), refreshed from `GET /lists/sync` on start, `visibilitychange`, `online` and after each mutation;
+  - the copy seeds the first page of the list feed: the Lists tab shows it, sorted like the feed, until that page arrives, and offline it shows only the copy, ignoring the saved filters (UI-02). A list finished on this phone whose finish wasn't sent yet is left out;
   - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id;
   - a flush loop that runs on start, `visibilitychange→visible` and `online`, in order, stopping at the first network error or timeout;
   - a status store feeding the indicator (SYNC-07);
@@ -504,6 +508,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - `de.json` / `en.json` with flat keys: `feature.screen.element`, errors as `error.<code>`, categories as `category.<key>`, units as `unit.<unit>`, reminders as `reminder.<n>`;
   - `format.ts` wraps `Intl.NumberFormat`/`DateTimeFormat` (`de-DE`, `en-GB`);
   - `parseAmount()` accepts `,` and `.`.
+- **Keyboard** (UI-01, D-28): one viewport module watches `visualViewport` (`resize`, `scroll`), derives the keyboard height, ignores it while pinch-zoomed (`scale` ≠ 1) and does nothing where the API is missing. It exposes the inset as a CSS variable and a "keyboard open" state: the dialogs size themselves to the visible area, and the tab bar and the update prompt hide.
 - **Design tokens:** CSS variables (green accent, neutral grays, light and dark) in `styles/tokens.css`, mapped into the Tailwind theme. Dark mode uses only `prefers-color-scheme` (no inline script). shadcn components use only tokens.
 - **Testability:**
   - every interactive element has an accessible name;
