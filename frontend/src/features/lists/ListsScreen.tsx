@@ -6,14 +6,16 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { EmptyLine } from '@/components/EmptyLine';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { FilterPanel } from '@/components/FilterPanel';
 import { InitialMarker } from '@/components/InitialMarker';
 import { LoadError } from '@/components/LoadError';
 import { LoadingState } from '@/components/LoadingState';
+import { NoMatches } from '@/components/NoMatches';
 import { OfflineNotice } from '@/components/OfflineNotice';
 import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
@@ -21,39 +23,79 @@ import { useCouple } from '@/features/couple/api';
 import { FirstLoginHints } from '@/features/hints/FirstLoginHints';
 import { useConnected, usePendingFinishes, useSyncEngine } from '@/features/sync/context';
 import { SyncIndicator } from '@/features/sync/SyncIndicator';
+import { useUserFilterGroup } from '@/features/userFilter/useUserFilterGroup';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
-import { useCreateList, useListFeed, type ListSummary } from './api';
+import { showsLocalCopy, useCreateList, useListFeed, type ListSummary } from './api';
 import { listDisplayName } from './format';
+import { FEED_KEY } from './keys';
 import type { ListViewState } from './ListScreen';
+import { useStateFilterGroup } from './useStateFilterGroup';
+
+/** What the saved user filter and state filter hide in the feed (UI-02). */
+interface FeedFilters {
+  hides: (list: ListSummary) => boolean;
+  /** A user or a state is unticked. */
+  active: boolean;
+  /** A change is being saved, or the feed is loading again after it. */
+  saving: boolean;
+  /** Ticks every user and state again. */
+  reset: () => void;
+}
 
 /**
- * The Lists tab, where the app opens (UI-02, UI-03): the pinned block with the "New list" tile,
- * the first-login hints and the sync notice, then the list feed: every list I can see, in every
- * state, newest created first, the next 30 as I scroll down.
+ * The Lists tab, where the app opens (UI-02, UI-03): the pinned block with the "New list" tile
+ * and the filter button, the first-login hints and the sync notice, then the list feed: every list
+ * I can see, in every state, as far as the saved user filter and state filter show them, newest
+ * created first, the next 30 as I scroll down. Offline the filters don't apply, so their button
+ * is disabled.
  */
 export function ListsScreen() {
   const { t } = useTranslation();
+  const connected = useConnected();
+  const userFilter = useUserFilterGroup('lists', {
+    label: t('lists.filter.users'),
+    reloadKey: FEED_KEY,
+  });
+  const stateFilter = useStateFilterGroup();
+  const filters: FeedFilters = {
+    hides: (list) => userFilter.hidden.has(list.owner.id) || stateFilter.hidden.has(list.status),
+    active: userFilter.group.active || stateFilter.group.active,
+    saving: userFilter.saving || stateFilter.saving,
+    reset: () => {
+      userFilter.reset();
+      stateFilter.reset();
+    },
+  };
 
   return (
     <Screen variant="tab" title={t('nav.lists')} testId={testIds.screenLists}>
-      <NewList />
+      <ListsPinnedBlock
+        filter={
+          <FilterPanel
+            groups={[userFilter.group, stateFilter.group]}
+            onReset={filters.reset}
+            disabled={!connected}
+          />
+        }
+      />
       {/* Only when there is something to say: offline, or changes waiting (SYNC-07). */}
       <SyncIndicator quiet />
       <FirstLoginHints />
-      <ListFeed />
+      <ListFeed filters={filters} />
     </Screen>
   );
 }
 
 /**
- * LIST-01: the "New list" tile creates a draft right away and opens it with the meal picker.
- * Creating a list needs the server, so offline the tile is disabled rather than failing on a tap.
+ * The pinned block (UI-01) with the filter button and the "New list" tile (LIST-01), which
+ * creates a draft right away and opens it with the meal picker. Creating a list needs the server,
+ * so offline the tile is disabled rather than failing on a tap.
  */
-function NewList() {
+function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const create = useCreateList();
@@ -71,6 +113,7 @@ function NewList() {
   return (
     <>
       <PinnedBlock
+        filter={filter}
         newTile={{
           label: t('lists.new'),
           onClick: newList,
@@ -86,9 +129,11 @@ function NewList() {
 /**
  * The feed below the pinned block (UI-02). Until the server's first page arrives it is the local
  * copy (SYNC-09); offline it is only the local copy, because read-only and done lists need a
- * connection. A list finished here whose finish hasn't been sent yet stays hidden.
+ * connection. The copy ignores the saved filters; the server leaves out what they hide, and a
+ * list hidden by a change still being saved goes at once. A list finished here whose finish
+ * hasn't been sent yet stays hidden.
  */
-function ListFeed() {
+function ListFeed({ filters }: { filters: FeedFilters }) {
   const { t } = useTranslation();
   const engine = useSyncEngine();
   const feed = useListFeed();
@@ -99,6 +144,7 @@ function ListFeed() {
   const lists = connected
     ? feed.data?.pages.flatMap((page) => page.lists)
     : engine.copiedSummaries();
+  const filtered = connected && !showsLocalCopy(feed);
 
   if (!lists) {
     if (feed.error) return <LoadError error={feed.error} />;
@@ -109,10 +155,16 @@ function ListFeed() {
     // Until the first answer (or the copy) it is unknown whether there are lists at all.
     return <LoadingState />;
   }
-  const shown = lists.filter((list) => !finishing.has(list.id));
+  const shown = lists.filter(
+    (list) => !finishing.has(list.id) && !(filtered && filters.hides(list)),
+  );
   if (shown.length === 0) {
     // An empty copy and a failed first page: whether there are lists at all is unknown.
-    return error ? <LoadError error={error} /> : <EmptyLine text={t('lists.empty')} />;
+    if (error) return <LoadError error={error} />;
+    if (filtered && filters.active) return <NoMatches onReset={filters.reset} />;
+    // The answer from before users or states were ticked again says nothing about the lists.
+    if (filters.saving) return <LoadingState />;
+    return <EmptyLine text={t('lists.empty')} />;
   }
 
   return (

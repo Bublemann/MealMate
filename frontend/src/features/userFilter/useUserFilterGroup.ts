@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { FilterGroup } from '@/components/FilterPanel';
 import { useCurrentUser } from '@/features/auth/context';
 import { userLabel } from '@/i18n/users';
-import { useSaveUserFilter, useVisibleUsers, type UserFilterKind } from './api';
+import { useSaveFilter, useVisibleUsers, type UserFilterKind } from './api';
 
 interface UserFilter {
   /** The group for the filter panel. */
@@ -21,7 +21,7 @@ interface UserFilter {
  * checkbox per user whose meals or lists are visible, "Me" first, ticked while their meals or
  * lists are shown. It is at its default while it hides none of them; users who can't be seen
  * right now stay hidden, also on a reset. Each change is saved on the server at once and loads
- * `reloadKey` again (`useSaveUserFilter`); a failed load or save shows in the group.
+ * `reloadKey` again (`useSaveFilter`); a failed load or save shows in the group.
  */
 export function useUserFilterGroup(
   kind: UserFilterKind,
@@ -30,7 +30,7 @@ export function useUserFilterGroup(
   const { t } = useTranslation();
   const me = useCurrentUser();
   const visible = useVisibleUsers(kind);
-  const save = useSaveUserFilter(kind, reloadKey);
+  const save = useSaveFilter(kind, reloadKey);
   const hidden = new Set(me.filter_hidden[kind]);
   const visibleIds = visible.data?.map((user) => user.id);
   // Until the users have loaded, anyone hidden counts.

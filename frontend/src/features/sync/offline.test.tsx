@@ -36,6 +36,12 @@ function serverGone(answer: () => Promise<never>) {
   return fetchMock;
 }
 
+/** I am Anna, with saved filters that hide my own lists and those being shopped (UI-02). */
+const HIDING_MY_SHOPPING: Schemas['Me'] = {
+  ...TEST_USER,
+  filter_hidden: { meals: [], lists: [TEST_USER.id], list_states: ['shopping'] },
+};
+
 function goOffline() {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
   act(() => {
@@ -201,6 +207,23 @@ describe('lists from the local copy (SYNC-09)', () => {
     await waitFor(() =>
       expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
     );
+  });
+
+  it('shows the copy whatever the saved filters say until the feed answers (UI-02)', async () => {
+    await storeCopy(shoppingList());
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists', { user: HIDING_MY_SHOPPING });
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.getByTestId(testIds.filterButton)).toBeEnabled();
+    // The server leaves out what the filters hide: here, everything.
+    await feed.answer(feedPage([]));
+
+    expect(await screen.findByText('No matches')).toBeVisible();
+    expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
   });
 
   it('says why the feed did not load while it shows the copy', async () => {
@@ -471,6 +494,28 @@ describe('the Lists tab offline (UI-02, SYNC-03)', () => {
     const notice = screen.getByTestId(testIds.syncStatus);
     expect(notice).toHaveTextContent('Offline');
     expect(tile.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows the copy whatever the saved filters say and disables the filter button', async () => {
+    await storeCopy(shoppingList());
+    mockApi({
+      ...LIST_ROUTES,
+      'GET /api/lists': feedPage(FEED_LISTS.filter((list) => list.owner.id !== TEST_USER.id)),
+      'GET /api/lists/sync': NEVER,
+    });
+    renderApp('/lists', { user: HIDING_MY_SHOPPING });
+    await waitFor(() => expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(4));
+    const button = screen.getByTestId(testIds.filterButton);
+    await waitFor(() => expect(button).toHaveAccessibleName('Filters, 2 active'));
+
+    goOffline();
+
+    // My list being shopped is in the copy: in the shop it must never be filtered away.
+    await waitFor(() => expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1));
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Wochenende (26/09/2026)');
+    expect(button).toBeDisabled();
+    // Nothing is filtered, so nothing is counted.
+    expect(button).toHaveAccessibleName('Filters');
   });
 
   it('says the lists need a connection before the copy was ever complete', async () => {

@@ -64,7 +64,7 @@ frontend/
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
-    │   ├── userFilter/     # the user filter on Meals and Lists: visible users, saving, filter group
+    │   ├── userFilter/     # the user filter on Meals and Lists: visible users, filter group; saving the saved filters
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
@@ -146,11 +146,15 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   its accessible name. A group shows the loading placeholder until its options arrive, and its
   error when they fail to load or a change fails. Ingredients offers the categories (any of them,
   ING-03); Meals the user filter (MEAL-10), the cuisines (any of them) and the tags (all of them,
-  MEAL-09). The user filter is `useUserFilterGroup` (`features/userFilter/`), one checkbox per
-  user whose meals or lists are visible, "Me" first; each change is saved on the server at once
-  and loads the narrowed query again, and the screen hides an unticked user's rows right away. At
-  the largest text sizes the options and buttons wrap and the panel scrolls, its buttons staying
-  in view.
+  MEAL-09); Lists the user filter and the state filter (UI-02). The user filter is
+  `useUserFilterGroup` (`features/userFilter/`), one checkbox per user whose meals or lists are
+  visible, "Me" first, then the partner; the state filter is `useStateFilterGroup`
+  (`features/lists/`), "Entwurf", "Einkauf" and "Erledigt". Both are saved on the server in the
+  profile's `filter_hidden` (`useSaveFilter`, saves one after another): each change is saved at
+  once and loads the narrowed query again, and the screen hides the rows it hides right away. On
+  Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
+  counts nothing then. At the largest text sizes the options and buttons wrap and the panel
+  scrolls, its buttons staying in view.
 - **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
   `InitialMarker`, a round marker with the owner's initial, one's own rows included; screen readers
   read it as the owner's full name. Meal rows put it after the name, so the meal is read first.
@@ -158,8 +162,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   person.
 - **List feed** (UI-02): the Lists tab loads `GET /api/lists` page by page (`useListFeed`, 30 per
   page, `next_cursor`); the next page loads when the end of the feed comes near the screen
-  (`IntersectionObserver`; tests stub it). Icons with an accessible name mark a shared list, a
-  read-only one (lock), one being shopped and a done one.
+  (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
+  filter. Until its first page arrives the feed is the local copy (`showsLocalCopy`), which they
+  don't narrow. Icons with an accessible name mark a shared list, a read-only one (lock), one being
+  shopped and a done one.
 - **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in
   `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
   survives opening a detail and coming back, and is gone when the app closes or the session ends;

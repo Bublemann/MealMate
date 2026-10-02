@@ -64,6 +64,14 @@ export function useListFeed() {
 }
 
 /**
+ * Whether the feed still shows the local copy, which the server's first page hasn't replaced yet
+ * (SYNC-09): the copy goes into the cache as loaded at time 0, so that the feed is asked for.
+ */
+export function showsLocalCopy(feed: { dataUpdatedAt: number }): boolean {
+  return feed.dataUpdatedAt === 0;
+}
+
+/**
  * Changes per list that wait for their answer (their optimistic state is on screen). While there
  * are any, a load of the list that answers is ignored: it may predate them and undo what is shown.
  * Counted per query client, which holds the cache they protect.
