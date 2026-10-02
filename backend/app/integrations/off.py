@@ -186,11 +186,12 @@ def _pack_quantity(value: object) -> float | None:
 
 
 def _pack_unit(value: object) -> BaseUnit | None:
-    """`g` or `ml` exactly (after cleaning); anything else, such as `mlx` or `kg`, is unknown."""
+    """`g` or `ml` exactly (after cleaning); anything else, such as `mlx`, `kg` or `piece`, is
+    unknown."""
     if not isinstance(value, str) or len(value) > _UNIT_MAX_LENGTH:
         return None
     text = clean_text(value, _UNIT_MAX_LENGTH)
-    return BaseUnit(text) if text in {unit.value for unit in BaseUnit} else None
+    return BaseUnit(text) if text in {BaseUnit.G.value, BaseUnit.ML.value} else None
 
 
 def _nutrients(value: object) -> dict[str, float]:

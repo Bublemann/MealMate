@@ -1,8 +1,9 @@
 import { Check, CookingPot, Plus, Search } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { InitialMarker } from '@/components/InitialMarker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,9 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useCurrentUser } from '@/features/auth/context';
-import { useMeals, type MealSummary } from '@/features/meals/api';
-import { userLabel } from '@/i18n/users';
+import { usePickerMeals, type MealSummary } from '@/features/meals/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds, type TestId } from '@/testIds';
 import { useAddListMeal, useRecentMeals } from './api';
@@ -31,15 +30,26 @@ interface MealPickerProps {
 
 /**
  * Adds meals to a list (LIST-03/04): "Recently used" first (MEAL-09), then all visible meals or
- * the search results, each with its own servings. It stays open for adding several meals; a
- * missing meal can be created on the spot and comes back to the list.
+ * the search results, whatever the user filter on Meals says, each with its owner's marker and its
+ * own servings. It stays open for adding several meals; a missing meal can be created on the spot
+ * and comes back to the list.
  */
 export function MealPicker({ listId, open, onOpenChange }: MealPickerProps) {
   const { t } = useTranslation();
+  const contentRef = useRef<HTMLDivElement>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid={testIds.mealPicker}>
+      <DialogContent
+        ref={contentRef}
+        data-testid={testIds.mealPicker}
+        // Opens without the keyboard, so a recently used meal is one tap away (MEAL-09): the focus
+        // goes to the picker itself instead of its search field.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          contentRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('lists.picker.title')}</DialogTitle>
           <DialogDescription>{t('lists.picker.text')}</DialogDescription>
@@ -71,7 +81,7 @@ function PickerContent({ listId }: { listId: string }) {
   const debounced = useDebouncedValue(query.trim());
   const searching = debounced !== '';
   const recent = useRecentMeals({ enabled: !searching });
-  const meals = useMeals({ q: debounced, cuisineIds: [], tagIds: [] });
+  const meals = usePickerMeals(debounced);
   const recentIds = new Set(recent.data?.map((meal) => meal.id));
   // Without a search, the recently used meals come first and are not repeated below.
   const rest = searching ? meals.data : meals.data?.filter((meal) => !recentIds.has(meal.id));
@@ -151,7 +161,6 @@ function PickerSection({ title, meals, listId, testId }: PickerSectionProps) {
 
 function PickerRow({ meal, listId }: { meal: MealSummary; listId: string }) {
   const { t } = useTranslation();
-  const user = useCurrentUser();
   const add = useAddListMeal(listId);
   const [servings, setServings] = useState(meal.servings);
   const [added, setAdded] = useState(false);
@@ -184,14 +193,9 @@ function PickerRow({ meal, listId }: { meal: MealSummary; listId: string }) {
             <CookingPot aria-hidden="true" className="size-6" />
           </span>
         )}
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="font-medium break-words">{meal.name}</span>
-          {meal.owner.id !== user.id && (
-            <span className="text-sm text-muted-foreground">
-              {t('meals.card.by', { name: userLabel(t, meal.owner) })}
-            </span>
-          )}
-        </span>
+        <span className="min-w-0 flex-1 font-medium break-words">{meal.name}</span>
+        {/* After the name, as on the Meals tab: the meal is read first, then whose it is. */}
+        <InitialMarker user={meal.owner} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ServingsStepper value={servings} name={meal.name} onChange={setServings} />

@@ -10,7 +10,8 @@ Merging rules (AGG-03), deliberately simple:
    pieces and spoons stay a volume, nothing is converted;
 3. otherwise every part is converted strictly (no 1 g/ml estimate) to the ingredient's base
    unit where its attributes allow it; the others stay in their own kind's segment, so
-   "500 g + 2 Stk." appears only while the ingredient has no piece weight.
+   "500 g + 2 Stk." appears while a g ingredient has no piece weight, and always beside the
+   pieces of a `piece` ingredient, which takes nothing but pieces (`units.convert`).
 
 Sums use `math.fsum`, so they do not depend on the order of the parts (AGG-05).
 
@@ -124,7 +125,8 @@ class CheckSnapshot:
 
     def to_json(self) -> dict[str, Any]:
         """`{"mass_g": …, "volume_ml": …, "count": …, "has_unspecified": …, "base_total": …,
-        "base_unit": "g"|"ml"}`; absent segments and a missing base total are left out."""
+        "base_unit": "g"|"ml"|"piece"}`; absent segments and a missing base total are left
+        out."""
         data: dict[str, Any] = {SEGMENT_NAMES[kind]: value for kind, value in self.segments.items()}
         data["has_unspecified"] = self.has_unspecified
         if self.base_total is not None and self.base_unit is not None:

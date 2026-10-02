@@ -1,7 +1,8 @@
 """Ingredients (ING-01..06, NUT-02), their barcode and Open Food Facts data (BAR-02..10).
 
 There is one kind of ingredient: typed by hand, with a brand, or taken from Open Food Facts with
-its barcode. Nutrients are the ingredient's own values per 100 g or 100 ml of its base unit.
+its barcode. It is counted in its base unit: g, ml or pieces (D-32). Nutrients are the
+ingredient's own values per 100 g, or per 100 ml for an ml ingredient.
 """
 
 from datetime import datetime
@@ -35,7 +36,9 @@ from app.schemas.nutrition import NutrientValues
 from app.schemas.users import UserRef
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines them.
-BaseUnitName = Literal["g", "ml"]
+BaseUnitName = Literal["g", "ml", "piece"]
+# What Open Food Facts gives nutrients per: 100 g or 100 ml.
+NutritionBasisName = Literal["g", "ml"]
 IngredientSource = Literal["manual", "off"]
 LookupSource = Literal["db", "off", "none"]
 
@@ -128,8 +131,9 @@ class IngredientUsage(BaseModel):
 
 
 class Ingredient(BaseModel):
-    """An ingredient with its own nutrition per 100 g or 100 ml of `base_unit` (NUT-02; null
-    is unknown, never 0).
+    """An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
+    never 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count
+    with `piece_weight_g` (NUT-05).
 
     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
@@ -177,8 +181,8 @@ class IngredientCreate(BaseModel):
     """A new ingredient (ING-02), in one request also when it was scanned.
 
     `category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:
-    0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g or 100 ml of the base
-    unit. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are
+    0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g, or per 100 ml for
+    base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are
     ignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E
     expanded first), an EAN-8 as it is; a barcode another ingredient has is 409
     `ingredient.barcode_taken`.
@@ -212,6 +216,7 @@ class IngredientUpdate(BaseModel):
     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
     another product's. The base unit may change freely; the values are not converted.
+    Changing it away from `piece` clears the piece weight, unless the request sets one.
     """
 
     name: IngredientNameInput | None = None
@@ -259,7 +264,7 @@ class ProductProposal(BaseModel):
     quantity_text: str | None
     pack_quantity: float | None
     pack_unit: Unit | None
-    nutrition_basis: BaseUnitName | None
+    nutrition_basis: NutritionBasisName | None
     nutrients: NutrientValues
     category_key: str | None
     off_last_modified_at: datetime | None

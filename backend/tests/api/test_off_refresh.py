@@ -248,6 +248,36 @@ async def test_nutrients_on_another_basis_are_left_alone(
     assert (body["quantity_text"], body["pack_unit"]) == ("0,5 l", "ml")
 
 
+async def test_a_piece_ingredient_refreshes_its_values_per_100_g(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """Switched to Stück before saving, the proposal's values stay per 100 g (ING-02), so Open
+    Food Facts' values per 100 g go on updating them; values per 100 ml don't."""
+    product = await saved_oats(api, anna, edited=[], base_unit="piece", piece_weight_g=40)
+    assert (product["base_unit"], product["nutrients"]) == ("piece", OATS_NUTRIENTS)
+    newer = oats(nutriments={"energy-kcal_100g": 368}, last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=newer)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert body["nutrients"] == OATS_NUTRIENTS | {"kcal": 368}
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 40)
+
+    per_ml = oats(
+        product_quantity_unit="ml",
+        nutriments={"energy-kcal_100g": 50},
+        last_modified_t=modified(60),
+    )
+    route(off_api, OATS).respond(json=per_ml)
+    await refresh(app, clock, product["id"])
+    assert (await get(api, anna, product["id"]))["nutrients"]["kcal"] == 368
+
+
 async def test_lone_surrogates_are_not_stored(
     app: FastAPI,
     api: AsyncClient,
@@ -540,7 +570,12 @@ async def test_editing_a_field_settles_its_pending_value(
     assert changed.json()["pending_update"]["fields"] == [
         {"field": "nutrients.kcal", "current": 372, "proposed": 158}
     ]
-    # Another base unit settles every pending nutrient (they were per the old one).
+    # Counted in pieces, the values are still per 100 g: the pending ones stay (ING-02).
+    in_pieces = await api.patch(
+        f"/api/ingredients/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
+    )
+    assert in_pieces.json()["pending_update"] == changed.json()["pending_update"]
+    # Another basis settles every pending nutrient (they were per 100 g).
     rebased = await api.patch(
         f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )

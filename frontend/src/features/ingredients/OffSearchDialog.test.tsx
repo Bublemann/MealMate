@@ -166,6 +166,40 @@ describe('OffSearchDialog', () => {
     });
   });
 
+  it('keeps the values per 100 g when a chosen product is counted in pieces instead (ING-02)', async () => {
+    const { fetchMock, user } = renderSearch({
+      'GET /api/ingredients/off-search': page([found(OATS)]),
+      'POST /api/ingredients': Response.json(ingredient({ id: 'ing-oats' }), { status: 201 }),
+    });
+    const dialog = await openSearch(user, 'Haferflocken');
+    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
+    const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
+    await user.click(first!);
+
+    const form = screen.getByTestId(testIds.ingredientForm);
+    // Open Food Facts proposes grams or millilitres, never pieces.
+    expect(within(form).getByRole('radio', { name: 'Grams (g)' })).toBeChecked();
+    await user.click(within(form).getByRole('radio', { name: 'Pieces (pcs)' }));
+    expect(
+      within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
+    ).toBeVisible();
+    expect(within(form).getByLabelText('Calories')).toHaveValue('372');
+    await user.type(within(form).getByLabelText('Weight per piece (g)'), '40');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1));
+    const body = (await requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()) as {
+      base_unit: string;
+      piece_weight_g: number;
+      nutrients: Record<string, number>;
+      off: { edited_fields: string[] };
+    };
+    expect([body.base_unit, body.piece_weight_g]).toEqual(['piece', 40]);
+    expect(body.nutrients).toEqual(OATS.nutrients);
+    // The values are still Open Food Facts': later updates may change them.
+    expect(body.off.edited_fields).toEqual([]);
+  });
+
   it('counts a name typed before choosing a product without one as edited (BAR-04)', async () => {
     const { fetchMock, user } = renderSearch({
       'GET /api/ingredients/off-search': page([

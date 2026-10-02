@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components, paths } from '@/api/generated/schema';
+import { useVisibleUsers } from '@/features/savedFilters/api';
 import { photoFormData, preparePhoto } from './photo';
 
 export type Meal = components['schemas']['Meal'];
@@ -36,6 +37,8 @@ export interface MealFilters {
 const MEALS_KEY = ['meals'] as const;
 /** Every search of the meals: the user filter on Meals loads them again once it is saved. */
 export const MEAL_SEARCH_KEY = [...MEALS_KEY, 'list'] as const;
+/** The meal picker's searches, apart from the Meals tab's: the user filter doesn't narrow them. */
+const MEAL_PICKER_KEY = [...MEALS_KEY, 'picker'] as const;
 const detailKey = (id: string) => [...MEALS_KEY, 'detail', id] as const;
 const MEAL_TAGS_KEY = [...MEALS_KEY, 'tags'] as const;
 const TAGS_KEY = ['reference', 'tags'] as const;
@@ -45,6 +48,7 @@ export const PHOTO_UPLOAD_TIMEOUT_MS = 60_000;
 
 function invalidateLists(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: MEAL_SEARCH_KEY });
+  void queryClient.invalidateQueries({ queryKey: MEAL_PICKER_KEY });
 }
 
 /** A meal was saved, copied or deleted: its tags may be new, or no longer used anywhere. */
@@ -75,6 +79,30 @@ export function useMeals({ q, cuisineIds, tagIds }: MealFilters) {
     queryFn: ({ signal }) => unwrap(api.GET('/api/meals', { params: { query }, signal })),
     placeholderData: keepPreviousData,
   });
+}
+
+/**
+ * The meal picker's search (MEAL-09): every meal the user can see that matches `q`, A–Z, whatever
+ * the user filter on Meals says. It asks for the meals of everyone whose meals are visible, so the
+ * server doesn't apply that filter. The previous result stays while the next one loads. Unlike the
+ * other hooks it returns only what the picker reads, as it waits for two queries.
+ */
+export function usePickerMeals(q: string) {
+  const owners = useVisibleUsers('meals');
+  const ownerIds = owners.data?.map((user) => user.id);
+  const query = { ...(q.trim() ? { q: q.trim() } : {}), owner_ids: ownerIds ?? [] };
+  const meals = useQuery({
+    queryKey: [...MEAL_PICKER_KEY, query],
+    queryFn: ({ signal }) => unwrap(api.GET('/api/meals', { params: { query }, signal })),
+    enabled: ownerIds !== undefined,
+    placeholderData: keepPreviousData,
+  });
+  return {
+    data: meals.data,
+    error: owners.error ?? meals.error,
+    // Without the owners the meals never load: the error shows instead of "Loading…".
+    isPending: meals.isPending && !owners.error,
+  };
 }
 
 /**
