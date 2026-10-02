@@ -267,7 +267,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the ingredient data needed to calculate them (unit conversions, category).
   - From then on, edits to the meal, deletion of the meal, or wiki edits of the ingredients no longer change this list or its history.
   - A meal or linked extra item added while shopping is frozen at the moment it's added, under the ingredient's category at that moment, *Uncategorized* included.
-  - **Deleted categories** (REF-01, D-30): frozen lines and the extra items of lists being shopped and done lists keep their category when an admin deletes it. The list keeps showing that heading with its name, near the place it had in the walking order: right after the category that took over its place (plan § 5.6). This holds online, offline and in the export.
+  - **Deleted categories** (REF-01, D-30): frozen lines and the extra items of lists being shopped and done lists keep their category when an admin deletes it. The list keeps showing that heading with its name, near the place it had in the walking order: right after the category that took over its place ([plan § 5.6](plan.md#56-units-nutrition-and-aggregation-domain)). This holds online, offline and in the export.
   - Category names are not frozen, so a rename shows here too.
 - **LIST-12** **Editing while shopping** (online only): add or remove meals, change servings, add or remove extra items. This lets a partner at home change the list while the other person is in the store.
   - A new line appears unchecked and marked "new".
