@@ -44,18 +44,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 
 ## 3. Glossary
 
-| Term | Meaning |
-|---|---|
-| **Ingredient** | A shared food item: either something generic typed by hand ("Zwiebel", "Ei (REWE)") or a specific product with a brand and a barcode, usually from Open Food Facts ("Milch â€“ Weihenstephan"). It has a category, a base unit (g or ml) and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients. |
-| **Meal** | A recipe owned by one user: ingredients with amounts, instructions, photo, source link, and "makes *N* servings". |
-| **Serving** | One portion. A meal's `servings` value is how many portions its ingredient amounts make (default 1). |
-| **Shopping list** | A list owned by one user, built from meals (each with a chosen number of servings) plus extra items. |
-| **Line** | One row on a shopping list after aggregation, e.g. "Onions 500 g". It merges the same ingredient from all meals and extra items; two brands of the same thing are two ingredients and so two lines. |
-| **Extra item** | Something added to a list by hand. It is either linked to an ingredient ("1 l milk") or free text ("Birthday candles"). |
-| **Frozen / detached meal** | A meal on a list whose ingredients were copied into the list, so later changes to the meal no longer affect that list (LIST-11, LIST-15). |
-| **Couple / partner** | Two users who have agreed to share shopping lists. Each user can be in at most one couple. |
-| **Admin** | A user with the admin role: manages accounts, invites and shared reference data. |
-| **OFF** | Open Food Facts, the open product database (openfoodfacts.org). |
+The domain terms (ingredient, meal, shopping list, line, couple and the rest) are defined in [`CONTEXT.md`](../CONTEXT.md) at the repo root, the single glossary for docs, code and tickets.
 
 ## 4. Functional requirements
 
