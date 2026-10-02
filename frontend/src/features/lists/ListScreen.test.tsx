@@ -1,7 +1,7 @@
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BEN, CARL, errorResponse, mockApi, requestsTo } from '@/test/api';
+import { BEN, CARL, errorResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import {
   emptyList,
   LIST_ID,
@@ -243,10 +243,67 @@ describe('ListScreen', () => {
           .getAllByRole('listitem')
           .map((item) => item.getAttribute('aria-label')),
       ).toEqual(['Lasagne', 'Pfannkuchen']);
-      expect(within(all).getByText('by Ben')).toBeVisible();
+      // Whose meal it is shows as the owner's marker, one's own included (UI-02).
+      const lasagne = within(all).getByRole('listitem', { name: 'Lasagne' });
+      expect(within(lasagne).getByRole('img', { name: 'Ben' })).toHaveTextContent('B');
+      const pancakes = within(all).getByRole('listitem', { name: 'Pfannkuchen' });
+      expect(within(pancakes).getByRole('img', { name: 'Anna' })).toHaveTextContent('A');
+      expect(within(dialog).queryByText('by Ben')).not.toBeInTheDocument();
       expect(within(dialog).getByTestId(testIds.mealPickerCreate)).toHaveAttribute(
         'href',
         `/meals/new?addToList=${LIST_ID}`,
+      );
+    });
+
+    it('opens without the keyboard: the search field is not focused (MEAL-09)', async () => {
+      const { user } = renderList(pickerRoutes());
+
+      await user.click(await screen.findByTestId(testIds.addMeals));
+      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
+
+      await within(dialog).findByTestId(testIds.mealPickerRecent);
+      expect(within(dialog).getByLabelText('Search meals')).not.toHaveFocus();
+      // The focus is in the picker, so screen readers announce it.
+      expect(dialog).toHaveFocus();
+    });
+
+    it('offers the meals of users the Meals tab hides (MEAL-09, MEAL-10)', async () => {
+      const hidingBen = { ...TEST_USER, filter_hidden: { meals: [BEN.id], lists: [] } };
+      const meals = [CHILI, LASAGNE, PANCAKES];
+      mockApi({
+        ...LIST_ROUTES,
+        ...pickerRoutes({
+          'GET /api/me': hidingBen,
+          // Like the server: the user filter on Meals applies unless owners are asked for.
+          'GET /api/meals': (request: Request) => {
+            const owners = new URL(request.url).searchParams.getAll('owner_ids');
+            return owners.length > 0
+              ? meals.filter((meal) => owners.includes(meal.owner.id))
+              : meals.filter((meal) => meal.owner.id !== BEN.id);
+          },
+        }),
+      });
+      const { router, user } = renderApp('/meals', { user: hidingBen });
+      const list = await screen.findByTestId(testIds.mealList);
+      expect(within(list).queryByText('Lasagne')).not.toBeInTheDocument();
+
+      await act(() => router.navigate(`/lists/${LIST_ID}`));
+      await user.click(await screen.findByTestId(testIds.addMeals));
+      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
+
+      const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
+      expect(
+        within(recent)
+          .getAllByRole('listitem')
+          .map((item) => item.getAttribute('aria-label')),
+      ).toEqual(['Chili']);
+      const all = await within(dialog).findByTestId(testIds.mealPickerResults);
+      await waitFor(() =>
+        expect(
+          within(all)
+            .getAllByRole('listitem')
+            .map((item) => item.getAttribute('aria-label')),
+        ).toEqual(['Lasagne', 'Pfannkuchen']),
       );
     });
 
