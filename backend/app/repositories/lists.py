@@ -51,12 +51,15 @@ async def mine(
 async def feed(
     session: AsyncSession,
     owner_ids: Collection[str],
+    statuses: Collection[str],
     after: FeedPosition | None,
     limit: int,
 ) -> Sequence[ShoppingList]:
-    """At most `limit` lists of the given owners, in every state, in the order of the list feed
-    (UI-02): newest created first, ties by id; only those after `after` if given."""
-    statement = select(ShoppingList).where(ShoppingList.owner_id.in_(owner_ids))
+    """At most `limit` lists of the given owners in the given states, in the order of the list
+    feed (UI-02): newest created first, ties by id; only those after `after` if given."""
+    statement = select(ShoppingList).where(
+        ShoppingList.owner_id.in_(owner_ids), ShoppingList.status.in_(statuses)
+    )
     if after is not None:
         statement = statement.where(
             or_(

@@ -39,6 +39,11 @@ interface FilterPanelProps {
   groups: readonly FilterGroup[];
   /** "Zurücksetzen": puts every group back to its default (but keeps the search text). */
   onReset: () => void;
+  /**
+   * E.g. on Lists offline, where the filters don't apply (UI-02): the button is disabled and
+   * counts nothing.
+   */
+  disabled?: boolean;
 }
 
 const FOOTER_BUTTON = 'min-w-0 flex-[1_1_8em] shrink wrap-break-word';
@@ -48,9 +53,9 @@ const FOOTER_BUTTON = 'min-w-0 flex-[1_1_8em] shrink wrap-break-word';
  * checkboxes whose changes apply at once, "Zurücksetzen" for every group and "Fertig", which
  * closes it. The button shows how many groups are not at their default, also in its name.
  */
-export function FilterPanel({ groups, onReset }: FilterPanelProps) {
+export function FilterPanel({ groups, onReset, disabled = false }: FilterPanelProps) {
   const { t } = useTranslation();
-  const activeGroups = groups.filter((group) => group.active).length;
+  const activeGroups = disabled ? 0 : groups.filter((group) => group.active).length;
 
   return (
     <Sheet>
@@ -59,6 +64,7 @@ export function FilterPanel({ groups, onReset }: FilterPanelProps) {
           variant="outline"
           size="icon"
           data-testid={testIds.filterButton}
+          disabled={disabled}
           aria-label={
             activeGroups ? t('filter.buttonActive', { count: activeGroups }) : t('filter.button')
           }

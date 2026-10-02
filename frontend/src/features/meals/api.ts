@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components, paths } from '@/api/generated/schema';
-import { useVisibleUsers } from '@/features/userFilter/api';
+import { useVisibleUsers } from '@/features/savedFilters/api';
 import { photoFormData, preparePhoto } from './photo';
 
 export type Meal = components['schemas']['Meal'];

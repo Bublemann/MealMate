@@ -1,5 +1,5 @@
-"""The own account: profile, language, privacy, filter chips, password, sessions (ACC-09,
-ACC-10, ACC-13, VIS-02, I18N-01)."""
+"""The own account: profile, language, privacy, saved filters, password, sessions (ACC-09,
+ACC-10, ACC-13, VIS-02, MEAL-10, UI-02, I18N-01)."""
 
 from datetime import datetime
 
@@ -38,7 +38,11 @@ def _dedupe(ids: list[str]) -> list[str]:
 
 
 def _filter_hidden(value: FilterHidden) -> dict[str, list[str]]:
-    return {"meals": _dedupe(value.meals), "lists": _dedupe(value.lists)}
+    return {
+        "meals": _dedupe(value.meals),
+        "lists": _dedupe(value.lists),
+        "list_states": _dedupe(list(value.list_states)),
+    }
 
 
 async def update_me(

@@ -6,11 +6,14 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.domain.accounts import DISPLAY_NAME_MAX_LENGTH
+from app.domain.lists import LIST_STATUSES, ListStatus
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
 Role = Literal["user", "admin"]
 Language = Literal["de", "en"]
 VisibilityScope = Literal["meals", "lists"]
+# The parts of `FilterHidden`.
+SavedFilter = Literal["meals", "lists", "list_states"]
 
 DisplayNameInput = Annotated[
     str,
@@ -21,6 +24,7 @@ PasswordInput = Annotated[str, StringConstraints(max_length=1024)]
 UserIdList = Annotated[
     list[Annotated[str, StringConstraints(max_length=36)]], Field(max_length=500)
 ]
+ListStatusList = Annotated[list[ListStatus], Field(max_length=len(LIST_STATUSES))]
 
 
 class UserRef(BaseModel):
@@ -32,10 +36,13 @@ class UserRef(BaseModel):
 
 
 class FilterHidden(BaseModel):
-    """User filter chips this user has switched off, per screen (MEAL-10, UI-02)."""
+    """What this user's saved filters hide; empty shows everything. `meals` and `lists` are the
+    users unticked in the user filter on Meals (MEAL-10) and on Lists (UI-02), `list_states` the
+    states unticked in the state filter on Lists (UI-02)."""
 
     meals: UserIdList
     lists: UserIdList
+    list_states: ListStatusList
 
 
 class Me(BaseModel):

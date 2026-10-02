@@ -11,7 +11,7 @@ import { ApiError, isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
 import { useSyncEngine } from '@/features/sync/context';
 import { uuidv7 } from '@/lib/uuid';
-import { detailKey, FEED_KEY } from './keys';
+import { COPY_UPDATED_AT, detailKey, FEED_KEY } from './keys';
 
 export { isUnreachable } from '@/api/errors';
 
@@ -59,8 +59,13 @@ export function useListFeed() {
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
     initialData: () => engine.copiedFeed(),
-    initialDataUpdatedAt: 0,
+    initialDataUpdatedAt: COPY_UPDATED_AT,
   });
+}
+
+/** Whether the feed still shows the local copy: the server's first page hasn't arrived (SYNC-09). */
+export function showsLocalCopy(feed: { dataUpdatedAt: number }): boolean {
+  return feed.dataUpdatedAt === COPY_UPDATED_AT;
 }
 
 /**

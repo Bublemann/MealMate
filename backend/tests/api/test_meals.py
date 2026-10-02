@@ -20,6 +20,7 @@ from tests.accounts import (
     fields,
     make_couple,
     make_user,
+    save_filters,
     scalars,
     set_privacy,
 )
@@ -979,10 +980,7 @@ async def test_filter_chips(api: AsyncClient, anna: Account, ben: Account, carl:
     await set_privacy(api, carl, meals_public=False)
 
     assert await list_meals(api, anna) == ["Anna's", "Ben's"]
-    response = await api.patch(
-        "/api/me", json={"filter_hidden": {"meals": [ben.id], "lists": []}}, headers=anna.headers
-    )
-    assert response.status_code == 200
+    await save_filters(api, anna, meals=[ben.id])
     assert await list_meals(api, anna) == ["Anna's"]
     # Explicit owners replace the saved chips, but never widen what is visible.
     assert await list_meals(api, anna, owner_ids=[ben.id]) == ["Ben's"]
@@ -993,9 +991,7 @@ async def test_filter_chips(api: AsyncClient, anna: Account, ben: Account, carl:
     assert await list_meals(api, anna, owner_ids=[carl.id]) == []
     assert await list_meals(api, anna, owner_ids=["someone"]) == []
     # Hiding yourself works too.
-    await api.patch(
-        "/api/me", json={"filter_hidden": {"meals": [anna.id], "lists": []}}, headers=anna.headers
-    )
+    await save_filters(api, anna, meals=[anna.id])
     assert await list_meals(api, anna) == ["Ben's"]
 
 
@@ -1024,9 +1020,7 @@ async def test_meal_tags_are_those_of_visible_meals(
     # A private meal's tags do not leak; a tag no meal uses any more is not offered.
     assert await meal_tags(api, carl) == ["Asia", "Italienisch", "Scharf"]
     # The filter chips narrow the meals, not the tags to filter by.
-    await api.patch(
-        "/api/me", json={"filter_hidden": {"meals": [carl.id], "lists": []}}, headers=anna.headers
-    )
+    await save_filters(api, anna, meals=[carl.id])
     assert await meal_tags(api, anna) == ["Asia", "Backen", "Italienisch", "Scharf"]
     # The autocomplete keeps the shared pool (REF-04).
     pool = await api.get("/api/tags", params={"q": "verg"}, headers=carl.headers)

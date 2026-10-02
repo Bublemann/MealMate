@@ -1465,8 +1465,9 @@ export interface paths {
         };
         /**
          * List Visible Users
-         * @description Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,
-         *     your partner, and everyone whose matching privacy switch is public.
+         * @description Users whose meals (`for=meals`) or lists (`for=lists`) you can see, the choices of the
+         *     user filter on Meals or Lists: yourself first, your partner, then everyone whose matching
+         *     privacy switch is public, by display name.
          */
         get: operations["list_visible_users"];
         put?: never;
@@ -1967,9 +1968,13 @@ export interface components {
         FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username";
         /**
          * FilterHidden
-         * @description User filter chips this user has switched off, per screen (MEAL-10, UI-02).
+         * @description What this user's saved filters hide; empty shows everything. `meals` and `lists` are the
+         *     users unticked in the user filter on Meals (MEAL-10) and on Lists (UI-02), `list_states` the
+         *     states unticked in the state filter on Lists (UI-02).
          */
         FilterHidden: {
+            /** List States */
+            list_states: ("draft" | "shopping" | "done")[];
             /** Lists */
             lists: string[];
             /** Meals */

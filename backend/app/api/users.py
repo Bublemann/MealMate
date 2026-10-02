@@ -1,4 +1,5 @@
-"""Other users: the couple picker and the user filter chips (CPL-01, VIS-02)."""
+"""Other users: the couple picker and the choices of the user filters (CPL-01, VIS-02, MEAL-10,
+UI-02)."""
 
 from typing import Annotated
 
@@ -25,6 +26,7 @@ async def list_visible_users(
     session: ReadSession,
     scope: Annotated[VisibilityScope, Query(alias="for")],
 ) -> list[UserRef]:
-    """Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,
-    your partner, and everyone whose matching privacy switch is public."""
+    """Users whose meals (`for=meals`) or lists (`for=lists`) you can see, the choices of the
+    user filter on Meals or Lists: yourself first, your partner, then everyone whose matching
+    privacy switch is public, by display name."""
     return await users.list_visible(session, principal, scope)

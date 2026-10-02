@@ -266,7 +266,10 @@ describe('ListScreen', () => {
     });
 
     it('offers the meals of users the Meals tab hides (MEAL-09, MEAL-10)', async () => {
-      const hidingBen = { ...TEST_USER, filter_hidden: { meals: [BEN.id], lists: [] } };
+      const hidingBen = {
+        ...TEST_USER,
+        filter_hidden: { meals: [BEN.id], lists: [], list_states: [] },
+      };
       mockApi({
         ...LIST_ROUTES,
         ...pickerRoutes({

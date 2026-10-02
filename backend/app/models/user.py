@@ -8,7 +8,7 @@ from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
 
 
 def empty_filter_hidden() -> dict[str, list[str]]:
-    return {"meals": [], "lists": []}
+    return {"meals": [], "lists": [], "list_states": []}
 
 
 class User(IdMixin, TimestampMixin, Base):
@@ -30,7 +30,8 @@ class User(IdMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     meals_public: Mapped[bool] = mapped_column(Boolean, default=True)
     lists_public: Mapped[bool] = mapped_column(Boolean, default=True)
-    # User filter chips hidden by this user: {"meals": [user ids], "lists": [user ids]}.
+    # What this user's saved filters hide (`schemas.users.FilterHidden`, plan § 6):
+    # {"meals": [user ids], "lists": [user ids], "list_states": [list states]}.
     filter_hidden: Mapped[dict[str, Any]] = mapped_column(JSON, default=empty_filter_hidden)
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     password_changed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

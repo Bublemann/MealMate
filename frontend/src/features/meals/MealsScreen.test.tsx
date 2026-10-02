@@ -10,6 +10,7 @@ import {
   slowFilterSaves,
   TEST_USER,
 } from '@/test/api';
+import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { CUISINES, ME, meal, MEAL_ROUTES, mealSummary, TAGS } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -45,16 +46,11 @@ function listMeals(hidden: () => readonly string[]) {
 }
 
 function renderMeals(routes: Record<string, unknown> = {}, user = TEST_USER) {
-  let hidden: readonly string[] = user.filter_hidden.meals;
+  const saves = filterSaves(user);
   const fetchMock = mockApi({
     ...MEAL_ROUTES,
-    'GET /api/meals': listMeals(() => hidden),
-    // Saves the user filter, as the server does.
-    'PATCH /api/me': async (request: Request) => {
-      const body = (await request.json()) as Pick<typeof TEST_USER, 'filter_hidden'>;
-      hidden = body.filter_hidden.meals;
-      return { ...user, filter_hidden: body.filter_hidden };
-    },
+    'GET /api/meals': listMeals(() => saves.saved().meals),
+    'PATCH /api/me': saves.route,
     ...routes,
   });
   return { fetchMock, ...renderApp('/meals', { user }) };
@@ -62,13 +58,6 @@ function renderMeals(routes: Record<string, unknown> = {}, user = TEST_USER) {
 
 function searches(fetchMock: ReturnType<typeof mockApi>) {
   return requestsTo(fetchMock, 'GET /api/meals').map((request) => new URL(request.url).search);
-}
-
-/** The bodies of the profile saves, read from copies so a waitFor can read them again. */
-async function savedFilters(fetchMock: ReturnType<typeof mockApi>) {
-  return Promise.all(
-    requestsTo(fetchMock, 'PATCH /api/me').map((request) => request.clone().json()),
-  );
 }
 
 /** The rows' texts, also while the filter panel hides the list from screen readers. */
@@ -79,24 +68,6 @@ function rowTexts() {
         .getAllByTestId(testIds.mealCard)
         .map((row) => row.textContent)
     : [];
-}
-
-type User = ReturnType<typeof renderApp>['user'];
-
-async function openPanel(user: User) {
-  await user.click(screen.getByTestId(testIds.filterButton));
-  return screen.findByRole('dialog', { name: 'Filters' });
-}
-
-function group(panel: HTMLElement, name: string) {
-  return within(panel).getByRole('group', { name });
-}
-
-/** The checkboxes' names: the text of the label each one sits in. */
-function checkboxNames(element: HTMLElement) {
-  return within(element)
-    .getAllByRole('checkbox')
-    .map((box) => (box as HTMLInputElement).labels?.[0]?.textContent);
 }
 
 describe('MealsScreen', () => {
@@ -256,7 +227,7 @@ describe('MealsScreen', () => {
   it('unticks a user at once, saves the user filter and loads the meals again (MEAL-10)', async () => {
     const { fetchMock, user } = renderMeals(
       {},
-      { ...TEST_USER, filter_hidden: { meals: [], lists: ['someone'] } },
+      { ...TEST_USER, filter_hidden: { meals: [], lists: ['someone'], list_states: [] } },
     );
     await screen.findByTestId(testIds.mealList);
     const button = screen.getByTestId(testIds.filterButton);
@@ -270,7 +241,7 @@ describe('MealsScreen', () => {
     expect(button).toHaveAccessibleName('Filters, 1 active');
     await waitFor(async () =>
       expect(await savedFilters(fetchMock)).toEqual([
-        { filter_hidden: { meals: [BEN.id], lists: ['someone'] } },
+        { filter_hidden: { meals: [BEN.id], lists: ['someone'], list_states: [] } },
       ]),
     );
     await waitFor(() => expect(searches(fetchMock)).toEqual(['', '']));
@@ -279,7 +250,7 @@ describe('MealsScreen', () => {
   it('ticks a user again and keeps the others hidden (MEAL-10)', async () => {
     const { fetchMock, user } = renderMeals(
       {},
-      { ...TEST_USER, filter_hidden: { meals: [ME.id, BEN.id], lists: [] } },
+      { ...TEST_USER, filter_hidden: { meals: [ME.id, BEN.id], lists: [], list_states: [] } },
     );
     // Carl has no meals.
     expect(await screen.findByText('No matches')).toBeVisible();
@@ -290,7 +261,7 @@ describe('MealsScreen', () => {
 
     await waitFor(async () =>
       expect(await savedFilters(fetchMock)).toEqual([
-        { filter_hidden: { meals: [ME.id], lists: [] } },
+        { filter_hidden: { meals: [ME.id], lists: [], list_states: [] } },
       ]),
     );
     await waitFor(() => expect(rowTexts()).toEqual(['LasagneItalianB']));
@@ -314,7 +285,7 @@ describe('MealsScreen', () => {
 
     await waitFor(() => expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(3));
     expect((await savedFilters(fetchMock))[2]).toEqual({
-      filter_hidden: { meals: [CARL.id], lists: [] },
+      filter_hidden: { meals: [CARL.id], lists: [], list_states: [] },
     });
     expect(box('Ben')).toBeChecked();
     expect(box('Carl (deactivated)')).not.toBeChecked();
@@ -338,7 +309,7 @@ describe('MealsScreen', () => {
 
   it('loads the saved user filter again when saving fails, instead of guessing (MEAL-10)', async () => {
     // Meanwhile Carl was unticked on another device.
-    const saved = { ...TEST_USER, filter_hidden: { meals: [CARL.id], lists: [] } };
+    const saved = { ...TEST_USER, filter_hidden: { meals: [CARL.id], lists: [], list_states: [] } };
     const { fetchMock, user } = renderMeals({
       'PATCH /api/me': errorResponse(503, 'common.service_unavailable'),
       'GET /api/me': saved,
@@ -359,7 +330,7 @@ describe('MealsScreen', () => {
   it('resets cuisines, tags and users with “Reset” but keeps the search (UI-01)', async () => {
     const { fetchMock, user } = renderMeals(
       {},
-      { ...TEST_USER, filter_hidden: { meals: [BEN.id], lists: [] } },
+      { ...TEST_USER, filter_hidden: { meals: [BEN.id], lists: [], list_states: [] } },
     );
     await screen.findByTestId(testIds.mealList);
     const search = screen.getByLabelText('Search meals');
@@ -385,7 +356,7 @@ describe('MealsScreen', () => {
     expect(button).toHaveAccessibleName('Filters');
     expect(search).toHaveValue('a');
     expect((await savedFilters(fetchMock)).at(-1)).toEqual({
-      filter_hidden: { meals: [], lists: [] },
+      filter_hidden: { meals: [], lists: [], list_states: [] },
     });
     await waitFor(() =>
       expect(rowTexts()).toEqual(['ChiliNordischA', 'LasagneItalianB', 'PfannkuchenA']),
@@ -424,7 +395,7 @@ describe('MealsScreen', () => {
       expect(rowTexts()).toEqual(['ChiliNordischA', 'LasagneItalianB', 'PfannkuchenA']),
     );
     expect((await savedFilters(fetchMock)).at(-1)).toEqual({
-      filter_hidden: { meals: [], lists: [] },
+      filter_hidden: { meals: [], lists: [], list_states: [] },
     });
   });
 
@@ -447,7 +418,10 @@ describe('MealsScreen', () => {
   it('keeps the filter button when every user is unticked, so they can be ticked again (MEAL-10, UI-03)', async () => {
     const { fetchMock, user } = renderMeals(
       {},
-      { ...TEST_USER, filter_hidden: { meals: [ME.id, BEN.id, CARL.id], lists: [] } },
+      {
+        ...TEST_USER,
+        filter_hidden: { meals: [ME.id, BEN.id, CARL.id], lists: [], list_states: [] },
+      },
     );
 
     // Nothing to show is no empty tab here: the user filter hides everything.
@@ -464,7 +438,7 @@ describe('MealsScreen', () => {
 
     await waitFor(async () =>
       expect(await savedFilters(fetchMock)).toEqual([
-        { filter_hidden: { meals: [BEN.id, CARL.id], lists: [] } },
+        { filter_hidden: { meals: [BEN.id, CARL.id], lists: [], list_states: [] } },
       ]),
     );
     await waitFor(() => expect(rowTexts()).toEqual(['ChiliNordischA', 'PfannkuchenA']));
@@ -545,7 +519,10 @@ describe('MealsScreen', () => {
     let loads = 0;
     const { user } = renderMeals(
       { 'GET /api/meals': () => (++loads === 1 ? [] : again.route()) },
-      { ...TEST_USER, filter_hidden: { meals: [ME.id, BEN.id, CARL.id], lists: [] } },
+      {
+        ...TEST_USER,
+        filter_hidden: { meals: [ME.id, BEN.id, CARL.id], lists: [], list_states: [] },
+      },
     );
     expect(await screen.findByText('No matches')).toBeVisible();
 
@@ -564,7 +541,7 @@ describe('MealsScreen', () => {
     // Someone unticked earlier has made their meals private since.
     const { fetchMock, user } = renderMeals(
       {},
-      { ...TEST_USER, filter_hidden: { meals: ['user-private'], lists: [] } },
+      { ...TEST_USER, filter_hidden: { meals: ['user-private'], lists: [], list_states: [] } },
     );
     await screen.findByTestId(testIds.mealList);
     const button = screen.getByTestId(testIds.filterButton);
@@ -579,13 +556,13 @@ describe('MealsScreen', () => {
     await user.click(within(users).getByRole('checkbox', { name: 'Ben' }));
     await waitFor(async () =>
       expect(await savedFilters(fetchMock)).toEqual([
-        { filter_hidden: { meals: ['user-private', BEN.id], lists: [] } },
+        { filter_hidden: { meals: ['user-private', BEN.id], lists: [], list_states: [] } },
       ]),
     );
     await user.click(within(panel).getByRole('button', { name: 'Reset' }));
     await waitFor(async () =>
       expect((await savedFilters(fetchMock)).at(-1)).toEqual({
-        filter_hidden: { meals: ['user-private'], lists: [] },
+        filter_hidden: { meals: ['user-private'], lists: [], list_states: [] },
       }),
     );
   });

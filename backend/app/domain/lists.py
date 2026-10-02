@@ -10,7 +10,7 @@ must stay stable (AGG-05).
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, get_args
 
 from app.domain.meals import SERVINGS_MAX
 
@@ -32,6 +32,7 @@ FEED_CURSOR_MAX_LENGTH = 120
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
 ListStatus = Literal["draft", "shopping", "done"]
 DetachedReason = Literal["deleted", "unavailable"]
+LIST_STATUSES: tuple[ListStatus, ...] = get_args(ListStatus)
 
 INGREDIENT_KEY_PREFIX = "i:"
 TEXT_KEY_PREFIX = "x:"

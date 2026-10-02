@@ -42,7 +42,11 @@ async def test_update_me(app: FastAPI, api: AsyncClient) -> None:
         json={
             "display_name": "  Anna Müller ",
             "language": "en",
-            "filter_hidden": {"meals": [ben.id, ben.id], "lists": []},
+            "filter_hidden": {
+                "meals": [ben.id, ben.id],
+                "lists": [],
+                "list_states": ["done", "draft", "done"],
+            },
         },
         headers=anna.headers,
     )
@@ -51,12 +55,13 @@ async def test_update_me(app: FastAPI, api: AsyncClient) -> None:
     body = response.json()
     assert body["display_name"] == "Anna Müller"
     assert body["language"] == "en"
-    assert body["filter_hidden"] == {"meals": [ben.id], "lists": []}
+    saved = {"meals": [ben.id], "lists": [], "list_states": ["done", "draft"]}
+    assert body["filter_hidden"] == saved
     assert body["meals_public"] is True
     # Unsent fields stay as they are.
     response = await api.patch("/api/me", json={"language": "de"}, headers=anna.headers)
     assert response.json()["display_name"] == "Anna Müller"
-    assert response.json()["filter_hidden"] == {"meals": [ben.id], "lists": []}
+    assert response.json()["filter_hidden"] == saved
     assert (await api.get("/api/me", headers=anna.headers)).json() == response.json()
 
 
@@ -76,10 +81,21 @@ async def test_keeping_the_own_display_name_is_fine(app: FastAPI, api: AsyncClie
         ({"display_name": "a\u0000b"}, {("body", "display_name"): "invalid_format"}),
         ({"language": "fr"}, {("body", "language"): "invalid"}),
         ({"meals_public": "maybe"}, {("body", "meals_public"): "invalid"}),
-        ({"filter_hidden": {"meals": []}}, {("body", "filter_hidden", "lists"): "required"}),
         (
-            {"filter_hidden": {"meals": ["x"] * 501, "lists": []}},
+            {"filter_hidden": {"meals": [], "list_states": []}},
+            {("body", "filter_hidden", "lists"): "required"},
+        ),
+        (
+            {"filter_hidden": {"meals": [], "lists": []}},
+            {("body", "filter_hidden", "list_states"): "required"},
+        ),
+        (
+            {"filter_hidden": {"meals": ["x"] * 501, "lists": [], "list_states": []}},
             {("body", "filter_hidden", "meals"): "too_long"},
+        ),
+        (
+            {"filter_hidden": {"meals": [], "lists": [], "list_states": ["archived"]}},
+            {("body", "filter_hidden", "list_states", 0): "invalid"},
         ),
     ],
 )

@@ -1289,8 +1289,21 @@
         "type": "string"
       },
       "FilterHidden": {
-        "description": "User filter chips this user has switched off, per screen (MEAL-10, UI-02).",
+        "description": "What this user's saved filters hide; empty shows everything. `meals` and `lists` are the\nusers unticked in the user filter on Meals (MEAL-10) and on Lists (UI-02), `list_states` the\nstates unticked in the state filter on Lists (UI-02).",
         "properties": {
+          "list_states": {
+            "items": {
+              "enum": [
+                "draft",
+                "shopping",
+                "done"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "List States",
+            "type": "array"
+          },
           "lists": {
             "items": {
               "maxLength": 36,
@@ -1312,7 +1325,8 @@
         },
         "required": [
           "meals",
-          "lists"
+          "lists",
+          "list_states"
         ],
         "title": "FilterHidden",
         "type": "object"
@@ -8636,7 +8650,7 @@
     },
     "/api/users/visible": {
       "get": {
-        "description": "Users whose meals (`for=meals`) or lists (`for=lists`) you can see: yourself first,\nyour partner, and everyone whose matching privacy switch is public.",
+        "description": "Users whose meals (`for=meals`) or lists (`for=lists`) you can see, the choices of the\nuser filter on Meals or Lists: yourself first, your partner, then everyone whose matching\nprivacy switch is public, by display name.",
         "operationId": "list_visible_users",
         "parameters": [
           {
