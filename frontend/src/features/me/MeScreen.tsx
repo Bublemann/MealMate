@@ -27,7 +27,7 @@ export function MeScreen() {
   useMeRefresh();
 
   return (
-    <Screen title={t('me.title')} testId={testIds.screenMe}>
+    <Screen variant="tab" title={t('me.title')} testId={testIds.screenMe}>
       <ProfileSection />
       <PrivacySection />
       <CoupleSection />

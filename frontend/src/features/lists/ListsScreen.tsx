@@ -31,7 +31,7 @@ export function ListsScreen() {
   const { t } = useTranslation();
 
   return (
-    <Screen title={t('nav.lists')} testId={testIds.screenLists}>
+    <Screen variant="tab" title={t('nav.lists')} testId={testIds.screenLists}>
       {/* Only when there is something to say: offline, or changes waiting (SYNC-07). */}
       <SyncIndicator quiet />
       <FirstLoginHints />

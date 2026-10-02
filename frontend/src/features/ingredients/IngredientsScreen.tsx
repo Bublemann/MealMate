@@ -39,7 +39,7 @@ export function IngredientsScreen() {
   const noIngredientsAtAll = debounced === '' && ingredients.data?.length === 0;
 
   return (
-    <Screen title={t('nav.ingredients')} testId={testIds.screenIngredients}>
+    <Screen variant="tab" title={t('nav.ingredients')} testId={testIds.screenIngredients}>
       {!loaded ? (
         // Until the first answer it is unknown whether there are ingredients at all (UI-03).
         ingredients.error || categories.error ? (

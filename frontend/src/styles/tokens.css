@@ -20,6 +20,24 @@
   --destructive-foreground: #ffffff;
   --ring: #2e7d32;
 
+  /*
+   * Frosted surfaces (UI-01): about 70 % opaque over a blurred, more saturated backdrop (the
+   * `frosted` utility in index.css), with a hairline border and a soft shadow. Mixed from the
+   * colours above, so they follow a re-skin and the dark theme. The active tab's pill is lighter
+   * than the bar; its own shadow and hairline outline it where that is hard to see (light mode),
+   * so colour is not the only signal (A11Y-01).
+   */
+  --frosted: color-mix(in srgb, var(--muted) 70%, transparent);
+  --frosted-border: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --frosted-shadow:
+    0 0.5rem 1.5rem color-mix(in srgb, var(--foreground) 12%, transparent),
+    0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
+  --frosted-filter: blur(20px) saturate(180%);
+  --tab-active: color-mix(in srgb, var(--card) 90%, transparent);
+  --tab-active-shadow:
+    0 1px 3px color-mix(in srgb, var(--foreground) 16%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
+
   --radius: 0.75rem;
   --duration-fast: 150ms;
 
@@ -29,6 +47,22 @@
    */
   --tap-target: max(2.75rem, 44px);
   --control-font-size: max(1rem, 16px);
+
+  /*
+   * The floating tab bar (UI-01) keeps 16 px from the sides and sits above the bottom edge by the
+   * safe area (the home indicator), by at least as much as at the sides on iPhones without one.
+   * Its height and icons grow a little with the text size but stop short of crowding out the
+   * content at the largest sizes, which is why its margin, padding and caps are in px: 56 px less
+   * 2 × 4 px padding and 2 × 1 px border leaves every tab 46 px, at least 44 pt (A11Y-01).
+   * --tab-bar-clearance, how far the bar reaches up from the bottom edge, places the main
+   * content's end and the update prompt.
+   */
+  --tab-bar-margin: 16px;
+  --tab-bar-padding: 4px;
+  --tab-bar-bottom: max(env(safe-area-inset-bottom), var(--tab-bar-margin));
+  --tab-bar-height: clamp(56px, 3.5rem, 72px);
+  --tab-bar-icon: clamp(24px, 1.5rem, 32px);
+  --tab-bar-clearance: calc(var(--tab-bar-bottom) + var(--tab-bar-height));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,6 +82,11 @@
     --destructive: #ef5350;
     --destructive-foreground: #1f0707;
     --ring: #66bb6a;
+
+    /* Shadows stay black on a dark page; the lighter pill shows without one, so only a hairline. */
+    --frosted-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.4);
+    --tab-active: color-mix(in srgb, var(--foreground) 14%, transparent);
+    --tab-active-shadow: 0 0 0 1px color-mix(in srgb, var(--foreground) 8%, transparent);
   }
 }
 
