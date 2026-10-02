@@ -429,10 +429,7 @@ export class SyncEngine {
     return this.copy.get(listId)?.storedAt;
   }
 
-  /**
-   * The lists of the copy as rows of the list feed, sorted like it: newest created first, ties
-   * by id (UI-02). Only once the copy was complete (SYNC-09).
-   */
+  /** The lists of the copy as rows of the list feed, in its order, once complete (SYNC-09). */
   copiedSummaries() {
     if (this.syncedAt === null) return undefined;
     return [...this.copy.values()]

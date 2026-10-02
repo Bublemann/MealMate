@@ -67,7 +67,7 @@ frontend/
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
-    ├── components/         # shared app components (Screen, PinnedBlock, FilterPanel, InitialMarker, …)
+    ├── components/         # shared app components (Screen, PinnedBlock, FilterPanel, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
     ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
@@ -133,10 +133,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
   Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
   clears the search and the filters) when they hide everything. Meals keeps the old `EmptyState`
-  card until it moves to the pinned block. Like the tab bar, it must not crowd out
-  the content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and
-  its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the
-  first accessibility size, D-29), and its spacing is in `em` of that text.
+  card until it moves to the pinned block. Like the tab bar, the block must not crowd out the
+  content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and its
+  controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the first
+  accessibility size, D-29), and its spacing is in `em` of that text.
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in

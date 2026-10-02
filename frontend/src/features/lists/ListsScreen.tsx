@@ -94,6 +94,8 @@ function ListFeed() {
   const feed = useListFeed();
   const connected = useConnected();
   const finishing = usePendingFinishes();
+  // Offline the sync notice says why nothing loads.
+  const error = connected ? feed.error : null;
   const lists = connected
     ? feed.data?.pages.flatMap((page) => page.lists)
     : engine.copiedSummaries();
@@ -108,12 +110,15 @@ function ListFeed() {
     return <LoadingState />;
   }
   const shown = lists.filter((list) => !finishing.has(list.id));
-  if (shown.length === 0) return <EmptyLine text={t('lists.empty')} />;
+  if (shown.length === 0) {
+    // An empty copy and a failed first page: whether there are lists at all is unknown.
+    return error ? <LoadError error={error} /> : <EmptyLine text={t('lists.empty')} />;
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      {/* E.g. the first page failed while the copy is shown; offline the sync notice says it. */}
-      <LoadError error={connected && !feed.isFetchNextPageError ? feed.error : null} />
+      {/* E.g. the first page failed while the copy is shown. */}
+      <LoadError error={feed.isFetchNextPageError ? null : error} />
       <ul
         data-testid={testIds.listFeed}
         aria-label={t('lists.feedLabel')}
@@ -134,7 +139,7 @@ function ListFeed() {
           loading={feed.isFetchingNextPage}
         />
       )}
-      <LoadError error={connected && feed.isFetchNextPageError ? feed.error : null} />
+      <LoadError error={feed.isFetchNextPageError ? error : null} />
     </div>
   );
 }

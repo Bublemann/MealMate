@@ -74,7 +74,7 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     sign_in(page.context, anna)
     page.goto("/lists")
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
-    # "+ New list" (here the empty state's action) creates a draft and opens the picker.
+    # The pinned block's "New list" tile creates a draft and opens the picker.
     page.get_by_test_id(TEST_IDS["newList"]).click()
     expect(page).to_have_url(LIST_URL)
     picker = page.get_by_role("dialog", name=text("lists.picker.title"))
