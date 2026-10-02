@@ -71,6 +71,18 @@ describe('on-screen keyboard (UI-01)', () => {
     expect(nav).toBeVisible();
   });
 
+  it('also finds the keyboard where innerHeight shrinks with it', async () => {
+    const viewport = stubVisualViewport();
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(SCREEN);
+    mockApi();
+    renderApp('/lists');
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+
+    vi.stubGlobal('innerHeight', SCREEN - KEYBOARD);
+    viewport.change({ height: SCREEN - KEYBOARD });
+    expect(nav).not.toBeVisible();
+  });
+
   it('hides the update prompt while the keyboard is open', async () => {
     const viewport = stubVisualViewport();
     mockApi();

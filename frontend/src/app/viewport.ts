@@ -53,7 +53,8 @@ export function watchViewport(): () => void {
     // (scale 1, give or take rounding). Zoomed, the page is laid out as without the API (A11Y-02).
     const zoomed = Math.abs(viewport.scale - 1) > 0.01;
     // The layout viewport, which fixed elements are placed in. The larger of the two, in case a
-    // browser reports the visible part as innerHeight (clientHeight: the page without toolbars).
+    // browser reports the visible part as innerHeight (clientHeight: the viewport while the
+    // browser's toolbars show, never shrunk by the keyboard).
     const layout = Math.max(window.innerHeight, document.documentElement.clientHeight);
     const top = zoomed ? 0 : viewport.offsetTop;
     const keyboard = zoomed ? 0 : layout - viewport.height;
