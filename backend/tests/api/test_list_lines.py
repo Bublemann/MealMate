@@ -358,6 +358,34 @@ async def test_category_order_follows_the_admin(
     assert list(lines(body)) == ["Kerzen", "Mehl", "Zwiebeln", "Salz"]
 
 
+async def test_lines_of_a_new_category(
+    api: AsyncClient, anna: Account, admin: Account, categories: dict[str, str]
+) -> None:
+    """REF-01: a category an admin just added takes ingredients and free-text items at once, and
+    its lines come at its place in the walking order: last, until it is moved."""
+    response = await api.post(
+        "/api/admin/categories",
+        json={"names": {"de": "Käsetheke", "en": "Cheese counter"}},
+        headers=admin.headers,
+    )
+    counter = response.json()["id"]
+    gouda = await create_ingredient(api, anna, "Gouda", category_id=counter)
+    shopping_list = await create_list(api, anna)
+    await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=gouda["id"], amount=200, unit="g"
+    )
+    await extra_added(api, anna, shopping_list["id"], text="Feta", category_id=counter)
+    await extra_added(api, anna, shopping_list["id"], text="Kerzen")
+
+    body = await detail(api, anna, shopping_list["id"])
+
+    assert [(item["name"], item["category_id"]) for item in body["lines"]] == [
+        ("Kerzen", categories["other"]),
+        ("Feta", counter),
+        ("Gouda", counter),
+    ]
+
+
 async def test_lines_are_deterministic(
     api: AsyncClient, anna: Account, ingredients: dict[str, Any], meal_a: Any, meal_b: Any
 ) -> None:

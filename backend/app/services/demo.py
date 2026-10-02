@@ -45,6 +45,7 @@ from app.domain.text import normalize, sort_key
 from app.domain.units import Unit
 from app.media.store import MediaStore
 from app.models import (
+    Category,
     Couple,
     CoupleMember,
     Ingredient,
@@ -511,10 +512,15 @@ async def _insert_accounts(
     return DemoSeed(password=password, invite_url=invite.url, user_ids=ids)
 
 
+def _seeded_category_ids(rows: Iterable[Category]) -> dict[str, str]:
+    """The seeded categories' ids by key; the demo uses no others."""
+    return {row.key: row.id for row in rows if row.key is not None}
+
+
 async def _insert_catalog(
     session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime
 ) -> None:
-    categories = {row.key: row.id for row in await reference_repo.categories_in_order(session)}
+    categories = _seeded_category_ids(await reference_repo.categories_in_order(session))
     for item in DEMO_INGREDIENTS:
         creator = user_ids[item.creator]
         quantity_text, pack_quantity, pack_unit = item.pack or (None, None, None)
@@ -752,7 +758,7 @@ async def _shop(
     }
     for owner, meal, servings in demo.new_servings:
         list_meals[(user_ids[owner], meal)].servings = servings
-    categories = {row.key: row.id for row in content.categories.values()}
+    categories = _seeded_category_ids(content.categories.values())
     added = [
         _extra_item(
             shopping_list, extra, shopping_list.owner_id, ingredient_ids, categories, now=day
@@ -771,7 +777,7 @@ async def _insert_lists(
 ) -> None:
     """The demo drafts; the meal that gets deleted goes through the real hook (LIST-15)."""
     ingredient_ids = await _ingredient_ids(session)
-    categories = {row.key: row.id for row in await reference_repo.categories_in_order(session)}
+    categories = _seeded_category_ids(await reference_repo.categories_in_order(session))
     deleted = await _insert_deleted_meal(session, user_ids, now=now)
     every_meal = await meals_repo.search(
         session, owner_ids=list(user_ids.values()), query="", cuisine_ids=(), tag_ids=()

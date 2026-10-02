@@ -184,9 +184,12 @@ export function IngredientForm({
     () => initial.quantity_text !== '' || initial.pack_quantity !== '',
   );
 
-  const defaultCategory =
-    categories.data?.find((category) => category.key === values.categoryKey) ??
-    categories.data?.find((category) => category.key === 'other');
+  // Categories admins added have no key (REF-01), so a missing guess must not match them.
+  const guessed =
+    values.categoryKey === null
+      ? undefined
+      : categories.data?.find((category) => category.key === values.categoryKey);
+  const defaultCategory = guessed ?? categories.data?.find((category) => category.key === 'other');
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken =

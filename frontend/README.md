@@ -525,7 +525,8 @@ order.
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
 | `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
-| `saveCategoryOrder`      | `save-category-order`      | Admin: "Save order"                         |
+| `newCategory`            | `new-category`             | Admin: "New category" below the categories  |
+| `categoryDialog`         | `category-dialog`          | Admin: a category's names (new or edit)     |
 | `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                         |
 | `systemVersion`          | `system-version`           | Admin: running version (once loaded)        |
 | `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"      |

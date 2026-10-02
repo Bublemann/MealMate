@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
-import { CATEGORIES_KEY } from '@/features/reference/api';
+import { CATEGORIES_KEY, type Category } from '@/features/reference/api';
 
 export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
@@ -10,6 +10,7 @@ export type AdminEvent = components['schemas']['AdminEvent'];
 export type SystemInfo = components['schemas']['SystemInfo'];
 export type BackupStatus = components['schemas']['BackupStatus'];
 export type DiskStatus = components['schemas']['DiskStatus'];
+export type CategoryNames = components['schemas']['CategoryNames'];
 
 const USERS_KEY = ['admin', 'users'] as const;
 const INVITES_KEY = ['admin', 'invites'] as const;
@@ -110,7 +111,10 @@ export function useAdminEvents() {
   });
 }
 
-/** REF-01: the store's walking order; the answer is the new order of every category. */
+/**
+ * REF-01: the store's walking order; the answer is the new order of every category. A failed
+ * order loads the categories again, in case another admin changed them meanwhile.
+ */
 export function useReorderCategories() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -118,6 +122,46 @@ export function useReorderCategories() {
       unwrap(api.PUT('/api/admin/categories/order', { body: { category_ids: categoryIds } })),
     onSuccess: (categories) => {
       queryClient.setQueryData(CATEGORIES_KEY, categories);
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+    },
+    onError: () => {
+      // Not awaited: the screen puts the order back at once.
+      void queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
+    },
+  });
+}
+
+/** REF-01: a new category with both names; it goes last in the walking order. */
+export function useCreateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (names: CategoryNames) =>
+      unwrap(api.POST('/api/admin/categories', { body: { names } })),
+    onSuccess: (category) => {
+      queryClient.setQueryData<Category[]>(
+        CATEGORIES_KEY,
+        (categories) => categories && [...categories, category],
+      );
+      void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+    },
+  });
+}
+
+/** REF-01: new names for a category, seeded ones included; every list shows them. */
+export function useRenameCategory(categoryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (names: CategoryNames) =>
+      unwrap(
+        api.PATCH('/api/admin/categories/{category_id}', {
+          params: { path: { category_id: categoryId } },
+          body: { names },
+        }),
+      ),
+    onSuccess: (category) => {
+      queryClient.setQueryData<Category[]>(CATEGORIES_KEY, (categories) =>
+        categories?.map((existing) => (existing.id === category.id ? category : existing)),
+      );
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
     },
   });

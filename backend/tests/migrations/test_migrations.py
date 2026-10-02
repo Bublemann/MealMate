@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0009"
+HEAD = "0010"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +59,7 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients; 0008 and 0009 only add columns.
+# 0007 merges the products into the ingredients; 0008 to 0010 only change columns.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -131,6 +131,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0009")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0010")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0009")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
@@ -582,6 +586,96 @@ def test_category_names_are_unique_per_language(
             f"UPDATE categories SET {column} = "  # noqa: S608
             f"(SELECT {column} FROM categories WHERE key = 'other') WHERE key = 'cheese'"
         )
+
+
+# --- 0010 -----------------------------------------------------------------------------------
+
+
+def key_column_nullable(path: Path) -> bool:
+    [(notnull,)] = query(path, "SELECT \"notnull\" FROM pragma_table_info('categories') "
+                               "WHERE name = 'key'")  # fmt: skip
+    return notnull == 0
+
+
+def test_0010_makes_the_key_optional_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0009 → 0010 (REF-01): the key becomes optional, for the categories
+    admins add; no row and no value changes, and the downgrade makes it required again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = rows_of(path, "categories")
+    assert not key_column_nullable(path)
+
+    command.upgrade(config, "0010")
+
+    assert key_column_nullable(path)
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+
+    command.downgrade(config, "0009")
+    assert not key_column_nullable(path)
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+def test_the_downgrade_refuses_categories_without_a_key(
+    config: Config, database_path: Path
+) -> None:
+    """An admin-added category has no key, which a category needs below 0010: the downgrade
+    fails with a clear message and changes nothing."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        insert(
+            connection,
+            "categories",
+            key=None,
+            name_de="Käsetheke",
+            name_de_norm="kaesetheke",
+            name_en="Cheese counter",
+            name_en_norm="cheese counter",
+            sort_order=len(CATEGORY_KEYS),
+        )
+    before = rows_of(database_path, "categories")
+
+    with pytest.raises(
+        RuntimeError, match=r"admins added categories, which have no key \('Cheese counter'\)"
+    ):
+        command.downgrade(config, "0009")
+
+    assert current_revision(database_path) == HEAD
+    assert key_column_nullable(database_path)
+    assert rows_of(database_path, "categories") == before
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        connection.execute("DELETE FROM categories WHERE key IS NULL")
+    command.downgrade(config, "0009")
+    assert not key_column_nullable(database_path)
+
+
+def test_keys_stay_unique(config: Config, database_path: Path) -> None:
+    """Categories without a key may be many; a key still names one category only."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        for position, name in enumerate(("Käsetheke", "Backstube"), start=len(CATEGORY_KEYS)):
+            insert(
+                connection,
+                "categories",
+                key=None,
+                name_de=name,
+                name_de_norm=name.lower(),
+                name_en=name,
+                name_en_norm=name.lower(),
+                sort_order=position,
+            )
+    with (
+        closing(sqlite3.connect(database_path)) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
+    ):
+        connection.execute("UPDATE categories SET key = 'other' WHERE key = 'cheese'")
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

@@ -577,6 +577,26 @@ async def test_an_older_client_names_the_category_by_key(
     assert items[charcoal] == categories["other"]
 
 
+async def test_a_free_text_item_in_a_new_category(
+    app: FastAPI, api: AsyncClient, anna: Account, shopping: Any
+) -> None:
+    """REF-01, SYNC-03: an item added offline in a category an admin just added lands in it."""
+    admin = await make_user(app, api, "admin", role="admin")
+    response = await api.post(
+        "/api/admin/categories",
+        json={"names": {"de": "Käsetheke", "en": "Cheese counter"}},
+        headers=admin.headers,
+    )
+    counter = response.json()["id"]
+    feta = op_id(1)
+
+    body = await applied(
+        api, anna, shopping["id"], op("extra.add", extra_id=feta, text="Feta", category_id=counter)
+    )
+
+    assert {item["id"]: item["category_id"] for item in body["extra_items"]}[feta] == counter
+
+
 async def test_update_and_delete_free_text_items(
     api: AsyncClient, anna: Account, shopping: Any, flour: Any
 ) -> None:

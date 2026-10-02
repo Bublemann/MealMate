@@ -19,6 +19,21 @@ export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   sort_order: index,
 }));
 
+/** A category an admin added (REF-01): it has no key, and goes last until it is moved. */
+export const CHEESE_COUNTER: Schemas['Category'] = {
+  id: 'cat-cheese-counter',
+  key: null,
+  names: { de: 'Käsetheke', en: 'Cheese counter' },
+  sort_order: CATEGORIES.length,
+};
+
+/** The categories with CHEESE_COUNTER moved before *Other*, as an admin may do. */
+export const CATEGORIES_WITH_ADDED: Schemas['Category'][] = [
+  ...CATEGORIES.slice(0, -1),
+  CHEESE_COUNTER,
+  ...CATEGORIES.slice(-1),
+].map((category, index) => ({ ...category, sort_order: index }));
+
 export const UNITS: Schemas['UnitInfo'][] = [
   { unit: 'g', kind: 'mass' },
   { unit: 'kg', kind: 'mass' },
