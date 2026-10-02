@@ -330,7 +330,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **AGG-02** A line merges all parts for the **same ingredient**: the scaled amounts from meals plus linked extra items. Free-text extra items are never merged.
 - **AGG-03** **Merging rules:**
   - Amounts of the same kind merge: g + kg → mass; ml + l + tbsp + tsp → volume; pieces, including amounts without a unit. The result is shown in the ingredient's base unit.
-  - Otherwise nothing converts across kinds. Spoons of a Gramm ingredient, and amounts that don't fit the ingredient (MEAL-02, LIST-06), are shown side by side with the rest on one line: "500 g + 2 Stk.".
+  - Apart from parts frozen before D-32 (below), nothing converts across kinds. Spoons of a Gramm ingredient, and amounts that don't fit the ingredient (MEAL-02, LIST-06), are shown side by side with the rest on one line: "500 g + 2 Stk.".
   - Frozen meals and extra items keep the conversions they copied (LIST-11): parts frozen before D-32 still merge across kinds with their piece weight and density, so lists being shopped and done lists stay as they were (D-08).
   - Parts without an amount ("salt, to taste") appear as "Salz" with no amount, or as "+ etwas / + some" next to other parts.
 - **AGG-04** **Display rounding** (calculations keep full precision):
