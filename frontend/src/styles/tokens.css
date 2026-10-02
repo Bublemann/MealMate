@@ -63,6 +63,18 @@
   --tab-bar-height: clamp(56px, 3.5rem, 72px);
   --tab-bar-icon: clamp(24px, 1.5rem, 32px);
   --tab-bar-clearance: calc(var(--tab-bar-bottom) + var(--tab-bar-height));
+
+  /*
+   * The visible area (UI-01): iOS doesn't shrink the page for the on-screen keyboard, it only
+   * shows less of it. While the app runs, app/viewport.ts sets on <html> where the visible part
+   * starts (iOS scrolls it down to the focused field) and how far the keyboard reaches up from the
+   * bottom edge. Both stay 0 without a keyboard, while pinch-zoomed and where the browser can't
+   * tell. --visible-height is what is left of the viewport; `100%` is the viewport's height for a
+   * fixed element, which is what uses it (the pop-ups).
+   */
+  --visible-top: 0px;
+  --keyboard-inset: 0px;
+  --visible-height: calc(100% - var(--visible-top) - var(--keyboard-inset));
 }
 
 @media (prefers-color-scheme: dark) {

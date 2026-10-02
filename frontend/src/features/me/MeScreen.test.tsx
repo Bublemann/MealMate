@@ -210,6 +210,7 @@ describe('MeScreen', () => {
 
     await user.click(screen.getByTestId(testIds.changePasswordButton));
     const dialog = await screen.findByRole('dialog', { name: 'Change password' });
+    expect(within(dialog).getByLabelText('Current password')).toHaveFocus();
     await user.type(within(dialog).getByLabelText('Current password'), 'old-secret');
     await user.type(within(dialog).getByLabelText('New password'), 'a much better one');
     await user.click(within(dialog).getByRole('button', { name: 'Change password' }));

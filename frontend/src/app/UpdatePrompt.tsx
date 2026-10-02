@@ -4,18 +4,24 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { testIds } from '@/testIds';
 import { pwaUpdate } from './pwaUpdate';
+import { useKeyboardOpen } from './viewport';
 
-/** Offers to reload when a new app version has been installed in the background. */
+/**
+ * Offers to reload when a new app version has been installed in the background. Like the tab bar,
+ * it hides while the keyboard is open (UI-01).
+ */
 export function UpdatePrompt() {
   const { t } = useTranslation();
   const available = useSyncExternalStore(pwaUpdate.subscribe, pwaUpdate.isAvailable);
+  const keyboardOpen = useKeyboardOpen();
 
   return (
     <div
       aria-live="polite"
       className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-20 px-4"
     >
-      {available && (
+      {/* Left out rather than hidden, so one that arrives while typing is announced later. */}
+      {available && !keyboardOpen && (
         <Card
           data-testid={testIds.updatePrompt}
           className="pointer-events-auto mx-auto max-w-xl flex-row flex-wrap items-center gap-2 px-4 py-2 shadow-lg"
