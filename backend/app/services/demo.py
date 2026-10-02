@@ -41,7 +41,7 @@ from app.core.passwords import hash_password
 from app.db.ids import new_id
 from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
-from app.domain.text import normalize
+from app.domain.text import normalize, sort_key
 from app.domain.units import Unit
 from app.media.store import MediaStore
 from app.models import (
@@ -520,8 +520,10 @@ async def _insert_catalog(
         ingredient = Ingredient(
             name=item.name,
             name_norm=normalize(item.name),
+            name_sort=sort_key(item.name),
             brand=item.brand,
             brand_norm=None if item.brand is None else normalize(item.brand),
+            brand_sort=None if item.brand is None else sort_key(item.brand),
             barcode=item.barcode,
             category_id=categories[item.category],
             base_unit=item.base_unit,
@@ -640,6 +642,7 @@ async def _insert_meals(
             owner_id=user_ids[demo.owner],
             name=source.name,
             name_norm=normalize(source.name),
+            name_sort=sort_key(source.name),
             instructions=source.instructions,
             source_url=source.source_url,
             servings=source.servings,
@@ -674,6 +677,7 @@ async def _insert_deleted_meal(
         owner_id=user_ids[demo.owner],
         name=demo.name,
         name_norm=normalize(demo.name),
+        name_sort=sort_key(demo.name),
         servings=demo.servings,
         created_at=now,
         updated_at=now,

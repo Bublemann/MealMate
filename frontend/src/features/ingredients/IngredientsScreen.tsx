@@ -18,31 +18,9 @@ import { useIngredients, type IngredientSummary } from './api';
 import { IngredientFormDialog } from './IngredientFormDialog';
 import { IngredientName } from './IngredientName';
 
-interface Group {
-  category: Category;
-  ingredients: IngredientSummary[];
-}
-
 /**
- * The server's results under their category headings, in the categories' walking order; within
- * a category they keep the server's order (best matches first when searching).
- */
-function groupByCategory(ingredients: IngredientSummary[], categories: Category[]): Group[] {
-  const byCategory = new Map<string, IngredientSummary[]>();
-  for (const ingredient of ingredients) {
-    const group = byCategory.get(ingredient.category_id) ?? [];
-    group.push(ingredient);
-    byCategory.set(ingredient.category_id, group);
-  }
-  return categories.flatMap((category) => {
-    const members = byCategory.get(category.id);
-    return members ? [{ category, ingredients: members }] : [];
-  });
-}
-
-/**
- * The Ingredients tab: search (name and brand), grouped by category, "New ingredient" and "Scan"
- * (ING-01, ING-03, BAR-01).
+ * The Ingredients tab: search (name and brand), one list in the server's order (dictionary order,
+ * best matches first when searching), "New ingredient" and "Scan" (ING-01, ING-03, BAR-01).
  */
 export function IngredientsScreen() {
   const { t } = useTranslation();
@@ -53,13 +31,16 @@ export function IngredientsScreen() {
   const debounced = useDebouncedValue(query.trim());
   const ingredients = useIngredients(debounced);
   const categories = useCategories();
-  const groups =
-    ingredients.data && categories.data ? groupByCategory(ingredients.data, categories.data) : null;
+  // The rows name their category, so the list waits for the categories as well.
+  const loaded =
+    ingredients.data && categories.data
+      ? { ingredients: ingredients.data, categories: categories.data }
+      : null;
   const noIngredientsAtAll = debounced === '' && ingredients.data?.length === 0;
 
   return (
     <Screen title={t('nav.ingredients')} testId={testIds.screenIngredients}>
-      {!groups ? (
+      {!loaded ? (
         // Until the first answer it is unknown whether there are ingredients at all (UI-03).
         ingredients.error || categories.error ? (
           <LoadError error={ingredients.error ?? categories.error} />
@@ -108,7 +89,7 @@ export function IngredientsScreen() {
             </div>
           </div>
           <LoadError error={ingredients.error ?? categories.error} />
-          {groups.length === 0 && debounced !== '' && (
+          {loaded.ingredients.length === 0 && debounced !== '' && (
             <Card className="items-start gap-3 px-5">
               <p aria-live="polite">{t('ingredients.noResults', { query: debounced })}</p>
               <Button variant="outline" onClick={() => setCreating(true)}>
@@ -117,7 +98,7 @@ export function IngredientsScreen() {
               </Button>
             </Card>
           )}
-          {groups.length > 0 && <IngredientGroups groups={groups} />}
+          {loaded.ingredients.length > 0 && <IngredientList {...loaded} />}
         </>
       )}
       <IngredientFormDialog
@@ -144,33 +125,30 @@ function ScanLink() {
   );
 }
 
-function IngredientGroups({ groups }: { groups: Group[] }) {
+function IngredientList({
+  ingredients,
+  categories,
+}: {
+  ingredients: IngredientSummary[];
+  categories: Category[];
+}) {
   const { t } = useTranslation();
+  const categoryKeys = new Map(categories.map((category) => [category.id, category.key]));
 
   return (
-    <section
+    <ul
       data-testid={testIds.ingredientList}
       aria-label={t('ingredients.listLabel')}
-      className="flex flex-col gap-6"
+      className="flex flex-col divide-y rounded-xl border bg-card"
     >
-      {groups.map(({ category, ingredients }) => (
-        <CategoryGroup key={category.id} category={category} ingredients={ingredients} />
-      ))}
-    </section>
-  );
-}
-
-function CategoryGroup({ category, ingredients }: Group) {
-  const { t } = useTranslation();
-  const headingId = useId();
-
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2">
-      <h2 id={headingId} className="text-lg font-semibold">
-        {categoryName(t, category.key)}
-      </h2>
-      <ul className="flex flex-col divide-y rounded-xl border bg-card">
-        {ingredients.map((ingredient) => (
+      {ingredients.map((ingredient) => {
+        const categoryKey = categoryKeys.get(ingredient.category_id);
+        // "Milchprodukte & Eier · ml": where it sorts on a shopping list, and its base unit.
+        const details = [
+          categoryKey === undefined ? null : categoryName(t, categoryKey),
+          unitLabel(t, ingredient.base_unit),
+        ].filter((detail) => detail !== null);
+        return (
           <li key={ingredient.id}>
             <Link
               to={`/ingredients/${ingredient.id}`}
@@ -179,15 +157,13 @@ function CategoryGroup({ category, ingredients }: Group) {
             >
               <span className="flex min-w-0 flex-1 flex-col">
                 <IngredientName ingredient={ingredient} />
-                <span className="text-sm text-muted-foreground">
-                  {unitLabel(t, ingredient.base_unit)}
-                </span>
+                <span className="text-sm text-muted-foreground">{details.join(' · ')}</span>
               </span>
               <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
             </Link>
           </li>
-        ))}
-      </ul>
-    </section>
+        );
+      })}
+    </ul>
   );
 }

@@ -20,7 +20,7 @@ from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
 from app.domain.nutrition import meal_nutrition
-from app.domain.text import normalize
+from app.domain.text import normalize, sort_key
 from app.domain.units import BaseUnit, IngredientAttrs, Unit
 from app.media.store import MediaStore
 from app.models import Ingredient as IngredientRow
@@ -363,6 +363,7 @@ async def create_meal(
             owner_id=principal.user_id,
             name=body.name,
             name_norm=normalize(body.name),
+            name_sort=sort_key(body.name),
             instructions=body.instructions,
             source_url=body.source_url,
             servings=body.servings,
@@ -398,6 +399,7 @@ async def update_meal(
         )
         if body.name is not None:
             meal.name, meal.name_norm = body.name, normalize(body.name)
+            meal.name_sort = sort_key(body.name)
         if "instructions" in sent:
             meal.instructions = body.instructions
         if "source_url" in sent:
@@ -448,6 +450,7 @@ async def copy_meal(
             owner_id=principal.user_id,
             name=original.name,
             name_norm=original.name_norm,
+            name_sort=original.name_sort,
             instructions=original.instructions,
             source_url=original.source_url,
             servings=original.servings,

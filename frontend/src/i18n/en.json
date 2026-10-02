@@ -454,7 +454,7 @@
   "ingredients.search.label": "Search ingredients",
   "ingredients.search.placeholder": "e.g. apples",
   "ingredients.new": "New ingredient",
-  "ingredients.listLabel": "Ingredients by category",
+  "ingredients.listLabel": "Ingredients",
   "ingredients.noResults": "No ingredient matches “{{query}}”.",
   "ingredients.createNamed": "Create “{{name}}”",
   "ingredients.form.createTitle": "New ingredient",

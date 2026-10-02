@@ -34,7 +34,7 @@ async def search(
     cuisine_id: str | None,
     tag_id: str | None,
 ) -> Sequence[Meal]:
-    """Meals of the given owners, A-Z by normalised name (then id). A normalised `query`
+    """Meals of the given owners in dictionary order (then by id). A normalised `query`
     matches the meal name, a tag name or the cuisine (its key or name), also with umlaut
     spellings folded."""
     if not owner_ids:
@@ -60,7 +60,7 @@ async def search(
                 exists().where(Cuisine.id == Meal.cuisine_id).where(cuisine_matches),
             )
         )
-    result = await session.execute(statement.order_by(Meal.name_norm, Meal.id))
+    result = await session.execute(statement.order_by(Meal.name_sort, Meal.id))
     return result.scalars().all()
 
 

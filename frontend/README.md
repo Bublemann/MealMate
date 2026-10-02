@@ -415,7 +415,7 @@ order.
 | `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                    |
 | `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                 |
 | `newIngredient`          | `new-ingredient`           | "New ingredient" on Ingredients             |
-| `ingredientList`         | `ingredient-list`          | Ingredients grouped by category             |
+| `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                   |
 | `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
 | `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |

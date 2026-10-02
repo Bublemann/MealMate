@@ -1,4 +1,5 @@
-"""Ingredients: create with brand and barcode, search, similar hint, own values, admin order, merge.
+"""Ingredients: create with brand and barcode, search, similar hint, own values, admin category
+order (seen on a shopping list), merge.
 
 ING-01..05, NUT-02, REF-01 (plan § 12, M3; one kind of ingredient since 2026-09-28). All tests of
 a run share one database, so names get a unique tag; the tag is the same in both spellings of a
@@ -108,12 +109,15 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
 
 
 def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None:
-    """REF-01: the new order shows on the Ingredients tab."""
+    """REF-01: a shopping list's lines follow the new order."""
     original = [category["id"] for category in api.categories(admin)]
     first, second = api.categories(admin)[:2]
     tag = unique("e2e")
-    api.create_ingredient(admin, f"Order A {tag}", category_key=first["key"])
-    api.create_ingredient(admin, f"Order B {tag}", category_key=second["key"])
+    item_a = api.create_ingredient(admin, f"Order A {tag}", category_key=first["key"])
+    item_b = api.create_ingredient(admin, f"Order B {tag}", category_key=second["key"])
+    draft = api.create_list(admin, f"Order {tag}")
+    for item in (item_a, item_b):
+        api.add_extra_item(admin, draft["id"], ingredient_id=item["id"], amount=100, unit="g")
     first_name = text(f"category.{first['key']}")
     second_name = text(f"category.{second['key']}")
 
@@ -127,10 +131,9 @@ def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None
         page.get_by_test_id(TEST_IDS["saveCategoryOrder"]).click()
         expect(page.get_by_role("status")).to_have_text(text("admin.categories.saved"))
 
-        page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
-        page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
-        headings = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role("heading", level=2)
-        expect(headings).to_have_text([second_name, first_name])
+        page.goto(f"/lists/{draft['id']}")
+        lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
+        expect(lines).to_contain_text([item_b["name"], item_a["name"]])
     finally:
         api.order_categories(admin, original)
 

@@ -7,7 +7,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.text import fold_umlauts
-from app.models import Category, Ingredient
+from app.models import Ingredient
 from app.repositories.search import contains, folded
 
 
@@ -49,12 +49,12 @@ async def search(
 ) -> Sequence[Ingredient]:
     """With a normalised `query`: the ingredients whose normalised name or brand, or both
     together ("name brand"), contain it (also with umlaut spellings folded, so "apfel" finds
-    "Äpfel"); an exact name first, then names starting with it, then by name and brand. Without
-    one: all of them by category order, name and brand."""
+    "Äpfel"); an exact name first, then names starting with it, each in dictionary order by
+    name and brand. Without one: all of them in that order."""
     statement = select(Ingredient)
     if category_id is not None:
         statement = statement.where(Ingredient.category_id == category_id)
-    order = (Ingredient.name_norm, func.coalesce(Ingredient.brand_norm, ""), Ingredient.id)
+    order = (Ingredient.name_sort, func.coalesce(Ingredient.brand_sort, ""), Ingredient.id)
     if query:
         # The label holds the name and the brand, so it matches either or both.
         matches, _ = contains(_label_norm(), query)
@@ -64,9 +64,7 @@ async def search(
         )
         statement = statement.where(matches).order_by(exact.is_(False), prefix.is_(False), *order)
     else:
-        statement = statement.join(Category, Category.id == Ingredient.category_id).order_by(
-            Category.sort_order, *order
-        )
+        statement = statement.order_by(*order)
     result = await session.execute(statement.limit(limit))
     return result.scalars().all()
 

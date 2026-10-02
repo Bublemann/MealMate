@@ -178,7 +178,7 @@ MealMate/
 - **Primary keys:** UUIDv7 strings (`uuid.uuid7()`). The server accepts any valid UUID for client-supplied IDs (offline extra items, op IDs) and never relies on their embedded timestamp.
 - **Timestamps:** UTC in the database.
 - **`*_norm` columns:** lowercase, `ä→ae ö→oe ü→ue ß→ss`, accents stripped, whitespace collapsed. They are used for uniqueness and search (ING-03, REF-04, ACC-05).
-- **Dictionary order** (ING-03, MEAL-09, D-27): meals and ingredients sort by a key built from the original name: lowercase, `ä→a ö→o ü→u ß→ss`, accents stripped. It is not derived from `*_norm`: folding `ae`/`oe`/`ue` back would also change real letter pairs ("Quelle", "Feuer", "Aloe").
+- **Dictionary order** (ING-03, MEAL-09, D-27): meals and ingredients sort by a key built from the original name: lowercase, `ä→a ö→o ü→u ß→ss`, accents stripped, whitespace collapsed. It is not derived from `*_norm`: folding `ae`/`oe`/`ue` back would also change real letter pairs ("Quelle", "Feuer", "Aloe"). The keys are stored next to the names (`*_sort` columns: the name's, and an ingredient's brand's) and set wherever a name or brand is written.
 
 ### 5.3 Errors and headers (I18N-03, SEC-06)
 
@@ -413,8 +413,8 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 | `categories` | `key` (unique), `sort_order` | Seeded by migration |
 | `cuisines` | `key` (unique, nullable), `name` (nullable), `name_norm` (unique), `created_by` FK set null | Seeded entries have a `key`; user-added ones have a `name` |
 | `tags`, `meal_tags` | `name`, `name_norm` (unique) · (`meal_id`, `tag_id`) | |
-| `ingredients` | `name`, `name_norm` (indexed, not unique), `brand`, `brand_norm`, `barcode` (unique, nullable), `category_id` FK, `base_unit` (`g`/`ml`), `piece_weight_g`, `density_g_per_ml`, nutrient columns (nullable), `quantity_text`, `pack_quantity`, `pack_unit`, `source` (`manual`/`off`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` FK set null | One kind of ingredient (D-21, migration 0007 merged the former `products` table into it); the pack size is stored for the postponed pack-rounding feature |
-| `meals` | `owner_id` FK cascade, `name`, `name_norm`, `instructions`, `source_url`, `servings`, `cuisine_id` FK set null, `photo_key`, `copied_from_meal_id` FK set null | |
+| `ingredients` | `name`, `name_norm` (indexed, not unique), `name_sort` (indexed), `brand`, `brand_norm`, `brand_sort`, `barcode` (unique, nullable), `category_id` FK, `base_unit` (`g`/`ml`), `piece_weight_g`, `density_g_per_ml`, nutrient columns (nullable), `quantity_text`, `pack_quantity`, `pack_unit`, `source` (`manual`/`off`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` FK set null | One kind of ingredient (D-21, migration 0007 merged the former `products` table into it); the pack size is stored for the postponed pack-rounding feature; `name_sort` and `brand_sort` are the dictionary-order keys (§ 5.2, migration 0008) |
+| `meals` | `owner_id` FK cascade, `name`, `name_norm`, `name_sort` (indexed), `instructions`, `source_url`, `servings`, `cuisine_id` FK set null, `photo_key`, `copied_from_meal_id` FK set null | `name_sort` is the dictionary-order key (§ 5.2, migration 0008) |
 | `meal_ingredients` | `meal_id` FK cascade, `position`, `ingredient_id` FK restrict, `amount`, `unit`, `note` | |
 | `shopping_lists` | `owner_id` FK cascade, `name` (nullable → translated default), `status`, `shared_with_partner`, `version`, `reminder_seed`, `shopping_started_at`, `finished_at` | |
 | `list_meals` | `list_id` FK cascade, `meal_id` FK set null, `servings`, `meal_servings_snapshot`, `meal_name_snapshot`, `meal_owner_id_snapshot`, `added_by` FK set null, `frozen_at`, `detached_reason` | Unique (`list_id`, `meal_id`) while `meal_id` is not null |
