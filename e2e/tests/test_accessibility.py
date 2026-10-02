@@ -233,9 +233,8 @@ def test_no_serious_violations(
         page.get_by_test_id(TEST_IDS["filterButton"]).click()
         panel = page.get_by_test_id(TEST_IDS["filterPanel"])
         panel.get_by_role("checkbox", name=text("category.other"), exact=True).check()
-        expect(page.get_by_test_id(TEST_IDS["filterButton"])).to_have_accessible_name(
-            text("filter.buttonActive_one", count="1")
-        )
+        # Counted on the button, behind the open panel.
+        expect(page.get_by_test_id(TEST_IDS["filterButton"])).to_have_text("1")
     if screen.path == "/scan/new":
         page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(new_barcode())
         page.get_by_test_id(TEST_IDS["barcodeLookup"]).click()

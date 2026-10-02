@@ -170,24 +170,28 @@ def test_member_filters_by_categories(member_page: Page, api: Api, member: Accou
     expect(group).to_have_accessible_name(text("ingredients.filter.categories"))
     expect(group.get_by_role("checkbox")).to_have_count(len(api.categories(member)))
 
-    # Each tick applies at once, behind the open panel; several show any of them.
+    # Each tick applies at once, behind the open panel; several show any of them. The button
+    # counts the group (its name is read once the panel, which hides the page from screen
+    # readers, is closed).
     group.get_by_role("checkbox", name=fruit, exact=True).check()
     expect(rows).to_have_count(1)
     expect(rows).to_contain_text([f"Kirschen {tag}"])
-    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    expect(button).to_have_text("1")
     group.get_by_role("checkbox", name=dairy, exact=True).check()
     expect(rows).to_contain_text([f"Kirschen {tag}", f"Quark {tag}"])
-    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    expect(button).to_have_text("1")
 
     # "Reset" unticks every group and keeps the search.
     panel.get_by_role("button", name=text("filter.reset"), exact=True).click()
     expect(group.get_by_role("checkbox", checked=True)).to_have_count(0)
     expect(rows).to_have_count(3)
-    expect(button).to_have_accessible_name(text("filter.button"))
+    expect(button).to_have_text("")
 
     group.get_by_role("checkbox", name=sauces, exact=True).check()
     panel.get_by_role("button", name=text("filter.done"), exact=True).click()
     expect(panel).to_be_hidden()
+    expect(button).to_be_focused()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
     expect(rows).to_contain_text([f"Senf {tag}"])
 
     # Kept while the app is open: open the ingredient and come back.
@@ -215,11 +219,22 @@ def test_filter_panel_fits_the_largest_text_size(
     page = member_page
     page.goto("/ingredients")
     page.add_style_tag(content="html { font-size: 53px !important; }")
-    page.get_by_test_id(TEST_IDS["filterButton"]).click()
-    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
-    expect(panel).to_be_visible()
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
     viewport = page.viewport_size
     assert viewport is not None
+    # The button sits beside the search field, not below it.
+    button_box, search_box = button.bounding_box(), search.bounding_box()
+    assert button_box is not None
+    assert search_box is not None
+    assert button_box["y"] < search_box["y"] + search_box["height"]
+    assert button_box["x"] + button_box["width"] <= viewport["width"]
+
+    button.click()
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+    expect(panel).to_be_visible()
+    # Measured once it has slid in.
+    panel.evaluate("panel => Promise.all(panel.getAnimations().map((a) => a.finished))")
 
     assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
     assert panel.evaluate("panel => panel.scrollWidth <= panel.clientWidth")
