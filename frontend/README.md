@@ -311,7 +311,7 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 ## "Neue Zutat"
 
 `IngredientForm` is one compact pop-up for creating an ingredient from the Ingredients tab or the
-meal form's picker, for the meal form's scan and for editing (ING-04, D-35). Top to bottom: the
+meal form's picker and for the meal form's scan; the edit pop-up uses it too (ING-04, D-35). Top to bottom: the
 Open Food Facts attribution (only while Open Food Facts values are shown, BAR-09); the name with
 two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) and a scan icon
 ("Barcode scannen"), each at least 44 pt and wrapping below the name at large text sizes; the
@@ -351,7 +351,7 @@ and the meal form, so the scanner doesn't import `IngredientForm`.
 - **In "Neue Zutat":** the barcode is looked up with `GET /api/ingredients/lookup` (25 s timeout).
   - A barcode that belongs to an ingredient fills in nothing; the barcode's message line says
     "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that ingredient) or, in the
-    picker, "nehmen" (takes it into the meal).
+    meal form's picker, "nehmen" (takes it into the meal).
   - An Open Food Facts proposal fills the form like a chosen search result (name, brand, category
     guess, base unit, nutrients, barcode, read-only), keeping what was typed where the proposal
     has no value. One "Speichern" creates the ingredient in one request, with an `off` block
@@ -362,15 +362,15 @@ and the meal form, so the scanner doesn't import `IngredientForm`.
   - When editing, a scan only fills in the barcode, or shows "Gehört schon zu …" when another
     ingredient has it.
 - **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has,
-  the similar-ingredients hint offers it to each match without a barcode: in the picker "Milch
-  nehmen" links it (`POST /api/ingredients/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
+  the similar-ingredients hint offers it to each match without a barcode: in the meal form's
+  picker "Milch nehmen" links it (`POST /api/ingredients/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
   Milch hinzufügen" links it, closes the pop-up and opens Milch. A match with a barcode is offered
   as before, without attaching anything.
 - **Meal form:** "Barcode scannen" adds a known barcode's row at once. An unknown one opens "Neue
   Zutat" filled as above, and its "Speichern" also adds the row.
 - **Tests:** `decoder.test.ts` decodes the PNGs in `features/scanner/fixtures/` with the real
   decoder (made by `node scripts/generate-barcode-fixtures.mjs`, deterministic); the camera and
-  flow tests mock the decoder.
+  scan tests mock the decoder.
 
 ## Open Food Facts search by name
 
