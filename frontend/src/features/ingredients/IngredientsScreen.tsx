@@ -29,8 +29,8 @@ export function IngredientsScreen() {
   // The search stays when the user opens an ingredient and comes back (UI-01).
   const [{ search }, remember] = useTabMemory('ingredients');
   const [creating, setCreating] = useState(false);
-  const typed = search.trim();
-  const debounced = useDebouncedValue(typed);
+  const searchText = search.trim();
+  const debounced = useDebouncedValue(searchText);
   const ingredients = useIngredients(debounced);
   const categories = useCategories();
   // The rows name their category, so the list waits for the categories as well.
@@ -50,7 +50,9 @@ export function IngredientsScreen() {
           testId: testIds.ingredientSearch,
         }}
         newTile={{
-          label: typed ? t('ingredients.createNamed', { name: typed }) : t('ingredients.new'),
+          label: searchText
+            ? t('ingredients.createNamed', { name: searchText })
+            : t('ingredients.new'),
           onClick: () => setCreating(true),
           testId: testIds.newIngredient,
         }}
@@ -68,7 +70,13 @@ export function IngredientsScreen() {
           {loaded.ingredients.length > 0 ? (
             <IngredientList {...loaded} />
           ) : debounced === '' ? (
-            <EmptyLine text={t('ingredients.empty')} />
+            // An earlier search's empty answer, shown while the full list loads, says nothing
+            // about whether there are ingredients at all.
+            ingredients.isPlaceholderData ? (
+              <LoadingState />
+            ) : (
+              <EmptyLine text={t('ingredients.empty')} />
+            )
           ) : (
             <NoMatches onReset={() => remember({ search: '' })} />
           )}
@@ -77,7 +85,7 @@ export function IngredientsScreen() {
       <IngredientFormDialog
         open={creating}
         onOpenChange={setCreating}
-        initialName={typed}
+        initialName={searchText}
         onSaved={(ingredient) => void navigate(`/ingredients/${ingredient.id}`)}
       />
     </Screen>

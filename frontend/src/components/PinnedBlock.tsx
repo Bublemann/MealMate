@@ -1,10 +1,11 @@
 import { Plus, Search } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { TestId } from '@/testIds';
 
-interface PinnedSearch {
+interface SearchFieldProps {
   /** The field's name, for screen readers only: the magnifier shows what it is (A11Y-01). */
   label: string;
   placeholder: string;
@@ -13,7 +14,7 @@ interface PinnedSearch {
   testId: TestId;
 }
 
-interface NewTile {
+interface NewTileProps {
   /** "Neue Zutat", or "„Quitten“ anlegen" while a search text is present. */
   label: string;
   onClick: () => void;
@@ -22,10 +23,10 @@ interface NewTile {
 
 interface PinnedBlockProps {
   /** Lists has no search field. */
-  search?: PinnedSearch;
+  search?: SearchFieldProps;
   /** The filter button (at least 44 pt): next to the search field, or else next to the tile. */
   filter?: ReactNode;
-  newTile: NewTile;
+  newTile: NewTileProps;
 }
 
 /**
@@ -33,13 +34,12 @@ interface PinnedBlockProps {
  * tile, on a frosted surface that stays below the status bar while the content scrolls under it.
  * The tab renders it at once, whether it is still loading, empty or filled (UI-03), and shows its
  * state below it. At the largest text sizes it stops growing before it crowds out the content
- * (--pinned-* in tokens.css): its controls take their text size and tap target from there, and
- * its spacing is in em; the tile wraps a long name.
+ * (the `pinned` utility, D-29), and its spacing is in em of its text; the tile wraps a long name.
  */
 export function PinnedBlock({ search, filter, newTile }: PinnedBlockProps) {
   return (
     // Spans the content column across the Layout's px-4, so nothing shows beside it.
-    <div className="frosted sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em] text-(length:--pinned-font-size) [--control-font-size:var(--pinned-font-size)] [--tap-target:var(--pinned-tap-target)]">
+    <div className="frosted pinned sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em]">
       {search && (
         <div className="flex flex-wrap gap-[0.5em]">
           <SearchField {...search} />
@@ -47,14 +47,14 @@ export function PinnedBlock({ search, filter, newTile }: PinnedBlockProps) {
         </div>
       )}
       <div className="flex flex-wrap gap-[0.5em]">
-        <Tile {...newTile} />
+        <NewTile {...newTile} />
         {!search && filter}
       </div>
     </div>
   );
 }
 
-function SearchField({ label, placeholder, value, onChange, testId }: PinnedSearch) {
+function SearchField({ label, placeholder, value, onChange, testId }: SearchFieldProps) {
   const id = useId();
 
   return (
@@ -82,16 +82,15 @@ function SearchField({ label, placeholder, value, onChange, testId }: PinnedSear
 }
 
 /** Shaped like a row of the tab's list, in the primary green; a long name wraps. */
-function Tile({ label, onClick, testId }: NewTile) {
+function NewTile({ label, onClick, testId }: NewTileProps) {
   return (
-    <button
-      type="button"
+    <Button
       data-testid={testId}
       onClick={onClick}
-      className="flex min-h-(--tap-target) min-w-0 flex-[1_1_12em] items-center gap-[0.75em] rounded-xl bg-primary px-[1em] py-[0.75em] text-left font-medium text-primary-foreground transition-colors outline-none hover:bg-primary/90 focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.75em] text-left text-[1em]"
     >
-      <Plus aria-hidden="true" className="size-[1.25em] shrink-0" />
+      <Plus aria-hidden="true" className="size-[1.25em]" />
       <span className="min-w-0 wrap-anywhere">{label}</span>
-    </button>
+    </Button>
   );
 }

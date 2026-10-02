@@ -66,9 +66,10 @@
 
   /*
    * The pinned block (UI-01) stays at the top while the content scrolls under it, so like the tab
-   * bar it must leave room for the content at the largest text sizes: its text grows with the
-   * text size up to 28 px (about the first accessibility size) and its controls up to 64 px, and
-   * its spacing is in em of that text. A long name in its "Neu…" tile wraps.
+   * bar it must leave room for the content at the largest text sizes (D-29): its text grows with
+   * the text size up to 28 px (about the first accessibility size) and its controls up to 64 px
+   * (the `pinned` utility in index.css), and its spacing is in em of that text. A long name in its
+   * "Neu…" tile wraps.
    */
   --pinned-font-size: clamp(16px, 1rem, 28px);
   --pinned-tap-target: clamp(44px, 2.75rem, 64px);

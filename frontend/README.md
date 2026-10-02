@@ -128,7 +128,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
   Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
   clears the search and the filters) when they hide everything. Meals and Lists keep the old
-  `EmptyState` card until they move to the pinned block.
+  `EmptyState` card until they move to the pinned block. Like the tab bar, it must not crowd out
+  the content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and
+  its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the
+  first accessibility size, D-29), and its spacing is in `em` of that text.
 - **Tab memory** (UI-01): a tab's search text, and later its cuisine, tag and category choices,
   live in `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
   survives opening a detail and coming back, and is gone when the app closes or the session ends;

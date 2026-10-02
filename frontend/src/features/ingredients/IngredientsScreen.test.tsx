@@ -164,6 +164,32 @@ describe('IngredientsScreen', () => {
     expect(screen.queryByText('No matches')).toBeNull();
   });
 
+  it('does not call a filled tab empty while the full list loads again (UI-03)', async () => {
+    const again = heldRoute();
+    let fullLoads = 0;
+    const { queryClient, user } = renderIngredients({
+      'GET /api/ingredients': (request: Request) => {
+        if (new URL(request.url).searchParams.get('q')) return [];
+        fullLoads += 1;
+        return fullLoads === 1 ? ALL : again.route();
+      },
+    });
+    await screen.findByTestId(testIds.ingredientList);
+    await user.type(screen.getByLabelText('Search ingredients'), 'Quitten');
+    expect(await screen.findByText('No matches')).toBeVisible();
+
+    // The cache has dropped the unused full list (after its gcTime), so it is loaded again.
+    queryClient.removeQueries({ queryKey: ['ingredients', 'list', ''], exact: true });
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await waitFor(() => expect(fullLoads).toBe(2));
+
+    expect(screen.queryByText('No ingredients yet')).toBeNull();
+    expect(screen.queryByText('No matches')).toBeNull();
+    await again.answer(ALL);
+    const list = await screen.findByTestId(testIds.ingredientList);
+    expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
+  });
+
   it('shows one line under the pinned block when there are no ingredients yet (UI-03)', async () => {
     const { user } = renderIngredients({ 'GET /api/ingredients': [] });
 
