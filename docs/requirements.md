@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -143,7 +143,16 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - A deleted category can't be restored, and its names can be reused.
   - The Open Food Facts category guess (BAR-03) only ever names a seeded category; a guess of a deleted one falls back to *Other*.
 - **REF-02** **Units:** `g`, `kg`, `ml`, `l`, `piece`, `tbsp`, `tsp`. They are fixed and shown translated (`Stk.`/`pcs`, `EL`/`tbsp`, `TL`/`tsp`).
-  - Conversions: 1 kg = 1000 g, 1 l = 1000 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml.
+  - **Conversions** happen only within a kind: 1 kg = 1000 g, 1 l = 1000 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml. Nothing converts between grams, millilitres and pieces (D-32).
+  - **Fitting units:** an ingredient's base unit (ING-02) decides which units its amounts can use:
+
+    | Base unit | Fitting units |
+    |---|---|
+    | Gramm (`g`) | g, kg, EL, TL |
+    | Milliliter (`ml`) | ml, l, EL, TL |
+    | Stück (`piece`) | Stk., or an amount without a unit |
+
+    A row without an amount fits every base unit. An amount without a unit counts as pieces.
 - **REF-03** **Cuisines:** a seeded, translated pick-list. Any user can add further cuisines as plain text. A meal has 0 or 1 cuisine.
 - **REF-04** **Tags:** free text, 0 or more per meal, from one shared pool with autocomplete. Unique ignoring case and umlauts. Not translated.
 
@@ -152,45 +161,70 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **ING-01** Ingredients are **shared by all users**. Any user can create one and **edit** any one, like a household wiki. The app records and shows "created by" and "last changed by".
 - **ING-02** An ingredient has:
   - a **name** (stored as typed, not translated). Names don't have to be unique: "Milch" can exist once per brand, and by hand;
-  - an optional **brand** and an optional **barcode** (EAN/UPC, unique when set), plus the pack size as information;
+  - an optional **brand** and an optional **barcode** (EAN/UPC, unique when set);
   - a **category** (required, default *Other*), picked from the categories that aren't deleted, in walking order. *Uncategorized* is never offered: an ingredient is only put there when an admin deletes its category (REF-01). An uncategorized ingredient can be saved without picking a new category, so its other fields can be edited;
-  - a **base unit** (`g` or `ml`, required, default `g`);
-  - an optional **weight of one piece** in g (e.g. egg = 60 g);
-  - an optional **density** in g per ml;
-  - its nutrition values (NUT-02), all optional.
+  - a **base unit**: Gramm, Milliliter or Stück (`g`, `ml`, `piece`; required, default Gramm). It says what the ingredient is counted in and which units its amounts can use (REF-02);
+  - for a Stück ingredient only, an optional **piece weight** in g (e.g. egg = 60 g). It only serves the nutrition (NUT-05);
+  - no density: nothing converts between grams and millilitres (D-32);
+  - its nutrition values (NUT-02), all optional, per 100 g for Gramm and Stück, per 100 ml for Milliliter;
+  - the **pack size** ("500 g", "6 × 1,5 l") when it comes from Open Food Facts, as information only. It is never typed in (BAR-04, D-38).
+
+  Changing the base unit converts nothing: the values stay as they are, now per 100 g or 100 ml of the new base unit, and changing away from Stück clears the piece weight. When meal rows, or extra items on drafts, use the ingredient in units that would no longer fit, the app first names how many ("Eier wird in 3 Gerichten in g verwendet. Diese Mengen passen dann nicht mehr.") and asks "Trotzdem ändern" or "Abbrechen"; those amounts are then kept and flagged (MEAL-02). A change no amount depends on asks nothing.
 - **ING-03** Search covers the name and the brand and ignores case, umlauts and accents: `apfel`, `Äpfel` and `aepfel` all find "Äpfel". Everywhere an ingredient is shown, the brand follows the name ("Milch (Weihenstephan)"). When a user creates an ingredient, a "similar ingredient already exists" hint is shown; it doesn't block creating it. The **Ingredients tab**:
   - is one A–Z list in **dictionary order** by name, then brand. Dictionary order ignores case and accents and sorts ä/ö/ü as a/o/u and ß as ss, so "Äpfel" sits next to "Apfel". With a search, the best matches come first ("Milch" above "Buttermilch"), then the same order;
-  - shows in each row the name with the brand and the barcode icon, and the category and base unit in the grey line ("Milchprodukte & Eier · ml");
+  - shows in each row the name with the brand and the barcode icon, and the category and base unit in the grey line ("Milchprodukte & Eier · ml", or "Milchprodukte & Eier · Stk." for eggs counted in pieces);
   - offers several categories in its filter panel (UI-01); an ingredient matches **any** of them;
   - turns its "Neue Zutat" tile into "„Quitten“ anlegen" while a search text is present, which opens "Neue Zutat" with that name filled in.
-- **ING-04** An ingredient can be created by hand (name only is enough), from a **barcode scan**, or from an **Open Food Facts name search** (BAR-11). Scanned or searched ingredients keep their Open Food Facts origin for refreshes (BAR-05). An existing ingredient without a barcode can be given one later (a scan in the shop: "this is already in MealMate").
-- **ING-05** Only admins can **delete** an ingredient, and only while nothing references it. Otherwise admins can **merge** duplicate ingredients ("merge A into B"): every meal and list reference is moved to B, and A is deleted (A's barcode moves to B if B has none).
+- **ING-04** An ingredient is created in **"Neue Zutat"**, from the Ingredients tab or the meal form (MEAL-03), in one of three ways:
+  - by **typing**: the name alone is enough;
+  - by the **magnifier** next to the name, which searches Open Food Facts (BAR-11);
+  - by the **scan icon** next to it (BAR-01..03).
+
+  Scanned or searched ingredients keep their Open Food Facts origin for refreshes (BAR-05). An existing ingredient gets a barcode in two ways: through the similar-ingredients hint after a scan in "Neue Zutat" (BAR-03), or by scanning in its edit pop-up, which fills in only the barcode (BAR-03).
+
+  "Neue Zutat" is one compact pop-up (D-35), the same for creating from the Ingredients tab or the meal form, for the meal form's scan and for editing. Below the headline come the name with the magnifier and the scan icon (no magnifier when editing), the barcode, the brand, the category, the base unit, the piece weight (Stück only) and the nutrition values; "Speichern" sits in a footer pinned below them.
+- **ING-05** Only admins can **delete** an ingredient, and only while nothing references it. Otherwise admins can **merge** duplicate ingredients ("merge A into B"): every meal and list reference is moved to B, and A is deleted (A's barcode moves to B if B has none). A and B may have different base units. Then the confirmation names how many of A's amounts won't fit B ("N Mengen passen danach nicht zu B"). Nothing is converted: those amounts are kept and flagged (MEAL-02).
 - **ING-06** Ingredients created by a user who is later deleted stay, shown as created by "deleted user".
 
 ### 4.6 Nutrition (NUT)
 
 - **NUT-01** Tracked nutrients: **kcal, protein, carbohydrates, sugar, fat**, per 100 g or 100 ml. Adding a nutrient later must only require adding it to one registry in code, one database migration and translations (see plan).
 - **NUT-02** An ingredient's value for each nutrient is its own stored value (typed, or from Open Food Facts); a missing value is **unknown**, and unknown is never treated as 0.
-- **NUT-03** A meal's nutrition is the sum over its ingredients (amount converted to the base unit × value per 100). It is shown **per meal** and **per serving** (total ÷ `servings`).
+- **NUT-03** A meal's nutrition is the sum over its ingredients (amount in g or ml, NUT-05, × value per 100). It is shown **per meal** and **per serving** (total ÷ `servings`).
 - **NUT-04** If any ingredient value is unknown or an amount can't be converted, the total shows what can be calculated plus an **"incomplete"** marker. The marker names the missing ingredients or fields.
 - **NUT-05** Conversions needed for nutrition:
-  - `piece` uses the ingredient's piece weight;
-  - g↔ml uses its density;
-  - spoons of a g-based ingredient without density are counted as 1 g/ml and marked **"estimate"**.
+  - pieces of a Stück ingredient use its piece weight. Without one, they count as unknown, and the "incomplete" marker names the missing piece weight;
+  - nothing converts between g and ml;
+  - spoons of a Gramm ingredient count as 1 g/ml and are marked **"estimate"**;
+  - an amount that doesn't fit its ingredient (REF-02, MEAL-02) counts as unknown, and the "incomplete" marker names it.
 - **NUT-06** Nutrition is computed when requested, not stored, so ingredient changes show up everywhere immediately.
 
 ### 4.7 Barcode scanning and Open Food Facts (BAR)
 
-- **BAR-01** A **scan button** is available in the ingredient picker of the meal form. For now the Ingredients tab has none, until creating ingredients is redesigned. It uses the phone camera (EAN-13, EAN-8, UPC-A, UPC-E). The barcode can also be typed in by hand as a fallback. The ingredient form's barcode field keeps its own scan button, which only fills in the number.
-- **BAR-02** Lookup order: own database first, then OFF. A known barcode goes straight to its ingredient.
-- **BAR-03** For an unknown barcode, the app opens the **ingredient form prefilled** with the OFF product (name in the user's language if available, brand, pack size, category guess, nutrition, barcode); the user can correct anything and saves with **one tap**. If OFF doesn't know it, the same form opens with only the barcode filled in. Alternatively the barcode can be attached to an existing ingredient without a barcode.
-- **BAR-04** Values the user changed or typed are marked as **user-edited per field** and are never overwritten automatically.
+- **BAR-01** Scanning happens in two places (D-36, D-37):
+  - the **scan icon** in "Neue Zutat", wherever it opens (ING-04);
+  - the meal form's **"Barcode scannen"** (MEAL-03).
+
+  There is no scan page and no scan button on the Ingredients tab, and the barcode field has no scan button of its own. The camera starts only on a tap on one of the two, never when a pop-up opens. It reads EAN-13, EAN-8, UPC-A and UPC-E. When there is no camera or access is denied, the digits can be typed into the scanner instead.
+- **BAR-02** Lookup order: own database first, then OFF. A barcode that already belongs to an ingredient:
+  - in "Neue Zutat": fills in nothing and shows "Gehört schon zu Milch (Weihenstephan)" below the barcode field, with "öffnen", which goes to that ingredient, or, in the meal form, "nehmen", which takes it into the meal;
+  - in the meal form's scan: adds that ingredient's row at once;
+  - in an edit pop-up: is shown the same way instead of being filled in, so no barcode is used twice.
+- **BAR-03** A scan in "Neue Zutat" of a barcode no ingredient has:
+  - when OFF knows it, **fills the form** like a chosen search result (BAR-11): name in the user's language if available, brand, category guess, base unit, nutrition and barcode, with the pack size kept as information (ING-02). Fields OFF has no value for keep what the user typed. The user can correct anything and saves with **one tap**;
+  - when OFF doesn't know it, fills in only the barcode, with a one-line notice below it;
+  - when OFF is slow or can't be reached, fills in the barcode with a notice and "Nochmal versuchen".
+
+  A barcode that came from OFF stays read-only, so the values and the barcode belong to the same product. When editing, a scan only fills in the barcode (or shows BAR-02's notice).
+
+  **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has, the similar-ingredients hint (ING-03) offers to attach it to a match that has no barcode: "Milch nehmen" in the meal form gives Milch the barcode and takes Milch into the meal; "Barcode zu Milch hinzufügen" elsewhere gives Milch the barcode, closes the pop-up and opens Milch. A match that has a barcode is offered without attaching anything: another package is another ingredient (D-21). There is no separate "this is already in MealMate" step.
+- **BAR-04** Values the user changed or typed are marked as **user-edited per field** and are never overwritten automatically. The pack size is never edited by a user (ING-02), so it is never marked and always comes from OFF.
 - **BAR-05** Ingredients from OFF are refreshed when older than **30 days** (configurable):
   - in the background when the ingredient is scanned or opened;
   - by a nightly job.
 - **BAR-06** When a refresh returns new values:
-  - fields that were not user-edited update silently;
-  - for user-edited fields, the app shows a hint: "Open Food Facts has newer values: kcal 165 → 158 [Apply] [Ignore]".
+  - fields that were not user-edited, and the pack size always, update silently;
+  - for user-edited fields, the app shows a hint (never for the pack size): "Open Food Facts has newer values: kcal 165 → 158 [Apply] [Ignore]".
 - **BAR-07** When OFF is unreachable, or the product was removed there, the cached values stay and the next scheduled refresh tries again.
 - **BAR-08** OFF usage rules:
   - a descriptive User-Agent (`MealMate/<version> (<contact>)`);
@@ -203,21 +237,23 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - nutrient values must be finite and plausible, otherwise they are dropped.
 
   It is only ever rendered as text.
-- **BAR-11** **Name search:** in the ingredient form and the ingredient picker, "Search Open Food Facts" searches OFF for the typed text (products sold in Germany). Results show name, brand, pack size and kcal, and mark products already in MealMate. Choosing one fills the ingredient form like a scan (BAR-03), barcode included.
+- **BAR-11** **Name search:** the **magnifier icon** next to the name in "Neue Zutat" (read as "In Open Food Facts suchen") searches OFF for the typed name at once (products sold in Germany). With an empty name, it opens the search with an empty search field. It isn't offered when editing an ingredient, so a product can't replace an existing ingredient's values and origin. Results show name, brand, pack size and kcal, and mark products already in MealMate. Choosing one fills the form, barcode included (BAR-03).
 
 ### 4.8 Meals (MEAL)
 
 - **MEAL-01** Only the **name** is required. Everything else is optional, with no minimum number of ingredients.
 - **MEAL-02** A meal has:
   - a name;
-  - 0 or more **ingredient rows** (ingredient, optional amount, optional unit, optional note such as "to taste");
+  - 0 or more **ingredient rows** (ingredient, optional amount, optional unit, optional note such as "to taste"). A row's unit choices follow its ingredient's base unit (REF-02), and choosing another ingredient clears a unit that no longer fits. An amount that doesn't fit, entered before this rule (D-32) or left by a base-unit change (ING-02) or a merge (ING-05), is kept as it is and flagged: the meal form marks it "Einheit passt nicht zu Eier" and offers only fitting units to fix it. New amounts that don't fit are refused;
   - **instructions** (multi-line plain text);
   - **one photo**;
   - a **source link**;
   - **servings** (whole number ≥ 1, default 1);
   - 0 or 1 cuisine;
   - 0 or more tags.
-- **MEAL-03** In the meal form, a missing ingredient can be **created inline**; a name alone is enough (ING-04). The scan button is available there too.
+- **MEAL-03** In the meal form, a missing ingredient can be **created inline**: the compact "Neue Zutat" opens (ING-04), and a name alone is enough. Its "Speichern" also adds the ingredient's row. **"Barcode scannen"** stays below the ingredient picker (BAR-01):
+  - a barcode that belongs to an ingredient adds its row at once (BAR-02);
+  - an unknown one opens "Neue Zutat" filled as after a scan inside it (BAR-03).
 - **MEAL-04** **Photo:**
   - taken with the camera or picked from the library;
   - shrunk on the phone before upload (about 1600 px);
@@ -250,7 +286,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - A meal appears at most once per list; adding it again raises its servings.
 - **LIST-05** The list view shows at the **top** the meals with their servings, and **below** the aggregated lines grouped by category in category order (AGG).
 - **LIST-06** **Extra items** are added through one input with autocomplete over ingredients:
-  - picking an ingredient adds a linked extra item (optional amount and unit) that merges with the same ingredient from meals;
+  - picking an ingredient adds a linked extra item (optional amount and unit) that merges with the same ingredient from meals. Its unit follows the same rule as a meal row (MEAL-02): only units that fit the ingredient's base unit are offered and accepted, and an existing item that doesn't fit is kept and flagged;
   - anything else becomes a **free-text** item with an optional free-text amount. It goes into *Other* unless the user picks a category. The choices are the categories that aren't deleted, in walking order, without *Uncategorized* (REF-01).
   - **When an admin deletes a category**, the free-text items in it move to *Other* on drafts and keep the deleted category on lists being shopped and done lists. "Shop again" (SHOP-06) and "Copy to my lists" (VIS-03) put them into *Other*. A free-text item added offline whose category was deleted before it was sent also lands in *Other*, so sending it never fails (SYNC-04).
 - **LIST-07** In a draft, a calculated line can be **removed for this list only** (swipe), e.g. "still have rice". It moves to a collapsed "Removed" section and can be restored. Nothing is remembered for future lists (there is no pantry logic).
@@ -264,9 +300,10 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   | `shopping` | "Start shopping" pressed. Meal ingredients are frozen (LIST-11) and items are checked off. |
   | `done` | "Finish shopping" pressed. Read-only. Stays in the Lists feed, marked as done (UI-02, SHOP-05). |
 
-- **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the ingredient data needed to calculate them (unit conversions, category).
+- **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the ingredient data needed to calculate them: the base unit, the piece weight and the category. Linked extra items get the same copy.
   - From then on, edits to the meal, deletion of the meal, or wiki edits of the ingredients no longer change this list or its history.
   - A meal or linked extra item added while shopping is frozen at the moment it's added, under the ingredient's category at that moment, *Uncategorized* included.
+  - Rows frozen before the base unit Stück existed (D-32) keep the density they copied, and keep converting with it and their piece weight (AGG-03), so those lists don't change.
   - **Deleted categories** (REF-01, D-30): frozen lines and the extra items of lists being shopped and done lists keep their category when an admin deletes it. The list keeps showing that heading with its name, near the place it had in the walking order: right after the category that took over its place ([plan § 5.6](plan.md#56-units-nutrition-and-aggregation-domain)). This holds online, offline and in the export.
   - Category names are not frozen, so a rename shows here too.
 - **LIST-12** **Editing while shopping** (online only): add or remove meals, change servings, add or remove extra items. This lets a partner at home change the list while the other person is in the store.
@@ -292,9 +329,9 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **AGG-01** All amounts, conversions, aggregation, rounding and nutrition are computed in the **backend**. The frontend only formats numbers for the locale.
 - **AGG-02** A line merges all parts for the **same ingredient**: the scaled amounts from meals plus linked extra items. Free-text extra items are never merged.
 - **AGG-03** **Merging rules:**
-  - Units of the same kind always merge: g + kg → mass; ml + l + tbsp + tsp → volume; pieces.
-  - Different kinds merge only when the ingredient has the needed conversion (piece weight, density). The result is shown in the ingredient's base unit.
-  - Otherwise the parts are shown side by side on one line: "500 g + 2 Stk.".
+  - Amounts of the same kind merge: g + kg → mass; ml + l + tbsp + tsp → volume; pieces, including amounts without a unit. The result is shown in the ingredient's base unit.
+  - Nothing converts across kinds. Spoons of a Gramm ingredient, and amounts that don't fit the ingredient (MEAL-02, LIST-06), are shown side by side with the rest on one line: "500 g + 2 Stk.".
+  - Frozen meals and extra items keep the conversions they copied (LIST-11): parts frozen before D-32 still merge across kinds with their piece weight and density, so lists being shopped and done lists stay as they were (D-08).
   - Parts without an amount ("salt, to taste") appear as "Salz" with no amount, or as "+ etwas / + some" next to other parts.
 - **AGG-04** **Display rounding** (calculations keep full precision):
   - g and ml → whole numbers; from 1000 shown as kg or l with up to 2 decimals, trailing zeros removed;
@@ -645,12 +682,14 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   The tests also assert that no request leaves the app's origin (SEC-08). Browser limitations of the test setup (e.g. Secure cookies over plain HTTP in WebKit) are handled as described in plan § 9 and covered by the manual check (QA-06).
 - **QA-05** E2E tests find elements by role, accessible name or test ID, never by CSS classes, so the frontend can be restyled without breaking tests.
 - **QA-06** Before every release tag, a **manual checklist on a real iPhone** (about 15 minutes):
-  - camera scan;
+  - camera scan, in the meal form and with the scan icon inside "Neue Zutat";
   - share to Notes and invite sharing;
   - offline and lie-fi check-off and sync;
   - Home Screen install and staying logged in after a restart;
   - dark mode;
   - typing into the last field of every pop-up with a text field, and reaching its main button with the keyboard up;
+  - reaching "Speichern" in the pinned footer of "Neue Zutat" with the keyboard up;
+  - the name row of "Neue Zutat" with its two icons at the largest text size;
   - the tab bar and the update banner hiding while typing, in pop-ups and in page fields;
   - the frosted tab bar and pinned block staying readable over meal photos, in light and dark mode.
 - **QA-07** **Linting and formatting** are enforced in CI:
@@ -721,6 +760,13 @@ These are not in v2.0. The data model should not make them hard.
 | D-29 | The pinned block's text and controls grow with the iPhone text size only up to about the first accessibility size (text up to 28 px, tap targets up to 64 px); the content below it keeps growing (2026-10-02, owner decision on #41) | the block stays at the top while the content scrolls under it: text that kept growing would make it taller than the screen at the largest sizes and hide the list; iOS's own bars stop growing at the accessibility sizes too |
 | D-30 | A deleted category stays in the database, marked as deleted. Pickers and the walking order hide it, but lists being shopped and done lists keep showing it with its name, near its old place; their frozen lines are not rewritten to another category. It can't be restored, and its names can be reused (2026-10-02) | frozen lines and the extra items on those lists still point to it, so history stays true (D-08) and lines keep their heading while someone shops; rewriting them would change done lists after the fact; nothing is removed, so the foreign keys stay strict |
 | D-31 | Category names move from the translation files into the database, one name per UI language; a language without a name shows the English one. Seeded cuisines and units keep translation keys (2026-10-02) | admins can add and rename categories without a new app version, and the server can check that names are unique per language; nobody edits seeded cuisines or units, so keys are still enough for them |
+| D-32 | An ingredient is counted in one **base unit**, chosen once: Gramm, Milliliter or Stück. Its amounts use only the units that fit it (Gramm: g, kg, EL, TL; Milliliter: ml, l, EL, TL; Stück: Stk. or no unit), and nothing converts between grams, millilitres and pieces: the density is gone, and a piece weight exists only for Stück ingredients, to work out their nutrition per 100 g. Spoons of a Gramm ingredient stay a 1 g/ml estimate for nutrition (2026-10-02) | weight per piece and density only served to convert across kinds, which is hard to understand and rarely right; the amounts of one ingredient now always add up to one number on the shopping list; eggs and onions still get nutrition values through the piece weight; "1 EL Zucker" is too common to refuse |
+| D-33 | An amount that doesn't fit its ingredient's base unit (entered before D-32, or left by a base-unit change or a merge) is kept as it is and flagged, never converted: it sits beside the other amounts on the line ("500 g + 2 Stk.") and counts as unknown in the nutrition. New ones are refused. A base-unit change or a merge that leaves amounts not fitting first names how many; a change nothing depends on asks nothing. Frozen meals and extra items keep converting with the piece weight and density they copied (2026-10-02) | a guessed conversion would silently put a wrong amount on someone's list; one user's edit must not break other people's meals unannounced; the owner of a meal fixes such a row in one step; lists being shopped and done lists stay exactly as they were (D-08) |
+| D-34 | Existing ingredients move to the new base units by usage: a `g` or `ml` ingredient that meal rows and linked extra items on drafts use with an amount, and only in pieces (Stk. or no unit), becomes Stück and keeps its piece weight (a former ml ingredient's values are converted to per 100 g with its density, if it has one). Every other ingredient keeps Gramm or Milliliter and loses its density and piece weight. One transaction; no downgrade (2026-10-02) | how people use an ingredient is the only evidence of how they count it; "2 Eier" keeps its nutrition after the update; nothing else is guessed, and rows that no longer fit are flagged instead (D-33) |
+| D-35 | "Neue Zutat" becomes one compact pop-up for creating from the Ingredients tab or the meal form, editing, and the meal form's scan: no text under the headline; the name with a magnifier (Open Food Facts search) and a scan icon next to it; the barcode directly below; the brand with a placeholder instead of a hint; the category; the base unit as three choices; the piece weight only for Stück; the nutrition values in two columns; "Speichern" in a footer pinned below the scroll area. The cursor starts in the name only when it is empty (2026-10-02) | on the iPhone the old form was long, explained every field and asked for values nobody fills in; its buttons sat far from what they fill and "Speichern" at the end of a long scroll; a scan's result shows at once below the name; with a name filled in, the keyboard would cover the icons and the category |
+| D-36 | Scanning moves into "Neue Zutat": a known barcode shows "Gehört schon zu …" with "öffnen" or "nehmen" instead of jumping away; a barcode Open Food Facts knows fills the form; an unknown one fills only the barcode. While the form holds a scanned barcode that no ingredient has, the similar-ingredients hint attaches it to a match without a barcode. When editing, a scan only fills in the barcode. The separate "Das gibt es schon in MealMate" step goes (2026-10-02) | creating an ingredient happens in one place, whichever way it starts; no second copy of the form opens and nothing navigates away mid-task; the hint the user already sees is the natural place to say "this package is my Milch", so a typed-in ingredient gets its barcode without a search of its own |
+| D-37 | The scan page `/scan` is removed and its address leads to the Ingredients tab. The meal form keeps "Barcode scannen": a known barcode adds its row, an unknown one opens "Neue Zutat" filled as after a scan inside it (2026-10-02) | the pop-up's scan icon does everything the page did, and no tab linked to it any more (D-27); old links don't break; in the kitchen, scanning a package into a meal stays one step |
+| D-38 | The pack size ("500 g", "6 × 1,5 l") is information from Open Food Facts only: never typed in or edited, refreshed silently, shown in the search results and on the detail page (2026-10-02) | nobody knows or needs it when typing an ingredient; it tells products apart in the search ("Milch 1 l" or "6 × 1,5 l"); a value nobody edits needs no "newer values" question; it stays stored for the postponed pack rounding |
 
 ## 8. Owner decisions
 

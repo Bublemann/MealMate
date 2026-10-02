@@ -61,7 +61,7 @@ frontend/
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
-    │   ├── scanner/        # /scan and the meal form's scan dialog: camera, decoder, lookup flow
+    │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
@@ -308,12 +308,30 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 - **Tests**: `fake-indexeddb/auto` in the sync tests; component tests without it use the memory
   fallback.
 
+## "Neue Zutat"
+
+`IngredientForm` is one compact pop-up for creating an ingredient from the Ingredients tab or the
+meal form's picker, for the meal form's scan and for editing (ING-04, D-35). Top to bottom: the
+Open Food Facts attribution (only while Open Food Facts values are shown, BAR-09); the name with
+two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) and a scan icon
+("Barcode scannen"), each at least 44 pt and wrapping below the name at large text sizes; the
+barcode (placeholder "8, 12 oder 13 Ziffern") with a message line for scan notices; the
+similar-ingredients hint, only while there are matches; the brand (placeholder "optional, z. B.
+REWE"); the category; the base unit as three radio options, Gramm, Milliliter and Stück; the piece
+weight, only for Stück; the nutrition values in two columns. "Speichern" sits in a footer pinned
+below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels. Labels
+stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
+empty, so "„Quitten“ anlegen" opens without the keyboard covering the icons. There are no density
+and no pack size fields: the pack size is passed on from a chosen Open Food Facts proposal (D-38).
+
 ## Barcode scanner
 
-`/scan` (no tab links to it for now, BAR-01, but it is still reachable by its address) and the
-scan dialog of the meal form's ingredient picker share `features/scanner/ScanFlow.tsx`
-(BAR-01..03). Both are lazy-loaded chunks with the decoder, so the initial JavaScript stays small
-(PERF-03).
+The scan icon in "Neue Zutat" and "Barcode scannen" in the meal form's ingredient picker open the
+scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
+Ingredients tab (D-37), and the barcode field has no scan button of its own. The scanner is a
+lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
+starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up
+and the meal form, so the scanner doesn't import `IngredientForm`.
 
 - **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
   `?url`, so it is part of the build (`dist/assets/zxing_reader-*.wasm`) and served by the app;
@@ -330,17 +348,26 @@ scan dialog of the meal form's ingredient picker share `features/scanner/ScanFlo
   while in use (unplugged, taken by another app), decoding stops and "No camera available" is
   shown with a "Try again" button. Without a camera, or when access is denied, only the manual
   input is shown; it is always there (`inputMode="numeric"`).
-- **Flow:** `GET /api/ingredients/lookup` (25 s timeout; a timeout or `off.busy` shows "Open Food
-  Facts is slow"). A known barcode goes straight to its ingredient (or into the meal row).
-  Otherwise the ingredient form (`IngredientForm`, the same as for "New ingredient") opens inline,
-  filled with the Open Food Facts proposal (name, brand, category guess, base unit, nutrients,
-  package, barcode) or, when Open Food Facts doesn't know the barcode or can't be asked, with only
-  the barcode (and the notice naming it, "Try again", "Scan again"). One "Save" creates the
-  ingredient in one request, with an `off` block naming only the values the user changed
-  (`edited_fields`, BAR-04). "This is already in MealMate" instead gives the barcode to an existing
-  ingredient that has none (an ingredient with a barcode keeps it).
-- **Barcode field:** the ingredient form's "Scan" opens `BarcodeScanDialog` (lazy, same decoder),
-  which only fills the field.
+- **In "Neue Zutat":** the barcode is looked up with `GET /api/ingredients/lookup` (25 s timeout).
+  - A barcode that belongs to an ingredient fills in nothing; the barcode's message line says
+    "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that ingredient) or, in the
+    picker, "nehmen" (takes it into the meal).
+  - An Open Food Facts proposal fills the form like a chosen search result (name, brand, category
+    guess, base unit, nutrients, barcode, read-only), keeping what was typed where the proposal
+    has no value. One "Speichern" creates the ingredient in one request, with an `off` block
+    naming only the values the user changed (`edited_fields`, BAR-04) and the pack size passed
+    on from the proposal.
+  - A barcode Open Food Facts doesn't know fills in only the barcode, with a notice. A timeout or
+    `off.busy` does the same, with "Nochmal versuchen".
+  - When editing, a scan only fills in the barcode, or shows "Gehört schon zu …" when another
+    ingredient has it.
+- **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has,
+  the similar-ingredients hint offers it to each match without a barcode: in the picker "Milch
+  nehmen" links it (`POST /api/ingredients/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
+  Milch hinzufügen" links it, closes the pop-up and opens Milch. A match with a barcode is offered
+  as before, without attaching anything.
+- **Meal form:** "Barcode scannen" adds a known barcode's row at once. An unknown one opens "Neue
+  Zutat" filled as above, and its "Speichern" also adds the row.
 - **Tests:** `decoder.test.ts` decodes the PNGs in `features/scanner/fixtures/` with the real
   decoder (made by `node scripts/generate-barcode-fixtures.mjs`, deterministic); the camera and
   flow tests mock the decoder.
@@ -348,13 +375,14 @@ scan dialog of the meal form's ingredient picker share `features/scanner/ScanFlo
 ## Open Food Facts search by name
 
 People who start with no data have nothing to scan yet, so a new ingredient can also be filled
-from a search by name: "Search Open Food Facts" in the ingredient form (also when creating from
-the picker) opens `OffSearchDialog`. The search (`GET /api/ingredients/off-search?q=&page=`, 25 s
-timeout) runs only when the user taps "Search" or presses Enter, never while typing (BAR-08); the
-server rate-limits and caches it. A result shows name, brand, package size and calories per
-100 g/ml; choosing one fills the form like a scanned proposal (with its barcode, read-only). A
-product that is already in MealMate picks that ingredient in the picker and links to it elsewhere.
-"More results" loads the next page.
+from a search by name: the magnifier next to the name in "Neue Zutat" (also when creating from the
+picker, never when editing) opens `OffSearchDialog` with the typed name and searches at once, or
+with an empty search field when no name is typed (BAR-11). Further searches
+(`GET /api/ingredients/off-search?q=&page=`, 25 s timeout) run only when the user taps "Search" or
+presses Enter, never while typing (BAR-08); the server rate-limits and caches them. A result shows
+name, brand, pack size and calories per 100 g/ml; choosing one fills the form like a scanned
+proposal (with its barcode, read-only). A product that is already in MealMate picks that
+ingredient in the picker and links to it elsewhere. "More results" loads the next page.
 
 ## Tests
 
