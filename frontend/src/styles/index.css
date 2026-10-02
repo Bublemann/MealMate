@@ -21,6 +21,7 @@
   --color-tab-active: var(--tab-active);
 
   --shadow-frosted: var(--frosted-shadow);
+  --shadow-tab-active: var(--tab-active-shadow);
 
   --radius-sm: calc(var(--radius) - 0.25rem);
   --radius-md: calc(var(--radius) - 0.125rem);

@@ -37,13 +37,12 @@ export function Layout() {
       <SyncToasts />
       <UpdatePrompt />
       {/*
-       * Floats above the content, as wide as the content column (max-w-2xl less the main's px-4)
-       * and no wider, so taps beside it reach what is behind (UI-01). Its padding is in px, so the
-       * tabs keep 44 pt at the largest text sizes.
+       * Floats above the content, 16 px from the sides and no wider than the content column (the
+       * main's max-w-2xl less its px-4), so taps beside it reach what is behind (UI-01).
        */}
       <nav
         aria-label={t('nav.label')}
-        className="frosted fixed inset-x-(--tab-bar-margin) bottom-(--tab-bar-bottom) z-10 mx-auto h-(--tab-bar-height) max-w-160 rounded-full border border-frosted-border p-[4px] shadow-frosted"
+        className="frosted fixed inset-x-(--tab-bar-margin) bottom-(--tab-bar-bottom) z-10 mx-auto h-(--tab-bar-height) max-w-[calc(var(--container-2xl)-2rem)] rounded-full border border-frosted-border p-(--tab-bar-padding) shadow-frosted"
       >
         <ul className="flex h-full">
           {TABS.map(({ to, label, icon: Icon, testId }) => (
@@ -54,16 +53,15 @@ export function Layout() {
                 className={({ isActive }) =>
                   cn(
                     'flex flex-1 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset',
-                    isActive
-                      ? 'bg-tab-active text-primary'
-                      : 'text-muted-foreground hover:text-foreground',
+                    isActive ? 'bg-tab-active text-primary shadow-tab-active' : 'text-foreground',
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
                     {/* Besides the green, a lighter pill and a thicker stroke mark the active tab
-                        (A11Y-01). The name is only read out, not shown. */}
+                        (A11Y-01). The others are in the text colour, which stays readable over
+                        photos. The name is only read out, not shown. */}
                     <Icon
                       aria-hidden="true"
                       strokeWidth={isActive ? 2.5 : 2}
