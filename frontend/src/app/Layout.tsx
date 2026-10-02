@@ -22,7 +22,7 @@ const TABS: readonly Tab[] = [
 ];
 
 /**
- * App shell: the current screen above a bottom tab bar for one-handed use (UI-01), with the
+ * App shell: the current screen above a floating tab bar for one-handed use (UI-01), with the
  * sync module's banners and messages (SYNC-07).
  */
 export function Layout() {
@@ -30,43 +30,44 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))]">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(var(--tab-bar-clearance)+1.5rem)]">
         <SyncBanners />
         <Outlet />
       </main>
       <SyncToasts />
       <UpdatePrompt />
+      {/*
+       * Floats above the content, 16 px from the sides and no wider than the content column (the
+       * main's max-w-2xl less its px-4), so taps beside it reach what is behind (UI-01).
+       */}
       <nav
         aria-label={t('nav.label')}
-        className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+        className="frosted fixed inset-x-(--tab-bar-margin) bottom-(--tab-bar-bottom) z-10 mx-auto h-(--tab-bar-height) max-w-[calc(var(--container-2xl)-2rem)] rounded-full border border-frosted-border p-(--tab-bar-padding) shadow-frosted"
       >
-        <ul className="mx-auto flex max-w-2xl">
+        <ul className="flex h-full">
           {TABS.map(({ to, label, icon: Icon, testId }) => (
-            <li key={to} className="flex-1">
+            <li key={to} className="flex min-w-0 flex-1">
               <NavLink
                 to={to}
                 data-testid={testId}
                 className={({ isActive }) =>
                   cn(
-                    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset',
-                    isActive
-                      ? 'font-bold text-foreground'
-                      : 'font-medium text-muted-foreground hover:text-foreground',
+                    'flex flex-1 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset',
+                    isActive ? 'bg-tab-active text-primary shadow-tab-active' : 'text-foreground',
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
-                    {/* The filled pill marks the active tab without relying on hue (A11Y-01). */}
-                    <span
-                      className={cn(
-                        'flex h-8 w-14 items-center justify-center rounded-full transition-colors',
-                        isActive && 'bg-primary text-primary-foreground',
-                      )}
-                    >
-                      <Icon aria-hidden="true" className="size-6" />
-                    </span>
-                    {t(label)}
+                    {/* Besides the green, a lighter pill and a thicker stroke mark the active tab
+                        (A11Y-01). The others are in the text colour, which stays readable over
+                        photos. The name is only read out, not shown. */}
+                    <Icon
+                      aria-hidden="true"
+                      strokeWidth={isActive ? 2.5 : 2}
+                      className="size-(--tab-bar-icon)"
+                    />
+                    <span className="sr-only">{t(label)}</span>
                   </>
                 )}
               </NavLink>

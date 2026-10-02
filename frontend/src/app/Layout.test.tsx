@@ -31,6 +31,18 @@ describe('Layout', () => {
     expect(screen.getByTestId(testIds.tabLists)).toHaveAttribute('aria-current', 'page');
   });
 
+  it('names the icon-only tabs by their text, not by aria-labels', async () => {
+    mockApi();
+    renderApp('/lists');
+
+    expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();
+    for (const { tab, title } of TABS) {
+      const link = screen.getByTestId(tab);
+      expect(link).toHaveAccessibleName(title);
+      expect(link).not.toHaveAttribute('aria-label');
+    }
+  });
+
   it('navigates between the tabs', async () => {
     mockApi();
     const { router, user } = renderApp('/lists');
@@ -39,8 +51,10 @@ describe('Layout', () => {
       await user.click(screen.getByTestId(tab));
 
       expect(router.state.location.pathname).toBe(path);
+      // The headline is visually hidden on the tab screens but still labels them (UI-01).
       const current = screen.getByTestId(screenId);
       expect(within(current).getByRole('heading', { level: 1 })).toHaveTextContent(title);
+      expect(screen.getByRole('region', { name: title })).toBe(current);
       for (const other of TABS) {
         const link = screen.getByTestId(other.tab);
         if (other.tab === tab) expect(link).toHaveAttribute('aria-current', 'page');

@@ -50,7 +50,7 @@ export function MealsScreen() {
   }
 
   return (
-    <Screen title={t('nav.meals')} testId={testIds.screenMeals}>
+    <Screen variant="tab" title={t('nav.meals')} testId={testIds.screenMeals}>
       {!meals.data ? (
         // Until the first answer it is unknown whether there are meals at all (UI-03).
         meals.error ? (

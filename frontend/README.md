@@ -113,8 +113,12 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only;
   the tab names stay as visually hidden text (not `aria-label`s), so screen readers and tests still
   read them. The tab screens (Lists, Meals, Ingredients, Me) have a level-1 heading only screen
-  readers see; detail screens keep a visible one. While the on-screen keyboard is open, the tab bar
-  and the update prompt hide and pop-ups fit into the space above the keyboard.
+  readers see (`<Screen variant="tab">`); detail screens keep a visible one. The frosted look is
+  the `frosted` utility (`index.css`) with the `--frosted*` tokens; the bar's size and position
+  are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it leaves room
+  for the content at the largest text sizes), and `--tab-bar-clearance` keeps the content's end
+  and the update prompt above it. While the on-screen keyboard is open, the tab bar and the update
+  prompt hide and pop-ups fit into the space above the keyboard.
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
