@@ -260,7 +260,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   - it collects `missing` entries (ingredient + field or "no amount"/"not convertible") and `estimate` flags;
   - it returns the totals per meal and per serving.
 - **Aggregation** (AGG), `aggregate(list_state) -> [Line]`:
-  1. **Sources.** Each list meal contributes rows. If it is live (draft and not detached), the rows come from the current meal with the ingredients' live attributes. If it is frozen (shopping/done, or detached, LIST-15), they come from `list_meal_ingredients` with the attributes and category captured at freezing time. Aggregation knows every category, deleted ones included (D-30): live rows use the ingredient's current category, frozen rows their snapshot.
+  1. **Sources.** Each list meal contributes rows. If it is live (draft and not detached), the rows come from the current meal with the ingredients' live attributes. If it is frozen (shopping/done, or detached, LIST-15), they come from `list_meal_ingredients` with the attributes and category captured at freezing time. Aggregation knows every category, deleted ones included (D-30): live rows use the ingredient's current category, frozen rows the category captured at freezing time.
   2. Each row gets factor = `list_servings / meal_servings`, and becomes a part `(ingredient, amount × factor, unit, attrs, source)`.
   3. Linked extra items become parts of their ingredient. Once the list has left `draft`, they always use their `attrs_snapshot`. Free-text extra items become their own lines.
   4. **Grouping.** Parts are grouped by line key: `i:<ingredient_id>` for ingredients, `x:<extra_item_id>` for free text.
@@ -441,7 +441,7 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 - **Category deleted** (REF-01, D-30); refused for *Other* and *Uncategorized*:
   1. every ingredient of the category moves to *Uncategorized*. This isn't an edit of the ingredient: `updated_by` stays;
   2. free-text extra items on drafts that aren't tombstoned move to *Other*;
-  3. nothing on lists being shopped or done lists changes: their frozen lines, linked extra items' `attrs_snapshot` and free-text items keep pointing to the category, so the foreign keys stay RESTRICT;
+  3. nothing on lists being shopped or done lists changes: their frozen lines (`category_id_snapshot`) and free-text items keep pointing to the category, so those foreign keys stay RESTRICT, and linked extra items keep it in their `attrs_snapshot`;
   4. `deleted_at` is set, and the remaining `sort_order` closes the gap;
   5. a `category.delete` admin event records the names and both counts.
 
