@@ -26,11 +26,7 @@ function subscribe(listener: Listener): () => void {
 
 /** Whether the on-screen keyboard is open, while `watchViewport` runs (UI-01). */
 export function useKeyboardOpen(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => keyboardOpen,
-    () => false,
-  );
+  return useSyncExternalStore(subscribe, () => keyboardOpen);
 }
 
 /** Sets a CSS variable on <html>, unless it already has that value. */
@@ -56,8 +52,11 @@ export function watchViewport(): () => void {
     // Pinch-zoom shrinks the visible part too, but the keyboard's room is only known unzoomed
     // (scale 1, give or take rounding). Zoomed, the page is laid out as without the API (A11Y-02).
     const zoomed = Math.abs(viewport.scale - 1) > 0.01;
+    // The layout viewport, which fixed elements are placed in. The larger of the two, in case a
+    // browser reports the visible part as innerHeight (clientHeight: the page without toolbars).
+    const layout = Math.max(window.innerHeight, document.documentElement.clientHeight);
     const top = zoomed ? 0 : viewport.offsetTop;
-    const keyboard = zoomed ? 0 : window.innerHeight - viewport.height;
+    const keyboard = zoomed ? 0 : layout - viewport.height;
     setVariable('--visible-top', top);
     setVariable('--keyboard-inset', Math.max(0, keyboard - top));
     setKeyboardOpen(keyboard >= KEYBOARD_MIN_HEIGHT);

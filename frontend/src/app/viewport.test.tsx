@@ -41,8 +41,9 @@ function stubVisualViewport(): FakeVisualViewport {
 }
 
 /**
- * Where a pop-up places itself: jsdom can't apply the stylesheet, so this reads the visible area's
- * edges that its position and height are calculated from (tokens.css).
+ * The visible area a pop-up gets: the edges its position and height are calculated from
+ * (tokens.css). jsdom can't apply the stylesheet, so where the pop-up ends up is checked on a real
+ * iPhone (QA-06).
  */
 function visibleArea(element: HTMLElement) {
   const style = getComputedStyle(element);
@@ -75,16 +76,31 @@ describe('on-screen keyboard (UI-01)', () => {
     mockApi();
     renderApp('/lists');
     act(() => pwaUpdate.announce(() => Promise.resolve()));
-    const prompt = await screen.findByTestId(testIds.updatePrompt);
+    expect(await screen.findByTestId(testIds.updatePrompt)).toBeVisible();
 
     viewport.change({ height: SCREEN - KEYBOARD });
-    expect(prompt).not.toBeVisible();
+    expect(screen.queryByTestId(testIds.updatePrompt)).not.toBeInTheDocument();
 
     viewport.change({ height: SCREEN });
-    expect(prompt).toBeVisible();
+    expect(screen.getByTestId(testIds.updatePrompt)).toBeVisible();
   });
 
-  it('fits pop-ups into the visible area above the keyboard', async () => {
+  it('shows an update that arrived while typing once the keyboard closes', async () => {
+    const viewport = stubVisualViewport();
+    mockApi();
+    renderApp('/lists');
+    await screen.findByRole('navigation', { name: 'Main navigation' });
+
+    viewport.change({ height: SCREEN - KEYBOARD });
+    act(() => pwaUpdate.announce(() => Promise.resolve()));
+    expect(screen.queryByTestId(testIds.updatePrompt)).not.toBeInTheDocument();
+
+    viewport.change({ height: SCREEN });
+    // Added to the live region only now, so screen readers announce it then.
+    expect(screen.getByTestId(testIds.updatePrompt)).toBeVisible();
+  });
+
+  it('gives pop-ups the visible area above the keyboard', async () => {
     const viewport = stubVisualViewport();
     mockApi();
     const { user } = renderApp('/me');

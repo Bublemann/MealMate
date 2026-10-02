@@ -18,10 +18,10 @@ export function UpdatePrompt() {
   return (
     <div
       aria-live="polite"
-      hidden={keyboardOpen}
       className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-20 px-4"
     >
-      {available && (
+      {/* Left out rather than hidden, so one that arrives while typing is announced later. */}
+      {available && !keyboardOpen && (
         <Card
           data-testid={testIds.updatePrompt}
           className="pointer-events-auto mx-auto max-w-xl flex-row flex-wrap items-center gap-2 px-4 py-2 shadow-lg"
