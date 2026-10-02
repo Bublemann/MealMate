@@ -326,8 +326,8 @@ and no pack size fields: the pack size is passed on from a chosen Open Food Fact
 
 ## Barcode scanner
 
-The scan icon in "Neue Zutat" and "Barcode scannen" in the meal form's ingredient picker open the
-scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
+The scan icon in "Neue Zutat" and in the edit pop-up, and "Barcode scannen" in the meal form's
+ingredient picker, open the scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
 Ingredients tab (D-37), and the barcode field has no scan button of its own. The scanner is a
 lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
 starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up

@@ -251,7 +251,8 @@ Each rule has API tests, including negative cases and the switch combinations in
   - Factors to the base unit of each kind: g, ml, piece.
   - **Base units** (ING-02): `g`, `ml` and `piece`. One rule, `fits(unit, base_unit)`, decides whether an amount fits its ingredient (REF-02): `g` takes `g`, `kg`, `tbsp`, `tsp`; `ml` takes `ml`, `l`, `tbsp`, `tsp`; `piece` takes `piece` or no unit. A row without an amount fits every base unit, and an amount without a unit counts as pieces. The same rule serves meal-row validation, linked extra items, the fits flags in responses (§ 7), and the counts for base-unit changes and merges (§ 6).
   - `convert(amount, unit, to_base, attrs)` uses the ingredient attributes (`base_unit`, `piece_weight_g`, `density_g_per_ml`), which are either live or from a frozen snapshot. It returns the value plus an `estimate` flag (NUT-05), or "not convertible".
-    - It converts across kinds only for a `g` or `ml` base unit with a piece weight or density. Live attributes never have one: they carry no density, and a piece weight only for a `piece` ingredient, where it serves the nutrition only. So nothing converts across kinds for live ingredients, nor for rows frozen since D-32 (D-32, D-33).
+    - For lines, it converts across kinds only for a `g` or `ml` base unit with a piece weight or density. Live attributes never have one: they carry no density, and a piece weight only for a `piece` ingredient. So nothing converts across kinds on the lines of live ingredients, nor of rows frozen since D-32 (D-32, D-33).
+    - Nutrition does two conversions on top (NUT-05, see "Meal nutrition"): a `piece` ingredient's pieces to grams with its piece weight, and spoons of a `g` ingredient as 1 g/ml, flagged as an estimate.
     - Snapshots taken before D-32 keep the piece weight and density they copied and keep converting with them, so their lists being shopped and done lists don't change (LIST-11, D-08).
 - **Nutrients registry:**
   - `NUTRIENTS = [kcal, protein, carbs, sugar, fat]`, each with its OFF field names (`energy-kcal_100g`, `proteins_100g`, `carbohydrates_100g`, `sugars_100g`, `fat_100g`), a plausible range and a display unit.
@@ -516,7 +517,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - checked lines go into the "In the cart" section;
   - there are badges "+300 g" / "changed" for lines that need more (LIST-12);
   - polling every 5 s while visible, with `If-None-Match`.
-- **Scanner:** a lazily loaded chunk without a route of its own (PERF-03). The scan icon in "Neue Zutat" and the meal form's "Barcode scannen" open it over the pop-up or the form, and only then is it loaded and the camera started (BAR-01). It hands the barcode back; the lookup (`GET /ingredients/lookup`) and what follows (BAR-02/03) belong to the pop-up and the meal form, so the scanner doesn't import the ingredient form.
+- **Scanner:** a lazily loaded chunk without a route of its own (PERF-03). The scan icon in "Neue Zutat" and in the edit pop-up, and the meal form's "Barcode scannen", open it over the pop-up or the form, and only then is it loaded and the camera started (BAR-01). It hands the barcode back; the lookup (`GET /ingredients/lookup`) and what follows (BAR-02/03) belong to the pop-up and the meal form, so the scanner doesn't import the ingredient form.
   - The wasm binary is bundled and served by the app (`import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'` plus `prepareZXingModule({overrides: {locateFile}})`), never loaded from a CDN (SEC-08).
   - It uses the camera through `getUserMedia({video: {facingMode: "environment"}})`.
   - It shows a manual barcode input when the camera is unavailable or denied.
