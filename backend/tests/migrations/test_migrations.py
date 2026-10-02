@@ -28,7 +28,7 @@ from app.db.migrations import (
     upgrade_database,
 )
 from app.db.session import Database
-from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS
+from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.main import create_app
 from app.models import Base
 from app.services import demo
@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0008"
+HEAD = "0009"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +59,7 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients; 0008 only adds columns.
+# 0007 merges the products into the ingredients; 0008 and 0009 only add columns.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -130,6 +130,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0008")
     assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0009")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0008")
+    assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0007")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0006")
@@ -157,8 +161,12 @@ def test_reference_data_is_seeded(config: Config, database_path: Path) -> None:
     downgrade and upgrade seeds them again."""
     for _ in range(2):
         command.upgrade(config, "head")
-        categories = query(database_path, "SELECT key, sort_order FROM categories ORDER BY 2")
-        assert categories == [(key, position) for position, key in enumerate(CATEGORY_KEYS)]
+        categories = query(
+            database_path, "SELECT key, name_de, name_en, sort_order FROM categories ORDER BY 4"
+        )
+        assert categories == [
+            (*category, position) for position, category in enumerate(SEEDED_CATEGORIES)
+        ]
         cuisines = query(database_path, "SELECT key, name, name_norm FROM cuisines ORDER BY id")
         assert cuisines == [(key, None, key) for key in CUISINE_KEYS]
         ids = query(database_path, "SELECT id FROM categories UNION ALL SELECT id FROM cuisines")
@@ -497,6 +505,83 @@ def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> Non
     assert meals_and_ingredients(path) == before
     assert row_counts(path) == counts
     assert_clean(path)
+
+
+# --- 0009 -----------------------------------------------------------------------------------
+
+# Requirements appendix A, as the translations `category.<key>` had them.
+SEEDED_CATEGORY_NAMES = {
+    "fruit_vegetables": ("Obst & Gemüse", "Fruit & vegetables"),
+    "bread_bakery": ("Brot & Backwaren", "Bread & bakery"),
+    "dairy_eggs": ("Milchprodukte & Eier", "Dairy & eggs"),
+    "cheese": ("Käse", "Cheese"),
+    "meat_fish": ("Fleisch & Fisch", "Meat & fish"),
+    "sausage_deli": ("Wurst & Aufschnitt", "Sausage & deli"),
+    "plant_based": ("Tofu & pflanzliche Alternativen", "Tofu & plant-based"),
+    "pasta_rice_grains": ("Nudeln, Reis & Getreide", "Pasta, rice & grains"),
+    "canned_jars": ("Konserven & Gläser", "Canned & jarred"),
+    "sauces_spices_oils": ("Soßen, Gewürze & Öle", "Sauces, spices & oils"),
+    "baking": ("Backzutaten", "Baking"),
+    "breakfast_spreads": ("Frühstück & Aufstriche", "Breakfast & spreads"),
+    "snacks_sweets": ("Süßes & Snacks", "Snacks & sweets"),
+    "frozen": ("Tiefkühl", "Frozen"),
+    "drinks": ("Getränke", "Drinks"),
+    "household_hygiene": ("Drogerie & Haushalt", "Household & toiletries"),
+    "other": ("Sonstiges", "Other"),
+}
+
+
+def test_0009_names_every_category_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0008 → 0009 (D-31): every seeded category gets its German and English
+    name of appendix A, each with its normalised form; the key stays, no row and no other value
+    changes, and the downgrade drops the names again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0008")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = rows_of(path, "categories")
+
+    command.upgrade(config, "0009")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    after = rows_of(path, "categories")
+    without_names = [
+        {column: value for column, value in row.items() if not column.startswith("name_")}
+        for row in after
+    ]
+    assert without_names == before
+    assert {row["key"]: (row["name_de"], row["name_en"]) for row in after} == (
+        SEEDED_CATEGORY_NAMES
+    )
+    norms = {row["key"]: (row["name_de_norm"], row["name_en_norm"]) for row in after}
+    assert norms["fruit_vegetables"] == ("obst & gemuese", "fruit & vegetables")
+    assert norms["sauces_spices_oils"] == ("sossen, gewuerze & oele", "sauces, spices & oils")
+    assert norms["frozen"] == ("tiefkuehl", "frozen")
+
+    command.downgrade(config, "0008")
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+@pytest.mark.parametrize("language", ["de", "en"])
+def test_category_names_are_unique_per_language(
+    config: Config, database_path: Path, language: str
+) -> None:
+    """REF-01: no two categories share a name in one language (compared normalised)."""
+    command.upgrade(config, "0009")
+    column = f"name_{language}_norm"
+    with (
+        closing(sqlite3.connect(database_path)) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
+    ):
+        connection.execute(
+            f"UPDATE categories SET {column} = "  # noqa: S608
+            f"(SELECT {column} FROM categories WHERE key = 'other') WHERE key = 'cheese'"
+        )
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

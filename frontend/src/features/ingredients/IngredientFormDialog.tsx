@@ -383,7 +383,7 @@ export function IngredientForm({
           >
             {categories.data?.map((category) => (
               <NativeSelectOption key={category.id} value={category.id}>
-                {categoryName(t, category.key)}
+                {categoryName(category, language)}
               </NativeSelectOption>
             ))}
           </NativeSelect>

@@ -11,6 +11,7 @@ import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
 import { useCategories, type Category } from '@/features/reference/api';
 import { categoryName } from '@/features/reference/labels';
+import { useLanguage } from '@/i18n';
 import { useTabMemory } from '@/lib/tabMemory';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
@@ -28,6 +29,7 @@ import { IngredientName } from './IngredientName';
  */
 export function IngredientsScreen() {
   const { t } = useTranslation();
+  const language = useLanguage();
   const navigate = useNavigate();
   // The search and the categories stay when the user opens an ingredient and comes back (UI-01).
   const [{ search, categoryIds }, remember] = useTabMemory('ingredients');
@@ -61,7 +63,7 @@ export function IngredientsScreen() {
                 label: t('ingredients.filter.categories'),
                 options: categories.data?.map((category) => ({
                   id: category.id,
-                  label: categoryName(t, category.key),
+                  label: categoryName(category, language),
                 })),
                 checked: categoryIds,
                 active: categoryIds.length > 0,
@@ -122,7 +124,7 @@ function IngredientList({
   categories: Category[];
 }) {
   const { t } = useTranslation();
-  const categoryKeys = new Map(categories.map((category) => [category.id, category.key]));
+  const categoriesById = new Map(categories.map((category) => [category.id, category]));
 
   return (
     <ul
@@ -139,7 +141,7 @@ function IngredientList({
           >
             <span className="flex min-w-0 flex-1 flex-col">
               <IngredientName ingredient={ingredient} />
-              <IngredientCategoryUnit ingredient={ingredient} categoryKeys={categoryKeys} />
+              <IngredientCategoryUnit ingredient={ingredient} categories={categoriesById} />
             </span>
             <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
           </Link>

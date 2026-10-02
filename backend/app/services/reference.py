@@ -13,7 +13,7 @@ from app.models import Category as CategoryRow
 from app.models import Cuisine as CuisineRow
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction
-from app.schemas.reference import Category, Cuisine, Tag, UnitInfo
+from app.schemas.reference import Category, CategoryNames, Cuisine, Tag, UnitInfo
 from app.services import events
 from app.services.principal import Principal
 
@@ -22,7 +22,12 @@ _CUISINE_POSITION = {key: position for position, key in enumerate(CUISINE_KEYS)}
 
 
 def category(row: CategoryRow) -> Category:
-    return Category(id=row.id, key=row.key, sort_order=row.sort_order)
+    return Category(
+        id=row.id,
+        key=row.key,
+        names=CategoryNames(de=row.name_de, en=row.name_en),
+        sort_order=row.sort_order,
+    )
 
 
 def cuisine(row: CuisineRow) -> Cuisine:

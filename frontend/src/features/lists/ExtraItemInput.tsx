@@ -13,6 +13,7 @@ import { ingredientLabel } from '@/features/ingredients/label';
 import { useCategories, type Unit } from '@/features/reference/api';
 import { useConnected, useQueueOp } from '@/features/sync/context';
 import { categoryName } from '@/features/reference/labels';
+import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { parseAmount } from '@/i18n/format';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -47,6 +48,7 @@ export function ExtraItemInput({
   shopping?: boolean;
 }) {
   const { t } = useTranslation();
+  const language = useLanguage();
   const inputId = useId();
   const hintId = `${inputId}-hint`;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,13 +67,14 @@ export function ExtraItemInput({
   const queue = useQueueOp(listId);
   const connected = useConnected();
   const categories = useCategories();
-  const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
+  const categoriesById = new Map(categories.data?.map((category) => [category.id, category]));
   const debounced = useDebouncedValue(text.trim());
   const searching = debounced !== '' && !picked && connected;
   const suggestions = useIngredients(debounced, { enabled: searching });
   const matches = searching ? (suggestions.data ?? []).slice(0, MAX_SUGGESTIONS) : [];
   const typed = text.trim();
   const pickedLabel = picked ? ingredientLabel(picked.name, picked.brand) : null;
+  const pickedCategory = picked ? categoriesById.get(picked.category_id) : undefined;
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, add.error);
   const shownFields = picked ? ['amount', 'unit'] : ['text', 'amount_text', 'category_id'];
@@ -142,12 +145,11 @@ export function ExtraItemInput({
     // A second Enter while the first is being stored must not add the item twice.
     if (queuing.current) return;
     queuing.current = true;
-    const categoryKey = categoryKeys.get(chosenCategory);
     const payload = {
       extra_id: uuidv7(),
       text: typed,
       ...(amountText.trim() ? { amount_text: amountText.trim() } : {}),
-      ...(categoryKey ? { category_key: categoryKey } : {}),
+      ...(chosenCategory ? { category_id: chosenCategory } : {}),
     };
     try {
       if (await queue(shoppingOps.addExtra(payload, stampOp()))) clear();
@@ -190,9 +192,11 @@ export function ExtraItemInput({
               >
                 {pickedLabel}
               </RemovableChip>
-              <span className="text-sm text-muted-foreground">
-                {categoryName(t, categoryKeys.get(picked.category_id) ?? 'other')}
-              </span>
+              {pickedCategory && (
+                <span className="text-sm text-muted-foreground">
+                  {categoryName(pickedCategory, language)}
+                </span>
+              )}
             </div>
           ) : (
             <>
@@ -232,7 +236,7 @@ export function ExtraItemInput({
                   className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
                 >
                   <IngredientName ingredient={ingredient} />
-                  <IngredientCategoryUnit ingredient={ingredient} categoryKeys={categoryKeys} />
+                  <IngredientCategoryUnit ingredient={ingredient} categories={categoriesById} />
                 </button>
               </li>
             ))}

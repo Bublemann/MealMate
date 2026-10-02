@@ -6,6 +6,7 @@ import { LoadError } from '@/components/LoadError';
 import { Button } from '@/components/ui/button';
 import { useCategories, type Category } from '@/features/reference/api';
 import { categoryName } from '@/features/reference/labels';
+import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
 import { AdminScreen } from './AdminScreen';
 import { useReorderCategories } from './api';
@@ -29,6 +30,7 @@ export function AdminCategoriesScreen() {
 
 function CategoryOrder({ categories }: { categories: Category[] }) {
   const { t } = useTranslation();
+  const language = useLanguage();
   const reorder = useReorderCategories();
   const [order, setOrder] = useState(() => categories.map(({ id }) => id));
   const [saved, setSaved] = useState(false);
@@ -80,7 +82,7 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
         {order.map((id, index) => {
           const category = byId.get(id);
           if (!category) return null;
-          const name = categoryName(t, category.key);
+          const name = categoryName(category, language);
           return (
             <li key={id} className="flex items-center gap-2 py-1 pr-2 pl-4">
               <span

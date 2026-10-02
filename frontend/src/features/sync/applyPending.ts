@@ -1,5 +1,5 @@
 import { ingredientLabel } from '@/features/ingredients/label';
-import type { ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
+import type { Category, ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
 
 /** A line as the view shows it; `pending`: changed by an op that wasn't sent yet (SYNC-07). */
 export type PendingLine = ListLine & { pending?: boolean };
@@ -16,8 +16,8 @@ export interface PendingList extends Omit<ListDetail, 'lines' | 'extra_items'> {
 export interface PendingOptions {
   /** Who made the ops: a waiting check-off shows my initial (SHOP-01). */
   me: UserRef;
-  /** Category ids by key, for a free-text item added with its category's key. */
-  categoryIds: ReadonlyMap<string, string>;
+  /** The categories a free-text item can be added to. */
+  categories: readonly Pick<Category, 'id' | 'key'>[];
   /** The time now (ms since the epoch), for the clamp of taps from the future; default: now. */
   now?: number;
 }
@@ -57,7 +57,7 @@ function tapTime(at: string, now: number): { at: string; ms: number } {
 export function applyPending(
   detail: ListDetail,
   ops: readonly Op[],
-  { me, categoryIds, now = Date.now() }: PendingOptions,
+  { me, categories, now = Date.now() }: PendingOptions,
 ): PendingList {
   const list: PendingList = { ...detail, pendingFinish: false };
   /** The op id of the waiting check-off each line shows, for the tie-break. */
@@ -68,7 +68,7 @@ export function applyPending(
         checkLine(list, op, tapTime(op.at, now), me, shownOps);
         break;
       case 'extra.add':
-        addExtra(list, op.payload, op.at, me, categoryIds);
+        addExtra(list, op.payload, op.at, me, categories);
         break;
       case 'extra.update':
         updateExtra(list, op.payload);
@@ -128,15 +128,30 @@ function checkLine(
 type ExtraAdd = Extract<Op, { type: 'extra.add' }>['payload'];
 type ExtraUpdate = Extract<Op, { type: 'extra.update' }>['payload'];
 
+/**
+ * The category of a free-text item as the server picks it (LIST-06): by id, or by key in an op an
+ * app version before D-31 queued; *Other* for none or an unknown one.
+ */
+function extraCategoryId(
+  { category_id, category_key }: ExtraAdd,
+  categories: readonly Pick<Category, 'id' | 'key'>[],
+): string {
+  let named: Pick<Category, 'id' | 'key'> | undefined;
+  if (category_id) named = categories.find((category) => category.id === category_id);
+  else if (category_key) named = categories.find((category) => category.key === category_key);
+  return (named ?? categories.find((category) => category.key === 'other'))?.id ?? '';
+}
+
 function addExtra(
   list: PendingList,
-  { extra_id: id, text, amount_text, category_key }: ExtraAdd,
+  payload: ExtraAdd,
   at: string,
   me: UserRef,
-  categoryIds: ReadonlyMap<string, string>,
+  categories: readonly Pick<Category, 'id' | 'key'>[],
 ) {
+  const { extra_id: id, text, amount_text } = payload;
   if (list.status === 'done' || list.extra_items.some((item) => item.id === id)) return;
-  const categoryId = categoryIds.get(category_key ?? 'other') ?? categoryIds.get('other') ?? '';
+  const categoryId = extraCategoryId(payload, categories);
   const amountText = amount_text ?? null;
   list.extra_items = [
     ...list.extra_items,

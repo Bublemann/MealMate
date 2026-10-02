@@ -345,7 +345,7 @@ describe('shopping view (SHOP-01)', () => {
           op_id: A_UUID_V7,
           at: AN_ISO_TIME,
           type: 'extra.add',
-          payload: { extra_id: A_UUID_V7, text: 'Servietten', category_key: 'other' },
+          payload: { extra_id: A_UUID_V7, text: 'Servietten', category_id: 'cat-other' },
         },
       ],
     });

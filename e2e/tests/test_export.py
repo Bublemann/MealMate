@@ -89,13 +89,13 @@ def test_export_list_as_text(
         "sauces_spices_oils": [line(salt["name"])],
         "other": [line(candles, "2 Packungen")],
     }
-    categories = [c["key"] for c in api.categories(anna) if c["key"] in lines]
+    categories = [c for c in api.categories(anna) if c["key"] in lines]
     created = datetime.fromisoformat(detail["created_at"]).astimezone(TIME_ZONE)
     reminder = text(f"reminder.{detail['reminder_seed'] % 10 + 1}", language)
     expected = [
         f"{draft['name']} ({created.strftime(DATE_FORMATS[language])})",
         text("lists.export.meal", language, servings="4", name=tart["name"]),
-        *("\n".join([text(f"category.{key}", language), *lines[key]]) for key in categories),
+        *("\n".join([c["names"][language], *lines[c["key"]]]) for c in categories),
         reminder,
     ]
     assert shared == "\n\n".join(expected)

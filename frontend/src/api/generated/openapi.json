@@ -297,7 +297,7 @@
         "type": "object"
       },
       "Category": {
-        "description": "Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).",
+        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other*.",
         "properties": {
           "id": {
             "title": "Id",
@@ -307,6 +307,9 @@
             "title": "Key",
             "type": "string"
           },
+          "names": {
+            "$ref": "#/components/schemas/CategoryNames"
+          },
           "sort_order": {
             "title": "Sort Order",
             "type": "integer"
@@ -315,9 +318,29 @@
         "required": [
           "id",
           "key",
+          "names",
           "sort_order"
         ],
         "title": "Category",
+        "type": "object"
+      },
+      "CategoryNames": {
+        "description": "A category's name in each UI language (I18N-04, D-31).",
+        "properties": {
+          "de": {
+            "title": "De",
+            "type": "string"
+          },
+          "en": {
+            "title": "En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "de",
+          "en"
+        ],
+        "title": "CategoryNames",
         "type": "object"
       },
       "CategoryOrder": {
@@ -777,7 +800,7 @@
         "type": "object"
       },
       "ExtraAddPayload": {
-        "description": "Add a free-text extra item with the client's id (UUID). `category_key` is a category's\n`key`; left out or unknown: *Other*.",
+        "description": "Add a free-text extra item with the client's id (UUID), in the category `category_id`;\nleft out or unknown: *Other*. App versions from before D-31 send the category's `key` as\n`category_key` instead, which is still accepted.",
         "properties": {
           "amount_text": {
             "anyOf": [
@@ -790,6 +813,19 @@
               }
             ],
             "title": "Amount Text"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
           },
           "category_key": {
             "anyOf": [

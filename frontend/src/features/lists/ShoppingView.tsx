@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import type { Category } from '@/features/reference/api';
 import type { PendingLine, PendingList } from '@/features/sync/applyPending';
 import { useQueueOp } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
@@ -28,7 +29,7 @@ import { Reminder } from './Reminder';
 interface ShoppingViewProps {
   /** The list with the user's waiting changes applied. */
   list: PendingList;
-  categoryKeys: ReadonlyMap<string, string>;
+  categories: readonly Category[];
   onAddMeals: () => void;
 }
 
@@ -48,8 +49,9 @@ const CART = Symbol('cart');
  * there is none), and an unchecked one keeps it in its new place; a polite live region says where
  * the line went.
  */
-export function ShoppingView({ list, categoryKeys, onAddMeals }: ShoppingViewProps) {
+export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps) {
   const { t } = useTranslation();
+  const language = useLanguage();
   const headingId = useId();
   const queue = useQueueOp(list.id);
   const [finishOpen, setFinishOpen] = useState(false);
@@ -63,7 +65,7 @@ export function ShoppingView({ list, categoryKeys, onAddMeals }: ShoppingViewPro
   const shown = list.lines.filter((line) => !line.hidden);
   const open = shown.filter((line) => !line.checked);
   const inCart = shown.filter((line) => line.checked);
-  const groups = groupByCategory(open, categoryKeys, t);
+  const groups = groupByCategory(open, categories, language);
   // In the order they are shown, across the categories.
   const openInOrder = groups.flatMap((group) => group.lines);
   const editing = list.extra_items.find((item) => item.id === editingId) ?? null;

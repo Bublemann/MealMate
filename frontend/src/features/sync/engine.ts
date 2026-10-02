@@ -11,7 +11,7 @@ import { ApiError, isApiError } from '@/api/errors';
 import type { AuthSession, SessionEnd } from '@/features/auth/session';
 import { detailKey, FEED_KEY, type FeedData } from '@/features/lists/keys';
 import { listDisplayName } from '@/features/lists/format';
-import { CATEGORIES_KEY } from '@/features/reference/api';
+import { CATEGORIES_KEY, categoriesQuery } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import { errorMessage } from '@/i18n/errors';
 import { flushEntries, type FlushResult, type SendOutcome } from './flush';
@@ -89,6 +89,11 @@ function isDetailKey(key: readonly unknown[]): key is ReturnType<typeof detailKe
 
 function isCategoriesKey(key: readonly unknown[]): boolean {
   return key.length === CATEGORIES_KEY.length && key.every((part, i) => part === CATEGORIES_KEY[i]);
+}
+
+/** App versions before D-31 stored the categories without their names, which headings need. */
+function hasNames(stored: StoredCategories): boolean {
+  return stored.categories.every((category) => typeof category.names === 'object');
 }
 
 /** The request would go out with a session that isn't the ops' user's any more (SYNC-10). */
@@ -383,7 +388,7 @@ export class SyncEngine {
       // Stale at once: the copy lacks read-only and done lists, so the feed is asked for anyway.
       cache.setQueryData(FEED_KEY, feed, { updatedAt: 0 });
     }
-    if (categories && cache.getQueryData(CATEGORIES_KEY) === undefined) {
+    if (categories && hasNames(categories) && cache.getQueryData(CATEGORIES_KEY) === undefined) {
       cache.setQueryData(CATEGORIES_KEY, categories.categories, {
         updatedAt: categories.storedAt,
       });
@@ -769,6 +774,9 @@ export class SyncEngine {
   private async refreshOnce(): Promise<void> {
     const userId = this.userId;
     if (!userId) return;
+    // They head the stored lists offline (LIST-11), so they are kept as current as the copy;
+    // loaded only once they are stale, and kept for offline use by `remember`.
+    void this.queryClient.prefetchQuery(categoriesQuery);
     const storage = await this.storage();
     const etagKey = userMetaKey('etag', userId);
     // An empty copy (e.g. deleted while someone else was signed in) is loaded in full: a stored

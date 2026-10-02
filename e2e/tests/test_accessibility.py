@@ -228,7 +228,8 @@ def test_no_serious_violations(
     if screen.path == "/ingredients/filter":
         page.get_by_test_id(TEST_IDS["filterButton"]).click()
         panel = page.get_by_test_id(TEST_IDS["filterPanel"])
-        panel.get_by_role("checkbox", name=text("category.other"), exact=True).check()
+        other = request.getfixturevalue("api").category_name(account, "other")
+        panel.get_by_role("checkbox", name=other, exact=True).check()
         # Counted on the button, behind the open panel.
         expect(page.get_by_test_id(TEST_IDS["filterButton"])).to_have_text("1")
     if screen.path == "/scan/new":

@@ -1616,15 +1616,27 @@ export interface components {
         };
         /**
          * Category
-         * @description Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).
+         * @description Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking
+         *     order). `key` names a seeded category, e.g. `other` for *Other*.
          */
         Category: {
             /** Id */
             id: string;
             /** Key */
             key: string;
+            names: components["schemas"]["CategoryNames"];
             /** Sort Order */
             sort_order: number;
+        };
+        /**
+         * CategoryNames
+         * @description A category's name in each UI language (I18N-04, D-31).
+         */
+        CategoryNames: {
+            /** De */
+            de: string;
+            /** En */
+            en: string;
         };
         /**
          * CategoryOrder
@@ -1791,12 +1803,15 @@ export interface components {
         };
         /**
          * ExtraAddPayload
-         * @description Add a free-text extra item with the client's id (UUID). `category_key` is a category's
-         *     `key`; left out or unknown: *Other*.
+         * @description Add a free-text extra item with the client's id (UUID), in the category `category_id`;
+         *     left out or unknown: *Other*. App versions from before D-31 send the category's `key` as
+         *     `category_key` instead, which is still accepted.
          */
         ExtraAddPayload: {
             /** Amount Text */
             amount_text?: string | null;
+            /** Category Id */
+            category_id?: string | null;
             /** Category Key */
             category_key?: string | null;
             /** Extra Id */
