@@ -67,14 +67,15 @@ export function ExtraItemInput({
   const queue = useQueueOp(listId);
   const connected = useConnected();
   const categories = useCategories();
-  const categoriesById = new Map(categories.data?.map((category) => [category.id, category]));
   const debounced = useDebouncedValue(text.trim());
   const searching = debounced !== '' && !picked && connected;
   const suggestions = useIngredients(debounced, { enabled: searching });
   const matches = searching ? (suggestions.data ?? []).slice(0, MAX_SUGGESTIONS) : [];
   const typed = text.trim();
   const pickedLabel = picked ? ingredientLabel(picked.name, picked.brand) : null;
-  const pickedCategory = picked ? categoriesById.get(picked.category_id) : undefined;
+  const pickedCategory = picked
+    ? categories.data?.find(({ id }) => id === picked.category_id)
+    : undefined;
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, add.error);
   const shownFields = picked ? ['amount', 'unit'] : ['text', 'amount_text', 'category_id'];
@@ -236,7 +237,10 @@ export function ExtraItemInput({
                   className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
                 >
                   <IngredientName ingredient={ingredient} />
-                  <IngredientCategoryUnit ingredient={ingredient} categories={categoriesById} />
+                  <IngredientCategoryUnit
+                    ingredient={ingredient}
+                    categories={categories.data ?? []}
+                  />
                 </button>
               </li>
             ))}

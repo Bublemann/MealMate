@@ -1,5 +1,9 @@
 import { ingredientLabel } from '@/features/ingredients/label';
+import { otherCategoryId } from '@/features/lists/format';
 import type { Category, ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
+
+/** What a free-text item's category is found by. */
+type CategoryRef = Pick<Category, 'id' | 'key'>;
 
 /** A line as the view shows it; `pending`: changed by an op that wasn't sent yet (SYNC-07). */
 export type PendingLine = ListLine & { pending?: boolean };
@@ -17,7 +21,7 @@ export interface PendingOptions {
   /** Who made the ops: a waiting check-off shows my initial (SHOP-01). */
   me: UserRef;
   /** The categories a free-text item can be added to. */
-  categories: readonly Pick<Category, 'id' | 'key'>[];
+  categories: readonly CategoryRef[];
   /** The time now (ms since the epoch), for the clamp of taps from the future; default: now. */
   now?: number;
 }
@@ -134,12 +138,12 @@ type ExtraUpdate = Extract<Op, { type: 'extra.update' }>['payload'];
  */
 function extraCategoryId(
   { category_id, category_key }: ExtraAdd,
-  categories: readonly Pick<Category, 'id' | 'key'>[],
+  categories: readonly CategoryRef[],
 ): string {
-  let named: Pick<Category, 'id' | 'key'> | undefined;
+  let named: CategoryRef | undefined;
   if (category_id) named = categories.find((category) => category.id === category_id);
   else if (category_key) named = categories.find((category) => category.key === category_key);
-  return (named ?? categories.find((category) => category.key === 'other'))?.id ?? '';
+  return named?.id ?? otherCategoryId(categories);
 }
 
 function addExtra(
@@ -147,7 +151,7 @@ function addExtra(
   payload: ExtraAdd,
   at: string,
   me: UserRef,
-  categories: readonly Pick<Category, 'id' | 'key'>[],
+  categories: readonly CategoryRef[],
 ) {
   const { extra_id: id, text, amount_text } = payload;
   if (list.status === 'done' || list.extra_items.some((item) => item.id === id)) return;

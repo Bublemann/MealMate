@@ -201,7 +201,7 @@ describe('IngredientsScreen', () => {
     const { authSession, user } = renderIngredients({
       'GET /api/categories': CATEGORIES.map((category) =>
         category.key === 'dairy_eggs'
-          ? { ...category, names: { de: 'Kühlregal', en: 'Fridge aisle' } }
+          ? { ...category, names: { de: 'Kühlregal', en: 'Chilled goods' } }
           : category,
       ),
     });

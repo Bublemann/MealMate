@@ -123,13 +123,13 @@ describe('ListScreen', () => {
   it('names the headings as the server names the categories, in the UI language (I18N-04)', async () => {
     const renamed = CATEGORIES.map((category) =>
       category.key === 'dairy_eggs'
-        ? { ...category, names: { de: 'Kühlregal', en: 'Fridge aisle' } }
+        ? { ...category, names: { de: 'Kühlregal', en: 'Chilled goods' } }
         : category,
     );
     const { authSession } = renderList({ 'GET /api/categories': renamed });
 
     const lines = await screen.findByTestId(testIds.listLines);
-    expect(within(lines).getByRole('list', { name: 'Fridge aisle' })).toHaveTextContent('Milch');
+    expect(within(lines).getByRole('list', { name: 'Chilled goods' })).toHaveTextContent('Milch');
 
     authSession.setUser({ ...authSession.getState().user!, language: 'de' });
     const { changeLanguage } = await import('@/i18n');
@@ -143,7 +143,7 @@ describe('ListScreen', () => {
   it('shows the English name of a category that has none in the UI language (I18N-01)', async () => {
     // As for a UI language added later, before admins fill in its names.
     const untranslated = CATEGORIES.map((category) =>
-      category.key === 'dairy_eggs' ? { ...category, names: { en: 'Fridge aisle' } } : category,
+      category.key === 'dairy_eggs' ? { ...category, names: { en: 'Chilled goods' } } : category,
     ) as typeof CATEGORIES;
     const { authSession } = renderList({ 'GET /api/categories': untranslated });
     authSession.setUser({ ...authSession.getState().user!, language: 'de' });
@@ -151,7 +151,7 @@ describe('ListScreen', () => {
     await changeLanguage('de');
 
     const lines = await screen.findByTestId(testIds.listLines);
-    expect(within(lines).getByRole('list', { name: 'Fridge aisle' })).toHaveTextContent('Milch');
+    expect(within(lines).getByRole('list', { name: 'Chilled goods' })).toHaveTextContent('Milch');
   });
 
   it('changes servings with − and + at once and saves each step (LIST-04)', async () => {

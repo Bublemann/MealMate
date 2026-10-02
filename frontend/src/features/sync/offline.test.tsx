@@ -141,7 +141,7 @@ describe('lists from the local copy (SYNC-09)', () => {
     const storage = await storeCopy(listDetail());
     const renamed = CATEGORIES.map((category) => ({
       ...category,
-      names: { ...category.names, en: `${category.names.en} aisle` },
+      names: { ...category.names, en: `${category.names.en} (renamed)` },
     }));
     mockApi({
       ...LIST_ROUTES,

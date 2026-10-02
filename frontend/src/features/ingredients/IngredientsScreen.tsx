@@ -124,7 +124,6 @@ function IngredientList({
   categories: Category[];
 }) {
   const { t } = useTranslation();
-  const categoriesById = new Map(categories.map((category) => [category.id, category]));
 
   return (
     <ul
@@ -141,7 +140,7 @@ function IngredientList({
           >
             <span className="flex min-w-0 flex-1 flex-col">
               <IngredientName ingredient={ingredient} />
-              <IngredientCategoryUnit ingredient={ingredient} categories={categoriesById} />
+              <IngredientCategoryUnit ingredient={ingredient} categories={categories} />
             </span>
             <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
           </Link>
