@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { categoryName } from '@/features/reference/labels';
 import type { Language } from '@/i18n';
 import { userLabel } from '@/i18n/users';
 import type { AdminEvent } from './api';
@@ -38,18 +39,21 @@ export function describeEvent(t: TFunction, event: AdminEvent, language: Languag
     const value = event.details[key];
     return typeof value === 'string' ? value : '';
   };
+  // A category is named in the UI language, as everywhere else (D-31).
+  const category = (prefix = '') =>
+    categoryName(
+      { names: { de: text(`${prefix}name_de`), en: text(`${prefix}name_en`) } },
+      language,
+    );
   if (event.action === 'category.create') {
-    // A category's names, one per language (D-31): the UI language's, else the English one.
-    const name = text(`name_${language}`) || text('name_en');
-    return t(ACTION_KEYS[event.action], { actor, name });
+    return t(ACTION_KEYS[event.action], { actor, name: category() });
   }
   if (event.action === 'category.rename') {
-    // A rename may change one name only: shown in the UI language if that one changed.
-    const changed =
-      [language, 'en', 'de'].find((code) => text(`old_name_${code}`) !== text(`name_${code}`)) ??
-      language;
-    const from = text(`old_name_${changed}`);
-    return t(ACTION_KEYS[event.action], { actor, from, to: text(`name_${changed}`) });
+    const from = category('old_');
+    const to = category();
+    // Only its name in another language changed.
+    if (from === to) return t('admin.events.action.categoryRenameOther', { actor, name: to });
+    return t(ACTION_KEYS[event.action], { actor, from, to });
   }
   return t(ACTION_KEYS[event.action], {
     actor,

@@ -652,7 +652,14 @@ describe('offline (SYNC-03)', () => {
 
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
     const form = screen.getByRole('form', { name: 'Add an item' });
-    await user.selectOptions(within(form).getByLabelText('Category'), 'cat-cheese-counter');
+    const category = within(form).getByLabelText('Category');
+    // In walking order, where it is last.
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other', 'Cheese counter']);
+    await user.selectOptions(category, 'cat-cheese-counter');
     await user.click(within(form).getByRole('button', { name: 'Add Feta' }));
 
     const lines = screen.getByTestId(testIds.shoppingLines);

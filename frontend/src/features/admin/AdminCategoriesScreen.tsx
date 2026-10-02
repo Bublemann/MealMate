@@ -39,7 +39,7 @@ type Direction = 'up' | 'down';
 /** Whose dialog is open: a category's, or "New category"'s. */
 type Editing = Category | 'new' | null;
 
-// The server's limit (REF-01).
+/** The longest category name the server takes (REF-01). */
 const NAME_MAX_LENGTH = 40;
 const NAME_PATHS: ReadonlySet<string> = new Set(['names.de', 'names.en']);
 
@@ -68,9 +68,6 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
   // The order on screen while moves wait for the server; null shows the saved one.
   const [moved, setMoved] = useState<string[] | null>(null);
   const order = useMemo(() => moved ?? categories.map(({ id }) => id), [moved, categories]);
-  // One order is sent at a time. Taps made meanwhile wait, and only the last order is sent.
-  const sending = useRef(false);
-  const waiting = useRef<string[] | null>(null);
   // After a move the focus follows the moved category (its button may have become disabled).
   const [focus, setFocus] = useState<{ id: string; direction: Direction } | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
@@ -91,36 +88,17 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
     document.getElementById(`${baseId}-${focus.id}-${direction}`)?.focus();
   }, [focus, orderKey, baseId]);
 
-  // The screen shows the cached order again only after React Query has passed the saved order
-  // on to it, so the old order never flashes up in between.
-  const showSaved = () => notifyManager.schedule(() => setMoved(null));
-
-  function send(ids: string[]) {
-    sending.current = true;
-    reorder.mutate(ids, {
-      onSuccess: () => {
-        if (!waiting.current) showSaved();
-      },
-      // Back to the order the server saved last; taps that waited are dropped.
-      onError: () => {
-        waiting.current = null;
-        showSaved();
-      },
-      onSettled: () => {
-        sending.current = false;
-        const next = waiting.current;
-        waiting.current = null;
-        if (next) send(next);
-      },
-    });
-  }
-
   function open(event: MouseEvent<HTMLElement>, category: Category | 'new') {
     opener.current = event.currentTarget;
     setEditing(category);
   }
 
-  /** Each tap saves the new order at once (ADM-01). */
+  /**
+   * Each tap saves the new order at once (ADM-01); the saves go out one after another (`api.ts`).
+   * Only the latest tap's callback runs: once its save is in, or has failed, the screen shows the
+   * cached order again, which is then the server's. That happens only after React Query has
+   * passed the cache on to the screen, so an older order never flashes up in between.
+   */
   function move(id: string, direction: Direction) {
     const index = order.indexOf(id);
     const other = direction === 'up' ? index - 1 : index + 1;
@@ -129,8 +107,7 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
     [next[index], next[other]] = [next[other] as string, next[index] as string];
     setMoved(next);
     setFocus({ id, direction });
-    if (sending.current) waiting.current = next;
-    else send(next);
+    reorder.mutate(next, { onSettled: () => notifyManager.schedule(() => setMoved(null)) });
   }
 
   return (
@@ -208,10 +185,6 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
   );
 }
 
-/**
- * A category's German and English name, for a new category or one being renamed (REF-01). It
- * fits into the space above the keyboard and scrolls at the largest text sizes (UI-01).
- */
 interface CategoryDialogProps {
   editing: Editing;
   onClose: () => void;
@@ -219,6 +192,10 @@ interface CategoryDialogProps {
   onClosed: () => void;
 }
 
+/**
+ * A category's German and English name, for a new category or one being renamed (REF-01). It
+ * fits into the space above the keyboard and scrolls at the largest text sizes (UI-01).
+ */
 function CategoryDialog({ editing, onClose, onClosed }: CategoryDialogProps) {
   const { t } = useTranslation();
 

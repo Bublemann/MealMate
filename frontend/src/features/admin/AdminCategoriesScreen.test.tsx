@@ -17,6 +17,17 @@ async function reordered(request: Request) {
   }));
 }
 
+/** A PUT of the order that waits for the test to answer it; `answers` holds one per request. */
+function heldOrders() {
+  const answers: (() => void)[] = [];
+  const route = async (request: Request) => {
+    const body = await reordered(request);
+    await new Promise<void>((resolve) => answers.push(resolve));
+    return body;
+  };
+  return { answers, route };
+}
+
 function renderCategories(routes: Record<string, unknown> = {}) {
   const fetchMock = mockApi({
     'GET /api/me': TEST_ADMIN,
@@ -97,37 +108,59 @@ describe('AdminCategoriesScreen', () => {
     expect(screen.getByRole('button', { name: 'Move Dairy & eggs up' })).toHaveFocus();
   });
 
-  it('keeps every tap made while the server answers, and sends them after it', async () => {
-    const answers: (() => void)[] = [];
-    const { fetchMock, user } = renderCategories({
-      'PUT /api/admin/categories/order': async (request: Request) => {
-        const body = await reordered(request);
-        await new Promise<void>((resolve) => answers.push(resolve));
-        return body;
-      },
-    });
+  it('sends the taps one after another, each when the one before is answered', async () => {
+    const { answers, route } = heldOrders();
+    const { fetchMock, user } = renderCategories({ 'PUT /api/admin/categories/order': route });
     await screen.findByTestId(testIds.adminCategoryList);
 
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
     expect(names()).toEqual(['1Other', '2Fruit & vegetables', '3Dairy & eggs', '4Cheese']);
-    // One request at a time: the later taps wait for the first answer.
     await waitFor(() => expect(answers).toHaveLength(1));
     expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(1);
 
+    for (const sent of [2, 3]) {
+      act(() => answers.shift()?.());
+      await waitFor(() => expect(answers).toHaveLength(1));
+      expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(sent);
+      // The screen keeps the latest order while the earlier ones are answered.
+      expect(names()).toEqual(['1Other', '2Fruit & vegetables', '3Dairy & eggs', '4Cheese']);
+    }
     act(() => answers.shift()?.());
+
+    expect(await sentOrders(fetchMock)).toEqual([
+      ['cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-other', 'cat-cheese'],
+      ['cat-fruit_vegetables', 'cat-other', 'cat-dairy_eggs', 'cat-cheese'],
+      ['cat-other', 'cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-cheese'],
+    ]);
+    await waitFor(() =>
+      expect(names()).toEqual(['1Other', '2Fruit & vegetables', '3Dairy & eggs', '4Cheese']),
+    );
+  });
+
+  it('still saves a tap made just before leaving the screen (ADM-01)', async () => {
+    const { answers, route } = heldOrders();
+    const { fetchMock, user } = renderCategories({ 'PUT /api/admin/categories/order': route });
+    await screen.findByTestId(testIds.adminCategoryList);
+
+    await user.click(screen.getByRole('button', { name: 'Move Other up' }));
+    await user.click(screen.getByRole('button', { name: 'Move Other up' }));
+    await user.click(screen.getByRole('link', { name: 'Back to Me' }));
+    expect(await screen.findByTestId(testIds.screenMe)).toBeVisible();
     await waitFor(() => expect(answers).toHaveLength(1));
+
     act(() => answers.shift()?.());
 
     await waitFor(() =>
       expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(2),
     );
-    expect(await sentOrders(fetchMock)).toEqual([
-      ['cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-other', 'cat-cheese'],
-      ['cat-other', 'cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-cheese'],
+    expect((await sentOrders(fetchMock))[1]).toEqual([
+      'cat-fruit_vegetables',
+      'cat-other',
+      'cat-dairy_eggs',
+      'cat-cheese',
     ]);
-    expect(names()).toEqual(['1Other', '2Fruit & vegetables', '3Dairy & eggs', '4Cheese']);
   });
 
   it('puts the order back and says why when saving fails', async () => {

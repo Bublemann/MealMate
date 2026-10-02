@@ -162,6 +162,7 @@
   "admin.events.action.categoryReorder": "{{actor}} hat die Reihenfolge der Kategorien geändert",
   "admin.events.action.categoryCreate": "{{actor}} hat die Kategorie {{name}} angelegt",
   "admin.events.action.categoryRename": "{{actor}} hat die Kategorie {{from}} in {{to}} umbenannt",
+  "admin.events.action.categoryRenameOther": "{{actor}} hat den Namen der Kategorie {{name}} in einer anderen Sprache geändert",
   "admin.events.action.ingredientMerge": "{{actor}} hat die Zutat {{from}} mit {{into}} zusammengeführt",
   "admin.events.action.ingredientDelete": "{{actor}} hat die Zutat {{name}} gelöscht",
   "admin.events.action.systemBackupRequest": "{{actor}} hat ein Backup gestartet",

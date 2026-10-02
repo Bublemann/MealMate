@@ -162,6 +162,7 @@
   "admin.events.action.categoryReorder": "{{actor}} changed the order of the categories",
   "admin.events.action.categoryCreate": "{{actor}} added the category {{name}}",
   "admin.events.action.categoryRename": "{{actor}} renamed the category {{from}} to {{to}}",
+  "admin.events.action.categoryRenameOther": "{{actor}} changed the name of the category {{name}} in another language",
   "admin.events.action.ingredientMerge": "{{actor}} merged the ingredient {{from}} into {{into}}",
   "admin.events.action.ingredientDelete": "{{actor}} deleted the ingredient {{name}}",
   "admin.events.action.systemBackupRequest": "{{actor}} started a backup",

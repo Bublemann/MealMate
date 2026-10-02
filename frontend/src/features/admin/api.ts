@@ -16,6 +16,10 @@ const USERS_KEY = ['admin', 'users'] as const;
 const INVITES_KEY = ['admin', 'invites'] as const;
 const EVENTS_KEY = ['admin', 'events'] as const;
 const SYSTEM_KEY = ['admin', 'system'] as const;
+// Changes to the categories are sent one after another, in the order they were made, also after
+// the screen has closed (ADM-01): no change overtakes another, so a new category never arrives
+// before an order that doesn't name it yet.
+const CATEGORIES_SCOPE = { id: 'admin-categories' };
 
 export function useAdminUsers() {
   return useQuery({
@@ -118,9 +122,12 @@ export function useAdminEvents() {
 export function useReorderCategories() {
   const queryClient = useQueryClient();
   return useMutation({
+    scope: CATEGORIES_SCOPE,
     mutationFn: (categoryIds: string[]) =>
       unwrap(api.PUT('/api/admin/categories/order', { body: { category_ids: categoryIds } })),
-    onSuccess: (categories) => {
+    onSuccess: async (categories) => {
+      // A reload after an earlier failure must not overwrite this newer order.
+      await queryClient.cancelQueries({ queryKey: CATEGORIES_KEY });
       queryClient.setQueryData(CATEGORIES_KEY, categories);
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
     },
@@ -135,6 +142,7 @@ export function useReorderCategories() {
 export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
+    scope: CATEGORIES_SCOPE,
     mutationFn: (names: CategoryNames) =>
       unwrap(api.POST('/api/admin/categories', { body: { names } })),
     onSuccess: (category) => {
@@ -151,6 +159,7 @@ export function useCreateCategory() {
 export function useRenameCategory(categoryId: string) {
   const queryClient = useQueryClient();
   return useMutation({
+    scope: CATEGORIES_SCOPE,
     mutationFn: (names: CategoryNames) =>
       unwrap(
         api.PATCH('/api/admin/categories/{category_id}', {

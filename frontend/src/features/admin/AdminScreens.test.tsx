@@ -415,8 +415,8 @@ describe('AdminEventsScreen', () => {
     await waitFor(() =>
       expect(descriptions()).toEqual([
         'Admin hat die Kategorie Käse in Käsetheke umbenannt',
-        // The German name stayed, so the change shows in English.
-        'Admin hat die Kategorie Drinks in Beverages umbenannt',
+        // The German name stayed.
+        'Admin hat den Namen der Kategorie Getränke in einer anderen Sprache geändert',
         'Admin hat die Kategorie Backstube angelegt',
       ]),
     );
