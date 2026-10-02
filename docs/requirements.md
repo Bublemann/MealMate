@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-28) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -96,8 +96,8 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - A user can have at most one outgoing pending request.
   - Accepting cancels all other pending requests that involve either user.
 - **CPL-02** Each shopping list has a **"shared with partner"** switch. It defaults to **on** for new lists while the owner is in a couple, and only the owner can change it.
-  - **On:** the partner sees the list in their Lists home and history and can edit it (CPL-03).
-  - **Off:** the partner still **sees** the list, read-only, for as long as the couple exists (regardless of VIS-02), but cannot edit it and does not get it in their Lists home or history.
+  - **On:** it is a *shared list*. The partner can edit it (CPL-03) and gets it in their local copy (SYNC-02). In both partners' Lists feeds it shows the shared icon (UI-02).
+  - **Off:** the partner still **sees** the list, read-only, for as long as the couple exists (regardless of VIS-02), but cannot edit it. In their Lists feed it is a read-only list with a lock, in every state (UI-02).
 - **CPL-03** On a shared list, the partner can do everything the owner can except delete it and change the share switch:
   - rename it;
   - add or remove meals and change servings;
@@ -119,7 +119,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - Meals and lists belong to their owner.
 - **VIS-02** Each user has two privacy switches, **meals public** and **lists public**. Both default to on (public). When a switch is off:
   - other users cannot see those meals or lists. The partner still sees all of the user's meals and lists (CPL-02, CPL-04);
-  - the user's name disappears from the matching **user filter chips**: the meal chips (MEAL-10) for the meals switch, the list chips on *Others' lists* (UI-02) for the lists switch.
+  - the user disappears from the matching **user filter** of everyone except their partner: from the user filter on Meals (MEAL-10) for the meals switch, from the user filter on Lists (UI-02) for the lists switch.
 - **VIS-03** Other people's public lists are **read-only**. They offer **"Copy to my lists"**, which creates a new draft with the same servings and extra items, and the same meals **as far as the copier can see them** (VIS-06).
 - **VIS-04** Other people's visible meals can be viewed, added to one's own lists (LIST-03) and copied (MEAL-08). Only the owner can edit or delete a meal.
 - **VIS-05** Photos are only served to users who are allowed to see the meal.
@@ -154,7 +154,11 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - an optional **weight of one piece** in g (e.g. egg = 60 g);
   - an optional **density** in g per ml;
   - its nutrition values (NUT-02), all optional.
-- **ING-03** Search covers the name and the brand and ignores case, umlauts and accents: `apfel`, `Äpfel` and `aepfel` all find "Äpfel". Everywhere an ingredient is shown, the brand follows the name ("Milch (Weihenstephan)"). When a user creates an ingredient, a "similar ingredient already exists" hint is shown; it doesn't block creating it.
+- **ING-03** Search covers the name and the brand and ignores case, umlauts and accents: `apfel`, `Äpfel` and `aepfel` all find "Äpfel". Everywhere an ingredient is shown, the brand follows the name ("Milch (Weihenstephan)"). When a user creates an ingredient, a "similar ingredient already exists" hint is shown; it doesn't block creating it. The **Ingredients tab**:
+  - is one A–Z list in **dictionary order** by name, then brand. Dictionary order ignores case and accents and sorts ä/ö/ü as a/o/u and ß as ss, so "Äpfel" sits next to "Apfel". With a search, the best matches come first ("Milch" above "Buttermilch"), then the same order;
+  - shows in each row the name with the brand and the barcode icon, and the category and base unit in the grey line ("Milchprodukte & Eier · ml");
+  - offers several categories in its filter panel (UI-01); an ingredient matches **any** of them;
+  - turns its "Neue Zutat" tile into "„Quitten“ anlegen" while a search text is present, which opens "Neue Zutat" with that name filled in.
 - **ING-04** An ingredient can be created by hand (name only is enough), from a **barcode scan**, or from an **Open Food Facts name search** (BAR-11). Scanned or searched ingredients keep their Open Food Facts origin for refreshes (BAR-05). An existing ingredient without a barcode can be given one later (a scan in the shop: "this is already in MealMate").
 - **ING-05** Only admins can **delete** an ingredient, and only while nothing references it. Otherwise admins can **merge** duplicate ingredients ("merge A into B"): every meal and list reference is moved to B, and A is deleted (A's barcode moves to B if B has none).
 - **ING-06** Ingredients created by a user who is later deleted stay, shown as created by "deleted user".
@@ -173,7 +177,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 ### 4.7 Barcode scanning and Open Food Facts (BAR)
 
-- **BAR-01** A **scan button** is available in the ingredient picker of the meal form and on the Ingredients tab. It uses the phone camera (EAN-13, EAN-8, UPC-A, UPC-E). The barcode can also be typed in by hand as a fallback.
+- **BAR-01** A **scan button** is available in the ingredient picker of the meal form. For now that is its only place: the Ingredients tab has none until creating ingredients is redesigned. It uses the phone camera (EAN-13, EAN-8, UPC-A, UPC-E). The barcode can also be typed in by hand as a fallback. The ingredient form's barcode field keeps its own scan button, which only fills in the number.
 - **BAR-02** Lookup order: own database first, then OFF. A known barcode goes straight to its ingredient.
 - **BAR-03** For an unknown barcode, the app opens the **ingredient form prefilled** with the OFF product (name in the user's language if available, brand, pack size, category guess, nutrition, barcode); the user can correct anything and saves with **one tap**. If OFF doesn't know it, the same form opens with only the barcode filled in. Alternatively the barcode can be attached to an existing ingredient without a barcode.
 - **BAR-04** Values the user changed or typed are marked as **user-edited per field** and are never overwritten automatically.
@@ -209,7 +213,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - **servings** (whole number ≥ 1, default 1);
   - 0 or 1 cuisine;
   - 0 or more tags.
-- **MEAL-03** In the meal form, a missing ingredient can be **created inline** with just a name and category. The scan button is available there too.
+- **MEAL-03** In the meal form, a missing ingredient can be **created inline**; a name alone is enough (ING-04). The scan button is available there too.
 - **MEAL-04** **Photo:**
   - taken with the camera or picked from the library;
   - shrunk on the phone before upload (about 1600 px);
@@ -219,8 +223,14 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **MEAL-06** Meal detail shows the photo, nutrition per meal and per serving (NUT-03/04), ingredients, instructions, source button, owner, and "based on *X* by *Y*" for copies.
 - **MEAL-07** Only the **owner** can edit or delete a meal. Deleting a meal never silently changes other lists: wherever it is used on a list that isn't frozen yet, it is **detached** (LIST-15).
 - **MEAL-08** **Copy** (one tap, on any meal visible to the user) creates an independent meal owned by the copier. It includes ingredients, amounts, instructions, cuisine, tags, source link and its own copy of the photo, and it remembers the original ("based on X by Y"). The reference disappears when the original is deleted or becomes invisible.
-- **MEAL-09** The meal list supports search (name, tag, cuisine), filters by cuisine and tag, and sorts A–Z. The list-building picker shows "recently used" meals first.
-- **MEAL-10** **User filter chips** show one chip per user whose meals are visible, including oneself. Each chip toggles that user's meals on or off. The chip selection is saved per user, on the server, so it follows them across devices.
+- **MEAL-09** The **Meals tab**:
+  - has the search field (name, tag, cuisine) at the top of its pinned block (UI-01). While a search text is present, the "Neues Gericht" tile reads "„Lasagne“ anlegen" and opens the meal form with that name filled in;
+  - shows in each row the owner's initial in a round marker, as on Lists (UI-02), and the cuisine in the grey line;
+  - offers in its filter panel several cuisines (a meal matches **any** of them), several tags (a meal must have **all** of them) and the user filter (MEAL-10);
+  - sorts meals A–Z in dictionary order (ING-03), so "Äpfel im Schlafrock" sits next to "Apfelstrudel".
+
+  The list-building picker ("Gerichte hinzufügen") shows "recently used" meals first. It offers every meal the user can see, whatever the user filter on Meals says, shows the owner's initial marker in its rows, and opens without the keyboard.
+- **MEAL-10** The **user filter** on Meals is a group of checkboxes in the filter panel, one per user whose meals are visible, including oneself and the partner. Each checkbox shows or hides that user's meals. It is saved per user on the server, separately from the user filter on Lists (UI-02), so it follows them across devices. The meal picker ignores it (MEAL-09).
 
 ### 4.9 Shopping lists: building (LIST)
 
@@ -247,7 +257,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   |---|---|
   | `draft` | Being planned. Lines are computed live from the current meals (except detached ones, LIST-15). |
   | `shopping` | "Start shopping" pressed. Meal ingredients are frozen (LIST-11) and items are checked off. |
-  | `done` | "Finish shopping" pressed. Read-only. Appears in history. |
+  | `done` | "Finish shopping" pressed. Read-only. Stays in the Lists feed, marked as done (UI-02, SHOP-05). |
 
 - **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the ingredient data needed to calculate them (unit conversions, category).
   - From then on, edits to the meal, deletion of the meal, or wiki edits of the ingredients no longer change this list or its history.
@@ -293,9 +303,10 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **SHOP-02** Extra items can be added quickly while shopping.
 - **SHOP-03** The list shows a sync indicator (SYNC-07).
 - **SHOP-04** **Finish:** "Finish shopping" opens a dialog with the reminder (LIST-14), "*N* items not checked", and two buttons: *Finish* and *Keep shopping*. When the last item is checked, the app offers to finish.
-- **SHOP-05** **History:** done lists, grouped by the week they were **finished**, with the subtitle "bought on 26.09.".
-  - Checked lines count as bought; unchecked lines are shown greyed.
-  - Shared lists appear in both partners' history while the couple exists (see CPL-05 for what happens after).
+- **SHOP-05** **Done lists** stay in the Lists feed (UI-02), in their place by creation date, with a check and "gekauft am 26.09." (the day they were **finished**). There is no separate history page.
+  - In an opened done list, checked lines count as bought; unchecked lines are shown greyed.
+  - One's own done lists and shared ones have no lock. A shared done list shows like that in both partners' feeds while the couple exists (see CPL-05 for what happens after).
+  - Done lists of other users, and the partner's unshared ones, are read-only lists with a lock.
 - **SHOP-06** A done list offers two actions:
   - **"Shop again"** creates a new draft with the same meals (current versions), servings and extra items, all unchecked. Meals that are deleted or not visible are left out with a notice (VIS-06).
   - **"Reopen"** moves it back to *shopping*, in case *Finish* was tapped by mistake.
@@ -391,13 +402,35 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 ### 4.16 App shell and navigation (UI)
 
-- **UI-01** Mobile-first layout for iPhone, one-handed use. There is a bottom tab bar with **Lists**, **Meals**, **Ingredients** and **Me**.
-- **UI-02** The app opens on **Lists**:
-  - a list in *shopping* state appears at the top as a large "Continue shopping" card;
-  - then drafts, most recently edited first, including the partner's shared lists;
-  - then an entry to **History**;
-  - then **Others' lists**: other users' public lists, read-only, with their own user filter chips (saved separately from the meal chips).
-- **UI-03** Every empty screen shows one friendly sentence and one main action, e.g. "No meals yet – create your first meal".
+- **UI-01** Mobile-first layout for iPhone, one-handed use.
+  - **Tab bar:** a floating, frosted bar at the bottom with **Lists**, **Meals**, **Ingredients** and **Me**, as icons only; screen readers still read the tab names. It keeps a gap at both sides and above the bottom edge, also on iPhones without a home indicator, and taps beside it reach the content. The active tab gets a subtle lighter pill and a green icon with a thicker stroke, so colour is not the only signal. The bar stays visible while scrolling and its icons stay readable over meal photos, in light and dark mode.
+  - **Tab screens** (Lists, Meals, Ingredients, Me) show no visible headline; each still has a heading that screen readers announce. Detail screens (a shopping list, a meal, an ingredient, the admin pages) keep their visible titles.
+  - **Pinned block:** Lists, Meals and Ingredients have a frosted block at the top that stays put while scrolling. It holds a search field (not on Lists), a filter button and a green "Neu…" tile shaped like a row of that tab ("Neue Liste", "Neues Gericht", "Neue Zutat"). It appears at once and looks the same while the tab loads, when it is empty and when it is filled.
+  - **Filter panel:** the filter button opens a panel that slides up from the bottom (without animation under Reduce Motion) with groups of checkboxes. Each change applies immediately. "Zurücksetzen" resets every group and "Fertig" closes the panel. The button shows how many groups are not at their default, also in its accessible name.
+  - **Kept per tab:** the search text and the cuisine, tag and category choices stay until the app is closed, so opening an entry and coming back keeps them. The user filter and the state filter are saved on the server (UI-02, MEAL-10).
+  - **Keyboard:** while the on-screen keyboard is open, in a pop-up or on a page, the tab bar and the update banner hide. Pop-ups fit into the space above the keyboard, so their last field and main button can be reached. Pinch-zoom is not mistaken for an open keyboard (A11Y-02).
+  - At the largest iPhone text size, the pinned block, the filter panel and the tab bar show all their text and controls without clipping or overlap, wrapping where needed.
+- **UI-02** The app opens on **Lists**: one **feed** of every shopping list the user can see (their own, their partner's shared and unshared ones, other users' public ones), in every state (draft, shopping, done). It is sorted by creation date, newest first, so a list never moves when it is edited, shopped or finished. The newest 30 come first, more as the user scrolls down.
+  - **Row:** the list's name and date (LIST-02), "3 Gerichte · 5 Artikel", and a round marker with the owner's initial, also on one's own lists; screen readers read the marker as the owner's name. Icons, and texts after the counts, mark the kind of list; a row can have several (a shared list being shopped shows both icons):
+
+    | List | Icon | Text |
+    |---|---|---|
+    | Own shared list | shared | "Geteilt mit <partner>" |
+    | Partner's shared list | shared | "von <owner>, mit dir geteilt" |
+    | Read-only list (no edit rights, in any state; CPL-02, VIS-03) | lock | "von <owner>" |
+    | Being shopped | cart | |
+    | Done list (SHOP-05) | check | "gekauft am <date>" |
+
+    One's own unshared lists add no "von" text.
+  - **Pinned block** (UI-01): the green "Neue Liste" tile, which creates a draft and opens the meal picker (LIST-01), and the filter button. There is no search field.
+  - **Filter panel:** the **user filter**, one checkbox per user whose lists are visible, including oneself and the partner; unticking a user hides all of that user's lists, shared ones too. The **state filter**: "Entwurf", "Einkauf" and "Erledigt", all ticked by default. Both are saved per user on the server, so they follow the user across devices.
+  - The first-login hints and the offline and sync notices sit below the pinned block and scroll away with the feed.
+  - **Local copy:** until the feed's first page arrives, also online, the tab shows the local copy (SYNC-02, SYNC-09), sorted like the feed. **Offline** it shows only the local copy, whatever the saved user filter and state filter say, and disables the filter button and the "Neue Liste" tile. Read-only and done lists need a connection.
+  - Opening a done list shows it read-only, with "Shop again" and "Reopen" (SHOP-06). An old link to the former history page leads to the Lists tab.
+- **UI-03** Lists, Meals and Ingredients show their pinned block (UI-01) at once. Below it:
+  - while the tab's first load runs, the loading placeholder;
+  - on an empty tab, one short line ("Noch keine Listen" / "Noch keine Gerichte" / "Noch keine Zutaten"), with no icon, heading or button: the "Neu…" tile is the action;
+  - when the search or the filters hide everything, "Keine Treffer" with a "Filter zurücksetzen" button, which clears the search text and resets every filter group.
 - **UI-04** Dark mode follows the iPhone setting automatically.
 - **UI-05** Branding: name **MealMate**, a green accent colour (from the v1 `#4CAF50` family), and a simple basket icon for the Home Screen and favicon. All colours are defined once as design tokens so the design can be re-skinned easily.
 - **UI-06** The *Me* tab shows the version and a **"Source code (AGPL-3.0)"** link to the exact source revision being run (LIC-02). It also contains the OFF attribution (BAR-09).
@@ -604,12 +637,15 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
   The tests also assert that no request leaves the app's origin (SEC-08). Browser limitations of the test setup (e.g. Secure cookies over plain HTTP in WebKit) are handled as described in plan § 9 and covered by the manual check (QA-06).
 - **QA-05** E2E tests find elements by role, accessible name or test ID, never by CSS classes, so the frontend can be restyled without breaking tests.
-- **QA-06** Before every release tag, a **manual checklist on a real iPhone** (about 10 minutes):
+- **QA-06** Before every release tag, a **manual checklist on a real iPhone** (about 15 minutes):
   - camera scan;
   - share to Notes and invite sharing;
   - offline and lie-fi check-off and sync;
   - Home Screen install and staying logged in after a restart;
-  - dark mode.
+  - dark mode;
+  - typing into the last field of every pop-up with a text field, and reaching its main button with the keyboard up;
+  - the tab bar and the update banner hiding while typing, in pop-ups and in page fields;
+  - the frosted tab bar and pinned block staying readable over meal photos, in light and dark mode.
 - **QA-07** **Linting and formatting** are enforced in CI:
   - backend: ruff (lint and format) and mypy;
   - frontend: eslint, prettier and `tsc`.
@@ -665,9 +701,16 @@ These are not in v2.0. The data model should not make them hard.
 | D-16 | Open Food Facts API v3, ≤ 10 requests/min | v2 was deprecated in June 2026; OFF allows 15 product reads/min per IP |
 | D-17 | When a user is deleted, the lists they share with a partner move to the partner | accepted default D15 in the planning conversation; the partner keeps their shopping history |
 | D-18 | A meal that is deleted or becomes invisible is *detached* from lists (frozen copy + notice), never silently removed (owner decision Q-3) | consistent with "lists keep a snapshot"; no surprises in someone else's plan; no private data leaks |
-| D-19 | "Shared with partner" switch: on = partner sees and edits; off = partner keeps read-only access while the couple exists (owner decision Q-2) | privacy never hides anything from the partner; the switch only controls editing and the partner's Lists home |
+| D-19 | "Shared with partner" switch: on = partner sees and edits; off = partner keeps read-only access while the couple exists (owner decision Q-2) | privacy never hides anything from the partner; the switch only controls editing and whether the partner gets the list in their offline copy |
 | D-20 | Retention 7 daily / 4 weekly / 6 monthly (≈ 17), on Pi and Mac alike | as agreed by the owner; 6-hourly backups only reduce data loss on the current day |
 | D-21 | One kind of ingredient: typed by hand or from OFF (barcode or name search), with an optional brand and barcode and its own values; different brands are different ingredients and separate shopping-list lines (2026-09-28, replaces D-06) | a new user has nothing to scan; creating from a scan or search must be one step; exact values per product instead of averages |
+| D-22 | Tab screens without a visible headline (screen readers still get one). Lists, Meals and Ingredients share a frosted pinned block: a search field (not on Lists), a filter button and a green, row-shaped "Neu…" tile that offers "„<text>“ anlegen" while a search text is present. An empty tab shows one short line; a search or filter that hides everything shows "Keine Treffer" with "Filter zurücksetzen" (2026-10-02) | the tab bar already says where you are; search, filter and "Neu…" sit in the same place on every tab, one tap away; fewer sentences to read on a phone |
+| D-23 | Filters move into a panel that slides up from the bottom: checkbox groups that apply immediately, "Zurücksetzen" for every group and "Fertig"; the filter button counts the groups not at their default. Several cuisines match as "any", several tags as "all", several categories as "any". The search text and the cuisine, tag and category choices are kept in memory per tab until the app closes (2026-10-02) | uncluttered tabs with filters in thumb reach; the count explains missing entries; two cuisines should widen the list, two tags narrow it; nothing to clean up in URLs or browser storage |
+| D-24 | One Lists feed replaces the "Continue shopping" card, the drafts, the history page with its weekly groups and "Others' lists": every list the user can see, in every state, including done lists of every visible owner; newest created first (ties by id), 30 per page. The old history address leads to the Lists tab (2026-10-02) | one place to look; an order that never changes after a list is created, unlike "most recently edited"; the tab opens fast even after a year of shopping |
+| D-25 | List rows mark the owner with an initial in a round marker (own lists too) and the kind of list with icons: shared, a lock for a read-only list, a cart while shopping, a check plus "gekauft am" when done. The lock means "no edit rights", whatever the state, so one's own and shared done lists get none (2026-10-02) | whose list it is shows at a glance instead of in spelled-out text; "read-only" keeps its glossary meaning and doesn't just mean "finished" |
+| D-26 | The user filter on Lists covers every list one can see, one's own and the partner's shared lists included, and offers oneself as a choice; a saved state filter (draft, shopping, done) sits next to it. Offline, both are ignored and the tab shows the local copy. The meal picker ignores the user filter on Meals (2026-10-02) | the feed mixes every kind of list, so the filter must reach all of them; done lists pile up; filters follow the user across devices; the shopping list must never disappear in the shop, and the picker must never look mysteriously empty |
+| D-27 | Meals and ingredients sort in dictionary order, by a key built from the original name (lowercase, ä/ö/ü → a/o/u, ß → ss, accents stripped), not from the `ae`-style normalized name. The Ingredients tab becomes one A–Z list (best match first while searching) with category and base unit in each row instead of category groups, and loses its scan button until creating ingredients is redesigned (2026-10-02) | "Äpfel im Schlafrock" belongs next to "Apfelstrudel"; folding "ae" back would also change real letter pairs ("Quelle", "Feuer", "Aloe"); people look for an ingredient by its name; the row still shows where it sorts on the shopping list |
+| D-28 | A floating, frosted tab bar with icons only (names for screen readers); the active tab gets a lighter pill and a green icon with a thicker stroke. The tab bar and the update banner hide while the keyboard is open, and pop-ups fit into the visible area above it. The keyboard is detected from the visual viewport, ignoring pinch-zoom; no viewport-meta or VirtualKeyboard approach and no iOS "Liquid Glass" (2026-10-02) | the owner wants a lighter, see-through bar; on the iPhone the keyboard hid the Save buttons of pop-ups and the tab bar rode up above it; iOS supports neither the viewport-meta setting nor the VirtualKeyboard API, and the CSP rules out inline scripts |
 
 ## 8. Owner decisions
 

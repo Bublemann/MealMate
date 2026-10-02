@@ -55,15 +55,15 @@ frontend/
     ├── main.tsx            # entry: i18n, styles, service-worker registration, <App />
     ├── api/                # client.ts (openapi-fetch, timeouts, auth middleware), errors.ts
     │   └── generated/      # openapi.json + schema.ts, generated, never edited by hand
-    ├── app/                # App, router, providers, Layout (bottom tab bar), UpdatePrompt
+    ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # /scan and the meal form's scan dialog: camera, decoder, lookup flow
-    │   ├── lists/          # Lists tab, draft/shopping/done views, history, polling, export text
-    │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
+    │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
+    │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks
@@ -95,8 +95,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   (`src/i18n/format.ts`: `formatNumber`, `formatDate`, `parseAmount`).
 - **Ingredient names** are shown with their brand: `ingredientLabel(name, brand)` from
   `features/ingredients/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
-  history, export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode
-  icon). Two brands of the same thing are different ingredients and separate list lines.
+  export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode icon). Two
+  brands of the same thing are different ingredients and separate list lines.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps
@@ -108,8 +108,13 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `text-muted-foreground`, …), never raw colours. Dark mode follows the device setting only (no JS
   theme switch). Sizes are in `rem`, so text follows the iPhone text-size setting; the
   `--tap-target` and `--control-font-size` tokens keep a px floor under touch targets and form
-  text. Colour is never the only signal (e.g. the active tab has a filled pill).
-  `prefers-reduced-motion` turns animations off.
+  text. Colour is never the only signal (e.g. the active tab has a lighter pill and a thicker icon
+  stroke besides its green icon). `prefers-reduced-motion` turns animations off.
+- **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only;
+  the tab names stay as visually hidden text (not `aria-label`s), so screen readers and tests still
+  read them. The tab screens (Lists, Meals, Ingredients, Me) have a level-1 heading only screen
+  readers see; detail screens keep a visible one. While the on-screen keyboard is open, the tab bar
+  and the update prompt hide and pop-ups fit into the space above the keyboard.
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
@@ -214,8 +219,9 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 - **Local copy** (SYNC-02): `GET /api/lists/sync` (with its ETag) replaces the user's copy at
   start, when the app comes to the foreground, when the connection returns and a second after any
   successful change; lists that are no longer returned disappear. Lists opened on screen and the
-  categories are kept too. The copy seeds the query cache (`initialData` of `useList` and of my
-  lists on the Lists home), so they show at once and stay when the server can't be reached.
+  categories are kept too. The copy seeds the query cache (`initialData` of `useList` and of the
+  list feed's first page on the Lists tab), so they show at once and stay when the server can't be
+  reached.
 - **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
   queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
   user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush
@@ -245,8 +251,9 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   ops are being sent. `SyncIndicator` shows "Saved", "Saving…", "Offline – N changes waiting" or
   "Can't reach MealMate …"; `SyncBanners` the "waiting for more than an hour" banner and the
   "can't store anything" note. Offline, the list views show a banner and disable (not hide)
-  everything that needs a connection, and the Lists home disables "+ New list"; export still
-  works.
+  everything that needs a connection; export still works. The Lists tab then shows only the local
+  copy, whatever the saved user filter and state filter say, and disables the filter button and
+  the "New list" tile (UI-02); read-only and done lists need a connection.
 - **Lifecycle** (SYNC-05/10), from the session's end events: logging out (after a confirmation
   when changes wait, on Me and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
   and keeps only this user's outbox; an expired one keeps both until the same user is back; a
@@ -259,9 +266,10 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 
 ## Barcode scanner
 
-`/scan` (from the Ingredients tab) and the scan dialog of the meal form's ingredient picker share
-`features/scanner/ScanFlow.tsx` (BAR-01..03). Both are lazy-loaded chunks with the decoder, so the
-initial JavaScript stays small (PERF-03).
+`/scan` (no tab links to it for now, BAR-01, but it is still reachable by its address) and the
+scan dialog of the meal form's ingredient picker share `features/scanner/ScanFlow.tsx`
+(BAR-01..03). Both are lazy-loaded chunks with the decoder, so the initial JavaScript stays small
+(PERF-03).
 
 - **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
   `?url`, so it is part of the build (`dist/assets/zxing_reader-*.wasm`) and served by the app;
