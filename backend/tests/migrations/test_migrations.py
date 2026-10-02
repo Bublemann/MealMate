@@ -320,12 +320,16 @@ def test_demo_data_at_0006_survives_the_earlier_migrations(tmp_path: Path) -> No
     assert_clean(path)
 
 
-def ingredients_by_name(path: Path) -> dict[str, list[dict[str, object]]]:
+def rows_of(path: Path, table: str) -> list[dict[str, object]]:
     with closing(sqlite3.connect(path)) as connection:
         connection.row_factory = sqlite3.Row
-        rows = [dict(row) for row in connection.execute("SELECT * FROM ingredients ORDER BY id")]
+        statement = f'SELECT * FROM "{table}" ORDER BY id'  # noqa: S608
+        return [dict(row) for row in connection.execute(statement)]
+
+
+def ingredients_by_name(path: Path) -> dict[str, list[dict[str, object]]]:
     by_name: dict[str, list[dict[str, object]]] = {}
-    for row in rows:
+    for row in rows_of(path, "ingredients"):
         by_name.setdefault(str(row["name"]), []).append(row)
     return by_name
 
@@ -437,13 +441,6 @@ def test_meals_and_lists_keep_working_after_0007(tmp_path: Path) -> None:
 
 
 # --- 0008 -----------------------------------------------------------------------------------
-
-
-def rows_of(path: Path, table: str) -> list[dict[str, object]]:
-    with closing(sqlite3.connect(path)) as connection:
-        connection.row_factory = sqlite3.Row
-        statement = f'SELECT * FROM "{table}" ORDER BY id'  # noqa: S608
-        return [dict(row) for row in connection.execute(statement)]
 
 
 def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> None:

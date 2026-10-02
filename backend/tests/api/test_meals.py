@@ -861,7 +861,9 @@ async def test_dictionary_order(api: AsyncClient, anna: Account) -> None:
     ]
 
 
-async def test_renaming_moves_the_meal(api: AsyncClient, anna: Account) -> None:
+async def test_renamed_and_copied_meals_keep_dictionary_order(
+    api: AsyncClient, anna: Account
+) -> None:
     await create_meal(api, anna, "Apfelstrudel")
     meal = await create_meal(api, anna, "Bratäpfel")
     await create_meal(api, anna, "Ananas-Curry")

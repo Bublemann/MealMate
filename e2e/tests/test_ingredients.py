@@ -113,11 +113,11 @@ def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None
     original = [category["id"] for category in api.categories(admin)]
     first, second = api.categories(admin)[:2]
     tag = unique("e2e")
-    item_a = api.create_ingredient(admin, f"Order A {tag}", category_key=first["key"])
-    item_b = api.create_ingredient(admin, f"Order B {tag}", category_key=second["key"])
+    ingredient_a = api.create_ingredient(admin, f"Order A {tag}", category_key=first["key"])
+    ingredient_b = api.create_ingredient(admin, f"Order B {tag}", category_key=second["key"])
     draft = api.create_list(admin, f"Order {tag}")
-    for item in (item_a, item_b):
-        api.add_extra_item(admin, draft["id"], ingredient_id=item["id"], amount=100, unit="g")
+    for ingredient in (ingredient_a, ingredient_b):
+        api.add_extra_item(admin, draft["id"], ingredient_id=ingredient["id"], amount=100, unit="g")
     first_name = text(f"category.{first['key']}")
     second_name = text(f"category.{second['key']}")
 
@@ -133,7 +133,7 @@ def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None
 
         page.goto(f"/lists/{draft['id']}")
         lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
-        expect(lines).to_contain_text([item_b["name"], item_a["name"]])
+        expect(lines).to_contain_text([ingredient_b["name"], ingredient_a["name"]])
     finally:
         api.order_categories(admin, original)
 

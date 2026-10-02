@@ -6,7 +6,9 @@ import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const ALL = [
-  // The server's dictionary order (ING-03), which the screen keeps.
+  // The server's dictionary order (ING-03), which the screen keeps, although "Other" comes last
+  // in the categories' walking order.
+  summary('Alufolie', 'other'),
   summary('Äpfel', 'fruit_vegetables'),
   summary('Butter', 'dairy_eggs', { brand: 'Kerrygold', barcode: '5011038133535', source: 'off' }),
   summary('Milch', 'dairy_eggs', { base_unit: 'ml' }),
@@ -22,7 +24,7 @@ vi.mock('@/features/scanner/decoder', () => ({
 function listIngredients(request: Request) {
   const q = new URL(request.url).searchParams.get('q');
   if (!q) return ALL;
-  return q === 'aepfel' ? [ALL[0]] : [];
+  return q === 'aepfel' ? [ALL[1]] : [];
 }
 
 function renderIngredients(routes: Record<string, unknown> = {}) {
@@ -64,6 +66,7 @@ describe('IngredientsScreen', () => {
     expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
     const rows = within(list).getAllByTestId(testIds.ingredientRow);
     expect(rows.map((row) => row.textContent)).toEqual([
+      'AlufolieOther · g',
       'ÄpfelFruit & vegetables · g',
       'Butter (Kerrygold) with barcodeDairy & eggs · g',
       'MilchDairy & eggs · ml',
@@ -275,7 +278,7 @@ describe('IngredientFormDialog (create)', () => {
   it('points to similar ingredients while typing the name (ING-03)', async () => {
     const { fetchMock, user } = renderIngredients({
       'GET /api/ingredients/similar': (request: Request) =>
-        new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[0]] : [],
+        new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[1]] : [],
     });
 
     await user.click(await screen.findByTestId(testIds.newIngredient));

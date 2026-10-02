@@ -63,6 +63,7 @@ from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
 from app.services import accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
+from app.services.off_fields import set_brand, set_name
 
 DEMO_USERS: tuple[tuple[str, str, Role, Language], ...] = (
     ("admin", "Admin", "admin", "de"),
@@ -518,12 +519,6 @@ async def _insert_catalog(
         creator = user_ids[item.creator]
         quantity_text, pack_quantity, pack_unit = item.pack or (None, None, None)
         ingredient = Ingredient(
-            name=item.name,
-            name_norm=normalize(item.name),
-            name_sort=sort_key(item.name),
-            brand=item.brand,
-            brand_norm=None if item.brand is None else normalize(item.brand),
-            brand_sort=None if item.brand is None else sort_key(item.brand),
             barcode=item.barcode,
             category_id=categories[item.category],
             base_unit=item.base_unit,
@@ -539,6 +534,8 @@ async def _insert_catalog(
             created_at=now,
             updated_at=now,
         )
+        set_name(ingredient, item.name)
+        set_brand(ingredient, item.brand)
         ingredient.set_nutrients({key: item.nutrients.get(key) for key in NUTRIENT_KEYS})
         session.add(ingredient)
     await session.flush()

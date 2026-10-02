@@ -26,10 +26,10 @@ async def list_meals(
     tag_id: Annotated[str | None, Query(max_length=36)] = None,
     owner_ids: Annotated[list[str] | None, Query(max_length=500)] = None,
 ) -> list[MealSummary]:
-    """The meals you can see, A-Z. `q` searches names, tags and cuisines ignoring case and
-    umlauts. Without `owner_ids`, owners you switched off in your filter chips
-    (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those owners'
-    meals are listed."""
+    """The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
+    and cuisines ignoring case and umlauts. Without `owner_ids`, owners you switched off in your
+    filter chips (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those
+    owners' meals are listed."""
     return await meals.list_meals(
         session,
         media,

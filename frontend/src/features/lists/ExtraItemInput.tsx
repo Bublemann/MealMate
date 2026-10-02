@@ -7,11 +7,12 @@ import { RemovableChip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useIngredients, type IngredientSummary } from '@/features/ingredients/api';
+import { IngredientDetails } from '@/features/ingredients/IngredientDetails';
 import { IngredientName } from '@/features/ingredients/IngredientName';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { useCategories, type Unit } from '@/features/reference/api';
 import { useConnected, useQueueOp } from '@/features/sync/context';
-import { categoryName, unitLabel } from '@/features/reference/labels';
+import { categoryName } from '@/features/reference/labels';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { parseAmount } from '@/i18n/format';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -223,24 +224,18 @@ export function ExtraItemInput({
             aria-label={t('lists.extra.suggestions')}
             className="flex flex-col divide-y rounded-lg border"
           >
-            {matches.map((ingredient) => {
-              const key = categoryKeys.get(ingredient.category_id);
-              return (
-                <li key={ingredient.id}>
-                  <button
-                    type="button"
-                    onClick={() => pick(ingredient)}
-                    className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    <IngredientName ingredient={ingredient} />
-                    <span className="text-sm text-muted-foreground">
-                      {key ? `${categoryName(t, key)} · ` : ''}
-                      {unitLabel(t, ingredient.base_unit)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {matches.map((ingredient) => (
+              <li key={ingredient.id}>
+                <button
+                  type="button"
+                  onClick={() => pick(ingredient)}
+                  className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+                >
+                  <IngredientName ingredient={ingredient} />
+                  <IngredientDetails ingredient={ingredient} categoryKeys={categoryKeys} />
+                </button>
+              </li>
+            ))}
           </ul>
         )}
         <ErrorAlert error={suggestions.error} />

@@ -622,8 +622,8 @@ export interface paths {
         /**
          * List Ingredients
          * @description Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
-         *     then names starting with `q`, then by name and brand; without `q`, all ingredients by
-         *     category order, name and brand (at most 1000).
+         *     then names starting with `q`, then the rest, each in dictionary order by name and brand
+         *     (Ä sorts as A); without `q`, all ingredients in that order (at most 1000).
          */
         get: operations["list_ingredients"];
         put?: never;
@@ -1260,10 +1260,10 @@ export interface paths {
         };
         /**
          * List Meals
-         * @description The meals you can see, A-Z. `q` searches names, tags and cuisines ignoring case and
-         *     umlauts. Without `owner_ids`, owners you switched off in your filter chips
-         *     (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those owners'
-         *     meals are listed.
+         * @description The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
+         *     and cuisines ignoring case and umlauts. Without `owner_ids`, owners you switched off in your
+         *     filter chips (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those
+         *     owners' meals are listed.
          */
         get: operations["list_meals"];
         put?: never;

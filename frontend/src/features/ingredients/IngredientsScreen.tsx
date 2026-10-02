@@ -11,10 +11,10 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCategories, type Category } from '@/features/reference/api';
-import { categoryName, unitLabel } from '@/features/reference/labels';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import { useIngredients, type IngredientSummary } from './api';
+import { IngredientDetails } from './IngredientDetails';
 import { IngredientFormDialog } from './IngredientFormDialog';
 import { IngredientName } from './IngredientName';
 
@@ -141,29 +141,21 @@ function IngredientList({
       aria-label={t('ingredients.listLabel')}
       className="flex flex-col divide-y rounded-xl border bg-card"
     >
-      {ingredients.map((ingredient) => {
-        const categoryKey = categoryKeys.get(ingredient.category_id);
-        // "Milchprodukte & Eier · ml": where it sorts on a shopping list, and its base unit.
-        const details = [
-          categoryKey === undefined ? null : categoryName(t, categoryKey),
-          unitLabel(t, ingredient.base_unit),
-        ].filter((detail) => detail !== null);
-        return (
-          <li key={ingredient.id}>
-            <Link
-              to={`/ingredients/${ingredient.id}`}
-              data-testid={testIds.ingredientRow}
-              className="flex min-h-(--tap-target) items-center gap-3 px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-            >
-              <span className="flex min-w-0 flex-1 flex-col">
-                <IngredientName ingredient={ingredient} />
-                <span className="text-sm text-muted-foreground">{details.join(' · ')}</span>
-              </span>
-              <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
-            </Link>
-          </li>
-        );
-      })}
+      {ingredients.map((ingredient) => (
+        <li key={ingredient.id}>
+          <Link
+            to={`/ingredients/${ingredient.id}`}
+            data-testid={testIds.ingredientRow}
+            className="flex min-h-(--tap-target) items-center gap-3 px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            <span className="flex min-w-0 flex-1 flex-col">
+              <IngredientName ingredient={ingredient} />
+              <IngredientDetails ingredient={ingredient} categoryKeys={categoryKeys} />
+            </span>
+            <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+          </Link>
+        </li>
+      ))}
     </ul>
   );
 }
