@@ -125,7 +125,8 @@ class CheckSnapshot:
 
     def to_json(self) -> dict[str, Any]:
         """`{"mass_g": …, "volume_ml": …, "count": …, "has_unspecified": …, "base_total": …,
-        "base_unit": "g"|"ml"}`; absent segments and a missing base total are left out."""
+        "base_unit": "g"|"ml"|"piece"}`; absent segments and a missing base total are left
+        out."""
         data: dict[str, Any] = {SEGMENT_NAMES[kind]: value for kind, value in self.segments.items()}
         data["has_unspecified"] = self.has_unspecified
         if self.base_total is not None and self.base_unit is not None:

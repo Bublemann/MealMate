@@ -499,7 +499,7 @@ describe('IngredientFormDialog (create)', () => {
     });
   });
 
-  it('clears the weight per piece when leaving “Pieces”', async () => {
+  it('clears the weight per piece when leaving “Pieces”, keeps one of grams (ING-02)', async () => {
     const { user } = renderIngredients();
 
     await user.click(await screen.findByTestId(testIds.newIngredient));
@@ -509,6 +509,10 @@ describe('IngredientFormDialog (create)', () => {
     await user.click(within(form).getByLabelText('Grams (g)'));
 
     expect(within(form).getByLabelText('Weight of one piece (g)')).toHaveValue('');
+    await user.type(within(form).getByLabelText('Weight of one piece (g)'), '55');
+    await user.click(within(form).getByLabelText('Pieces (pcs)'));
+    expect(within(form).getByLabelText('Weight per piece (g)')).toHaveValue('55');
+    await user.click(within(form).getByLabelText('Grams (g)'));
     expect(
       within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
     ).toBeVisible();

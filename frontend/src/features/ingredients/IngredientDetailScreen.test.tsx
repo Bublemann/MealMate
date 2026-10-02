@@ -270,6 +270,10 @@ describe('IngredientDetailScreen', () => {
     expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
     await user.click(within(dialog).getByLabelText('Grams (g)'));
     expect(within(dialog).getByLabelText('Weight of one piece (g)')).toHaveValue('');
+    // Back to pieces by mistake: its own piece weight is back.
+    await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
+    expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
+    await user.click(within(dialog).getByLabelText('Grams (g)'));
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());

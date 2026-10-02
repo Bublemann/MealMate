@@ -83,8 +83,7 @@ class IngredientAttrs:
     """What conversions need to know about an ingredient, live or from a frozen snapshot.
 
     `base_unit` may be given as a plain string ("g", "ml", "piece"), as rows and JSON snapshots
-    store it;
-    it is turned into a `BaseUnit` (anything else raises ValueError).
+    store it; it is turned into a `BaseUnit` (anything else raises ValueError).
     """
 
     base_unit: BaseUnit

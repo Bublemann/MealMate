@@ -209,18 +209,20 @@ export function IngredientForm({
   }
 
   /**
-   * Leaving Stück clears its piece weight, as the server does (ING-02); grams and millilitres
-   * get back the piece weight the ingredient has.
+   * Leaving Stück clears its piece weight, as the server does (ING-02), and grams or millilitres
+   * get back the one the ingredient had with them. Coming back to Stück brings back the
+   * ingredient's own piece weight; one of grams or millilitres comes along.
    */
   function chooseBaseUnit(unit: BaseUnit) {
     setValues((current) => {
-      const leavingPieces = current.baseUnit === 'piece' && unit !== 'piece';
-      const ownPieceWeight = initial.baseUnit === 'piece' ? '' : initial.piece_weight_g;
-      return {
-        ...current,
-        baseUnit: unit,
-        piece_weight_g: leavingPieces ? ownPieceWeight : current.piece_weight_g,
-      };
+      const ownUnitWasPiece = initial.baseUnit === 'piece';
+      let pieceWeight = current.piece_weight_g;
+      if (current.baseUnit === 'piece' && unit !== 'piece') {
+        pieceWeight = ownUnitWasPiece ? '' : initial.piece_weight_g;
+      } else if (current.baseUnit !== 'piece' && unit === 'piece' && ownUnitWasPiece) {
+        pieceWeight = initial.piece_weight_g;
+      }
+      return { ...current, baseUnit: unit, piece_weight_g: pieceWeight };
     });
   }
 

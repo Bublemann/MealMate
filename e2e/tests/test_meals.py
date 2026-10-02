@@ -152,7 +152,7 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
 
 def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Account) -> None:
     """A Stück journey (ING-02, ING-03, NUT-05, AGG-04, D-32): "Eier" counted in pieces of
-    60 g, "3 Stk." in a meal, nutrition from the piece weight, a list line in whole pieces."""
+    60 g, "2 Stk." in a meal, nutrition from the piece weight, a list line in whole pieces."""
     page = member_page
     tag = unique("e2e")
     name = f"Eier {tag}"
@@ -188,18 +188,21 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     )
     expect(row).to_contain_text(f"{text('category.dairy_eggs')} · {text('unit.piece')}")
 
-    # 3 eggs for 2 servings: 3 x 60 g = 180 g, x 155 kcal / 100 g = 279 kcal; nothing missing.
+    # 2 eggs for 4 servings: 2 x 60 g = 120 g, x 155 kcal / 100 g = 186 kcal; nothing missing.
     page.goto("/meals/new")
     meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
     meal_form.get_by_label(text("meals.field.name"), exact=True).fill(f"Rührei {tag}")
-    meal_form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True).click()
-    add_row(page, name, "3", "piece")
+    more = meal_form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True)
+    for _ in range(3):
+        more.click()
+    expect(meal_form.get_by_label(text("meals.field.servings"), exact=True)).to_have_value("4")
+    add_row(page, name, "2", "piece")
     meal_form.get_by_role("button", name=text("meals.form.create"), exact=True).click()
     expect(page).to_have_url(MEAL_URL)
-    expect(nutrient_row(page, "kcal")).to_contain_text("279 kcal")
+    expect(nutrient_row(page, "kcal")).to_contain_text("186 kcal")
     expect(page.get_by_test_id(TEST_IDS["mealIncomplete"])).to_have_count(0)
 
-    # Made for 3 on a list: 4.5 eggs, bought as 5.
+    # Made for 3 on a list: 1.5 eggs, bought as 2.
     shopping_list = api.create_list(member, f"Frühstück {tag}")
     api.add_list_meal(member, shopping_list["id"], meal_id(page), servings=3)
     page.goto(f"/lists/{shopping_list['id']}")
@@ -208,7 +211,7 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
         .get_by_test_id(TEST_IDS["listLine"])
         .filter(has_text=name)
     )
-    expect(line).to_contain_text(f"5 {text('unit.piece')}")
+    expect(line).to_contain_text(f"2 {text('unit.piece')}")
 
 
 def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:

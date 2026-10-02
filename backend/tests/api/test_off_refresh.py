@@ -570,7 +570,12 @@ async def test_editing_a_field_settles_its_pending_value(
     assert changed.json()["pending_update"]["fields"] == [
         {"field": "nutrients.kcal", "current": 372, "proposed": 158}
     ]
-    # Another base unit settles every pending nutrient (they were per the old one).
+    # Counted in pieces, the values are still per 100 g: the pending ones stay (ING-02).
+    in_pieces = await api.patch(
+        f"/api/ingredients/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
+    )
+    assert in_pieces.json()["pending_update"] == changed.json()["pending_update"]
+    # Another basis settles every pending nutrient (they were per 100 g).
     rebased = await api.patch(
         f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )

@@ -38,7 +38,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
 from app.domain.text import normalize
-from app.domain.units import BaseUnit, Unit
+from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import reference as reference_repo
@@ -281,9 +281,9 @@ async def update_ingredient(
 ) -> Ingredient:
     """Change the fields that were sent and record who changed it last (ING-01). On an
     ingredient from Open Food Facts, the Open Food Facts fields sent become user-edited and
-    their pending values go (BAR-04, BAR-06); a new base unit drops the pending nutrients,
-    which were per the old one, and leaving `piece` clears the piece weight unless one is sent
-    along (ING-02). Clearing or changing the barcode makes it a manual ingredient
+    their pending values go (BAR-04, BAR-06); a base unit whose values are per 100 of something
+    else (g or ml) drops the pending nutrients, and leaving `piece` clears the piece weight
+    unless one is sent along (ING-02). Clearing or changing the barcode makes it a manual ingredient
     (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
@@ -319,10 +319,12 @@ async def update_ingredient(
             row.category_id = body.category_id
         decided = list(edited)
         if body.base_unit is not None and body.base_unit != row.base_unit:
-            if row.base_unit == BaseUnit.PIECE:
+            old, new = BaseUnit(row.base_unit), BaseUnit(body.base_unit)
+            if old == BaseUnit.PIECE:
                 row.piece_weight_g = None
+            if NUTRITION_BASIS[old] != NUTRITION_BASIS[new]:
+                decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
             row.base_unit = body.base_unit
-            decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
         if "piece_weight_g" in sent:
             row.piece_weight_g = body.piece_weight_g
         if "density_g_per_ml" in sent:
