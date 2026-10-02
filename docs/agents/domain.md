@@ -15,12 +15,15 @@ Single-context repo:
 
 ```
 /
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
+├── CONTEXT.md            ← glossary
+├── docs/
+│   ├── adr/              ← created when the first ADR is written
+│   ├── requirements.md
+│   ├── plan.md
+│   └── operations.md
 ├── backend/
-└── frontend/
+├── frontend/
+└── deploy/
 ```
 
 ## Project docs
@@ -39,4 +42,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts ADR-0003 (…), but worth reopening because…_

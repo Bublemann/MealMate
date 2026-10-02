@@ -25,11 +25,11 @@ _Avoid_: spouse, co-owner
 ### Food
 
 **Ingredient**:
-A food item shared by all users: either something generic typed by hand ("Zwiebel") or a specific product with a brand and a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit (g or ml) and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
+A food item shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit (g or ml) and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
 _Avoid_: product, food, article
 
 **Brand**:
-The maker's name on an ingredient that is a specific product (e.g. "Weihenstephan"). It is optional and always shown after the ingredient's name.
+The brand name on an ingredient (e.g. "Weihenstephan", "REWE"). It is optional, with or without a barcode, and always shown after the ingredient's name.
 _Avoid_: manufacturer, label
 
 **Barcode**:
@@ -81,6 +81,10 @@ _Avoid_: others' list, foreign list
 A user's saved choice of whose meals, and separately whose shopping lists, they see. It follows them across devices.
 _Avoid_: person filter, user chips, meal chips, list chips
 
+**State filter**:
+A user's saved choice of which list states (draft, shopping, done) they see among shopping lists. It follows them across devices.
+_Avoid_: status filter, history filter
+
 **Draft**:
 A shopping list that is still being planned. Its lines follow the current meals.
 _Avoid_: planned list, open list
@@ -102,7 +106,7 @@ Something added to a shopping list by hand, either linked to an ingredient ("1 l
 _Avoid_: manual item, custom item
 
 **Frozen meal**:
-A meal on a shopping list whose ingredients were copied into the list when shopping started, so later changes to the meal no longer affect that list.
+A meal on a shopping list whose ingredients were copied into the list: when shopping starts, when it is added to a list that is already being shopped, or when it is detached. Later changes to the meal no longer affect that list.
 _Avoid_: snapshot, locked meal
 
 **Detached meal**:
