@@ -57,7 +57,7 @@ async def get(api: AsyncClient, user: Account, ingredient_id: str) -> Any:
     return response.json()
 
 
-async def search(api: AsyncClient, user: Account, **params: str) -> list[str]:
+async def search(api: AsyncClient, user: Account, **params: str | list[str]) -> list[str]:
     """The labels found: the name, with the brand in brackets."""
     response = await api.get("/api/ingredients", params=params, headers=user.headers)
     assert response.status_code == 200, response.text
@@ -663,6 +663,28 @@ async def test_list_in_dictionary_order(api: AsyncClient, anna: Account) -> None
     ]
     assert await search(api, anna, category_id=fruit, q="zw") == ["Zwiebeln"]
     assert await search(api, anna, category_id="unknown") == []
+
+
+async def test_list_of_several_categories(api: AsyncClient, anna: Account) -> None:
+    """ING-03, UI-01, D-23: several categories match any of them, in one list in dictionary
+    order; a search narrows them down. An unknown category adds nothing."""
+    categories = await category_ids(api, anna)
+    fruit, dairy = categories["fruit_vegetables"], categories["dairy_eggs"]
+    for name, category in (
+        ("Zwiebeln", "fruit_vegetables"),
+        ("Salz", "sauces_spices_oils"),
+        ("Milch", "dairy_eggs"),
+        ("Äpfel", "fruit_vegetables"),
+        ("Butter", "dairy_eggs"),
+        ("Alufolie", "other"),
+    ):
+        await create_ingredient(api, anna, name, category_id=categories[category])
+
+    both = ["Äpfel", "Butter", "Milch", "Zwiebeln"]
+    assert await search(api, anna, category_id=[fruit, dairy]) == both
+    assert await search(api, anna, category_id=[dairy, fruit, "unknown"]) == both
+    assert await search(api, anna, category_id=[fruit, dairy], q="i") == ["Milch", "Zwiebeln"]
+    assert await search(api, anna, category_id=[fruit, fruit]) == ["Äpfel", "Zwiebeln"]
 
 
 async def test_renaming_moves_the_ingredient(api: AsyncClient, anna: Account) -> None:
