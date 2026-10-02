@@ -108,9 +108,10 @@ export interface FormValues {
   sourceUrl: string;
 }
 
-export function initialValues(meal: Meal | undefined, language: Language): FormValues {
+/** The form's start: the meal's values, or a new meal with only `name` filled in (MEAL-09). */
+export function initialValues(meal: Meal | undefined, language: Language, name = ''): FormValues {
   return {
-    name: meal?.name ?? '',
+    name: meal?.name ?? name,
     servingsText: String(meal?.servings ?? MIN_SERVINGS),
     cuisineId: meal?.cuisine?.id ?? '',
     tags: meal?.tags.map((tag) => tag.name) ?? [],

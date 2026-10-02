@@ -7848,7 +7848,7 @@
     },
     "/api/meals": {
       "get": {
-        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts. Without `owner_ids`, owners you switched off in your\nfilter chips (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those\nowners' meals are listed.",
+        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal\nmatches if its cuisine is any of the given ones and it has every given tag. Without\n`owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are\nleft out; with `owner_ids` (repeatable), only those owners' meals are listed.",
         "operationId": "list_meals",
         "parameters": [
           {
@@ -7875,8 +7875,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 36,
-                  "type": "string"
+                  "items": {
+                    "maxLength": 36,
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
                 },
                 {
                   "type": "null"
@@ -7892,8 +7896,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 36,
-                  "type": "string"
+                  "items": {
+                    "maxLength": 36,
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
                 },
                 {
                   "type": "null"

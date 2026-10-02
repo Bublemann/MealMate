@@ -31,18 +31,19 @@ async def search(
     *,
     owner_ids: Collection[str],
     query: str,
-    cuisine_id: str | None,
-    tag_id: str | None,
+    cuisine_ids: Collection[str],
+    tag_ids: Collection[str],
 ) -> Sequence[Meal]:
     """Meals of the given owners in dictionary order (then by id). A normalised `query`
     matches the meal name, a tag name or the cuisine (its key or name), also with umlaut
-    spellings folded."""
+    spellings folded. With `cuisine_ids`, only meals in any of those cuisines; with `tag_ids`,
+    only meals that have every one of those tags."""
     if not owner_ids:
         return []
     statement = select(Meal).where(Meal.owner_id.in_(owner_ids))
-    if cuisine_id is not None:
-        statement = statement.where(Meal.cuisine_id == cuisine_id)
-    if tag_id is not None:
+    if cuisine_ids:
+        statement = statement.where(Meal.cuisine_id.in_(cuisine_ids))
+    for tag_id in dict.fromkeys(tag_ids):
         statement = statement.where(
             exists().where(MealTag.meal_id == Meal.id, MealTag.tag_id == tag_id)
         )

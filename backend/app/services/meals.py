@@ -282,16 +282,18 @@ async def list_meals(
     principal: Principal,
     *,
     query: str | None,
-    cuisine_id: str | None,
-    tag_id: str | None,
+    cuisine_ids: Sequence[str],
+    tag_ids: Sequence[str],
     owner_ids: Sequence[str] | None,
     now: datetime,
 ) -> list[MealSummary]:
     """The meals the principal may see (VIS-01/02, CPL-04), A-Z (MEAL-09).
 
-    Without `owner_ids`, the owners the principal switched off in their filter chips are left
-    out (MEAL-10); with them, only those owners' meals are listed (as far as visible). `query`
-    matches the name, a tag or the cuisine, ignoring case, umlauts and accents.
+    Without `owner_ids`, the owners the principal unticked in their user filter on Meals are
+    left out (MEAL-10); with them, only those owners' meals are listed (as far as visible).
+    `query` matches the name, a tag or the cuisine, ignoring case, umlauts and accents. With
+    `cuisine_ids`, a meal's cuisine must be any of them; with `tag_ids`, it must have all of
+    them (MEAL-09).
     """
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
@@ -305,8 +307,8 @@ async def list_meals(
             session,
             owner_ids=owners,
             query=normalize(query or ""),
-            cuisine_id=cuisine_id,
-            tag_id=tag_id,
+            cuisine_ids=cuisine_ids,
+            tag_ids=tag_ids,
         )
         return await _summaries(session, media, rows, now=now)
 

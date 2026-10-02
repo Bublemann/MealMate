@@ -1,5 +1,6 @@
 import { ListFilter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -22,7 +23,7 @@ export interface FilterOption {
 export interface FilterGroup {
   /** Names the group, e.g. "Kategorien". */
   label: string;
-  /** Undefined while they load: the group shows the loading placeholder. */
+  /** Undefined until they have loaded: the group shows the loading placeholder, or the error. */
   options: readonly FilterOption[] | undefined;
   /** The ids of the ticked options. */
   checked: readonly string[];
@@ -30,6 +31,8 @@ export interface FilterGroup {
   active: boolean;
   /** Called with the ticked options, in the options' order, right after each change. */
   onChange: (checked: string[]) => void;
+  /** A failed load of the options or a failed change, shown in the group. */
+  error?: unknown;
 }
 
 interface FilterPanelProps {
@@ -97,7 +100,7 @@ export function FilterPanel({ groups, onReset }: FilterPanelProps) {
 
 /** One group: its options in columns that become one at large text sizes, wrapping long names. */
 function CheckboxGroup({ group }: { group: FilterGroup }) {
-  const { label, options, checked, onChange } = group;
+  const { label, options, checked, onChange, error } = group;
 
   function onToggle(id: string, on: boolean) {
     const next = new Set(checked);
@@ -122,8 +125,9 @@ function CheckboxGroup({ group }: { group: FilterGroup }) {
           ))}
         </div>
       ) : (
-        <LoadingState />
+        !error && <LoadingState />
       )}
+      <ErrorAlert error={error} />
     </fieldset>
   );
 }
