@@ -206,7 +206,9 @@ def test_member_filters_by_categories(member_page: Page, api: Api, member: Accou
     expect(page.get_by_test_id(TEST_IDS["ingredientList"])).to_be_visible()
 
 
-def test_filter_panel_fits_the_largest_text_size(member_page: Page) -> None:
+def test_filter_panel_fits_the_largest_text_size(
+    member_page: Page, api: Api, member: Account
+) -> None:
     """UI-01: at the largest iPhone text size (53 px body text, simulated here) the filter
     panel's groups, "Reset" and "Done" wrap instead of being clipped or widening the page, and
     the panel scrolls; its buttons stay in view."""
@@ -230,12 +232,13 @@ def test_filter_panel_fits_the_largest_text_size(member_page: Page) -> None:
         action = panel.get_by_role("button", name=text(name), exact=True)
         expect(action).to_be_in_viewport()
         assert action.evaluate("action => action.scrollWidth <= action.clientWidth")
-    # The last category can be scrolled to and ticked; every name fits the panel's width.
+    # The last category can be scrolled to and ticked; every name wraps within the panel.
     boxes = panel.get_by_role("checkbox")
     boxes.last.check()
     expect(boxes.last).to_be_checked()
-    for label in panel.locator("label").all():
-        assert label.evaluate("label => label.scrollWidth <= label.clientWidth")
+    for category in api.categories(member):
+        name = panel.get_by_text(text(f"category.{category['key']}"), exact=True)
+        assert name.evaluate("name => name.scrollWidth <= name.clientWidth")
 
 
 def test_filter_panel_does_not_slide_under_reduce_motion(member_page: Page) -> None:

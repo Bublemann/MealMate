@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
-import { ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import { CATEGORIES, ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -195,6 +195,22 @@ describe('IngredientsScreen', () => {
       expect(boxes[index]).not.toBeChecked();
     });
     expect(boxes).toHaveLength(4);
+  });
+
+  it('shows the placeholder in the panel until the categories have loaded (UI-03)', async () => {
+    const categories = heldRoute();
+    const { user } = renderIngredients({ 'GET /api/categories': categories.route });
+
+    await user.click(await screen.findByTestId(testIds.filterButton));
+
+    const group = within(await screen.findByTestId(testIds.filterPanel)).getByRole('group', {
+      name: 'Categories',
+    });
+    expect(await within(group).findByText('Loading…')).toBeVisible();
+    expect(within(group).queryAllByRole('checkbox')).toEqual([]);
+    await categories.answer(CATEGORIES);
+    await waitFor(() => expect(within(group).getAllByRole('checkbox')).toHaveLength(4));
+    expect(within(group).queryByText('Loading…')).toBeNull();
   });
 
   it('applies each ticked category at once and counts the group on the button (UI-01, ING-03)', async () => {

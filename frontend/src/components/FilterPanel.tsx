@@ -1,5 +1,6 @@
 import { ListFilter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -21,7 +22,8 @@ export interface FilterOption {
 export interface FilterGroup {
   /** Names the group, e.g. "Kategorien". */
   label: string;
-  options: readonly FilterOption[];
+  /** Undefined while they load: the group shows the loading placeholder. */
+  options: readonly FilterOption[] | undefined;
   /** The ids of the ticked options. */
   checked: readonly string[];
   /** Whether the group is not at its default; the button counts these groups. */
@@ -36,6 +38,8 @@ interface FilterPanelProps {
   onReset: () => void;
 }
 
+const FOOTER_BUTTON = 'min-w-0 flex-[1_1_8em] shrink wrap-break-word';
+
 /**
  * The filter button of the pinned block and the panel it slides up (UI-01, D-23): groups of
  * checkboxes whose changes apply at once, "Zurücksetzen" for every group and "Fertig", which
@@ -43,7 +47,7 @@ interface FilterPanelProps {
  */
 export function FilterPanel({ groups, onReset }: FilterPanelProps) {
   const { t } = useTranslation();
-  const active = groups.filter((group) => group.active).length;
+  const activeGroups = groups.filter((group) => group.active).length;
 
   return (
     <Sheet>
@@ -52,16 +56,18 @@ export function FilterPanel({ groups, onReset }: FilterPanelProps) {
           variant="outline"
           size="icon"
           data-testid={testIds.filterButton}
-          aria-label={active ? t('filter.buttonActive', { count: active }) : t('filter.button')}
+          aria-label={
+            activeGroups ? t('filter.buttonActive', { count: activeGroups }) : t('filter.button')
+          }
           className="relative rounded-xl"
         >
           <ListFilter aria-hidden="true" className="size-[1.25em]" />
-          {active > 0 && (
+          {activeGroups > 0 && (
             <span
               aria-hidden="true"
               className="absolute -top-[0.375em] -right-[0.375em] flex h-[1.5em] min-w-[1.5em] items-center justify-center rounded-full bg-primary px-[0.375em] text-[0.75em] leading-none font-semibold text-primary-foreground"
             >
-              {active}
+              {activeGroups}
             </span>
           )}
         </Button>
@@ -76,15 +82,12 @@ export function FilterPanel({ groups, onReset }: FilterPanelProps) {
           ))}
         </div>
         <SheetFooter>
-          <Button
-            variant="outline"
-            className="min-w-0 flex-[1_1_8em] wrap-break-word"
-            onClick={onReset}
-          >
+          {/* Side by side, or one per row at large text sizes, wrapping a long word. */}
+          <Button variant="outline" className={FOOTER_BUTTON} onClick={onReset}>
             {t('filter.reset')}
           </Button>
           <SheetClose asChild>
-            <Button className="min-w-0 flex-[1_1_8em] wrap-break-word">{t('filter.done')}</Button>
+            <Button className={FOOTER_BUTTON}>{t('filter.done')}</Button>
           </SheetClose>
         </SheetFooter>
       </SheetContent>
@@ -94,30 +97,33 @@ export function FilterPanel({ groups, onReset }: FilterPanelProps) {
 
 /** One group: its options in columns that become one at large text sizes, wrapping long names. */
 function CheckboxGroup({ group }: { group: FilterGroup }) {
+  const { label, options, checked, onChange } = group;
+
   function onToggle(id: string, on: boolean) {
-    const checked = new Set(group.checked);
-    if (on) checked.add(id);
-    else checked.delete(id);
-    group.onChange(group.options.map((option) => option.id).filter((other) => checked.has(other)));
+    const next = new Set(checked);
+    if (on) next.add(id);
+    else next.delete(id);
+    onChange((options ?? []).map((option) => option.id).filter((other) => next.has(other)));
   }
 
   return (
     <fieldset data-testid={testIds.filterGroup} className="flex min-w-0 flex-col gap-1">
-      <legend className="mb-1 font-semibold">{group.label}</legend>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,10em),1fr))] gap-x-4">
-        {group.options.map((option) => (
-          <label
-            key={option.id}
-            className="flex min-h-(--tap-target) min-w-0 cursor-pointer items-center gap-3 py-1"
-          >
+      <legend className="mb-1 font-semibold">{label}</legend>
+      {options ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,10em),1fr))] gap-x-4">
+          {options.map((option) => (
             <Checkbox
-              checked={group.checked.includes(option.id)}
+              key={option.id}
+              checked={checked.includes(option.id)}
               onChange={(event) => onToggle(option.id, event.target.checked)}
-            />
-            <span className="min-w-0 wrap-break-word">{option.label}</span>
-          </label>
-        ))}
-      </div>
+            >
+              {option.label}
+            </Checkbox>
+          ))}
+        </div>
+      ) : (
+        <LoadingState />
+      )}
     </fieldset>
   );
 }

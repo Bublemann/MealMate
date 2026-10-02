@@ -140,8 +140,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
-  the design tokens, MNT-05), each with whether it is at its default, and a reset for all of
-  them. Each tick applies at once; "Zurücksetzen" resets every group and keeps the search;
+  the design tokens whose label is the tap target, MNT-05), each with whether it is at its
+  default, and a reset for all of them. Each tick applies at once; "Zurücksetzen" resets every group and keeps the search;
   "Fertig" closes the panel. The button shows how many groups are not at their default, also in
   its accessible name. Ingredients offers the categories (any of them, ING-03). At the largest
   text sizes the options and buttons wrap and the panel scrolls, its buttons staying in view.

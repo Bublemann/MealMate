@@ -34,12 +34,12 @@ function SheetContent({
     <DialogPrimitive.Portal data-slot="sheet-portal">
       <DialogPrimitive.Overlay
         data-slot="sheet-overlay"
-        className="fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in motion-reduce:animate-none"
+        className="fixed inset-0 z-50 bg-black/50 motion-safe:data-[state=closed]:animate-fade-out motion-safe:data-[state=open]:animate-fade-in"
       />
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          'fixed inset-x-0 bottom-(--keyboard-inset) z-50 mx-auto flex max-h-[calc(var(--visible-height)-max(env(safe-area-inset-top),1rem))] w-full max-w-lg flex-col overflow-y-auto overscroll-contain rounded-t-2xl border border-b-0 bg-card text-card-foreground shadow-lg outline-none data-[state=closed]:animate-sheet-out data-[state=open]:animate-sheet-in motion-reduce:animate-none',
+          'fixed inset-x-0 bottom-(--keyboard-inset) z-50 mx-auto flex max-h-[calc(var(--visible-height)-max(env(safe-area-inset-top),1rem))] w-full max-w-lg flex-col overflow-y-auto overscroll-contain rounded-t-2xl border border-b-0 bg-card text-card-foreground shadow-lg outline-none motion-safe:data-[state=closed]:animate-sheet-out motion-safe:data-[state=open]:animate-sheet-in',
           className,
         )}
         {...props}

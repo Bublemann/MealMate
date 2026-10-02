@@ -6,14 +6,14 @@ import { createContext, useContext, type Dispatch, type SetStateAction } from 'r
  * instead.
  */
 export interface TabMemories {
-  /** `categories`: the ids ticked in the filter panel; none ticked shows every category. */
-  ingredients: { search: string; categories: string[] };
+  /** `categoryIds`: the categories ticked in the filter panel; none shows every category. */
+  ingredients: { search: string; categoryIds: string[] };
 }
 
 export type TabWithMemory = keyof TabMemories;
 
 export const INITIAL_TAB_MEMORIES: TabMemories = {
-  ingredients: { search: '', categories: [] },
+  ingredients: { search: '', categoryIds: [] },
 };
 
 export const TabMemoryContext = createContext<{

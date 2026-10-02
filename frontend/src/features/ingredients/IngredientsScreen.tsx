@@ -30,7 +30,7 @@ export function IngredientsScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   // The search and the categories stay when the user opens an ingredient and comes back (UI-01).
-  const [{ search, categories: categoryIds }, remember] = useTabMemory('ingredients');
+  const [{ search, categoryIds }, remember] = useTabMemory('ingredients');
   const [creating, setCreating] = useState(false);
   const searchText = search.trim();
   const debounced = useDebouncedValue(searchText);
@@ -59,16 +59,16 @@ export function IngredientsScreen() {
             groups={[
               {
                 label: t('ingredients.filter.categories'),
-                options: (categories.data ?? []).map((category) => ({
+                options: categories.data?.map((category) => ({
                   id: category.id,
                   label: categoryName(t, category.key),
                 })),
                 checked: categoryIds,
                 active: categoryIds.length > 0,
-                onChange: (checked) => remember({ categories: checked }),
+                onChange: (checked) => remember({ categoryIds: checked }),
               },
             ]}
-            onReset={() => remember({ categories: [] })}
+            onReset={() => remember({ categoryIds: [] })}
           />
         }
         newTile={{
@@ -100,7 +100,7 @@ export function IngredientsScreen() {
               <EmptyLine text={t('ingredients.empty')} />
             )
           ) : (
-            <NoMatches onReset={() => remember({ search: '', categories: [] })} />
+            <NoMatches onReset={() => remember({ search: '', categoryIds: [] })} />
           )}
         </>
       )}
