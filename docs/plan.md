@@ -177,7 +177,7 @@ MealMate/
 
 - **Primary keys:** UUIDv7 strings (`uuid.uuid7()`). The server accepts any valid UUID for client-supplied IDs (offline extra items, op IDs) and never relies on their embedded timestamp.
 - **Timestamps:** UTC in the database.
-- **`*_norm` columns:** lowercase, `ä→ae ö→oe ü→ue ß→ss`, accents stripped, whitespace collapsed. They are used for uniqueness and search (ING-03, REF-04, ACC-05).
+- **`*_norm` columns:** lowercase, `ä→ae ö→oe ü→ue ß→ss`, accents stripped, whitespace collapsed. They are used for uniqueness and search (ING-03, REF-01, REF-04, ACC-05).
 - **Dictionary order** (ING-03, MEAL-09, D-27): meals and ingredients sort by a key built from the original name: lowercase, `ä→a ö→o ü→u ß→ss`, accents stripped, whitespace collapsed. It is not derived from `*_norm`: folding `ae`/`oe`/`ue` back would also change real letter pairs ("Quelle", "Feuer", "Aloe"). The keys are stored next to the names (`*_sort` columns: the name's, and an ingredient's brand's) and set wherever a name or brand is written.
 
 ### 5.3 Errors and headers (I18N-03, SEC-06)
@@ -260,14 +260,14 @@ Each rule has API tests, including negative cases and the switch combinations in
   - it collects `missing` entries (ingredient + field or "no amount"/"not convertible") and `estimate` flags;
   - it returns the totals per meal and per serving.
 - **Aggregation** (AGG), `aggregate(list_state) -> [Line]`:
-  1. **Sources.** Each list meal contributes rows. If it is live (draft and not detached), the rows come from the current meal with the ingredients' live attributes. If it is frozen (shopping/done, or detached, LIST-15), they come from `list_meal_ingredients` with the attributes and category captured at freezing time.
+  1. **Sources.** Each list meal contributes rows. If it is live (draft and not detached), the rows come from the current meal with the ingredients' live attributes. If it is frozen (shopping/done, or detached, LIST-15), they come from `list_meal_ingredients` with the attributes and category captured at freezing time. Aggregation knows every category, deleted ones included (D-30): live rows use the ingredient's current category, frozen rows their snapshot.
   2. Each row gets factor = `list_servings / meal_servings`, and becomes a part `(ingredient, amount × factor, unit, attrs, source)`.
   3. Linked extra items become parts of their ingredient. Once the list has left `draft`, they always use their `attrs_snapshot`. Free-text extra items become their own lines.
   4. **Grouping.** Parts are grouped by line key: `i:<ingredient_id>` for ingredients, `x:<extra_item_id>` for free text.
   5. **Totals.** If all parts with an amount can be converted to the base unit, there is one total. Otherwise there is one **segment** per unit kind (`mass_g`, `volume_ml`, `count`), e.g. "500 g + 2 Stk.". Parts without an amount set `has_unspecified`.
   6. **Display rounding** (AGG-04) produces `display: [{value, unit}]`, while the exact segment totals are kept.
   7. **Check state** is applied from `list_line_states` (§ 5.7). Lines hidden in the draft (LIST-07) are returned with `hidden: true`.
-  8. **Sort** by category `sort_order`, then name (normalised). The output is deterministic (AGG-05).
+  8. **Sort** by category `sort_order`, then name (normalised). A deleted category keeps its last `sort_order`, so ties between categories break by not deleted before deleted, then by category id. The output is deterministic (AGG-05).
 - **Tests:** table-driven tests for every rule, plus Hypothesis properties:
   - merging order doesn't matter;
   - scaling by *k* scales totals by *k*;
@@ -309,7 +309,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   | `type` | Payload | Rule |
   |---|---|---|
   | `line.check` | `{line_key, checked}` | Last write wins by `at` (ties: higher `op_id`). `at` is clamped to at most server time + 5 min. On a `done` list: applied if `at ≤ finished_at` (SYNC-06), otherwise rejected with `list.done` |
-  | `extra.add` | `{extra_id, text, amount_text?, category_key?}` | `extra_id` is created by the client (UUIDv7); a duplicate id means already applied |
+  | `extra.add` | `{extra_id, text, amount_text?, category_id?}` | `extra_id` is created by the client (UUIDv7); a duplicate id means already applied. `category_key` from older clients is still accepted. An unknown or deleted category, or *Uncategorized*, falls back to *Other*, so the op never fails (LIST-06) |
   | `extra.update` | `{extra_id, text, amount_text?}` | Ignored if the item was deleted (delete wins) |
   | `extra.delete` | `{extra_id}` | Soft delete (tombstone) |
   | `list.finish` | `{}` | No-op if already `done` |
@@ -410,7 +410,7 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 | `one_time_codes` | `kind` (`invite`/`reset`), `code_hmac` (unique), `created_by` FK set null, `target_user_id` FK cascade (reset), `expires_at`, `used_at`, `used_by` FK set null, `revoked_at`, `tailscale_share_url` (invite, optional) | |
 | `couples` | `requester_id` FK cascade, `addressee_id` FK cascade, `status` (`pending`/`accepted`), `accepted_at` | |
 | `couple_members` | `user_id` PK FK cascade, `couple_id` FK cascade | Filled on accept; the primary key enforces "one couple per user" |
-| `categories` | `key` (unique), `sort_order` | Seeded by migration |
+| `categories` | `key` (unique, nullable), `name_de`, `name_de_norm`, `name_en`, `name_en_norm`, `sort_order`, `deleted_at` | Seeded by migration with key and both names (requirements Appendix A); *Uncategorized* (`uncategorized`) starts last. Admin-added categories have no key; the key identifies *Other* and *Uncategorized* and drives the OFF category guess (§ 5.9). One name column, with its `_norm`, per UI language: a language added later gets an empty one, and the English name shows until admins fill it in (I18N-01, D-31). Names are unique per language among the categories that aren't deleted (REF-01). `deleted_at` marks a deleted category (D-30): it keeps its last `sort_order`, while the others keep a gap-free order. Each downgrade refuses while it would lose data: categories without a key, deleted categories, or ingredients in *Uncategorized* |
 | `cuisines` | `key` (unique, nullable), `name` (nullable), `name_norm` (unique), `created_by` FK set null | Seeded entries have a `key`; user-added ones have a `name` |
 | `tags`, `meal_tags` | `name`, `name_norm` (unique) · (`meal_id`, `tag_id`) | |
 | `ingredients` | `name`, `name_norm` (indexed, not unique), `name_sort` (indexed), `brand`, `brand_norm`, `brand_sort`, `barcode` (unique, nullable), `category_id` FK, `base_unit` (`g`/`ml`), `piece_weight_g`, `density_g_per_ml`, nutrient columns (nullable), `quantity_text`, `pack_quantity`, `pack_unit`, `source` (`manual`/`off`), `off_last_modified_at`, `fetched_at`, `user_edited_fields` (JSON), `pending_update` (JSON), `ignored_off_modified_at`, `created_by`/`updated_by` FK set null | One kind of ingredient (D-21, migration 0007 merged the former `products` table into it); the pack size is stored for the postponed pack-rounding feature; `name_sort` and `brand_sort` are the dictionary-order keys (§ 5.2, migration 0008) |
@@ -422,7 +422,7 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
 | `list_extra_items` | `list_id` FK cascade, `ingredient_id` FK restrict (nullable), `attrs_snapshot` (JSON; set at Start shopping, or immediately when added outside `draft`), `text`, `amount`, `unit`, `amount_text`, `category_id` FK, `added_by` FK set null, `deleted_at` | `id` may be generated by the client |
 | `list_line_states` | PK (`list_id`, `line_key`), `checked`, `checked_at`, `checked_op_id`, `checked_by` FK set null, `checked_snapshot` (JSON), `hidden` | `checked_op_id` breaks ties in last-write-wins (§ 5.8) |
 | `processed_ops` | `op_id` PK, `user_id`, `list_id`, `applied_at` | Pruned after 30 days |
-| `admin_events` | `actor_id` FK set null, `action`, `target_user_id` FK set null, `details` (JSON), `created_at` | Admin activity log (ADM-01) |
+| `admin_events` | `actor_id` FK set null, `action`, `target_user_id` FK set null, `details` (JSON), `created_at` | Admin activity log (ADM-01). Categories: `category.create` (names), `category.rename` (old and new names), `category.delete` (names, number of ingredients moved and of free-text items moved), `category.reorder` |
 
 **Deletion and lifecycle rules** (all in one write transaction each):
 - **Meal deleted** (MEAL-07): detach it from every not-yet-frozen list (§ 5.7), then delete it.
@@ -438,6 +438,14 @@ All tables have `id` (UUIDv7) plus `created_at`/`updated_at` unless stated other
   3. end the couple;
   4. cascade: meals, other lists, sessions, codes;
   5. media files are removed by the cleanup job.
+- **Category deleted** (REF-01, D-30); refused for *Other* and *Uncategorized*:
+  1. every ingredient of the category moves to *Uncategorized*. This isn't an edit of the ingredient: `updated_by` stays;
+  2. free-text extra items on drafts that aren't tombstoned move to *Other*;
+  3. nothing on lists being shopped or done lists changes: their frozen lines, linked extra items' `attrs_snapshot` and free-text items keep pointing to the category, so the foreign keys stay RESTRICT;
+  4. `deleted_at` is set, and the remaining `sort_order` closes the gap;
+  5. a `category.delete` admin event records the names and both counts.
+
+  Afterwards, "Shop again" and copies put free-text items whose category is deleted into *Other*. Creating or updating an ingredient refuses a deleted category and *Uncategorized*, except an update that leaves an uncategorized ingredient's category unchanged; adding or changing a free-text item over the REST API refuses them too (LIST-06).
 - **Ingredient merge** (ING-05) repoints `meal_ingredients`, `list_meal_ingredients` and `list_extra_items`, moves A's barcode to B if B has none, rewrites `list_line_states.line_key` (`i:A` → `i:B`, merging check states: checked only if both were checked), then deletes A.
 - **Base unit change** (ING-02) is allowed any time; values stay per 100 of the new unit, and pending OFF nutrient updates are dropped.
 
@@ -452,11 +460,11 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 | Me | `GET/PATCH /me` (display name, language, privacy, and in `filter_hidden` the user filter for meals and for lists and the state filter, § 6) · `POST /me/password` · `GET /me/sessions` · `DELETE /me/sessions/{id}` · `GET /me/security` (reset notices) |
 | Couple | `GET /couple` · `POST /couple/requests` · `POST /couple/requests/{id}/accept\|decline\|cancel` · `DELETE /couple` |
 | Users | `GET /users` (active users: id + display name, for the couple picker) · `GET /users/visible?for=meals\|lists` (the choices of the user filter on Meals or Lists: oneself first, the partner, then everyone whose matching privacy switch is public, VIS-02) |
-| Reference | `GET /categories` · `GET /units` · `GET/POST /cuisines` · `GET /tags?q=` |
+| Reference | `GET /categories` (every category, deleted ones included, because old lists and the offline copy need their names; by `sort_order`. Each with `id`, `key` or null, `names` by language (`de`, `en`), `sort_order`, `deleted` and its number of ingredients) · `GET /units` · `GET/POST /cuisines` · `GET /tags?q=` |
 | Ingredients | `GET /ingredients?q=&category_id=` (`q` searches name and brand; `category_id` is repeatable and matches any of them; without `q` sorted in dictionary order by name, then brand (§ 5.2); with `q` the best matches first, then the same order) · `POST` · `GET/PATCH /ingredients/{id}` · `GET /ingredients/similar?name=&brand=` · `GET /ingredients/lookup?barcode=` · `GET /ingredients/off-search?q=&page=` · `POST /ingredients/{id}/barcode` (link a barcode to an ingredient without one; 409 otherwise) · `POST /ingredients/{id}/pending-update/apply\|ignore` |
 | Meals | `GET /meals?q=&cuisine_id=&tag_id=&owner_ids=` (`cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given ones and it has every given tag; sorted in dictionary order (§ 5.2); without `owner_ids` the user filter on Meals applies, with `owner_ids` (repeatable) only those owners' meals are listed) · `GET /meals/tags` (the tags of all visible meals: the choices of the tag filter) · `GET /meals/recent` (the picker's "recently used") · `POST` · `GET/PATCH/DELETE /meals/{id}` · `POST /meals/{id}/copy` · `PUT/DELETE /meals/{id}/photo` · `GET /media/{key}` |
-| Lists | `GET /lists?cursor=` (the list feed, UI-02: every list you can see, in every state, with your user filter and state filter applied; newest created first, ties by id; 30 per page, with a `next_cursor` for the next page, null on the last) · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
-| Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/events` · `GET /admin/system` (version, plus backup and disk status read from the read-only `/status/*.json`) · `POST /admin/backup` (creates `/data/status/backup-request`, picked up by a systemd path unit) |
+| Lists | `GET /lists?cursor=` (the list feed, UI-02: every list you can see, in every state, with your user filter and state filter applied; newest created first, ties by id; 30 per page, with a `next_cursor` for the next page, null on the last) · `POST /lists` · `GET/PATCH/DELETE /lists/{id}` · `POST /lists/{id}/meals` · `PATCH/DELETE /lists/{id}/meals/{list_meal_id}` · `POST /lists/{id}/extra-items` · `PATCH/DELETE …/extra-items/{id}` · `POST /lists/{id}/lines/{key}/hide\|unhide` · `POST /lists/{id}/start-shopping\|reopen\|shop-again\|copy` · `POST /lists/{id}/ops` (§ 5.8; `extra.add` names the category by id) · `GET /lists/sync` (all editable draft/shopping lists for the offline copy) |
+| Admin | `GET/PATCH /admin/users[/{id}]` (role, active) · `DELETE /admin/users/{id}` · `GET/POST /admin/invites` · `DELETE /admin/invites/{id}` · `POST /admin/users/{id}/reset-link` · `PUT /admin/categories/order` (a permutation of the categories that aren't deleted, *Uncategorized* included) · `POST /admin/categories` (both names; 201, goes last) · `PATCH /admin/categories/{id}` (rename: both names; refused for *Uncategorized*) · `GET /admin/categories/{id}/usage` (the number of ingredients and of free-text items on drafts, for the delete confirmation) · `DELETE /admin/categories/{id}` (§ 6; refused for *Other* and *Uncategorized*). A taken name is a field error on that language's name; a deleted category is "not found" for rename and delete · `POST /admin/ingredients/{id}/merge` · `DELETE /admin/ingredients/{id}` · `GET /admin/events` · `GET /admin/system` (version, plus backup and disk status read from the read-only `/status/*.json`) · `POST /admin/backup` (creates `/data/status/backup-request`, picked up by a systemd path unit) |
 | Diagnostics (M1 only, removed in M9) | `POST /auth/diag/set\|check` (cookie carry-over test, under `/api/auth` so the cookie path matches) · `GET /auth/diag/request` (the client address, scheme and forwarding headers as the app sees them, O-3) |
 
 ## 8. Frontend design
@@ -478,7 +486,8 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 - **Sync module** (`features/sync/`):
   - an IndexedDB store `lists` for the offline copy (SYNC-02), refreshed from `GET /lists/sync` on start, `visibilitychange`, `online` and after each mutation;
   - the copy seeds the first page of the list feed: the Lists tab shows it, sorted like the feed, until that page arrives, and offline it shows only the copy, ignoring the saved filters (UI-02). A list finished on this phone whose finish wasn't sent yet is left out;
-  - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id;
+  - the category list, cached per user in the `meta` store with every category's names, deleted ones included (D-30), so stored lists show every heading offline (LIST-11);
+  - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id. A pending free-text item (`extra.add`) sends its category's id;
   - a flush loop that runs on start, `visibilitychange→visible` and `online`, in order, stopping at the first network error or timeout;
   - a status store feeding the indicator (SYNC-07);
   - `navigator.storage.persist()` requested after login;
@@ -505,7 +514,8 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - Clipboard fallback.
   - The export text is built by `features/lists/exportText.ts` (unit-tested) from the display values the backend already rounded.
 - **i18n:**
-  - `de.json` / `en.json` with flat keys: `feature.screen.element`, errors as `error.<code>`, categories as `category.<key>`, units as `unit.<unit>`, reminders as `reminder.<n>`;
+  - `de.json` / `en.json` with flat keys: `feature.screen.element`, errors as `error.<code>`, units as `unit.<unit>`, reminders as `reminder.<n>`;
+  - category names are not in these files but come from the API (I18N-04, D-31): one helper shows a category's name in the UI language, else in English;
   - `format.ts` wraps `Intl.NumberFormat`/`DateTimeFormat` (`de-DE`, `en-GB`);
   - `parseAmount()` accepts `,` and `.`.
 - **Keyboard** (UI-01, D-28): one viewport module watches `visualViewport` (`resize`, `scroll`), derives the keyboard height, ignores it while pinch-zoomed (`scale` ≠ 1) and does nothing where the API is missing. It exposes the inset as a CSS variable and a "keyboard open" state: the dialogs size themselves to the visible area, and the tab bar and the update prompt hide.
