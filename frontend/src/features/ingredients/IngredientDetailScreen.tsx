@@ -83,7 +83,7 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
     { label: t('ingredients.detail.brand'), value: ingredient.brand ?? notSet },
     {
       label: t('ingredients.detail.category'),
-      value: category ? categoryName(t, category.key) : '…',
+      value: category ? categoryName(category, language) : '…',
     },
     {
       label: t('ingredients.detail.baseUnit'),

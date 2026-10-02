@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import { ingredientLabel } from '@/features/ingredients/label';
+import type { Category } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
 import type { Language } from '@/i18n';
 import { formatDate, formatNumber } from '@/i18n/format';
@@ -81,27 +82,30 @@ export function sourceAmount(
 
 export interface CategoryGroup<Line> {
   categoryId: string;
-  /** The translated category name. */
+  /** The category's name in the UI language. */
   name: string;
   lines: Line[];
 }
 
 /**
  * Groups lines under their category, keeping the order the server sorted them in (category
- * order, then name: AGG-05). `categoryKeys` maps category ids to their keys.
+ * order, then name: AGG-05). A category missing from `categories` is named like *Other*.
  */
 export function groupByCategory<Line extends { category_id: string }>(
   lines: readonly Line[],
-  categoryKeys: ReadonlyMap<string, string>,
-  t: TFunction,
+  categories: readonly Category[],
+  language: Language,
 ): CategoryGroup<Line>[] {
+  const categoriesById = new Map(categories.map((category) => [category.id, category]));
+  const other = categoriesById.get(otherCategoryId(categories));
   const groups: CategoryGroup<Line>[] = [];
   const byId = new Map<string, CategoryGroup<Line>>();
   for (const line of lines) {
     let group = byId.get(line.category_id);
     if (!group) {
-      const key = categoryKeys.get(line.category_id) ?? 'other';
-      group = { categoryId: line.category_id, name: categoryName(t, key), lines: [] };
+      const category = categoriesById.get(line.category_id) ?? other;
+      const name = category ? categoryName(category, language) : '';
+      group = { categoryId: line.category_id, name, lines: [] };
       byId.set(line.category_id, group);
       groups.push(group);
     }

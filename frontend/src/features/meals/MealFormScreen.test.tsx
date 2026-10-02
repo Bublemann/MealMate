@@ -247,6 +247,23 @@ describe('MealFormScreen (create)', () => {
     expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
   });
 
+  it('fills in the name searched for on the Meals tab (MEAL-09)', async () => {
+    const created = bareMeal({ name: 'Lasagne al forno' });
+    const { fetchMock, user, router } = renderForm('/meals/new?name=%20Lasagne%20al%20forno%20', {
+      'POST /api/meals': Response.json(created, { status: 201 }),
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'New meal' })).toBeVisible();
+    expect(within(form).getByLabelText('Name')).toHaveValue('Lasagne al forno');
+    await user.click(within(form).getByRole('button', { name: 'Create meal' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/meals/meal-new'));
+    await expect(bodyOf(fetchMock, 'POST /api/meals')).resolves.toMatchObject({
+      name: 'Lasagne al forno',
+    });
+  });
+
   it('keeps servings between 1 and 99', async () => {
     const { fetchMock, user } = renderForm('/meals/new');
     const form = await screen.findByTestId(testIds.mealForm);

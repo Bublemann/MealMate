@@ -22,7 +22,7 @@ def nutrient_row(page: Page, key: str) -> Locator:
     )
 
 
-def test_member_builds_up_an_ingredient(member_page: Page) -> None:
+def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Account) -> None:
     """Create with brand and barcode, find by brand and by another spelling, similar hint, a
     second brand of the same thing, own nutrition values (ING-01..03, NUT-02)."""
     page = member_page
@@ -40,7 +40,7 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
     form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
     form.get_by_label(text("ingredients.field.brand"), exact=True).fill(brand)
     form.get_by_label(text("ingredients.field.category"), exact=True).select_option(
-        label=text("category.fruit_vegetables")
+        label=api.category_name(member, "fruit_vegetables")
     )
     form.get_by_label(text("ingredients.field.pieceWeight"), exact=True).fill("180")
     form.get_by_label(text("nutrient.kcal"), exact=True).fill("52")
@@ -55,7 +55,7 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
     detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
     label = ingredient_label(name, brand)
     expect(detail.get_by_role("heading", level=1)).to_have_text(label)
-    expect(detail).to_contain_text(text("category.fruit_vegetables"))
+    expect(detail).to_contain_text(api.category_name(member, "fruit_vegetables"))
     expect(detail).to_contain_text(barcode)
     expect(detail).to_contain_text("1 kg")
     expect(detail).to_contain_text(text("ingredients.detail.source.manual"))
@@ -152,9 +152,9 @@ def test_member_filters_by_categories(member_page: Page, api: Api, member: Accou
         (f"Senf {tag}", "sauces_spices_oils"),
     ):
         api.create_ingredient(member, name, category_key=category)
-    fruit = text("category.fruit_vegetables")
-    dairy = text("category.dairy_eggs")
-    sauces = text("category.sauces_spices_oils")
+    fruit = api.category_name(member, "fruit_vegetables")
+    dairy = api.category_name(member, "dairy_eggs")
+    sauces = api.category_name(member, "sauces_spices_oils")
 
     page.goto("/ingredients")
     page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
@@ -252,7 +252,7 @@ def test_filter_panel_fits_the_largest_text_size(
     boxes.last.check()
     expect(boxes.last).to_be_checked()
     for category in api.categories(member):
-        name = panel.get_by_text(text(f"category.{category['key']}"), exact=True)
+        name = panel.get_by_text(category["names"]["en"], exact=True)
         assert name.evaluate("name => name.scrollWidth <= name.clientWidth")
 
 
@@ -285,8 +285,7 @@ def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None
     draft = api.create_list(admin, f"Order {tag}")
     for ingredient in (ingredient_a, ingredient_b):
         api.add_extra_item(admin, draft["id"], ingredient_id=ingredient["id"], amount=100, unit="g")
-    first_name = text(f"category.{first['key']}")
-    second_name = text(f"category.{second['key']}")
+    first_name, second_name = first["names"]["en"], second["names"]["en"]
 
     try:
         sign_in(page.context, admin)

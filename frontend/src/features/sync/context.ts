@@ -11,9 +11,12 @@ import { useCategories } from '@/features/reference/api';
 import { applyPending, type PendingList } from './applyPending';
 import type { SyncEngine } from './engine';
 import { isConnected, untilWaitingTooLong, type SyncStatus } from './status';
-import type { ListDetail, Op } from './types';
+import type { Category, ListDetail, Op } from './types';
 
 export const SyncContext = createContext<SyncEngine | null>(null);
+
+/** Stable while the categories load, so the pending list isn't built again on every render. */
+const NO_CATEGORIES: readonly Category[] = [];
 
 export function useSyncEngine(): SyncEngine {
   const engine = useContext(SyncContext);
@@ -74,18 +77,14 @@ export function usePendingFinishes(): ReadonlySet<string> {
 export function usePendingList(list: ListDetail | undefined): PendingList | undefined {
   const me = useCurrentUser();
   const ops = usePendingOps(list?.id ?? '');
-  const categories = useCategories();
-  const categoryIds = useMemo(
-    () => new Map(categories.data?.map((category) => [category.key, category.id])),
-    [categories.data],
-  );
+  const categories = useCategories().data ?? NO_CATEGORIES;
   const user = useMemo(
     () => ({ id: me.id, display_name: me.display_name, deactivated: false }),
     [me.id, me.display_name],
   );
   return useMemo(
-    () => list && applyPending(list, ops, { me: user, categoryIds }),
-    [list, ops, user, categoryIds],
+    () => list && applyPending(list, ops, { me: user, categories }),
+    [list, ops, user, categories],
   );
 }
 

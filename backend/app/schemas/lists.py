@@ -316,12 +316,14 @@ class LineCheckPayload(BaseModel):
 
 
 class ExtraAddPayload(BaseModel):
-    """Add a free-text extra item with the client's id (UUID). `category_key` is a category's
-    `key`; left out or unknown: *Other*."""
+    """Add a free-text extra item with the client's id (UUID), in the category `category_id`;
+    left out or unknown: *Other*. App versions from before D-31 send the category's `key` as
+    `category_key` instead, which is still accepted."""
 
     extra_id: ClientIdInput
     text: ExtraTextInput
     amount_text: AmountTextInput | None = None
+    category_id: IdInput | None = None
     category_key: Annotated[str, StringConstraints(max_length=CATEGORY_KEY_MAX_LENGTH)] | None = (
         None
     )

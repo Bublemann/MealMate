@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS
+from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.domain.text import normalize
 from app.models import AdminEvent, Cuisine, Tag
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
@@ -59,6 +59,25 @@ async def test_categories_in_the_seeded_order(api: AsyncClient, anna: Account) -
         (key, position) for position, key in enumerate(CATEGORY_KEYS)
     ]
     assert len({item["id"] for item in categories}) == len(CATEGORY_KEYS)
+
+
+async def test_categories_have_a_name_per_language(api: AsyncClient, anna: Account) -> None:
+    """I18N-04, D-31: each category comes with its names by UI language, next to its id, key
+    and sort order."""
+    response = await api.get("/api/categories", headers=anna.headers)
+    categories = response.json()
+    first, *_, last = categories
+    assert first == {
+        "id": first["id"],
+        "key": "fruit_vegetables",
+        "names": {"de": "Obst & Gemüse", "en": "Fruit & vegetables"},
+        "sort_order": 0,
+    }
+    assert (last["key"], last["names"]) == ("other", {"de": "Sonstiges", "en": "Other"})
+    assert [(item["key"], item["names"]) for item in categories] == [
+        (category.key, {"de": category.name_de, "en": category.name_en})
+        for category in SEEDED_CATEGORIES
+    ]
 
 
 async def test_units(api: AsyncClient, anna: Account) -> None:

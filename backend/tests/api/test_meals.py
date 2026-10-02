@@ -949,6 +949,29 @@ async def test_filters(api: AsyncClient, anna: Account, cuisines: dict[str, str]
     assert await list_meals(api, anna, tag_id="unknown") == []
 
 
+async def test_several_cuisines_match_any_and_several_tags_all(
+    api: AsyncClient, anna: Account, cuisines: dict[str, str]
+) -> None:
+    curry = await create_meal(
+        api, anna, "Curry", cuisine_id=cuisines["indian"], tags=["Scharf", "Schnell"]
+    )
+    await create_meal(api, anna, "Dal", cuisine_id=cuisines["indian"], tags=["Schnell"])
+    await create_meal(api, anna, "Pad Thai", cuisine_id=cuisines["thai"], tags=["Scharf"])
+    await create_meal(api, anna, "Chili", tags=["Scharf", "Schnell"])
+    await create_meal(api, anna, "Suppe", cuisine_id=cuisines["french"])
+    hot, quick = (tag["id"] for tag in curry["tags"])
+
+    indian_or_thai = {"cuisine_id": [cuisines["indian"], cuisines["thai"]]}
+    assert await list_meals(api, anna, **indian_or_thai) == ["Curry", "Dal", "Pad Thai"]
+    assert await list_meals(api, anna, tag_id=[hot, quick]) == ["Chili", "Curry"]
+    assert await list_meals(api, anna, **indian_or_thai, tag_id=[hot]) == ["Curry", "Pad Thai"]
+    assert await list_meals(api, anna, **indian_or_thai, tag_id=[hot, quick]) == ["Curry"]
+    # A tag no meal has leaves nothing, as every tag must match.
+    assert await list_meals(api, anna, tag_id=[hot, "unknown"]) == []
+    # The same tag twice is still one tag.
+    assert await list_meals(api, anna, tag_id=[quick, quick]) == ["Chili", "Curry", "Dal"]
+
+
 async def test_filter_chips(api: AsyncClient, anna: Account, ben: Account, carl: Account) -> None:
     await create_meal(api, anna, "Anna's")
     await create_meal(api, ben, "Ben's")

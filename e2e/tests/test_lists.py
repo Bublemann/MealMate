@@ -17,8 +17,8 @@ LIST_URL = re.compile(r"/lists/([\w-]+)$")
 
 
 def category_names(api: Api, account: Account, keys: set[str]) -> list[str]:
-    """The translated names of the categories `keys`, in the app's current walking order."""
-    return [text(f"category.{c['key']}") for c in api.categories(account) if c["key"] in keys]
+    """The names of the categories `keys`, in the app's current walking order."""
+    return [c["names"]["en"] for c in api.categories(account) if c["key"] in keys]
 
 
 def line(page: Page, name: str) -> Locator:

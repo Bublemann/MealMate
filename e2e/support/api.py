@@ -184,8 +184,15 @@ class Api:
             raise ApiError(f"{b.username} is not a couple with {a.username}: {accepted}")
 
     def categories(self, account: Account) -> list[dict[str, Any]]:
-        """GET /api/categories: every category in its walking order."""
+        """GET /api/categories: every category in its walking order, with its `names` by
+        language."""
         return self.call("GET", "/api/categories", token=self.token(account))
+
+    def category_name(self, account: Account, key: str, language: str = "en") -> str:
+        """The name of the category `key` in `language`, as the app shows it: category names
+        come from the server, not from the translations (D-31)."""
+        [names] = [c["names"] for c in self.categories(account) if c["key"] == key]
+        return names[language]
 
     def order_categories(self, admin: Account, category_ids: list[str]) -> None:
         """PUT /api/admin/categories/order."""

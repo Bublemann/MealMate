@@ -210,6 +210,30 @@ describe('IngredientsScreen', () => {
     expect(boxes).toHaveLength(4);
   });
 
+  it('names the categories in the rows and the filter panel as the server does (I18N-04)', async () => {
+    const { authSession, user } = renderIngredients({
+      'GET /api/categories': CATEGORIES.map((category) =>
+        category.key === 'dairy_eggs'
+          ? { ...category, names: { de: 'Kühlregal', en: 'Chilled goods' } }
+          : category,
+      ),
+    });
+    authSession.setUser({ ...authSession.getState().user!, language: 'de' });
+    const { changeLanguage } = await import('@/i18n');
+    await changeLanguage('de');
+
+    await waitFor(() => expect(rowTexts()).toContain('MilchKühlregal · ml'));
+    expect(rowTexts()).toContain('ÄpfelObst & Gemüse · g');
+    await user.click(screen.getByTestId(testIds.filterButton));
+    const group = within(await screen.findByTestId(testIds.filterPanel)).getByTestId(
+      testIds.filterGroup,
+    );
+    const boxes = within(group).getAllByRole('checkbox');
+    ['Obst & Gemüse', 'Kühlregal', 'Käse', 'Sonstiges'].forEach((name, index) => {
+      expect(boxes[index]).toHaveAccessibleName(name);
+    });
+  });
+
   it('shows the placeholder in the panel until the categories have loaded (UI-03)', async () => {
     const categories = heldRoute();
     const { user } = renderIngredients({ 'GET /api/categories': categories.route });

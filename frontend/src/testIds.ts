@@ -77,7 +77,6 @@ export const testIds = {
   diskStatus: 'disk-status',
   mealSearch: 'meal-search',
   newMeal: 'new-meal',
-  mealUserChips: 'meal-user-chips',
   mealList: 'meal-list',
   mealCard: 'meal-card',
   screenMealForm: 'screen-meal-form',

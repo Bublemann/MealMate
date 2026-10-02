@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useCouple } from '@/features/couple/api';
+import type { Category } from '@/features/reference/api';
 import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
@@ -35,7 +36,7 @@ const MAX_NAME_LENGTH = 60;
 
 interface ListActionsProps {
   list: ListDetail;
-  categoryKeys: ReadonlyMap<string, string>;
+  categories: readonly Category[];
 }
 
 /**
@@ -45,7 +46,7 @@ interface ListActionsProps {
  * list can't be renamed or shared differently any more (LIST-10). Export also works offline from
  * the local copy (EXP-03); the rest needs a connection and is disabled without one (SYNC-03).
  */
-export function ListActions({ list, categoryKeys }: ListActionsProps) {
+export function ListActions({ list, categories }: ListActionsProps) {
   const { t } = useTranslation();
   const offline = !useConnected();
   const language = useLanguage();
@@ -58,7 +59,7 @@ export function ListActions({ list, categoryKeys }: ListActionsProps) {
   function onExport() {
     setExported(null);
     // Built synchronously and shared before any await: the share sheet needs the tap (plan § 8).
-    void shareText(exportText(list, { t, language, categoryKeys })).then(setExported);
+    void shareText(exportText(list, { t, language, categories })).then(setExported);
   }
 
   function onCopy() {

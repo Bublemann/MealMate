@@ -71,7 +71,7 @@ function PickerContent({ listId }: { listId: string }) {
   const debounced = useDebouncedValue(query.trim());
   const searching = debounced !== '';
   const recent = useRecentMeals({ enabled: !searching });
-  const meals = useMeals({ q: debounced, cuisineId: '', tagId: '' });
+  const meals = useMeals({ q: debounced, cuisineIds: [], tagIds: [] });
   const recentIds = new Set(recent.data?.map((meal) => meal.id));
   // Without a search, the recently used meals come first and are not repeated below.
   const rest = searching ? meals.data : meals.data?.filter((meal) => !recentIds.has(meal.id));

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
+import { useLanguage } from '@/i18n';
 
 /** The longest free-text amount the server takes (LIST-06). */
 export const MAX_AMOUNT_TEXT_LENGTH = 30;
@@ -91,6 +92,7 @@ export function FreeTextFields({
   withoutCategory = false,
 }: FreeTextFieldsProps) {
   const { t } = useTranslation();
+  const language = useLanguage();
   const categories = useCategories();
 
   return (
@@ -118,11 +120,11 @@ export function FreeTextFields({
               onChange={(event) => onCategoryChange(event.target.value)}
             >
               {!categories.data && (
-                <NativeSelectOption value="">{categoryName(t, 'other')}</NativeSelectOption>
+                <NativeSelectOption value="">{t('common.loading')}</NativeSelectOption>
               )}
               {categories.data?.map((category) => (
                 <NativeSelectOption key={category.id} value={category.id}>
-                  {categoryName(t, category.key)}
+                  {categoryName(category, language)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>

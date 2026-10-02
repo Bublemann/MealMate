@@ -1240,9 +1240,10 @@ export interface paths {
         /**
          * List Meals
          * @description The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
-         *     and cuisines ignoring case and umlauts. Without `owner_ids`, owners you switched off in your
-         *     filter chips (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those
-         *     owners' meals are listed.
+         *     and cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal
+         *     matches if its cuisine is any of the given ones and it has every given tag. Without
+         *     `owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are
+         *     left out; with `owner_ids` (repeatable), only those owners' meals are listed.
          */
         get: operations["list_meals"];
         put?: never;
@@ -1288,7 +1289,7 @@ export interface paths {
         /**
          * List Meal Tags
          * @description The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no
-         *     limit and ignores your filter chips.
+         *     limit; your user filter on Meals doesn't narrow it.
          */
         get: operations["list_meal_tags"];
         put?: never;
@@ -1616,15 +1617,27 @@ export interface components {
         };
         /**
          * Category
-         * @description Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).
+         * @description Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking
+         *     order). `key` names a seeded category, e.g. `other` for *Other*.
          */
         Category: {
             /** Id */
             id: string;
             /** Key */
             key: string;
+            names: components["schemas"]["CategoryNames"];
             /** Sort Order */
             sort_order: number;
+        };
+        /**
+         * CategoryNames
+         * @description A category's name in each UI language (I18N-04, D-31).
+         */
+        CategoryNames: {
+            /** De */
+            de: string;
+            /** En */
+            en: string;
         };
         /**
          * CategoryOrder
@@ -1791,12 +1804,15 @@ export interface components {
         };
         /**
          * ExtraAddPayload
-         * @description Add a free-text extra item with the client's id (UUID). `category_key` is a category's
-         *     `key`; left out or unknown: *Other*.
+         * @description Add a free-text extra item with the client's id (UUID), in the category `category_id`;
+         *     left out or unknown: *Other*. App versions from before D-31 send the category's `key` as
+         *     `category_key` instead, which is still accepted.
          */
         ExtraAddPayload: {
             /** Amount Text */
             amount_text?: string | null;
+            /** Category Id */
+            category_id?: string | null;
             /** Category Key */
             category_key?: string | null;
             /** Extra Id */
@@ -5330,8 +5346,8 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
-                cuisine_id?: string | null;
-                tag_id?: string | null;
+                cuisine_id?: string[] | null;
+                tag_id?: string[] | null;
                 owner_ids?: string[] | null;
             };
             header?: never;

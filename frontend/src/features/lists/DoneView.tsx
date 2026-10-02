@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import type { Category } from '@/features/reference/api';
 import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
@@ -19,7 +20,7 @@ import { Reminder } from './Reminder';
 interface DoneViewProps {
   /** `pendingFinish`: finished here, not sent yet; reopening waits until it is. */
   list: ListDetail & { pendingFinish?: boolean };
-  categoryKeys: ReadonlyMap<string, string>;
+  categories: readonly Category[];
 }
 
 /**
@@ -27,7 +28,7 @@ interface DoneViewProps {
  * (SHOP-05). "Shop again" starts a new draft from it, "Reopen" goes back to shopping (SHOP-06);
  * both need a connection (SYNC-03). A list finished here but not sent yet shows as done already.
  */
-export function DoneView({ list, categoryKeys }: DoneViewProps) {
+export function DoneView({ list, categories }: DoneViewProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const navigate = useNavigate();
@@ -37,8 +38,8 @@ export function DoneView({ list, categoryKeys }: DoneViewProps) {
   const offline = !useConnected();
   const groups = groupByCategory(
     list.lines.filter((line) => !line.hidden),
-    categoryKeys,
-    t,
+    categories,
+    language,
   );
 
   function onShopAgain() {

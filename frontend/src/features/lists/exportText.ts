@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import type { Category } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import type { ListDetail } from './api';
 import { groupByCategory, lineAmount, lineLabel, listDisplayName, reminderText } from './format';
@@ -14,8 +15,8 @@ type ExportLine = ExportableList['lines'][number];
 interface ExportOptions {
   t: TFunction;
   language: Language;
-  /** Category keys by id, for the translated headings. */
-  categoryKeys: ReadonlyMap<string, string>;
+  /** The categories, for the headings. */
+  categories: readonly Category[];
 }
 
 /**
@@ -26,7 +27,7 @@ interface ExportOptions {
  * bought say so, as plain text can't be greyed out (SHOP-05). Built synchronously from loaded
  * data, so the share button can call `navigator.share` within the tap (plan § 8).
  */
-export function exportText(list: ExportableList, { t, language, categoryKeys }: ExportOptions) {
+export function exportText(list: ExportableList, { t, language, categories }: ExportOptions) {
   const blocks: string[] = [listDisplayName(list, t, language)];
 
   if (list.meals.length > 0) {
@@ -48,7 +49,7 @@ export function exportText(list: ExportableList, { t, language, categoryKeys }: 
     const amount = lineAmount(t, language, line);
     return amount ? t('lists.export.item', { name: lineLabel(line), amount }) : lineLabel(line);
   };
-  for (const group of groupByCategory(shown, categoryKeys, t)) {
+  for (const group of groupByCategory(shown, categories, language)) {
     const open = group.lines.filter((line) => !line.checked);
     const checked = group.lines.filter((line) => line.checked);
     blocks.push(

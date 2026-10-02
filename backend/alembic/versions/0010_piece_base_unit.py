@@ -5,8 +5,8 @@ An ingredient's base unit (`ingredients.base_unit`) and its copy in frozen rows
 the allowed values widen; no existing value changes. The downgrade refuses while an ingredient
 or a frozen row is counted in pieces, since `g` and `ml` can't hold that.
 
-Revision ID: 0009
-Revises: 0008
+Revision ID: 0010
+Revises: 0009
 Create Date: 2026-10-02 00:00:00+00:00
 """
 
@@ -15,8 +15,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0009"
-down_revision: str | None = "0008"
+revision: str = "0010"
+down_revision: str | None = "0009"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -66,10 +66,10 @@ def _check_nothing_in_pieces(connection: sa.Connection) -> None:
     ).scalar_one()
     if ingredients or rows:
         raise CountedInPiecesError(
-            "cannot downgrade below 0009: "
+            "cannot downgrade below 0010: "
             f"{_counted(ingredients, 'ingredient', 'ingredients')} and "
             f"{_counted(rows, 'frozen row', 'frozen rows')} are counted in pieces, which the "
-            "base units g and ml of 0008 can't hold; give them the base unit g or ml first"
+            "base units g and ml of 0009 can't hold; give them the base unit g or ml first"
         )
 
 

@@ -774,7 +774,7 @@ async def _insert_lists(
     categories = {row.key: row.id for row in await reference_repo.categories_in_order(session)}
     deleted = await _insert_deleted_meal(session, user_ids, now=now)
     every_meal = await meals_repo.search(
-        session, owner_ids=list(user_ids.values()), query="", cuisine_id=None, tag_id=None
+        session, owner_ids=list(user_ids.values()), query="", cuisine_ids=(), tag_ids=()
     )
     meals = {
         (meal.owner_id, meal.name): meal for meal in every_meal if meal.copied_from_meal_id is None

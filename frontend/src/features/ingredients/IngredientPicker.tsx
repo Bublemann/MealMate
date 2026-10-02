@@ -46,7 +46,6 @@ export function IngredientPicker({
   const searching = debounced !== '';
   const results = useIngredients(debounced, { enabled: searching });
   const categories = useCategories();
-  const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
   const matches = searching
     ? (results.data ?? [])
         .filter((ingredient) => !excludeIds.includes(ingredient.id))
@@ -112,7 +111,10 @@ export function IngredientPicker({
                 className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
               >
                 <IngredientName ingredient={ingredient} />
-                <IngredientCategoryUnit ingredient={ingredient} categoryKeys={categoryKeys} />
+                <IngredientCategoryUnit
+                  ingredient={ingredient}
+                  categories={categories.data ?? []}
+                />
               </button>
             </li>
           ))}

@@ -282,16 +282,18 @@ async def list_meals(
     principal: Principal,
     *,
     query: str | None,
-    cuisine_id: str | None,
-    tag_id: str | None,
+    cuisine_ids: Sequence[str],
+    tag_ids: Sequence[str],
     owner_ids: Sequence[str] | None,
     now: datetime,
 ) -> list[MealSummary]:
     """The meals the principal may see (VIS-01/02, CPL-04), A-Z (MEAL-09).
 
-    Without `owner_ids`, the owners the principal switched off in their filter chips are left
-    out (MEAL-10); with them, only those owners' meals are listed (as far as visible). `query`
-    matches the name, a tag or the cuisine, ignoring case, umlauts and accents.
+    Without `owner_ids`, the owners the principal unticked in their user filter on Meals are
+    left out (MEAL-10); with them, only those owners' meals are listed (as far as visible).
+    `query` matches the name, a tag or the cuisine, ignoring case, umlauts and accents. With
+    `cuisine_ids`, a meal's cuisine must be any of them; with `tag_ids`, it must have all of
+    them (MEAL-09).
     """
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
@@ -305,8 +307,8 @@ async def list_meals(
             session,
             owner_ids=owners,
             query=normalize(query or ""),
-            cuisine_id=cuisine_id,
-            tag_id=tag_id,
+            cuisine_ids=cuisine_ids,
+            tag_ids=tag_ids,
         )
         return await _summaries(session, media, rows, now=now)
 
@@ -316,7 +318,7 @@ async def recent_meals(
 ) -> list[MealSummary]:
     """The meals the principal added to lists, most recently added first and each once, as
     far as they still exist and are visible to them (MEAL-09: "recently used" in the meal
-    picker); at most 10. Filter chips do not apply."""
+    picker); at most 10. The user filter on Meals does not apply."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         meal_ids = await lists_repo.recent_meal_ids(
@@ -328,8 +330,8 @@ async def recent_meals(
 
 async def list_meal_tags(session: AsyncSession, principal: Principal) -> list[Tag]:
     """The tags on the meals the principal may see (VIS-01/02, CPL-04), by name: the choices of
-    the Meals tab's tag filter (MEAL-09). Filter chips (MEAL-10) do not narrow them, and tags
-    only used on meals the principal cannot see are left out."""
+    the Meals tab's tag filter (MEAL-09). The user filter on Meals (MEAL-10) does not narrow
+    them, and tags only used on meals the principal cannot see are left out."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         tags = await meals_repo.tags_of_owners(session, visible)

@@ -297,7 +297,7 @@
         "type": "object"
       },
       "Category": {
-        "description": "Shown as the translation `category.<key>`, in `sort_order` (the shop's walking order).",
+        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other*.",
         "properties": {
           "id": {
             "title": "Id",
@@ -307,6 +307,9 @@
             "title": "Key",
             "type": "string"
           },
+          "names": {
+            "$ref": "#/components/schemas/CategoryNames"
+          },
           "sort_order": {
             "title": "Sort Order",
             "type": "integer"
@@ -315,9 +318,29 @@
         "required": [
           "id",
           "key",
+          "names",
           "sort_order"
         ],
         "title": "Category",
+        "type": "object"
+      },
+      "CategoryNames": {
+        "description": "A category's name in each UI language (I18N-04, D-31).",
+        "properties": {
+          "de": {
+            "title": "De",
+            "type": "string"
+          },
+          "en": {
+            "title": "En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "de",
+          "en"
+        ],
+        "title": "CategoryNames",
         "type": "object"
       },
       "CategoryOrder": {
@@ -777,7 +800,7 @@
         "type": "object"
       },
       "ExtraAddPayload": {
-        "description": "Add a free-text extra item with the client's id (UUID). `category_key` is a category's\n`key`; left out or unknown: *Other*.",
+        "description": "Add a free-text extra item with the client's id (UUID), in the category `category_id`;\nleft out or unknown: *Other*. App versions from before D-31 send the category's `key` as\n`category_key` instead, which is still accepted.",
         "properties": {
           "amount_text": {
             "anyOf": [
@@ -790,6 +813,19 @@
               }
             ],
             "title": "Amount Text"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
           },
           "category_key": {
             "anyOf": [
@@ -7853,7 +7889,7 @@
     },
     "/api/meals": {
       "get": {
-        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts. Without `owner_ids`, owners you switched off in your\nfilter chips (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those\nowners' meals are listed.",
+        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal\nmatches if its cuisine is any of the given ones and it has every given tag. Without\n`owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are\nleft out; with `owner_ids` (repeatable), only those owners' meals are listed.",
         "operationId": "list_meals",
         "parameters": [
           {
@@ -7880,8 +7916,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 36,
-                  "type": "string"
+                  "items": {
+                    "maxLength": 36,
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
                 },
                 {
                   "type": "null"
@@ -7897,8 +7937,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 36,
-                  "type": "string"
+                  "items": {
+                    "maxLength": 36,
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
                 },
                 {
                   "type": "null"
@@ -8053,7 +8097,7 @@
     },
     "/api/meals/tags": {
       "get": {
-        "description": "The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no\nlimit and ignores your filter chips.",
+        "description": "The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no\nlimit; your user filter on Meals doesn't narrow it.",
         "operationId": "list_meal_tags",
         "responses": {
           "200": {

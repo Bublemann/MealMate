@@ -64,6 +64,7 @@ frontend/
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
+    │   ├── userFilter/     # the user filter on Meals and Lists: visible users, saving, filter group
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
@@ -132,32 +133,38 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   present and opens the new form with that name. A tab renders it at once and puts its state
   below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
   Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
-  clears the search and the filters) when they hide everything. Meals keeps the old `EmptyState`
-  card until it moves to the pinned block. Like the tab bar, the block must not crowd out the
-  content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and its
-  controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the first
-  accessibility size, D-29), and its spacing is in `em` of that text.
+  clears the search and the filters) when they hide everything. Like the tab bar, the block must
+  not crowd out the content at the largest text sizes: the `pinned` utility (`index.css`) caps its
+  text and its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens
+  (about the first accessibility size, D-29), and its spacing is in `em` of that text.
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
   the design tokens whose label is the tap target, MNT-05), each with whether it is at its
   default, and a reset for all of them. Each tick applies at once; "Zurücksetzen" resets every group and keeps the search;
   "Fertig" closes the panel. The button shows how many groups are not at their default, also in
-  its accessible name. Ingredients offers the categories (any of them, ING-03). At the largest
-  text sizes the options and buttons wrap and the panel scrolls, its buttons staying in view.
-- **Initial marker** (UI-02, SHOP-01): whose list (or meal) a row is shows as `InitialMarker`, a
-  round marker with the owner's initial, one's own rows included; screen readers read it as the
-  owner's full name. Shopping mode's "checked by" uses the same marker, `decorative`, because its
-  text names the person.
+  its accessible name. A group shows the loading placeholder until its options arrive, and its
+  error when they fail to load or a change fails. Ingredients offers the categories (any of them,
+  ING-03); Meals the user filter (MEAL-10), the cuisines (any of them) and the tags (all of them,
+  MEAL-09). The user filter is `useUserFilterGroup` (`features/userFilter/`), one checkbox per
+  user whose meals or lists are visible, "Me" first; each change is saved on the server at once
+  and loads the narrowed query again, and the screen hides an unticked user's rows right away. At
+  the largest text sizes the options and buttons wrap and the panel scrolls, its buttons staying
+  in view.
+- **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
+  `InitialMarker`, a round marker with the owner's initial, one's own rows included; screen readers
+  read it as the owner's full name. Meal rows put it after the name, so the meal is read first.
+  Shopping mode's "checked by" uses the same marker, `decorative`, because its text names the
+  person.
 - **List feed** (UI-02): the Lists tab loads `GET /api/lists` page by page (`useListFeed`, 30 per
   page, `next_cursor`); the next page loads when the end of the feed comes near the screen
   (`IntersectionObserver`; tests stub it). Icons with an accessible name mark a shared list, a
   read-only one (lock), one being shopped and a done one.
-- **Tab memory** (UI-01): a tab's search text and category choices, and later its cuisine and tag
-  choices, live in `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout`
-  holds. It survives opening a detail and coming back, and is gone when the app closes or the
-  session ends; never put it in the URL or browser storage. The user filter and the state filter
-  are server state (`/me`).
+- **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in
+  `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
+  survives opening a detail and coming back, and is gone when the app closes or the session ends;
+  never put it in the URL or browser storage. The user filter and the state filter are server
+  state (`/me`).
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
@@ -263,7 +270,9 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   start, when the app comes to the foreground, when the connection returns and a second after any
   successful change; lists that are no longer returned disappear. Lists opened on screen and the
   categories are kept too: the category list holds every category's names, deleted ones included
-  (D-30), so stored lists show every heading offline. The copy seeds the query cache
+  (D-30), so stored lists show every heading offline. It is loaded again with the copy once it is
+  stale (`categoriesQuery`, 5 minutes), whichever screen is open; a cached list without names, left
+  by an app version before D-31, is not used. The copy seeds the query cache
   (`initialData` of `useList` and of the list feed's first page on the Lists tab), so they show at
   once and stay when the server can't be reached.
 - **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
@@ -523,8 +532,7 @@ order.
 | `backupNow`              | `backup-now`               | Admin: "Back up now"                        |
 | `diskStatus`             | `disk-status`              | Admin: free disk space, or "no check yet"   |
 | `mealSearch`             | `meal-search`              | Search field on Meals                       |
-| `newMeal`                | `new-meal`                 | "New meal" on Meals                         |
-| `mealUserChips`          | `meal-user-chips`          | User filter chips on Meals                  |
+| `newMeal`                | `new-meal`                 | "New meal" tile on Meals                    |
 | `mealList`               | `meal-list`                | List of meals on Meals                      |
 | `mealCard`               | `meal-card`                | One meal in the list (link)                 |
 | `screenMealForm`         | `screen-meal-form`         | Create/edit meal screen                     |

@@ -13,10 +13,8 @@ import {
 } from '@/test/lists';
 import { exportText } from './exportText';
 
-const categoryKeys = new Map(CATEGORIES.map((category) => [category.id, category.key]));
-
 function exported(language: 'de' | 'en', list = listDetail()) {
-  return exportText(list, { t: i18n.getFixedT(language), language, categoryKeys });
+  return exportText(list, { t: i18n.getFixedT(language), language, categories: CATEGORIES });
 }
 
 describe('exportText', () => {
