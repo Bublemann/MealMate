@@ -180,11 +180,15 @@ def test_partner_edits_a_shared_draft(
     sign_in(page.context, ben)
     page.goto("/lists")
     card = (
-        page.get_by_test_id(TEST_IDS["listDrafts"])
+        page.get_by_test_id(TEST_IDS["listFeed"])
         .get_by_test_id(TEST_IDS["listCard"])
         .filter(has_text=draft["name"])
     )
-    expect(card).to_contain_text(text("lists.card.by", name=anna.display_name))
+    # Anna's initial marks it as hers; the shared icon and text say Ben may change it (UI-02).
+    expect(card.get_by_role("img", name=anna.display_name)).to_have_text(anna.display_name[0])
+    expect(card).to_contain_text(text("lists.card.sharedBy", name=anna.display_name))
+    expect(card.get_by_role("img", name=text("lists.card.shared"), exact=True)).to_be_visible()
+    expect(card.get_by_role("img", name=text("lists.card.readOnly"), exact=True)).to_have_count(0)
     card.click()
     expect(page).to_have_url(re.compile(f"/lists/{draft['id']}$"))
 
@@ -226,8 +230,17 @@ def test_others_list_is_read_only_and_copies_what_i_can_see(
 
     sign_in(page.context, carl)
     page.goto("/lists")
-    others = page.get_by_test_id(TEST_IDS["othersLists"])
-    others.get_by_test_id(TEST_IDS["listCard"]).filter(has_text=party["name"]).click()
+    card = (
+        page.get_by_test_id(TEST_IDS["listFeed"])
+        .get_by_test_id(TEST_IDS["listCard"])
+        .filter(has_text=party["name"])
+    )
+    # A read-only list: Anna's marker, "by Anna" and a lock (UI-02).
+    expect(card.get_by_role("img", name=anna.display_name)).to_be_visible()
+    expect(card).to_contain_text(text("lists.card.by", name=anna.display_name))
+    expect(card).not_to_contain_text(text("lists.card.sharedBy", name=anna.display_name))
+    expect(card.get_by_role("img", name=text("lists.card.readOnly"), exact=True)).to_be_visible()
+    card.click()
     expect(page).to_have_url(re.compile(f"/lists/{party['id']}$"))
 
     expect(page.get_by_test_id(TEST_IDS["listReadOnly"])).to_contain_text(

@@ -34,7 +34,6 @@ from app.schemas.meals import AmountInput, ServingsInput
 from app.schemas.users import UserRef
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
-ListScope = Literal["mine", "others"]
 LineKind = Literal["ingredient", "text"]
 OpStatus = Literal["applied", "duplicate", "rejected"]
 # Room for the longest UUID spelling Python accepts (`urn:uuid:` and 36 characters).
@@ -206,8 +205,8 @@ class ListDetail(BaseModel):
 
 
 class ListSummary(BaseModel):
-    """A list on the Lists home (UI-02) or in the history (SHOP-05, by `finished_at`);
-    `line_count` counts the lines that are not hidden."""
+    """A list in the list feed (UI-02); `line_count` counts the lines that are not hidden.
+    `finished_at` is the day a done list was bought (SHOP-05)."""
 
     id: str
     name: str | None
@@ -221,6 +220,14 @@ class ListSummary(BaseModel):
     shared_with_partner: bool
     meal_count: int
     line_count: int
+
+
+class ListFeedPage(BaseModel):
+    """A page of the list feed (UI-02): up to 30 lists, newest created first (ties by id).
+    `next_cursor` asks for the next page (`GET /api/lists?cursor=`); null on the last one."""
+
+    lists: list[ListSummary]
+    next_cursor: str | None
 
 
 class ListCopyResult(BaseModel):

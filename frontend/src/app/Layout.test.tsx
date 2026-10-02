@@ -71,13 +71,11 @@ describe('Layout', () => {
     expect(router.state.location.pathname).toBe('/lists');
   });
 
-  it('shows an empty state with its main action on /lists', async () => {
+  it('shows an empty /lists with its "New list" tile', async () => {
     mockApi();
     renderApp('/lists');
 
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'No shopping lists yet' }),
-    ).toBeVisible();
+    expect(await screen.findByText('No lists yet')).toBeVisible();
     expect(screen.getByRole('button', { name: 'New list' })).toBeEnabled();
   });
 });

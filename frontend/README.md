@@ -67,9 +67,9 @@ frontend/
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks
-    ├── components/         # shared app components (Screen, PinnedBlock, FormField, ShareLink, …)
+    ├── components/         # shared app components (Screen, PinnedBlock, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
-    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, tab memory, user agent)
+    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
     ├── sw/sw.ts            # service worker
     ├── test/               # setup, renderApp (signed in by default), mockApi (fetch router)
@@ -132,11 +132,19 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   present and opens the new form with that name. A tab renders it at once and puts its state
   below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
   Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
-  clears the search and the filters) when they hide everything. Meals and Lists keep the old
-  `EmptyState` card until they move to the pinned block. Like the tab bar, it must not crowd out
+  clears the search and the filters) when they hide everything. Meals keeps the old `EmptyState`
+  card until it moves to the pinned block. Like the tab bar, it must not crowd out
   the content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and
   its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the
   first accessibility size, D-29), and its spacing is in `em` of that text.
+- **Initial marker** (UI-02, SHOP-01): whose list (or meal) a row is shows as `InitialMarker`, a
+  round marker with the owner's initial, one's own rows included; screen readers read it as the
+  owner's full name. Shopping mode's "checked by" uses the same marker, `decorative`, because its
+  text names the person.
+- **List feed** (UI-02): the Lists tab loads `GET /api/lists` page by page (`useListFeed`, 30 per
+  page, `next_cursor`); the next page loads when the end of the feed comes near the screen
+  (`IntersectionObserver`; tests stub it). Icons with an accessible name mark a shared list, a
+  read-only one (lock), one being shopped and a done one.
 - **Tab memory** (UI-01): a tab's search text, and later its cuisine, tag and category choices,
   live in `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
   survives opening a detail and coming back, and is gone when the app closes or the session ends;
@@ -489,11 +497,9 @@ order.
 | `editMeal`               | `edit-meal`                | "Edit" on the meal detail (owner)           |
 | `deleteMeal`             | `delete-meal`              | "Delete" on the meal detail (owner)         |
 | `copyMeal`               | `copy-meal`                | "Copy to my meals" on the meal detail       |
-| `newList`                | `new-list`                 | "New list" on Lists (also its empty state)  |
-| `listDrafts`             | `list-drafts`              | My lists (drafts) on Lists                  |
-| `listCard`               | `list-card`                | One list on Lists (link)                    |
-| `othersLists`            | `others-lists`             | Others' lists section on Lists              |
-| `listUserChips`          | `list-user-chips`          | User filter chips of Others' lists          |
+| `newList`                | `new-list`                 | "New list" tile on Lists                    |
+| `listFeed`               | `list-feed`                | The list feed on Lists                      |
+| `listCard`               | `list-card`                | One list in the feed (link)                 |
 | `screenList`             | `screen-list`              | List view screen                            |
 | `listReadOnly`           | `list-read-only`           | Read-only note on someone else's list       |
 | `copyList`               | `copy-list`                | "Copy to my lists" on a read-only list      |
@@ -515,10 +521,6 @@ order.
 | `lineSources`            | `line-sources`             | Sources dialog of a line                    |
 | `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
 | `listReminder`           | `list-reminder`            | Reminder in the last row of a list          |
-| `continueShopping`       | `continue-shopping`        | "Continue shopping" card on Lists           |
-| `historyLink`            | `history-link`             | Entry to the history on Lists               |
-| `screenHistory`          | `screen-history`           | History screen (done lists)                 |
-| `historyWeek`            | `history-week`             | One week of done lists in the history       |
 | `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
 | `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
 | `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |

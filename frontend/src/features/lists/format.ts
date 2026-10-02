@@ -144,8 +144,3 @@ export function needsMoreTexts(t: TFunction, language: Language, needsMore: Need
     ...(needsMore.changed ? [t('lists.shop.changed')] : []),
   ];
 }
-
-/** SHOP-01: who checked a line, as one letter: "B" for "ben". */
-export function initialOf(name: string): string {
-  return (Array.from(name.trim())[0] ?? '?').toLocaleUpperCase();
-}

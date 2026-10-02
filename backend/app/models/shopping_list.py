@@ -32,8 +32,9 @@ class ShoppingList(IdMixin, TimestampMixin, Base):
 
     `name` null shows the translated default name (LIST-02). `version` is incremented in SQL
     (`version + 1`) on every change of the list or anything in it, together with `updated_at`
-    ("most recently edited first", UI-02). `reminder_seed` picks the reminder (LIST-14).
-    `shopping_started_at` and `finished_at` belong to shopping mode and history (M5b).
+    (the local copy's order, SYNC-02). The list feed orders by `created_at`, so a list keeps
+    its place (UI-02). `reminder_seed` picks the reminder (LIST-14). `shopping_started_at` and
+    `finished_at` belong to shopping mode and done lists (M5b, SHOP-05).
     """
 
     __tablename__ = "shopping_lists"

@@ -4,7 +4,6 @@ import { CATEGORIES } from '@/test/ingredients';
 import { LINES } from '@/test/lists';
 import {
   groupByCategory,
-  initialOf,
   lineAmount,
   listDisplayName,
   needsMoreTexts,
@@ -146,14 +145,5 @@ describe('needsMoreTexts (LIST-12)', () => {
       'geändert',
     ]);
     expect(needsMoreTexts(en, 'en', none)).toEqual([]);
-  });
-});
-
-describe('initialOf (SHOP-01)', () => {
-  it('is the first letter, upper case', () => {
-    expect(initialOf('ben')).toBe('B');
-    expect(initialOf(' Anna ')).toBe('A');
-    expect(initialOf('Özlem')).toBe('Ö');
-    expect(initialOf('')).toBe('?');
   });
 });

@@ -76,7 +76,7 @@ export const DEFAULT_ROUTES: Record<string, unknown> = {
   'GET /api/couple': NO_COUPLE,
   'GET /api/users': [BEN, CARL],
   // The Lists tab, where the app opens: no lists yet, nobody else visible.
-  'GET /api/lists': [],
+  'GET /api/lists': { lists: [], next_cursor: null },
   // The sync module's local copy (SYNC-02): nothing to keep yet.
   'GET /api/lists/sync': { lists: [], generated_at: '2026-09-26T10:00:00Z' },
   'GET /api/users/visible': [],

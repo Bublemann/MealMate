@@ -1,165 +1,205 @@
-import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import {
-  BEN,
-  CARL,
-  errorResponse,
-  heldRoute,
-  mockApi,
-  requestsTo,
-  slowFilterSaves,
-  TEST_USER,
-} from '@/test/api';
-import { emptyList, LIST_ID, LIST_ROUTES } from '@/test/lists';
-import { ME } from '@/test/meals';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BEN, errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import { emptyList, FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listSummary } from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const IN_COUPLE = { partner: BEN, since: '2026-09-01T10:00:00Z', outgoing: null, incoming: [] };
 
-function renderLists(routes: Record<string, unknown> = {}, user = TEST_USER) {
+function renderLists(routes: Record<string, unknown> = {}) {
   const fetchMock = mockApi({ ...LIST_ROUTES, 'GET /api/couple': IN_COUPLE, ...routes });
-  return { fetchMock, ...renderApp('/lists', { user }) };
+  return { fetchMock, ...renderApp('/lists', { user: TEST_USER }) };
 }
 
-function othersRequests(fetchMock: ReturnType<typeof mockApi>) {
-  return requestsTo(fetchMock, 'GET /api/lists').filter(
-    (request) => new URL(request.url).searchParams.get('scope') === 'others',
-  );
+/** What a row says: whose it is (its marker), its text after the marker, and its icons. */
+function rowOf(row: HTMLElement) {
+  const [marker, ...icons] = within(row).getAllByRole('img');
+  return {
+    owner: marker?.getAttribute('aria-label'),
+    text: row.textContent?.slice(marker?.textContent?.length ?? 0),
+    icons: icons.map((icon) => icon.getAttribute('aria-label')),
+  };
 }
+
+/** Stands in for the browser's IntersectionObserver: `reveal()` scrolls the observed into view. */
+function stubIntersectionObserver() {
+  const observers = new Set<{ callback: IntersectionObserverCallback; targets: Element[] }>();
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      private readonly entry: { callback: IntersectionObserverCallback; targets: Element[] };
+      constructor(callback: IntersectionObserverCallback) {
+        this.entry = { callback, targets: [] };
+        observers.add(this.entry);
+      }
+      observe(target: Element) {
+        this.entry.targets.push(target);
+      }
+      unobserve() {}
+      disconnect() {
+        observers.delete(this.entry);
+      }
+    },
+  );
+  return {
+    reveal() {
+      act(() => {
+        for (const { callback, targets } of [...observers]) {
+          const entries = targets.map((target) => ({ target, isIntersecting: true }));
+          callback(entries as IntersectionObserverEntry[], {} as IntersectionObserver);
+        }
+      });
+    },
+  };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('ListsScreen', () => {
-  it('shows only a quiet placeholder until it knows whether I have lists (UI-03)', async () => {
-    const lists = heldRoute();
-    renderLists({ 'GET /api/lists?scope=mine': lists.route });
+  it('shows the pinned block at once and only a quiet placeholder below it (UI-03)', async () => {
+    const feed = heldRoute();
+    renderLists({ 'GET /api/lists': feed.route });
 
+    const tile = await screen.findByTestId(testIds.newList);
+    expect(tile).toHaveTextContent('New list');
+    expect(tile).toBeEnabled();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     expect(await screen.findByText('Loading…')).toBeVisible();
-    expect(screen.queryByTestId(testIds.newList)).toBeNull();
-    expect(screen.queryByRole('heading', { level: 2, name: 'My lists' })).toBeNull();
+    expect(screen.queryByTestId(testIds.listFeed)).not.toBeInTheDocument();
 
-    await lists.answer([]);
-    expect(await screen.findByText('No shopping lists yet')).toBeVisible();
-    expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+    await feed.answer(feedPage(FEED_LISTS));
+    expect(await screen.findByTestId(testIds.listFeed)).toBeVisible();
+    expect(screen.getByTestId(testIds.newList)).toBe(tile);
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
   });
 
-  it('shows my drafts with name, date, counts and who they are shared with (UI-02)', async () => {
+  it('shows one line below the same pinned block when there are no lists (UI-03)', async () => {
+    renderLists({ 'GET /api/lists': feedPage([]) });
+
+    expect(await screen.findByText('No lists yet')).toBeVisible();
+    const tile = screen.getByTestId(testIds.newList);
+    expect(tile).toHaveTextContent('New list');
+    // The first-login tips come below the pinned block and scroll away with the feed.
+    const tip = screen.getByTestId(testIds.hintTailscale);
+    expect(tile.compareDocumentPosition(tip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.listFeed)).not.toBeInTheDocument();
+  });
+
+  it('shows every kind of list with its owner, icons and texts, newest first (UI-02)', async () => {
     renderLists();
 
-    const drafts = await screen.findByTestId(testIds.listDrafts);
-    const cards = within(drafts).getAllByTestId(testIds.listCard);
+    const feed = await screen.findByTestId(testIds.listFeed);
+    const rows = within(feed).getAllByTestId(testIds.listCard);
     // The partner's name comes with the couple.
-    await waitFor(() => expect(cards[0]).toHaveTextContent('Shared with Ben'));
-    expect(cards.map((card) => card.textContent)).toEqual([
-      'Wochenende (26/09/2026)3 meals · 5 items · Shared with Ben',
-      'Shopping list (20/09/2026)1 meal · 1 item · by Ben',
+    await waitFor(() => expect(rows[0]).toHaveTextContent('Shared with Ben'));
+    expect(rows.map(rowOf)).toEqual([
+      {
+        owner: 'Anna',
+        text: 'Wochenende (26/09/2026)3 meals · 5 items · Shared with Ben',
+        icons: ['Shared', 'Shopping now'],
+      },
+      { owner: 'Anna', text: 'Vorrat (25/09/2026)1 meal · 2 items', icons: [] },
+      {
+        owner: 'Ben',
+        text: 'Shopping list (24/09/2026)1 meal · 1 item · by Ben, shared with you',
+        icons: ['Shared'],
+      },
+      {
+        owner: 'Ben',
+        text: 'Party (23/09/2026)4 meals · 12 items · by Ben',
+        icons: ['Read-only'],
+      },
+      {
+        owner: 'Carl',
+        text: 'Grillabend (22/09/2026)2 meals · 7 items · by Carl',
+        icons: ['Read-only'],
+      },
+      {
+        owner: 'Anna',
+        text: 'Salatabend (19/09/2026)1 meal · 4 items · bought on 20/09',
+        icons: ['Done'],
+      },
+      {
+        owner: 'Carl',
+        text: 'Vorrat (12/09/2026)1 meal · 3 items · by Carl · bought on 13/09',
+        icons: ['Read-only', 'Done'],
+      },
     ]);
-    expect(cards[0]).toHaveAttribute('href', `/lists/${LIST_ID}`);
-    expect(screen.getByRole('heading', { level: 2, name: 'My lists' })).toBeVisible();
+    expect(within(rows[0]!).getByRole('img', { name: 'Anna' })).toHaveTextContent('A');
+    expect(rows[0]).toHaveAttribute('href', `/lists/${LIST_ID}`);
+    expect(rows[6]).toHaveAttribute('href', '/lists/list-carl-done');
   });
 
-  it('shows others’ lists read-only below, with their own user chips but none for me', async () => {
-    renderLists();
+  it('does not say "shared" without a partner', async () => {
+    renderLists({
+      'GET /api/couple': { ...IN_COUPLE, partner: null, since: null },
+      'GET /api/lists': feedPage([listSummary({ shared_with_partner: true })]),
+    });
 
-    const others = await screen.findByTestId(testIds.othersLists);
-    expect(within(others).getByRole('heading', { level: 2 })).toHaveTextContent("Others' lists");
-    const cards = await within(others).findAllByTestId(testIds.listCard);
-    expect(cards.map((card) => card.textContent)).toEqual([
-      'Grillabend (26/09/2026)2 meals · 7 items · by Carl',
-    ]);
-    const chips = await within(others).findByTestId(testIds.listUserChips);
-    expect(chips).toHaveAccessibleName('Show lists of');
-    expect(
-      within(chips)
-        .getAllByRole('button')
-        .map((button) => button.textContent),
-    ).toEqual(['Ben', 'Carl']);
-  });
-
-  it('asks the server for the users whose lists I can see', async () => {
-    const { fetchMock } = renderLists();
-
-    await screen.findByTestId(testIds.listUserChips);
-    const [request] = requestsTo(fetchMock, 'GET /api/users/visible');
-    expect(new URL(request?.url ?? '').searchParams.get('for')).toBe('lists');
-  });
-
-  it('switches a chip off at once, saves filter_hidden.lists and loads the lists again', async () => {
-    const start = { ...TEST_USER, filter_hidden: { meals: ['someone'], lists: [] } };
-    const saved = { ...TEST_USER, filter_hidden: { meals: ['someone'], lists: [CARL.id] } };
-    const { fetchMock, user } = renderLists({ 'PATCH /api/me': saved }, start);
-    const chips = await screen.findByTestId(testIds.listUserChips);
-    await screen.findByText('Grillabend (26/09/2026)', { exact: false });
-
-    await user.click(within(chips).getByRole('button', { name: 'Carl' }));
-
-    expect(within(chips).getByRole('button', { name: 'Carl' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
+    const [row] = within(await screen.findByTestId(testIds.listFeed)).getAllByTestId(
+      testIds.listCard,
     );
-    expect(screen.queryByText(/Grillabend/)).not.toBeInTheDocument();
-    expect(screen.getByText('No lists from the people selected above.')).toBeVisible();
-    await waitFor(() => expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(1));
-    await expect(requestsTo(fetchMock, 'PATCH /api/me')[0]?.json()).resolves.toEqual({
-      filter_hidden: { meals: ['someone'], lists: [CARL.id] },
+    expect(rowOf(row!)).toEqual({
+      owner: 'Anna',
+      text: 'Wochenende (26/09/2026)3 meals · 5 items',
+      icons: [],
     });
-    await waitFor(() => expect(othersRequests(fetchMock)).toHaveLength(2));
   });
 
-  it('keeps quick toggles while earlier ones are still being saved', async () => {
-    const saves = slowFilterSaves();
-    const { fetchMock, user } = renderLists({ 'PATCH /api/me': saves.route });
-    const chips = await screen.findByTestId(testIds.listUserChips);
-    const chip = (name: string) => within(chips).getByRole('button', { name });
-
-    await user.click(chip('Ben'));
-    await user.click(chip('Carl'));
-    // The first save answers while the second waits: it doesn't know about Carl yet.
-    await saves.answer(1);
-    await user.click(chip('Ben'));
-    await saves.answer(2);
-    await saves.answer(3);
-
-    await waitFor(() => expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(3));
-    await expect(requestsTo(fetchMock, 'PATCH /api/me')[2]?.json()).resolves.toEqual({
-      filter_hidden: { meals: [], lists: [CARL.id] },
+  it('loads the next 30 lists when the end of the feed comes into view (UI-02)', async () => {
+    const observer = stubIntersectionObserver();
+    const first = Array.from({ length: 30 }, (_, index) =>
+      listSummary({ id: `list-${index}`, name: `Liste ${index + 1}` }),
+    );
+    const { fetchMock } = renderLists({
+      'GET /api/lists': feedPage(first, 'cursor-2'),
+      'GET /api/lists?cursor=cursor-2': feedPage([listSummary({ id: 'list-30', name: 'Alt' })]),
     });
-    expect(chip('Ben')).toHaveAttribute('aria-pressed', 'true');
-    expect(chip('Carl')).toHaveAttribute('aria-pressed', 'false');
+    const feed = await screen.findByTestId(testIds.listFeed);
+    expect(within(feed).getAllByTestId(testIds.listCard)).toHaveLength(30);
+    expect(screen.queryByText('Alt (26/09/2026)')).not.toBeInTheDocument();
+
+    observer.reveal();
+
+    expect(await within(feed).findByText('Alt (26/09/2026)')).toBeVisible();
+    expect(within(feed).getAllByTestId(testIds.listCard)).toHaveLength(31);
+    const cursors = requestsTo(fetchMock, 'GET /api/lists').map((request) =>
+      new URL(request.url).searchParams.get('cursor'),
+    );
+    expect(cursors).toEqual([null, 'cursor-2']);
+    // The last page has been loaded: nothing more is asked for.
+    observer.reveal();
+    expect(requestsTo(fetchMock, 'GET /api/lists')).toHaveLength(2);
   });
 
-  it('loads the saved chips again when saving fails', async () => {
-    const { fetchMock, user } = renderLists({
-      'PATCH /api/me': errorResponse(503, 'common.service_unavailable'),
-      'GET /api/me': { ...TEST_USER, filter_hidden: { meals: [], lists: [BEN.id] } },
+  it('says why the next lists did not load, without asking again and again', async () => {
+    const observer = stubIntersectionObserver();
+    const { fetchMock } = renderLists({
+      'GET /api/lists': feedPage(FEED_LISTS, 'cursor-2'),
+      'GET /api/lists?cursor=cursor-2': errorResponse(503, 'common.service_unavailable'),
     });
-    const chips = await screen.findByTestId(testIds.listUserChips);
+    await screen.findByTestId(testIds.listFeed);
 
-    await user.click(within(chips).getByRole('button', { name: 'Carl' }));
+    observer.reveal();
 
     expect(
       await screen.findByText('MealMate is unavailable right now. Please try again later.'),
     ).toBeVisible();
-    await waitFor(() =>
-      expect(within(chips).getByRole('button', { name: 'Ben' })).toHaveAttribute(
-        'aria-pressed',
-        'false',
-      ),
-    );
-    expect(within(chips).getByRole('button', { name: 'Carl' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await waitFor(() => expect(othersRequests(fetchMock)).toHaveLength(2));
+    const pages = () =>
+      requestsTo(fetchMock, 'GET /api/lists').filter((request) =>
+        new URL(request.url).searchParams.has('cursor'),
+      );
+    const asked = pages().length;
+    observer.reveal();
+    expect(pages()).toHaveLength(asked);
+    expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length);
   });
 
-  it('says so when nobody else shares a list, without chips when nobody else is visible', async () => {
-    renderLists({ 'GET /api/lists?scope=others': [], 'GET /api/users/visible': [ME] });
-
-    expect(await screen.findByText('Nobody else shares a list right now.')).toBeVisible();
-    expect(screen.queryByTestId(testIds.listUserChips)).not.toBeInTheDocument();
-  });
-
-  it('creates a draft with "+ New list" and opens it with the meal picker (LIST-01)', async () => {
+  it('creates a draft with the "New list" tile and opens it with the meal picker (LIST-01)', async () => {
     const created = emptyList();
     const { fetchMock, user, router } = renderLists({
       'POST /api/lists': Response.json(created, { status: 201 }),
@@ -178,19 +218,16 @@ describe('ListsScreen', () => {
     );
   });
 
-  it('shows one sentence and "New list" when I have no lists yet (UI-03)', async () => {
+  it('creates a list from an empty tab too', async () => {
     const created = emptyList();
     const { user, router } = renderLists({
-      'GET /api/lists?scope=mine': [],
+      'GET /api/lists': feedPage([]),
       'POST /api/lists': Response.json(created, { status: 201 }),
       'GET /api/lists/list-new': created,
       'GET /api/meals': [],
     });
+    await screen.findByText('No lists yet');
 
-    expect(await screen.findByRole('heading', { name: 'No shopping lists yet' })).toBeVisible();
-    expect(screen.queryByTestId(testIds.listDrafts)).not.toBeInTheDocument();
-    // Others' lists are still offered.
-    expect(await screen.findByText(/Grillabend/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'New list' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-new'));
@@ -208,14 +245,11 @@ describe('ListsScreen', () => {
     ).toBeVisible();
   });
 
-  it('does not say "shared" without a partner', async () => {
-    renderLists({ 'GET /api/couple': { ...IN_COUPLE, partner: null, since: null } });
+  it('leads an old link to the history to the Lists tab (UI-02)', async () => {
+    mockApi(LIST_ROUTES);
+    const { router } = renderApp('/lists/history');
 
-    const drafts = await screen.findByTestId(testIds.listDrafts);
-    await waitFor(() =>
-      expect(within(drafts).getAllByTestId(testIds.listCard)[0]).toHaveTextContent(
-        /^Wochenende \(26\/09\/2026\)3 meals · 5 items$/,
-      ),
-    );
+    expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/lists');
   });
 });

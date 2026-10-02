@@ -66,10 +66,22 @@ async def extra_added(api: AsyncClient, user: Account, list_id: str, **body: Any
     return response.json()
 
 
-async def summaries(api: AsyncClient, user: Account, **params: Any) -> Any:
+async def feed_page(api: AsyncClient, user: Account, cursor: str | None = None) -> Any:
+    """One page of the list feed (UI-02)."""
+    params = {} if cursor is None else {"cursor": cursor}
     response = await api.get("/api/lists", params=params, headers=user.headers)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+async def summaries(api: AsyncClient, user: Account) -> list[Any]:
+    """Every list in the user's feed, page after page."""
+    page = await feed_page(api, user)
+    items = page["lists"]
+    while page["next_cursor"] is not None:
+        page = await feed_page(api, user, page["next_cursor"])
+        items += page["lists"]
+    return items
 
 
 def lines(list_detail: Any) -> dict[str, Any]:

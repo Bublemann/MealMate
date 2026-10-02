@@ -4,9 +4,9 @@ import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { mockApi, requestsTo, TEST_USER } from '@/test/api';
+import { heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import { CATEGORIES } from '@/test/ingredients';
-import { LIST_ID, LIST_ROUTES, listDetail, shoppingList } from '@/test/lists';
+import { FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listDetail, shoppingList } from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import { DB_NAME, DB_VERSION, openSyncStorage, userMetaKey } from './storage';
@@ -113,14 +113,32 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows my lists on the Lists home from the copy', async () => {
-    await storeCopy(listDetail({ name: 'Vorrat' }));
-    serverGone(NEVER);
+  it('shows the copy on the Lists tab, newest created first, until the feed answers', async () => {
+    const storage = await storeCopy(
+      listDetail({ name: 'Vorrat', created_at: '2026-09-20T10:00:00Z' }),
+    );
+    await storage.putList({
+      id: 'list-two',
+      userId: TEST_USER.id,
+      detail: listDetail({ id: 'list-two', name: 'Grillen', updated_at: '2026-09-20T11:00:00Z' }),
+      storedAt: 1_000,
+    });
+    // Online, but the server is slow: the copy shows first (SYNC-09, UI-02).
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
 
     renderApp('/lists');
 
-    const drafts = await screen.findByTestId(testIds.listDrafts);
-    expect(within(drafts).getByText('Vorrat (26/09/2026)')).toBeVisible();
+    const copied = within(await screen.findByTestId(testIds.listFeed)).getAllByTestId(
+      testIds.listCard,
+    );
+    expect(copied).toHaveLength(2);
+    expect(copied[0]).toHaveTextContent('Grillen (26/09/2026)');
+    expect(copied[1]).toHaveTextContent('Vorrat (20/09/2026)');
+    await feed.answer(feedPage(FEED_LISTS));
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
   });
 
   it('leaves out a list finished here whose *Finish* waits to be sent', async () => {
@@ -147,7 +165,7 @@ describe('lists from the local copy (SYNC-09)', () => {
     renderApp('/lists');
 
     expect(await screen.findByText('Grillen (26/09/2026)')).toBeVisible();
-    expect(screen.getAllByTestId(testIds.continueShopping)).toHaveLength(1);
+    expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1);
     expect(screen.queryByText('Wochenende (26/09/2026)')).not.toBeInTheDocument();
   });
 
@@ -157,8 +175,7 @@ describe('lists from the local copy (SYNC-09)', () => {
 
     renderApp('/lists');
 
-    await screen.findByTestId(testIds.screenLists);
-    expect(screen.getAllByText('Loading…').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Loading…')).toBeVisible();
     expect(screen.queryByText('Vorrat (26/09/2026)')).not.toBeInTheDocument();
   });
 
@@ -332,8 +349,8 @@ describe('logging out with waiting changes (SYNC-05, SYNC-10)', () => {
   });
 });
 
-describe('the Lists home offline (SYNC-03)', () => {
-  it('disables "+ New list": creating a list needs the server', async () => {
+describe('the Lists tab offline (UI-02, SYNC-03)', () => {
+  it('disables the "New list" tile: creating a list needs the server', async () => {
     await storeCopy(listDetail({ name: 'Vorrat' }));
     serverGone(FAIL);
     renderApp('/lists');
@@ -344,10 +361,44 @@ describe('the Lists home offline (SYNC-03)', () => {
     expect(button).toBeDisabled();
   });
 
-  it('disables it in the empty state too', async () => {
+  it('shows only the copy, without read-only and done lists, and says so below the tile', async () => {
+    await storeCopy(shoppingList());
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
+
+    goOffline();
+
+    await waitFor(() => expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1));
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Wochenende (26/09/2026)');
+    const tile = screen.getByTestId(testIds.newList);
+    expect(tile).toBeDisabled();
+    const notice = screen.getByTestId(testIds.syncStatus);
+    expect(notice).toHaveTextContent('Offline');
+    expect(tile.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says the lists need a connection before the copy was ever complete', async () => {
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
+
+    goOffline();
+
+    expect(await screen.findByTestId(testIds.offlineNotice)).toHaveTextContent(
+      "You're offline. This page needs a connection.",
+    );
+    expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
+  });
+
+  it('disables it on an empty tab too', async () => {
     mockApi();
     renderApp('/lists');
-    await screen.findByText('No shopping lists yet');
+    await screen.findByText('No lists yet');
     const button = screen.getByTestId(testIds.newList);
     expect(button).toBeEnabled();
 

@@ -1,5 +1,5 @@
-"""Shopping lists: create, rename, share, delete, meals with servings, extra items, hidden
-lines, copies, starting to shop, reopening, shopping again and the history (LIST-01..15,
+"""Shopping lists: the list feed, create, rename, share, delete, meals with servings, extra
+items, hidden lines, copies, starting to shop, reopening and shopping again (LIST-01..15,
 SHOP-05/06, CPL-02/03, VIS-03/06, UI-02).
 
 Who may see or change a list is decided by `services.access`; which meals on it the viewer
@@ -30,10 +30,13 @@ from app.core.errors import (
 )
 from app.db.ids import new_id
 from app.domain.lists import (
-    HISTORY_LIMIT,
+    FEED_PAGE_SIZE,
     REMINDER_SEED_MAX,
     DetachedReason,
+    FeedPosition,
     ListStatus,
+    feed_cursor,
+    feed_position,
     raised_servings,
 )
 from app.domain.reference import OTHER_CATEGORY
@@ -46,7 +49,6 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.repositories import users as users_repo
 from app.schemas.lists import (
     ExtraItem,
     ExtraItemCreate,
@@ -54,10 +56,10 @@ from app.schemas.lists import (
     ListCopyResult,
     ListCreate,
     ListDetail,
+    ListFeedPage,
     ListMealAdd,
     ListMealEntry,
     ListMealUpdate,
-    ListScope,
     ListSummary,
     ListUpdate,
 )
@@ -68,8 +70,8 @@ from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
 from app.services.users import user_refs
 
-# Without a status filter, the Lists home shows drafts and lists being shopped (UI-02).
-DEFAULT_STATUSES: tuple[ListStatus, ...] = ("draft", "shopping")
+# The local copy holds the drafts and lists being shopped one can edit (SYNC-02).
+COPY_STATUSES: tuple[ListStatus, ...] = ("draft", "shopping")
 
 
 def _status(shopping_list: ShoppingList) -> ListStatus:
@@ -245,39 +247,31 @@ async def _summaries(
     ]
 
 
-async def list_lists(
-    session: AsyncSession, principal: Principal, *, scope: ListScope, status: ListStatus | None
-) -> list[ListSummary]:
-    """The lists on the Lists home (UI-02), most recently edited first.
-
-    - `mine`: the principal's own lists and those their partner shares with them (CPL-02);
-    - `others`: the other lists they may see (VIS-02/03, CPL-04: public owners' lists, the
-      partner's unshared ones), without the owners switched off in their list filter chips.
-
-    Without `status`, drafts and lists being shopped are listed.
-    """
-    statuses = DEFAULT_STATUSES if status is None else (status,)
+async def list_feed(
+    session: AsyncSession, principal: Principal, *, cursor: str | None
+) -> ListFeedPage:
+    """A page of the list feed (UI-02, D-24): every list the principal can see, in every state:
+    their own, all of their partner's (CPL-02/04) and those of owners whose *lists public*
+    switch is on (VIS-02/03). Newest created first, ties by id, `FEED_PAGE_SIZE` per page;
+    `cursor` is the previous page's `next_cursor` (422 if it is not one)."""
+    after: FeedPosition | None = None
+    if cursor is not None:
+        after = feed_position(cursor)
+        if after is None:
+            raise validation_error([FieldProblem(("query", "cursor"), FieldErrorCode.INVALID)])
     async with session.begin():
         partner = await access.partner_id(session, principal.user_id)
-        if scope == "mine":
-            rows = await lists_repo.mine(session, principal.user_id, partner, statuses)
-        else:
-            viewer = await users_repo.get(session, principal.user_id)
-            hidden = set() if viewer is None else set(viewer.filter_hidden.get("lists", []))
-            visible = await access.visible_owner_ids(session, principal.user_id, "lists")
-            owners = visible - hidden - {principal.user_id}
-            rows = await lists_repo.of_others(session, owners, partner, statuses)
-        return await _summaries(session, principal, partner, rows)
-
-
-async def list_history(session: AsyncSession, principal: Principal) -> list[ListSummary]:
-    """The history (SHOP-05): the principal's done lists and those their partner shares with
-    them while the couple exists (CPL-02), most recently finished first, at most
-    `HISTORY_LIMIT`."""
-    async with session.begin():
-        partner = await access.partner_id(session, principal.user_id)
-        rows = await lists_repo.history(session, principal.user_id, partner, HISTORY_LIMIT)
-        return await _summaries(session, principal, partner, rows)
+        owners = await access.owners_visible_to(session, principal.user_id, partner, "lists")
+        rows = await lists_repo.feed(session, owners, after, FEED_PAGE_SIZE + 1)
+        page = rows[:FEED_PAGE_SIZE]
+        next_cursor = (
+            feed_cursor(FeedPosition(page[-1].created_at, page[-1].id))
+            if len(rows) > FEED_PAGE_SIZE
+            else None
+        )
+        return ListFeedPage(
+            lists=await _summaries(session, principal, partner, page), next_cursor=next_cursor
+        )
 
 
 def _detail_json(
@@ -314,7 +308,7 @@ async def sync_lists(
     per list that changed since the last poll or sync of it."""
     async with session.begin():
         partner = await access.partner_id(session, principal.user_id)
-        rows = await lists_repo.mine(session, principal.user_id, partner, DEFAULT_STATUSES)
+        rows = await lists_repo.mine(session, principal.user_id, partner, COPY_STATUSES)
         entries: list[CachedList] = []
         for row in rows:
             rights = ListRights(
