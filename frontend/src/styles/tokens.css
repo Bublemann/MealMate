@@ -65,6 +65,16 @@
   --tab-bar-clearance: calc(var(--tab-bar-bottom) + var(--tab-bar-height));
 
   /*
+   * The pinned block (UI-01) stays at the top while the content scrolls under it, so like the tab
+   * bar it must leave room for the content at the largest text sizes (D-29): its text grows with
+   * the text size up to 28 px (about the first accessibility size) and its tap targets up to 64 px
+   * (the `pinned` utility in index.css), and its spacing is in em of that text. A long name in its
+   * "Neu…" tile wraps.
+   */
+  --pinned-font-size: min(1rem, 28px);
+  --pinned-tap-target: clamp(44px, 2.75rem, 64px);
+
+  /*
    * The visible area (UI-01): iOS doesn't shrink the page for the on-screen keyboard, it only
    * shows less of it. While the app runs, app/viewport.ts sets on <html> where the visible part
    * starts (iOS scrolls it down to the focused field) and how far the keyboard reaches up from the

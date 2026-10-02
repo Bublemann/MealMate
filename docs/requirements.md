@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-28) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -593,7 +593,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - colour is never the only signal;
   - contrast checked in light and dark mode;
   - tap targets ≥ 44 × 44 pt.
-- **A11Y-02** Text scales with the iPhone text-size setting (rem units). Pinch-zoom stays enabled. "Reduce motion" is respected.
+- **A11Y-02** Text scales with the iPhone text-size setting (rem units). Only the pinned block (UI-01) stops growing at about the first accessibility size, so it leaves room for the content (D-29). Pinch-zoom stays enabled. "Reduce motion" is respected.
 - **A11Y-03** An automated accessibility check (axe) runs on the main screens in E2E tests.
 
 ### 5.6 Maintainability and frontend handoff (MNT)
@@ -712,6 +712,7 @@ These are not in v2.0. The data model should not make them hard.
 | D-26 | The user filter on Lists covers every list one can see, one's own and the partner's shared lists included, and offers oneself as a choice; a saved state filter (draft, shopping, done) sits next to it. Offline, both are ignored and the tab shows the local copy. The meal picker ignores the user filter on Meals (2026-10-02) | the feed mixes every kind of list, so the filter must reach all of them; done lists pile up; filters follow the user across devices; the shopping list must never disappear in the shop, and the picker must never look mysteriously empty |
 | D-27 | Meals and ingredients sort in dictionary order, by a key built from the original name (lowercase, ä/ö/ü → a/o/u, ß → ss, accents stripped), not from the `ae`-style normalized name. The Ingredients tab becomes one A–Z list (best match first while searching) with category and base unit in each row instead of category groups, and loses its scan button until creating ingredients is redesigned (2026-10-02) | "Äpfel im Schlafrock" belongs next to "Apfelstrudel"; folding "ae" back would also change real letter pairs ("Quelle", "Feuer", "Aloe"); people look for an ingredient by its name; the row still shows where it sorts on the shopping list |
 | D-28 | A floating, frosted tab bar with icons only (names for screen readers); the active tab gets a lighter pill and a green icon with a thicker stroke. The tab bar and the update banner hide while the keyboard is open, and pop-ups fit into the visible area above it. The keyboard is detected from the visual viewport, ignoring pinch-zoom; no viewport-meta or VirtualKeyboard approach and no iOS "Liquid Glass" (2026-10-02) | the owner wants a lighter, see-through bar; on the iPhone the keyboard hid the Save buttons of pop-ups and the tab bar rode up above it; iOS supports neither the viewport-meta setting nor the VirtualKeyboard API, and the CSP rules out inline scripts |
+| D-29 | The pinned block's text and controls grow with the iPhone text size only up to about the first accessibility size (text up to 28 px, tap targets up to 64 px); the content below it keeps growing (2026-10-02, owner decision on #41) | the block stays at the top while the content scrolls under it: text that kept growing would make it taller than the screen at the largest sizes and hide the list; iOS's own bars stop growing at the accessibility sizes too |
 
 ## 8. Owner decisions
 

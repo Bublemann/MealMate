@@ -118,11 +118,9 @@ def test_member_creates_an_ingredient_from_a_typed_barcode(
     # Context-wide, so requests of the service worker count as well.
     page.context.on("request", record)
 
-    # BAR-01: the scan button on the Ingredients tab. Without a camera the decoder isn't loaded
-    # (see test_the_decoder_is_the_apps_own_file).
-    page.goto("/ingredients")
-    page.get_by_test_id(TEST_IDS["scanBarcode"]).click()
-    expect(page).to_have_url(re.compile(r"/scan$"))
+    # BAR-01: no tab links to the scanner for now, but its address still opens it. Without a
+    # camera the decoder isn't loaded (see test_the_decoder_is_the_apps_own_file).
+    page.goto("/scan")
     expect(page.get_by_test_id(TEST_IDS["scannerCameraMessage"])).to_be_visible()
 
     # BAR-03: the ingredient form opens, filled with the proposal, with the attribution.

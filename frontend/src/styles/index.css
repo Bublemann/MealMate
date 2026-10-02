@@ -37,6 +37,17 @@
   backdrop-filter: var(--frosted-filter);
 }
 
+/*
+ * The pinned block (UI-01, D-29): its text, and through --control-font-size and --tap-target the
+ * controls in it, grow with the text size only up to the --pinned-* caps (tokens.css). Form
+ * controls keep their 16 px floor.
+ */
+@utility pinned {
+  font-size: var(--pinned-font-size);
+  --control-font-size: max(var(--pinned-font-size), 16px);
+  --tap-target: var(--pinned-tap-target);
+}
+
 @layer base {
   /*
    * Text follows the iPhone text-size setting (A11Y-02); all sizes are rem-based. Only on iOS:

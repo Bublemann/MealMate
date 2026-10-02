@@ -1,5 +1,4 @@
 import { Plus, type LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { TestId } from '@/testIds';
@@ -15,8 +14,6 @@ interface EmptyStateProps {
   onAction?: () => void;
   /** The action's test ID, when it is the same action as a button shown with content. */
   actionTestId?: TestId;
-  /** Further actions below the main one. */
-  children?: ReactNode;
 }
 
 /** One friendly sentence and one main action for a screen without content (UI-03). */
@@ -28,7 +25,6 @@ export function EmptyState({
   actionIcon: ActionIcon = Plus,
   onAction,
   actionTestId,
-  children,
 }: EmptyStateProps) {
   return (
     <Card className="items-center gap-5 px-6 py-10 text-center">
@@ -43,7 +39,6 @@ export function EmptyState({
         <ActionIcon aria-hidden="true" />
         {actionLabel}
       </Button>
-      {children}
     </Card>
   );
 }

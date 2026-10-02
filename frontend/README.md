@@ -67,9 +67,9 @@ frontend/
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks
-    ├── components/         # shared app components (Screen, FormField, ShareLink, ConfirmDialog, …)
+    ├── components/         # shared app components (Screen, PinnedBlock, FormField, ShareLink, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
-    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, user-agent description)
+    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, tab memory, user agent)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
     ├── sw/sw.ts            # service worker
     ├── test/               # setup, renderApp (signed in by default), mockApi (fetch router)
@@ -125,6 +125,23 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `--keyboard-inset` on `<html>` give the dialogs their `--visible-height` (`tokens.css`).
   Pinch-zoom (`scale` ≠ 1) doesn't count as a keyboard (A11Y-02); without the API (as in jsdom)
   nothing changes. Tests stub `visualViewport` and fire its events (`app/viewport.test.tsx`).
+- **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
+  same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
+  it. It holds the search field (its label only for screen readers), a place for the filter button
+  and the green, row-shaped "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is
+  present and opens the new form with that name. A tab renders it at once and puts its state
+  below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
+  Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
+  clears the search and the filters) when they hide everything. Meals and Lists keep the old
+  `EmptyState` card until they move to the pinned block. Like the tab bar, it must not crowd out
+  the content at the largest text sizes: the `pinned` utility (`index.css`) caps its text and
+  its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens (about the
+  first accessibility size, D-29), and its spacing is in `em` of that text.
+- **Tab memory** (UI-01): a tab's search text, and later its cuisine, tag and category choices,
+  live in `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
+  survives opening a detail and coming back, and is gone when the app closes or the session ends;
+  never put it in the URL or browser storage. The user filter and the state filter are server
+  state (`/me`).
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
@@ -424,7 +441,7 @@ order.
 | `hintTailscale`          | `hint-tailscale`           | First-login hint "Keep Tailscale on"        |
 | `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                    |
 | `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                 |
-| `newIngredient`          | `new-ingredient`           | "New ingredient" on Ingredients             |
+| `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients        |
 | `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                   |
 | `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
 | `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
@@ -527,7 +544,7 @@ order.
 | `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)     |
 | `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
 | `reopenList`             | `reopen-list`              | "Reopen" on a done list                     |
-| `scanBarcode`            | `scan-barcode`             | "Scan barcode" (Ingredients tab, meal form) |
+| `scanBarcode`            | `scan-barcode`             | "Scan barcode" in the meal form             |
 | `screenScan`             | `screen-scan`              | The scanner route `/scan`                   |
 | `scanDialog`             | `scan-dialog`              | The scanner opened from the meal form       |
 | `scannerVideo`           | `scanner-video`            | Live camera image of the scanner            |
