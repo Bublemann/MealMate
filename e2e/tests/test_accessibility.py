@@ -64,10 +64,19 @@ SCREENS = [
     # The filter panel, opened in the test, with a category ticked.
     Screen("/ingredients/filter", "member", (TEST_IDS["filterPanel"],)),
     Screen("/meals/new", "member", (TEST_IDS["mealForm"], TEST_IDS["ingredientPicker"])),
-    # No camera in CI (denied or missing): the scanner shows its manual input (BAR-01).
-    Screen("/scan", "member", (TEST_IDS["screenScan"], TEST_IDS["barcodeInput"])),
-    # A barcode nobody knows is typed in the test: the notice and the form with the barcode.
-    Screen("/scan/new", "member", (TEST_IDS["scanNotice"], TEST_IDS["ingredientForm"])),
+    # The scanner over "New ingredient", opened in the test. No camera in CI (denied or
+    # missing): it shows its manual input (BAR-01).
+    Screen(
+        "/ingredients/scan", "member", (TEST_IDS["barcodeScanDialog"], TEST_IDS["barcodeInput"])
+    ),
+    # A barcode an ingredient has is typed into that scanner in the test: the pop-up names it
+    # below the barcode field, with "open" (BAR-02). Open Food Facts isn't asked, so its few
+    # lookups a minute (BAR-08) stay for test_barcodes.
+    Screen(
+        "/ingredients/scanned",
+        "member",
+        (TEST_IDS["ingredientScanNotice"], TEST_IDS["ingredientForm"]),
+    ),
     # A meal with a photo and ingredient rows is created in the test: /meals/<id>.
     Screen(
         "/meals/:id",
@@ -120,10 +129,19 @@ def test_no_serious_violations(
             off={"edited_fields": []},
         )
         path = f"/ingredients/{ingredient['id']}"
-    if path in ("/ingredients/new", "/ingredients/filter"):
+    # The barcode typed into the scanner on "/ingredients/scanned", and its ingredient's name.
+    scanned, scanned_name = "", ""
+    if path == "/ingredients/scanned":
+        api = request.getfixturevalue("api")
+        scanned, scanned_name = new_barcode(), unique("A11y scanned")
+        api.create_ingredient(account, scanned_name, barcode=scanned)
+    if path in (
+        "/ingredients/new",
+        "/ingredients/filter",
+        "/ingredients/scan",
+        "/ingredients/scanned",
+    ):
         path = "/ingredients"
-    if path == "/scan/new":
-        path = "/scan"
     if path == "/meals/:id":
         api = request.getfixturevalue("api")
         ingredient = api.create_ingredient(account, unique("A11y"), nutrients={"kcal": 52})
@@ -242,9 +260,16 @@ def test_no_serious_violations(
         panel.get_by_role("checkbox", name=other, exact=True).check()
         # Counted on the button, behind the open panel.
         expect(page.get_by_test_id(TEST_IDS["filterButton"])).to_have_text("1")
-    if screen.path == "/scan/new":
-        page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(new_barcode())
+    if screen.path in ("/ingredients/scan", "/ingredients/scanned"):
+        page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+        page.get_by_test_id(TEST_IDS["ingredientFormScan"]).click()
+    if screen.path == "/ingredients/scanned":
+        page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(scanned)
         page.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
+        # Checked once the lookup has answered, not while it runs.
+        expect(page.get_by_test_id(TEST_IDS["ingredientScanNotice"])).to_contain_text(
+            text("ingredients.scan.known", name=scanned_name)
+        )
     if screen.path == "/me/admin/invites":
         # Also check the created link with its share button.
         page.get_by_test_id(TEST_IDS["createInviteButton"]).click()

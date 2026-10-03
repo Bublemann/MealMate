@@ -364,7 +364,9 @@ ingredient picker, open the scanner over the pop-up or the form (BAR-01..03). Th
 Ingredients tab (D-37), and the barcode field has no scan button of its own. The scanner is a
 lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
 starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up
-and the meal form, so the scanner doesn't import `IngredientForm`.
+and the meal form, so the scanner doesn't import `IngredientForm`. The meal form asks only its own
+ingredients (`own_only`, no waiting for Open Food Facts): a known barcode adds its row, any other
+opens "Neue Zutat" with it, which looks it up as its own scan icon does (MEAL-03).
 
 - **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
   `?url`, so it is part of the build (`dist/assets/zxing_reader-*.wasm`) and served by the app;
@@ -552,7 +554,7 @@ order.
 | `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts        |
 | `offSearchMore`          | `off-search-more`          | "More results" (next page)                  |
 | `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search               |
-| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner of the form's scan icon             |
+| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner (scan icon, meal form's scan)       |
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
 | `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
@@ -637,19 +639,12 @@ order.
 | `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
 | `reopenList`             | `reopen-list`              | "Reopen" on a done list                     |
 | `scanBarcode`            | `scan-barcode`             | "Scan barcode" in the meal form             |
-| `screenScan`             | `screen-scan`              | The scanner route `/scan`                   |
-| `scanDialog`             | `scan-dialog`              | The scanner opened from the meal form       |
 | `scannerVideo`           | `scanner-video`            | Live camera image of the scanner            |
 | `scannerTorch`           | `scanner-torch`            | Light toggle (when the camera has one)      |
 | `scannerCameraMessage`   | `scanner-camera-message`   | "No camera / access denied" message         |
 | `scannerCameraRetry`     | `scanner-camera-retry`     | "Try again" after the camera went away      |
 | `barcodeInput`           | `barcode-input`            | Manual barcode input                        |
 | `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode             |
-| `scanNotice`             | `scan-notice`              | "Not found" / "Open Food Facts is slow"     |
-| `scanEnterManually`      | `scan-enter-manually`      | "Enter the values yourself"                 |
-| `scanAgain`              | `scan-again`               | "Scan again" next to the notice             |
-| `scanLinkExisting`       | `scan-link-existing`       | "This is already in MealMate" (scan form)   |
-| `scanLink`               | `scan-link`                | Linking a barcode to an existing ingredient |
 | `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"    |
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |

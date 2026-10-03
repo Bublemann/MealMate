@@ -1,9 +1,10 @@
 """Barcodes: typed into the scanner, looked up at Open Food Facts, saved (QA-04 journey 3).
 
-BAR-01..04, BAR-08..09, SEC-08 (plan § 12, M7). A scanned product opens the ingredient form, and
-a product can also be found by name. The camera can't be used in CI, so barcodes are typed into
-the scanner's manual input, which is always there (BAR-01). The app asks the fake Open Food Facts
-in fake_off/ that conftest serves to the container (`fake_off_app`).
+BAR-01..04, BAR-08..09, BAR-11, MEAL-03, SEC-08 (plan § 12, M7). Scanning happens inside "Neue
+Zutat" and from the meal form's "Barcode scannen" (D-36, D-37); there is no scan page. A product
+can also be found by name. The camera can't be used in CI, so barcodes are typed into the
+scanner's manual input, which is always there (BAR-01). The app asks the fake Open Food Facts in
+fake_off/ that conftest serves to the container (`fake_off_app`).
 """
 
 import re
@@ -81,11 +82,30 @@ def test_each_browser_has_its_own_product() -> None:
         product_for("opera")
 
 
-def look_up(page: Page, barcode: str) -> None:
-    """Types `barcode` into the scanner's manual input (the page must show /scan)."""
-    scanner = page.get_by_test_id(TEST_IDS["screenScan"])
+def open_new_ingredient(page: Page) -> Locator:
+    """Opens "New ingredient" from the Ingredients tab's tile."""
+    page.goto("/ingredients")
+    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+    return page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+
+
+def type_into_scanner(page: Page, barcode: str) -> None:
+    """Types `barcode` into the open scanner's manual input; the scanner closes."""
+    scanner = page.get_by_test_id(TEST_IDS["barcodeScanDialog"])
     scanner.get_by_test_id(TEST_IDS["barcodeInput"]).fill(barcode)
     scanner.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
+    expect(scanner).to_be_hidden()
+
+
+def scan_in(page: Page, dialog: Locator, barcode: str) -> None:
+    """Taps the scan icon of the ingredient pop-up `dialog` and types `barcode` into the scanner."""
+    dialog.get_by_test_id(TEST_IDS["ingredientFormScan"]).click()
+    type_into_scanner(page, barcode)
+
+
+def field(container: Locator, key: str) -> Locator:
+    """The ingredient form's field labelled `ingredients.field.<key>`."""
+    return container.get_by_label(text(f"ingredients.field.{key}"), exact=True)
 
 
 def expect_attribution(container: Locator) -> None:
@@ -98,7 +118,7 @@ def expect_attribution(container: Locator) -> None:
     expect(link).to_have_attribute("target", "_blank")
 
 
-def test_member_creates_an_ingredient_from_a_typed_barcode(
+def test_member_creates_an_ingredient_by_scanning_in_new_ingredient(
     fake_off_app: AppContainer,
     member_page: Page,
     member: Account,
@@ -106,8 +126,10 @@ def test_member_creates_an_ingredient_from_a_typed_barcode(
     base_url: str,
     browser_name: str,
 ) -> None:
-    """Journey 3: proposal → prefilled ingredient form → one Save; known and unknown barcodes;
-    the scanned ingredient in a meal row."""
+    """Journey 3 inside "New ingredient" from the Ingredients tile (D-36): a product Open Food
+    Facts knows fills the form for one Save; scanned again, its barcode is named as known; a
+    barcode nobody knows fills in only the barcode, and "Add the barcode to X" gives it to an
+    ingredient typed by hand before."""
     page = member_page
     product = product_for(browser_name)
     requested: list[str] = []
@@ -118,38 +140,35 @@ def test_member_creates_an_ingredient_from_a_typed_barcode(
     # Context-wide, so requests of the service worker count as well.
     page.context.on("request", record)
 
-    # BAR-01: no tab links to the scanner for now, but its address still opens it. Without a
-    # camera the decoder isn't loaded (see test_the_decoder_is_the_apps_own_file).
-    page.goto("/scan")
+    # BAR-01: the scan icon opens the scanner; without a camera, the digits are typed. Without
+    # a camera the decoder isn't loaded (see test_the_decoder_is_the_apps_own_file).
+    dialog = open_new_ingredient(page)
+    dialog.get_by_test_id(TEST_IDS["ingredientFormScan"]).click()
     expect(page.get_by_test_id(TEST_IDS["scannerCameraMessage"])).to_be_visible()
+    type_into_scanner(page, product.barcode)
 
-    # BAR-03: the ingredient form opens, filled with the proposal, with the attribution.
-    look_up(page, product.barcode)
-    scan = page.get_by_test_id(TEST_IDS["screenScan"])
-    expect(scan.get_by_role("heading", name=text("scanner.form.titleFound"))).to_be_visible()
-    form = scan.get_by_test_id(TEST_IDS["ingredientForm"])
-    name = form.get_by_label(text("ingredients.field.name"), exact=True)
+    # BAR-03: filled like a chosen search result, with the attribution; the barcode read-only.
+    form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
+    name = field(form, "name")
     expect(name).to_have_value(product.name)
-    expect(form.get_by_label(text("ingredients.field.brand"), exact=True)).to_have_value(
-        product.brand
-    )
+    expect(field(form, "brand")).to_have_value(product.brand)
     [category_id] = [
         category["id"]
         for category in api.categories(member)
         if category["key"] == product.category_key
     ]
-    expect(form.get_by_label(text("ingredients.field.category"), exact=True)).to_have_value(
-        category_id
-    )
+    expect(field(form, "category")).to_have_value(category_id)
     unit = form.get_by_role("radio", name=text(f"ingredients.baseUnit.{product.base_unit}"))
     expect(unit).to_be_checked()
     expect(form.get_by_label(text("nutrient.kcal"), exact=True)).to_have_value(
         product.kcal.removesuffix(" kcal")
     )
-    barcode = form.get_by_label(text("ingredients.field.barcode"), exact=True)
+    barcode = field(form, "barcode")
     expect(barcode).to_have_value(product.barcode)
+    expect(barcode).to_have_attribute("readonly", "")
     expect_attribution(form)
-    # Everything can be corrected before the one Save (all tests of a run share one database).
+    # Everything else can be corrected before the one Save (all tests of a run share one
+    # database).
     ingredient_name = f"{product.name} {unique('e2e')}"
     name.fill(ingredient_name)
     form.get_by_role("button", name=text("common.save")).click()
@@ -165,41 +184,44 @@ def test_member_creates_an_ingredient_from_a_typed_barcode(
     expect(page.get_by_test_id(TEST_IDS["ingredientNutrition"])).to_contain_text(product.kcal)
     expect_attribution(detail)
 
-    # BAR-02: the same barcode again goes straight to its ingredient.
-    page.goto("/scan")
-    look_up(page, product.barcode)
+    # BAR-02: scanned again, the pop-up stays open, names the ingredient and fills in nothing;
+    # "open" leads to it.
+    dialog = open_new_ingredient(page)
+    scan_in(page, dialog, product.barcode)
+    notice = dialog.get_by_test_id(TEST_IDS["ingredientScanNotice"])
+    expect(notice).to_contain_text(text("ingredients.scan.known", name=label))
+    expect(field(dialog, "barcode")).to_have_value("")
+    notice.get_by_test_id(TEST_IDS["ingredientScanOpen"]).click()
     expect(page).to_have_url(ingredient_url)
+    expect(dialog).to_be_hidden()
 
-    # Unknown to Open Food Facts: "not found", and the same form with only the barcode.
+    # Unknown to Open Food Facts: only the barcode, with a notice below it. Typed by hand
+    # before, the package's ingredient gets it through the similar-ingredients hint (BAR-03,
+    # D-36). Each lookup asks Open Food Facts, which the app allows only a few times a minute
+    # (BAR-08): one miss serves both.
+    oats = api.create_ingredient(member, unique("Haferflocken"))
     unknown = new_barcode()
-    page.goto("/scan")
-    look_up(page, unknown)
-    expect(page.get_by_test_id(TEST_IDS["scanNotice"])).to_have_text(
-        text("scanner.notFound", barcode=unknown)
+    dialog = open_new_ingredient(page)
+    field(dialog, "name").fill(oats["name"])
+    hint = dialog.get_by_test_id(TEST_IDS["ingredientSimilar"])
+    # Before a scan, the match is only a link.
+    expect(hint.get_by_role("link", name=oats["name"], exact=True)).to_be_visible()
+    scan_in(page, dialog, unknown)
+    expect(dialog.get_by_test_id(TEST_IDS["ingredientScanNotice"])).to_have_text(
+        text("ingredients.scan.notFound")
     )
-    form = page.get_by_test_id(TEST_IDS["ingredientForm"])
-    expect(form.get_by_label(text("ingredients.field.barcode"), exact=True)).to_have_value(unknown)
+    form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
+    expect(field(form, "barcode")).to_have_value(unknown)
+    expect(field(form, "barcode")).not_to_have_attribute("readonly", "")
     expect(form.get_by_test_id(TEST_IDS["offAttribution"])).to_have_count(0)
-    manual_name = unique("By hand")
-    form.get_by_label(text("ingredients.field.name"), exact=True).fill(manual_name)
-    form.get_by_label(text("nutrient.kcal"), exact=True).fill("60")
-    form.get_by_role("button", name=text("common.save")).click()
-    expect(page.get_by_role("heading", level=1)).to_have_text(manual_name)
+    hint.get_by_role("button", name=text("ingredients.similar.attach", name=oats["name"])).click()
+
+    expect(page).to_have_url(re.compile(rf"/ingredients/{oats['id']}$"))
+    expect(dialog).to_be_hidden()
     detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+    expect(detail.get_by_role("heading", level=1)).to_have_text(oats["name"])
     expect(detail).to_contain_text(unknown)
     expect(detail).to_contain_text(text("ingredients.detail.source.manual"))
-    expect(detail.get_by_test_id(TEST_IDS["offAttribution"])).to_have_count(0)
-
-    # The scanned ingredient in a meal: the meal form's scan adds it as a row (MEAL-03).
-    page.goto("/meals/new")
-    meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
-    meal_form.get_by_test_id(TEST_IDS["scanBarcode"]).click()
-    dialog = page.get_by_test_id(TEST_IDS["scanDialog"])
-    dialog.get_by_test_id(TEST_IDS["barcodeInput"]).fill(product.barcode)
-    dialog.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
-    expect(dialog).to_be_hidden()
-    row = meal_form.get_by_test_id(TEST_IDS["mealIngredientRow"])
-    expect(row).to_have_accessible_name(text("meals.row.label", name=label))
 
     # SEC-08: only the server talks to Open Food Facts.
     assert requested
@@ -240,8 +262,8 @@ def test_the_decoder_is_the_apps_own_file(
     """SEC-08, BAR-01: once the camera runs, the decoder's wasm comes from the app, no CDN.
 
     The decoder is loaded only with a camera stream, so the page gets a canvas stream as its
-    camera. Only run in Chromium: the other engines' stream and wasm handling is covered by the
-    manual iPhone check (QA-06)."""
+    camera, which the scan icon in "New ingredient" starts. Only run in Chromium: the other
+    engines' stream and wasm handling is covered by the manual iPhone check (QA-06)."""
     if browser_name != "chromium":
         pytest.skip("the canvas camera is only exercised in Chromium")
     page = member_page
@@ -249,8 +271,9 @@ def test_the_decoder_is_the_apps_own_file(
     page.on("request", lambda request: requested.append(request.url))
     page.add_init_script(FAKE_CAMERA)
 
+    dialog = open_new_ingredient(page)
     with page.expect_response(re.compile(r"/assets/zxing_reader-[\w-]+\.wasm$")) as wasm:
-        page.goto("/scan")
+        dialog.get_by_test_id(TEST_IDS["ingredientFormScan"]).click()
 
     expect(page.get_by_test_id(TEST_IDS["scannerVideo"])).to_be_visible()
     assert wasm.value.ok
@@ -262,10 +285,11 @@ def test_the_decoder_is_the_apps_own_file(
 
 
 def test_scanning_in_the_meal_form_adds_the_ingredient(
-    member_page: Page, member: Account, api: Api
+    fake_off_app: AppContainer, member_page: Page, member: Account, api: Api
 ) -> None:
-    """BAR-01, MEAL-03: the picker's scan button adds a known barcode's ingredient as a row, and
-    a new barcode's ingredient once its form (inside the scan dialog) is saved."""
+    """BAR-01, BAR-02, MEAL-03: the meal form's "Scan barcode" adds a known barcode's row at once;
+    a new barcode opens "New ingredient", filled as after a scan inside it, whose Save adds the
+    row."""
     page = member_page
     known = api.create_ingredient(
         member, unique("Scanned"), brand=unique("Brand"), barcode=new_barcode()
@@ -276,25 +300,28 @@ def test_scanning_in_the_meal_form_adds_the_ingredient(
     meal_name = form.get_by_label(text("meals.field.name"), exact=True)
     meal_name.fill(unique("Scan meal"))
     form.get_by_test_id(TEST_IDS["scanBarcode"]).click()
-    dialog = page.get_by_test_id(TEST_IDS["scanDialog"])
-    dialog.get_by_test_id(TEST_IDS["barcodeInput"]).fill(known["barcode"])
-    dialog.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
+    type_into_scanner(page, known["barcode"])
 
-    expect(dialog).to_be_hidden()
     rows = form.get_by_test_id(TEST_IDS["mealIngredientRow"])
     expect(rows).to_have_count(1)
     expect(rows).to_have_accessible_name(
         text("meals.row.label", name=ingredient_label(known["name"], known["brand"]))
     )
+    expect(page.get_by_role("dialog")).to_have_count(0)
 
-    # A barcode nobody knows: the ingredient form in the dialog, one Save, a second row.
+    # A barcode nobody knows: "New ingredient" with the barcode and Open Food Facts' answer;
+    # one Save adds a second row.
+    unknown = new_barcode()
     form.get_by_test_id(TEST_IDS["scanBarcode"]).click()
-    dialog.get_by_test_id(TEST_IDS["barcodeInput"]).fill(new_barcode())
-    dialog.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
-    new_form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
+    type_into_scanner(page, unknown)
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    expect(dialog.get_by_test_id(TEST_IDS["ingredientScanNotice"])).to_have_text(
+        text("ingredients.scan.notFound")
+    )
+    expect(field(dialog, "barcode")).to_have_value(unknown)
     new_name = unique("Scanned new")
-    new_form.get_by_label(text("ingredients.field.name"), exact=True).fill(new_name)
-    new_form.get_by_role("button", name=text("common.save")).click()
+    field(dialog, "name").fill(new_name)
+    dialog.get_by_role("button", name=text("common.save")).click()
 
     expect(dialog).to_be_hidden()
     expect(rows).to_have_count(2)

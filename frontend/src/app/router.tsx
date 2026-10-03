@@ -49,13 +49,8 @@ export const routes: RouteObject[] = [
           { path: 'meals/:id/edit', element: <MealFormScreen /> },
           { path: 'ingredients', element: <IngredientsScreen /> },
           { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
-          // The scanner and its decoder are a separate chunk, loaded when needed (PERF-03).
-          {
-            path: 'scan',
-            lazy: async () => ({
-              Component: (await import('@/features/scanner/ScanScreen')).ScanScreen,
-            }),
-          },
+          // The former scan page; scanning is inside "New ingredient" now (BAR-01, D-37).
+          { path: 'scan', element: <Navigate to="/ingredients" replace /> },
           { path: 'me', element: <MeScreen /> },
           {
             path: 'me/admin',

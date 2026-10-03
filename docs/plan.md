@@ -346,7 +346,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   3. if not found, ask OFF;
   4. return a *proposal* (not saved) with barcode, name (in the user's language, else the generic name, cut at a word boundary to 60 characters), brand, quantity, `product_quantity`, basis, category guess and nutrients.
 
-  With `own_only=true` (the scan in an edit pop-up, BAR-03), step 3 is skipped: the answer only says whether another ingredient has the barcode.
+  With `own_only=true` (the scan in an edit pop-up, BAR-03, and the meal form's scan, BAR-02), step 3 is skipped: the answer only says whether an ingredient has the barcode. The meal form's scan then opens "Neue Zutat" for a barcode none has, which looks it up in full (MEAL-03).
 
   Saving is `POST /api/ingredients` with the (corrected) values and an `off` block (`off_last_modified_at`, `edited_fields`), which creates a `source=off` ingredient in one request and marks the edited fields as user-edited (BAR-04).
   - **Pack size** (D-38): the pack fields (`quantity_text`, `pack_quantity`, `pack_unit`) are taken only on this create with an `off` block, passed on from the proposal. A create without one, and every `PATCH`, refuses them, so the pack size is never user-edited.

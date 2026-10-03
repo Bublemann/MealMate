@@ -2,6 +2,8 @@ import { CircleAlert, RotateCcw, ScanBarcode, Search } from 'lucide-react';
 import {
   lazy,
   Suspense,
+  useEffect,
+  useEffectEvent,
   useId,
   useRef,
   useState,
@@ -100,6 +102,11 @@ interface IngredientFormDialogProps {
   ingredient?: Ingredient;
   /** Prefills the name of a new ingredient (e.g. from a search). */
   initialName?: string;
+  /**
+   * A barcode scanned before the pop-up opened (the meal form's scan, MEAL-03): it is looked up
+   * at once, as a scan with the pop-up's own scan icon is.
+   */
+  initialScan?: string;
   /** Called with the saved ingredient; the dialog closes itself. */
   onSaved?: (ingredient: Ingredient) => void;
   /**
@@ -151,16 +158,13 @@ export function IngredientFormDialog({ open, onOpenChange, ...props }: Ingredien
   );
 }
 
-export interface IngredientFormProps {
+interface IngredientFormProps {
   /** Edit this ingredient; without it the form creates a new one. */
   ingredient?: Ingredient;
   /** Prefills the name of a new ingredient (e.g. from a search). */
   initialName?: string;
-  /**
-   * Starts a new ingredient from a looked-up barcode (the scan flow, BAR-03): its barcode and,
-   * if Open Food Facts knows it, the proposed values.
-   */
-  prefill?: Prefill;
+  /** A barcode to look up at once, as if it had just been scanned with the scan icon. */
+  initialScan?: string;
   /** Called with the saved ingredient, after `onClose`. */
   onSaved?: (ingredient: Ingredient) => void;
   onPickExisting?: (ingredient: IngredientSummary) => void;
@@ -168,8 +172,6 @@ export interface IngredientFormProps {
   onClose: () => void;
   /** The name field, e.g. for the dialog to put the cursor there. */
   nameRef?: Ref<HTMLInputElement>;
-  /** More actions below the save button, e.g. the scan flow's "already in MealMate". */
-  children?: ReactNode;
 }
 
 /** A base-unit change the server refused because amounts would stop fitting (D-33). */
@@ -206,17 +208,17 @@ interface Proposed {
  *
  * The scan looks the barcode up (BAR-02/03): a barcode another ingredient has fills in nothing
  * and offers that one instead; one Open Food Facts knows fills the form like a chosen product;
- * any other one only the barcode. When editing, Open Food Facts isn't asked.
+ * any other one only the barcode. When editing, Open Food Facts isn't asked. The meal form's scan
+ * opens the form with a barcode no ingredient has, looked up the same way (MEAL-03).
  */
-export function IngredientForm({
+function IngredientForm({
   ingredient,
   initialName = '',
-  prefill,
+  initialScan,
   onSaved,
   onPickExisting,
   onClose,
   nameRef,
-  children,
 }: IngredientFormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
@@ -225,15 +227,11 @@ export function IngredientForm({
   const update = useUpdateIngredient(ingredient?.id ?? '');
   const mutation = ingredient ? update : create;
 
-  const [initial] = useState<FormValues>(() => {
-    if (ingredient) return valuesFromIngredient(ingredient, language);
-    const empty = emptyValues(initialName, language);
-    return prefill ? valuesFromPrefill(prefill, empty, language) : empty;
-  });
-  const [values, setValues] = useState(initial);
-  const [proposed, setProposed] = useState<Proposed | null>(
-    prefill?.proposal ? { prefill, values: proposalValues(prefill, language) } : null,
+  const [initial] = useState<FormValues>(() =>
+    ingredient ? valuesFromIngredient(ingredient, language) : emptyValues(initialName, language),
   );
+  const [values, setValues] = useState(initial);
+  const [proposed, setProposed] = useState<Proposed | null>(null);
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
   const [refused, setRefused] = useState<Refused | null>(null);
   const [searching, setSearching] = useState(false);
@@ -332,6 +330,17 @@ export function IngredientForm({
       },
     );
   }
+
+  const lookUpInitialScan = useEffectEvent(() => {
+    if (initialScan !== undefined) lookUp(initialScan);
+  });
+  // Once, also where development mode runs effects twice: a lookup may ask Open Food Facts.
+  const lookedUpInitialScan = useRef(false);
+  useEffect(() => {
+    if (lookedUpInitialScan.current) return;
+    lookedUpInitialScan.current = true;
+    lookUpInitialScan();
+  }, []);
 
   function pickExisting(match: IngredientSummary) {
     onClose();
@@ -476,7 +485,7 @@ export function IngredientForm({
                 className="flex-[1_1_12rem]"
               />
               <div className="flex gap-2">
-                {!ingredient && !prefill && (
+                {!ingredient && (
                   <Button
                     type="button"
                     variant="outline"
@@ -667,7 +676,6 @@ export function IngredientForm({
           {t('common.save')}
         </Button>
       </div>
-      {children}
       {searching && (
         <OffSearchDialog
           open

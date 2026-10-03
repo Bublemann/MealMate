@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import { checkboxNames, openPanel } from '@/test/filters';
@@ -534,6 +534,15 @@ describe('IngredientsScreen', () => {
     await screen.findByTestId(testIds.ingredientList);
     expect(screen.queryByRole('link', { name: 'Scan barcode' })).toBeNull();
     expect(screen.queryByTestId(testIds.scanBarcode)).toBeNull();
+  });
+
+  it('is where an old link to the scan page leads (BAR-01, D-37)', async () => {
+    mockApi({ ...REFERENCE_ROUTES, 'GET /api/ingredients': listIngredients });
+    const { router } = renderApp('/scan');
+
+    expect(await screen.findByTestId(testIds.screenIngredients)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/ingredients');
+    expect(screen.queryByTestId(testIds.barcodeScanDialog)).not.toBeInTheDocument();
   });
 
   it('shows a translated error when the list cannot be loaded', async () => {
@@ -1074,6 +1083,68 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
       expect(requestsTo(fetchMock, LOOKUP)).toHaveLength(2);
     },
   );
+
+  it('gives a lookup 25 s before it counts as slow (plan § 8)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const fetchMock = mockApi({ ...REFERENCE_ROUTES, 'GET /api/ingredients': listIngredients });
+      // A lookup that never answers, until the client gives up.
+      vi.stubGlobal('fetch', (request: Request, init?: RequestInit) => {
+        if (new URL(request.url).pathname !== '/api/ingredients/lookup') return fetchMock(request);
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('', 'AbortError')));
+        });
+      });
+      const { user } = renderApp('/ingredients');
+
+      const dialog = await openNew(user);
+      await scanInForm(user, dialog, BARCODE);
+      const notice = () => within(dialog).getByTestId(testIds.ingredientScanNotice);
+      expect(notice()).toHaveTextContent(`Looking up ${BARCODE}…`);
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(notice()).toHaveTextContent(`Looking up ${BARCODE}…`);
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+      await waitFor(() => expect(notice()).toHaveTextContent(/^Open Food Facts is slow right now/));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cuts a long Open Food Facts name at a word to fit the name field', async () => {
+    const long = 'Frische fettarme Milch aus der Region, länger haltbar, homogenisiert, 1,5 % Fett';
+    const { user } = renderIngredients({
+      [LOOKUP]: lookupResult({ found_in: 'off', proposal: proposal({ name: long }) }),
+    });
+
+    const dialog = await openNew(user);
+    await scanInForm(user, dialog, BARCODE);
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Name')).toHaveValue(
+        'Frische fettarme Milch aus der Region, länger haltbar,',
+      ),
+    );
+  });
+
+  it('never shows a negative zero from Open Food Facts as "-0"', async () => {
+    // JSON can carry `-0`, and Intl.NumberFormat shows it with its sign.
+    const hit = proposal();
+    const zeros = lookupResult({
+      found_in: 'off',
+      proposal: { ...hit, nutrients: { ...hit.nutrients, fat: 0 } },
+    });
+    const text = JSON.stringify(zeros).replace('"fat":0', '"fat":-0');
+    expect(text).toContain('"fat":-0');
+    const { user } = renderIngredients({
+      [LOOKUP]: new Response(text, { headers: { 'Content-Type': 'application/json' } }),
+    });
+
+    const dialog = await openNew(user);
+    await scanInForm(user, dialog, BARCODE);
+
+    await waitFor(() => expect(within(dialog).getByLabelText('Fat')).toHaveValue('0'));
+  });
 
   it('says when the scanned digits are not a valid barcode, filling in nothing', async () => {
     const { user } = renderIngredients({
