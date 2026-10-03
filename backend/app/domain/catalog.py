@@ -27,16 +27,15 @@ PACK_QUANTITY_MAX = 100_000.0
 NAME_NORM_FACTOR = 4
 
 # The fields of an ingredient that Open Food Facts provides and refreshes (BAR-04..06), other
-# than the nutrients. Each one a user changes on an ingredient from Open Food Facts is recorded
-# as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base unit and piece
-# weight are the user's alone: a refresh never touches them.
-OFF_DATA_FIELDS: tuple[str, ...] = (
-    "name",
-    "brand",
-    "quantity_text",
-    "pack_quantity",
-    "pack_unit",
-)
+# than the nutrients and the pack size. Each one a user changes on an ingredient from Open Food
+# Facts is recorded as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base
+# unit and piece weight are the user's alone: a refresh never touches them.
+OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand")
+
+# The pack size (ING-02, D-38): Open Food Facts' alone. It is never typed in or edited, so it is
+# never user-edited and a refresh always updates it; "user-edited" marks on it from before D-38
+# are ignored, not rewritten.
+PACK_FIELDS: tuple[str, ...] = ("quantity_text", "pack_quantity", "pack_unit")
 
 
 def nutrient_field(key: str) -> str:

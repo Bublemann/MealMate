@@ -11,8 +11,10 @@ an admin, which the API checks. Barcode uniqueness is checked inside the write t
 which holds the write lock (`BEGIN IMMEDIATE`).
 
 On an ingredient from Open Food Facts (`source` off), every Open Food Facts field a user sets
-(`OFF_FIELDS`: name, brand, pack, nutrients) is marked user-edited, so that a refresh
+(`OFF_FIELDS`: name, brand, nutrients) is marked user-edited, so that a refresh
 (`services.off_refresh`) never overwrites it; see `services.off_fields` for the pending update.
+The pack size (`PACK_FIELDS`) is Open Food Facts' alone: it is only taken from a proposal on
+create, and an update refuses it (D-38).
 
 References from meals and lists go through `services.hooks`: `ingredient_references` blocks
 deletion (and is shown as the usage), and `on_ingredients_merged` repoints them when merging.
@@ -37,7 +39,7 @@ from app.core.errors import (
     validation_error,
 )
 from app.domain.barcodes import normalize_barcode
-from app.domain.catalog import OFF_FIELDS, nutrient_field
+from app.domain.catalog import OFF_FIELDS, PACK_FIELDS, nutrient_field
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
@@ -75,8 +77,6 @@ from app.services.users import user_refs
 SEARCH_LIMIT = 1000
 # Name-similar candidates looked at before those with the same name and brand are put first.
 _SIMILAR_CANDIDATES = 50
-# The plain fields of an update that are Open Food Facts fields (the others need more care).
-_PLAIN_OFF_FIELDS = ("quantity_text", "pack_quantity")
 
 
 def source_name(value: str) -> IngredientSource:
@@ -142,6 +142,18 @@ async def _check_barcode_free(
         raise ApiError(
             ErrorCode.INGREDIENT_BARCODE_TAKEN, status_code=409, params={"ingredient_id": owner}
         )
+
+
+def _pack_size_problems(body: IngredientCreate) -> list[FieldProblem]:
+    """The pack size comes only with an Open Food Facts proposal: nobody types it in (D-38)."""
+    if body.off is not None:
+        return []
+    sent = body.model_fields_set
+    return [
+        FieldProblem(("body", field), FieldErrorCode.INVALID)
+        for field in PACK_FIELDS
+        if field in sent
+    ]
 
 
 def _piece_weight_problem(piece_weight_g: float | None, base_unit: str) -> FieldProblem | None:
@@ -212,12 +224,13 @@ async def create_ingredient(
     session: AsyncSession, principal: Principal, body: IngredientCreate, *, now: datetime
 ) -> Ingredient:
     """Add an ingredient (ING-02), by hand or from an Open Food Facts proposal (`off`, BAR-03):
-    then `source` is off, it counts as fetched now, and only the fields the user changed
-    compared with the proposal (`off.edited_fields`) are user-edited (BAR-04)."""
+    then `source` is off, it counts as fetched now, only the fields the user changed compared
+    with the proposal (`off.edited_fields`) are user-edited (BAR-04), and only then is a pack
+    size taken (D-38)."""
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     from_off = body.off is not None
     async with session.begin():
-        problems: list[FieldProblem] = []
+        problems = _pack_size_problems(body)
         if from_off and barcode is None:
             problems.append(FieldProblem(("body", "barcode"), FieldErrorCode.REQUIRED))
         if problem := _piece_weight_problem(body.piece_weight_g, body.base_unit):
@@ -318,13 +331,6 @@ async def update_ingredient(
         if "brand" in sent:
             set_brand(row, body.brand)
             edited.append("brand")
-        for field in _PLAIN_OFF_FIELDS:
-            if field in sent:
-                setattr(row, field, getattr(body, field))
-                edited.append(field)
-        if "pack_unit" in sent:
-            row.pack_unit = None if body.pack_unit is None else body.pack_unit.value
-            edited.append("pack_unit")
         for key in _nutrient_keys(body.nutrients):
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
@@ -347,8 +353,10 @@ async def update_ingredient(
             if row.source == "off":
                 _make_manual(row)
         if row.source == "off":
+            # Marks on the pack size from before D-38 stay: they are ignored, not rewritten.
             row.user_edited_fields = [
-                field for field in OFF_FIELDS if field in {*row.user_edited_fields, *edited}
+                *row.user_edited_fields,
+                *(field for field in edited if field not in row.user_edited_fields),
             ]
             drop_pending(row, decided)
         row.updated_by = principal.user_id

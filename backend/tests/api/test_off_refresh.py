@@ -24,7 +24,7 @@ from app.schemas.ingredients import Ingredient
 from app.services import off_refresh
 from app.services.off_refresh import OffRefresher, Outcome
 from tests.accounts import Account, FakeClock, error, login, make_user
-from tests.catalog import EAN_13, create_from_off, create_ingredient
+from tests.catalog import EAN_13, create_from_off, create_ingredient, set_stored
 from tests.off import (
     MILK,
     OATS,
@@ -207,6 +207,39 @@ async def test_unknown_values_never_replace_known_ones(
     assert body["nutrients"] == OATS_NUTRIENTS
     assert body["pending_update"] is None
     assert body["fetched_at"] == "2026-09-27T12:00:00Z"
+
+
+async def test_the_pack_size_is_always_refreshed(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """Nobody edits the pack size (D-38), so a refresh updates it silently. "User-edited" marks
+    on it from before are ignored, not rewritten, and a pending update from before no longer
+    lists it (BAR-06)."""
+    product = await saved_oats(api, anna, edited=[])
+    pack_fields = ["quantity_text", "pack_quantity", "pack_unit"]
+    old_pending = {
+        "quantity_text": {"current": "500 g", "proposed": "0,5 kg"},
+        "pack_unit": {"current": "g", "proposed": "kg"},
+    }
+    await set_stored(app, product["id"], user_edited_fields=pack_fields, pending_update=old_pending)
+    assert (await get(api, anna, product["id"]))["user_edited_fields"] == []
+    assert (await get(api, anna, product["id"]))["pending_update"] is None
+    bigger = oats(quantity="1 kg", product_quantity=1000, last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=bigger)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("1 kg", 1000, "g")
+    assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
+    async with database(app).read_sessions() as session:
+        row = await session.get(IngredientRow, product["id"])
+        assert row is not None
+        assert row.user_edited_fields == pack_fields
 
 
 async def test_only_pending_changes(

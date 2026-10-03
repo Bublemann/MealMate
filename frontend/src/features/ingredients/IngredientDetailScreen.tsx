@@ -165,7 +165,7 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
 }
 
 /**
- * The package as Open Food Facts or the user gave it: the printed text ("6 × 1,5 l"), else the
+ * The pack size as Open Food Facts gave it (D-38): the printed text ("6 × 1,5 l"), else the
  * contents with their unit; null when neither is known. Information only (nothing is computed
  * from it).
  */

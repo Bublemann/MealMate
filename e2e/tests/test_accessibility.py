@@ -109,6 +109,7 @@ def test_no_serious_violations(
         path = f"/join#{code_from_link(link)}"
     if path == "/ingredients/:id":
         api = request.getfixturevalue("api")
+        # From Open Food Facts, so the page also shows the pack size and the attribution (D-38).
         ingredient = api.create_ingredient(
             account,
             unique("A11y"),
@@ -116,6 +117,7 @@ def test_no_serious_violations(
             barcode=new_barcode(),
             quantity_text="1 kg",
             nutrients={"kcal": 52},
+            off={"edited_fields": []},
         )
         path = f"/ingredients/{ingredient['id']}"
     if path in ("/ingredients/new", "/ingredients/filter"):
@@ -227,8 +229,11 @@ def test_no_serious_violations(
     if screen.path == "/ingredients/new":
         page.get_by_test_id(TEST_IDS["newIngredient"]).click()
         form = page.get_by_test_id(TEST_IDS["ingredientForm"])
-        form.get_by_text(text("ingredients.form.more"), exact=True).click()
-        expect(form.get_by_label(text("ingredients.field.packUnit"), exact=True)).to_be_visible()
+        # Stück shows the piece weight, so the check covers every field of the pop-up (D-35).
+        form.get_by_label(text("ingredients.baseUnit.piece"), exact=True).check()
+        piece_weight = form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)
+        expect(piece_weight).to_be_visible()
+        expect(page.get_by_test_id(TEST_IDS["ingredientFormFooter"])).to_be_visible()
     if screen.path == "/ingredients/filter":
         page.get_by_test_id(TEST_IDS["filterButton"]).click()
         panel = page.get_by_test_id(TEST_IDS["filterPanel"])

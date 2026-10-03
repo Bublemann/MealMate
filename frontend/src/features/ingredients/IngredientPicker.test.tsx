@@ -175,7 +175,6 @@ describe('IngredientPicker, created from Open Food Facts', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.click(within(dialog).getByTestId(testIds.offSearchButton));
     const search = await screen.findByTestId(testIds.offSearchDialog);
-    await user.click(within(search).getByRole('button', { name: 'Search' }));
     await user.click(await within(search).findByTestId(testIds.offSearchResult));
 
     await waitFor(() => expect(within(dialog).getByLabelText('Brand')).toHaveValue('Weidehof'));
@@ -210,7 +209,6 @@ describe('IngredientPicker, created from Open Food Facts', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.click(within(dialog).getByTestId(testIds.offSearchButton));
     const search = await screen.findByTestId(testIds.offSearchDialog);
-    await user.click(within(search).getByRole('button', { name: 'Search' }));
     const result = await within(search).findByRole('button', { name: /Already in MealMate/ });
     await user.click(result);
 

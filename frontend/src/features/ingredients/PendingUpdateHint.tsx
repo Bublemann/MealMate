@@ -2,7 +2,6 @@ import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Button } from '@/components/ui/button';
-import { unitLabel } from '@/features/reference/labels';
 import { useLanguage, type Language } from '@/i18n';
 import { formatNumber } from '@/i18n/format';
 import { testIds } from '@/testIds';
@@ -10,12 +9,10 @@ import { usePendingUpdate, type Ingredient, type PendingUpdateField } from './ap
 import { ingredientLabel } from './label';
 import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, type NutrientKey } from './nutrients';
 
+// The pack size is never user-edited, so it is never pending (BAR-06, D-38).
 const TEXT_FIELD_LABELS = {
   name: 'ingredients.field.name',
   brand: 'ingredients.field.brand',
-  quantity_text: 'ingredients.field.quantityText',
-  pack_quantity: 'ingredients.field.packQuantity',
-  pack_unit: 'ingredients.field.packUnit',
 } as const;
 
 function nutrientKeyOf(field: string): NutrientKey | null {
@@ -28,9 +25,7 @@ function describeChange(t: TFunction, language: Language, change: PendingUpdateF
   const nutrient = nutrientKeyOf(change.field);
   const format = (value: string | number | null): string => {
     if (value === null) return t('ingredients.pending.none');
-    if (typeof value === 'string') {
-      return change.field === 'pack_unit' ? unitLabel(t, value) : value;
-    }
+    if (typeof value === 'string') return value;
     return nutrient
       ? formatNutrient(t, language, nutrient, value)
       : formatNumber(value, language, { maximumFractionDigits: 3 });

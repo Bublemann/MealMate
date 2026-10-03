@@ -1,5 +1,5 @@
 import { CircleAlert, RotateCcw, Search } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useEffectEvent, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { isApiError } from '@/api/errors';
@@ -36,7 +36,10 @@ export const OFF_QUERY_MAX_LENGTH = 80;
 interface OffSearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Starts the search field with this text (the name typed so far); nothing is sent yet. */
+  /**
+   * Starts the search field with this text (the name typed so far) and searches for it at once,
+   * if it is long enough: opening the dialog is the explicit action (BAR-08, BAR-11).
+   */
   initialQuery: string;
   /** Called with the chosen product's values; the dialog closes itself. */
   onChoose: (proposal: OffProposal) => void;
@@ -78,9 +81,10 @@ function isOffSlow(error: unknown): boolean {
 }
 
 /**
- * Finds a product at Open Food Facts by name, for people who have nothing to scan yet. The
- * search runs only on "Search" or Enter, never while typing (BAR-08): Open Food Facts limits how
- * often it may be asked. Choosing a result fills the ingredient form like a scanned barcode.
+ * Finds a product at Open Food Facts by name, for people who have nothing to scan yet. It
+ * searches for the name it opens with at once; after that only on "Search" or Enter, never while
+ * typing (BAR-08): Open Food Facts limits how often it may be asked. Choosing a result fills the
+ * ingredient form like a scanned barcode.
  */
 export function OffSearchDialog({
   open,
@@ -112,6 +116,11 @@ export function OffSearchDialog({
       },
     );
   }
+
+  const searchInitialQuery = useEffectEvent(() => {
+    if (!tooShort) run(query, 1);
+  });
+  useEffect(() => searchInitialQuery(), []);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

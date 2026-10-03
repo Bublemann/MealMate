@@ -115,22 +115,21 @@ async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
         category_id=categories["dairy_eggs"],
         base_unit="ml",
         nutrients={"kcal": 64, "fat": 3.5, "sugar": None},
-        quantity_text="1 l",
-        pack_quantity=1,
-        pack_unit="l",
     )
     assert (body["name"], body["brand"], body["barcode"]) == ("Milch", "Weihenstephan", EAN_13)
     assert body["category_id"] == categories["dairy_eggs"]
     assert (body["base_unit"], body["piece_weight_g"]) == ("ml", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"kcal": 64, "fat": 3.5}
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("1 l", 1, "l")
-    # Typed by hand: nothing to refresh, nothing marked.
+    # Typed by hand: no pack size (D-38), nothing to refresh, nothing marked.
+    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == (None, None, None)
     assert (body["source"], body["user_edited_fields"], body["fetched_at"]) == ("manual", [], None)
 
 
 async def test_empty_optional_texts_are_null(api: AsyncClient, anna: Account) -> None:
-    body = await create_ingredient(api, anna, "Eier", brand="  ", quantity_text="")
-    assert (body["brand"], body["quantity_text"]) == (None, None)
+    body = await create_ingredient(api, anna, "Eier", brand="  ")
+    assert body["brand"] is None
+    body = await create_from_off(api, anna, "Milch", EAN_13, quantity_text=" ")
+    assert body["quantity_text"] is None
 
 
 async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Account) -> None:
@@ -246,10 +245,11 @@ async def test_limits_are_inclusive(api: AsyncClient, anna: Account) -> None:
         base_unit="piece",
         piece_weight_g=10_000,
         nutrients={"kcal": 900, "protein": 0, "carbs": 100, "sugar": 100, "fat": 100},
-        pack_quantity=100_000,
     )
     assert body["nutrients"] == {"kcal": 900, "protein": 0, "carbs": 100, "sugar": 100, "fat": 100}
     assert body["piece_weight_g"] == 10_000
+    from_off = await create_from_off(api, anna, "Großpackung", EAN_13, pack_quantity=100_000)
+    assert from_off["pack_quantity"] == 100_000
 
 
 async def test_density_is_gone(app: FastAPI, api: AsyncClient, anna: Account) -> None:
@@ -442,11 +442,58 @@ async def test_create_from_open_food_facts(
     )
     assert body["source"] == "off"
     assert body["barcode"] == "2000000000015"
+    # The pack size, passed on from the proposal (D-38).
+    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("500 g", 500, "g")
     # Only the fields the user changed compared with the proposal, in field order.
     assert body["user_edited_fields"] == ["name", "nutrients.kcal"]
     assert body["off_last_modified_at"] == "2026-01-01T00:00:00Z"
     assert body["fetched_at"] == "2026-09-27T12:00:00Z"
     assert body["pending_update"] is None
+
+
+@pytest.mark.parametrize(
+    "pack",
+    [{"quantity_text": "500 g"}, {"pack_quantity": 500}, {"pack_unit": "g"}, {"pack_unit": None}],
+)
+async def test_the_pack_size_needs_an_open_food_facts_origin(
+    api: AsyncClient, anna: Account, pack: dict[str, Any]
+) -> None:
+    """The pack size is Open Food Facts' alone (ING-02, D-38): typed by hand, it is refused."""
+    response = await post(api, anna, name="Haferflocken", barcode=EAN_13, **pack)
+    assert response.status_code == 422
+    assert fields(response) == {("body", field): "invalid" for field in pack}
+
+
+@pytest.mark.parametrize(
+    ("pack", "field", "code"),
+    [
+        ({"quantity_text": "x" * 41}, "quantity_text", "too_long"),
+        ({"quantity_text": "500͸ g"}, "quantity_text", "invalid_format"),
+        ({"pack_quantity": 0}, "pack_quantity", "out_of_range"),
+        ({"pack_quantity": 100_001}, "pack_quantity", "out_of_range"),
+        ({"pack_unit": "cup"}, "pack_unit", "invalid"),
+    ],
+)
+async def test_invalid_pack_sizes(
+    api: AsyncClient, anna: Account, pack: dict[str, Any], field: str, code: str
+) -> None:
+    off = {"edited_fields": []}
+    response = await post(api, anna, name="Haferflocken", barcode=EAN_13, off=off, **pack)
+    assert response.status_code == 422
+    assert fields(response) == {("body", field): code}
+
+
+async def test_the_pack_size_is_never_edited(api: AsyncClient, anna: Account) -> None:
+    """Not even an edited pack size from the proposal is marked (BAR-04)."""
+    response = await post(
+        api,
+        anna,
+        name="Haferflocken",
+        barcode=EAN_13,
+        quantity_text="1 kg",
+        off={"edited_fields": ["quantity_text"]},
+    )
+    assert fields(response) == {("body", "off", "edited_fields", 0): "invalid"}
 
 
 async def test_from_open_food_facts_needs_a_barcode(api: AsyncClient, anna: Account) -> None:
@@ -473,7 +520,6 @@ async def test_editing_an_off_ingredient_marks_the_fields(
         oats["id"],
         name="Zarte Haferflocken",
         brand=None,
-        quantity_text="500 g",
         nutrients={"kcal": 372, "fat": None},
         base_unit="piece",
         piece_weight_g=1,
@@ -482,36 +528,35 @@ async def test_editing_an_off_ingredient_marks_the_fields(
 
     assert response.status_code == 200
     body = response.json()
-    assert (body["name"], body["brand"], body["quantity_text"]) == (
-        "Zarte Haferflocken",
-        None,
-        "500 g",
-    )
+    assert (body["name"], body["brand"]) == ("Zarte Haferflocken", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"kcal": 372}
     # Only Open Food Facts fields are marked (not the base unit, piece weight or category).
-    assert body["user_edited_fields"] == [
-        "name",
-        "brand",
-        "quantity_text",
-        "nutrients.kcal",
-        "nutrients.fat",
-    ]
+    assert body["user_edited_fields"] == ["name", "brand", "nutrients.kcal", "nutrients.fat"]
     assert (body["created_by"], body["updated_by"]) == (ref(anna), ref(ben))
     assert body["updated_at"] == "2026-09-27T12:10:00Z"
 
-    body = (await patch(api, ben, oats["id"], pack_quantity=500, pack_unit="g")).json()
-    assert (body["pack_quantity"], body["pack_unit"]) == (500, "g")
-    body = (await patch(api, ben, oats["id"], pack_unit=None, nutrients=None)).json()
-    assert (body["pack_quantity"], body["pack_unit"]) == (500, None)
-    assert body["user_edited_fields"] == [
-        "name",
-        "brand",
-        "quantity_text",
-        "pack_quantity",
-        "pack_unit",
-        "nutrients.kcal",
-        "nutrients.fat",
-    ]
+
+@pytest.mark.parametrize(
+    "pack",
+    [
+        {"quantity_text": "1 kg"},
+        {"pack_quantity": 1000},
+        {"pack_unit": "kg"},
+        {"quantity_text": None, "pack_quantity": None, "pack_unit": None},
+    ],
+)
+async def test_the_pack_size_is_refused_on_update(
+    api: AsyncClient, anna: Account, pack: dict[str, Any]
+) -> None:
+    """Never edited, so never user-edited (BAR-04, D-38): sent anyway, it is refused, not
+    ignored, and nothing changes."""
+    oats = await create_from_off(
+        api, anna, "Haferflocken", EAN_13, quantity_text="500 g", pack_quantity=500, pack_unit="g"
+    )
+    response = await patch(api, anna, oats["id"], name="Hafer", **pack)
+    assert response.status_code == 422
+    assert fields(response) == {("body", field): "invalid" for field in pack}
+    assert await get(api, anna, oats["id"]) == oats
 
 
 def open_food_facts_data(body: dict[str, Any]) -> tuple[Any, ...]:

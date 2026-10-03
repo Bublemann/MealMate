@@ -6,6 +6,7 @@ import {
   CATEGORIES_AFTER_DELETE,
   CATEGORIES_WITH_ADDED,
   CATEGORIES_WITH_UNCATEGORIZED,
+  expectInPageOrder,
   ingredient,
   REFERENCE_ROUTES,
   summary,
@@ -439,7 +440,79 @@ describe('IngredientsScreen', () => {
 });
 
 describe('IngredientFormDialog (create)', () => {
-  it('creates an ingredient with brand, barcode, package and decimal commas, and opens it', async () => {
+  it('is compact: name with magnifier and scan icon, barcode, similar hint, brand, category, base unit, piece weight, nutrition, footer (ING-04, D-35)', async () => {
+    await i18n.changeLanguage('de');
+    const { fetchMock, user } = renderIngredients({
+      'GET /api/ingredients/similar': (request: Request) =>
+        new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[1]] : [],
+    });
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Neue Zutat' });
+    // No text below the headline.
+    expect(dialog).not.toHaveAccessibleDescription();
+    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const name = within(form).getByLabelText('Name');
+    await user.type(name, 'Apfel');
+    const similar = await within(form).findByTestId(testIds.ingredientSimilar);
+    const baseUnit = within(form).getByRole('group', { name: 'Basiseinheit' });
+    await user.click(within(baseUnit).getByLabelText('Stück (Stk.)'));
+
+    const barcode = within(form).getByLabelText('Barcode');
+    const brand = within(form).getByLabelText('Marke');
+    const nutrition = within(form).getByRole('group', { name: 'Nährwerte pro 100 g (optional)' });
+    const footer = within(dialog).getByTestId(testIds.ingredientFormFooter);
+    expectInPageOrder([
+      name,
+      within(form).getByRole('button', { name: 'In Open Food Facts suchen' }),
+      within(form).getByRole('button', { name: 'Barcode scannen' }),
+      barcode,
+      similar,
+      brand,
+      within(form).getByLabelText('Kategorie'),
+      baseUnit,
+      within(form).getByLabelText('Gewicht pro Stück (g)'),
+      nutrition,
+      footer,
+    ]);
+    // Placeholders instead of hints, and no hints at the base unit and the nutrition either.
+    expect(brand).toHaveAttribute('placeholder', 'optional, z. B. REWE');
+    expect(barcode).toHaveAttribute('placeholder', '8, 12 oder 13 Ziffern');
+    for (const field of [name, barcode, brand]) expect(field).not.toHaveAccessibleDescription();
+    expect(brand).toHaveValue('');
+    expect(barcode).toHaveValue('');
+    expect(baseUnit).toHaveTextContent(/^BasiseinheitGramm \(g\)Milliliter \(ml\)Stück \(Stk\.\)$/);
+    expect(nutrition).toHaveTextContent(/^Nährwerte pro 100 g \(optional\)Kalorien/);
+    // No pack size to type in (D-38).
+    expect(within(form).queryByText(/Packung/)).not.toBeInTheDocument();
+    // Labels stay visible above every field (A11Y-01).
+    expect(within(form).getByText('Marke')).toBeVisible();
+    expect(within(footer).getByRole('button', { name: 'Speichern' })).toBeVisible();
+
+    // The ✕ cancels.
+    await user.click(within(dialog).getByRole('button', { name: 'Schließen' }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+
+  it('puts the cursor in the name only while it is empty (D-35)', async () => {
+    const { user } = renderIngredients();
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const empty = await screen.findByRole('dialog', { name: 'New ingredient' });
+    await waitFor(() => expect(within(empty).getByLabelText('Name')).toHaveFocus());
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(empty).not.toBeInTheDocument());
+
+    // With “Quitten” filled in, the keyboard would cover the icons and the category.
+    await user.type(screen.getByLabelText('Search ingredients'), 'Quitten');
+    await user.click(screen.getByTestId(testIds.newIngredient));
+    const named = await screen.findByRole('dialog', { name: 'New ingredient' });
+    expect(within(named).getByLabelText('Name')).toHaveValue('Quitten');
+    await waitFor(() => expect(named).toHaveFocus());
+  });
+
+  it('creates an ingredient with brand, barcode and decimal commas, and opens it', async () => {
     const created = ingredient({ id: 'ing-birnen', name: 'Birnen', brand: 'Hofgut' });
     const { fetchMock, user, router } = renderIngredients({
       'POST /api/ingredients': Response.json(created, { status: 201 }),
@@ -459,12 +532,6 @@ describe('IngredientFormDialog (create)', () => {
     await user.type(within(form).getByLabelText('Calories'), '57,5');
     await user.type(within(form).getByLabelText('Fat'), '0.4');
     await user.type(within(form).getByLabelText('Barcode'), '4006381 333931');
-    // The package is optional and folded away under "More".
-    const more = within(form).getByText('More: package');
-    expect(within(form).getByLabelText('Package contents')).not.toBeVisible();
-    await user.click(more);
-    await user.type(within(form).getByLabelText('Package contents'), '1,5');
-    await user.selectOptions(within(form).getByLabelText('Unit of the contents'), 'kg');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-birnen'));
@@ -474,8 +541,6 @@ describe('IngredientFormDialog (create)', () => {
       category_id: 'cat-fruit_vegetables',
       brand: 'Hofgut',
       barcode: '4006381333931',
-      pack_quantity: 1.5,
-      pack_unit: 'kg',
       nutrients: { kcal: 57.5, fat: 0.4 },
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Birnen (Hofgut)' })).toBeVisible();
@@ -651,20 +716,25 @@ describe('IngredientFormDialog (create)', () => {
     expect(boxes).toHaveLength(3);
   });
 
-  it('scans a barcode into the barcode field', async () => {
-    const { user } = renderIngredients();
+  it('fills in the barcode from the scan icon next to the name, through the typed digits (BAR-01)', async () => {
+    const { fetchMock, user } = renderIngredients();
 
     await user.click(await screen.findByTestId(testIds.newIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
-    await user.click(within(dialog).getByTestId(testIds.barcodeFieldScan));
+    // The barcode field has no scan button of its own.
+    expect(within(dialog).getAllByRole('button', { name: 'Scan barcode' })).toEqual([
+      within(dialog).getByTestId(testIds.ingredientFormScan),
+    ]);
+    await user.click(within(dialog).getByRole('button', { name: 'Scan barcode' }));
     const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
     await user.type(within(scanner).getByTestId(testIds.barcodeInput), '4006381333931{Enter}');
 
     await waitFor(() => expect(scanner).not.toBeInTheDocument());
-    // Only filled in: nothing is looked up, and the form is still open.
+    // Only filled in: nothing is looked up yet, and the form is still open.
     const form = screen.getByTestId(testIds.ingredientForm);
     expect(within(form).getByLabelText('Barcode')).toHaveValue('4006381333931');
     expect(screen.getByRole('dialog', { name: 'New ingredient' })).toBeVisible();
+    expect(requestsTo(fetchMock, 'GET /api/ingredients/lookup')).toHaveLength(0);
   });
 
   it('shows a barcode another ingredient has next to the field', async () => {

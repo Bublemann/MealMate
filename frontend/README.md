@@ -529,17 +529,18 @@ order.
 | `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)    |
 | `filterGroup`            | `filter-group`             | One checkbox group in the filter panel      |
 | `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
+| `ingredientFormScan`     | `ingredient-form-scan`     | Scan icon next to the name in the form      |
+| `ingredientFormFooter`   | `ingredient-form-footer`   | The form's pinned footer with "Save"        |
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
 | `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
-| `offSearchButton`        | `off-search-button`        | "Search Open Food Facts" in the form        |
+| `offSearchButton`        | `off-search-button`        | Magnifier next to the name in the form      |
 | `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name              |
 | `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search      |
 | `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts        |
 | `offSearchMore`          | `off-search-more`          | "More results" (next page)                  |
 | `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search               |
-| `barcodeFieldScan`       | `barcode-field-scan`       | "Scan" at the form's barcode field          |
-| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner that fills the barcode field        |
+| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner of the form's scan icon             |
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |

@@ -128,8 +128,8 @@ describe('ScanScreen', () => {
     expect(within(form).getByLabelText('Fat')).toHaveValue('3.5');
     expect(within(form).getByLabelText('Barcode')).toHaveValue(BARCODE);
     expect(within(form).getByLabelText('Barcode')).toHaveAttribute('readonly');
-    expect(within(form).getByLabelText('Package size as printed')).toHaveValue('1 l');
-    expect(within(form).getByLabelText('Unit of the contents')).toHaveValue('l');
+    // The barcode belongs to the values: the scan icon can't replace it.
+    expect(within(form).getByRole('button', { name: 'Scan barcode' })).toBeDisabled();
     const link = within(form).getByRole('link', { name: /^Open Food Facts/ });
     expect(link).toHaveAttribute('href', 'https://world.openfoodfacts.org');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');

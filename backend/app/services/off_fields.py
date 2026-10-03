@@ -1,9 +1,10 @@
 """The Open Food Facts fields of an ingredient and its pending update (BAR-04, BAR-06).
 
 An ingredient from Open Food Facts (`source` off) has the fields of `OFF_FIELDS`: `name`,
-`brand`, `quantity_text`, `pack_quantity`, `pack_unit` and `nutrients.<key>`. Those a user
-changed are listed in `user_edited_fields`; a refresh (`services.off_refresh`) updates the others
-silently and collects newer values for the user-edited ones into `pending_update`.
+`brand` and `nutrients.<key>`. Those a user changed are listed in `user_edited_fields`; a refresh
+(`services.off_refresh`) updates the others silently and collects newer values for the
+user-edited ones into `pending_update`. The pack size (`PACK_FIELDS`) is never user-edited and
+always updated, so it never goes there: marks and entries for it from before D-38 are ignored.
 
 `pending_update` is stored as `{field: {"current": ..., "proposed": ...}}`; the API shows the
 entries whose proposed value still differs from the ingredient's value, as of its
