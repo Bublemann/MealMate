@@ -11,10 +11,11 @@ import {
   LINES,
   PRIVATE_MEAL,
   DETACHED_MEAL,
+  EXTRA_ITEMS,
   FLOUR_EXTRA_ID,
 } from '@/test/lists';
-import { CATEGORIES } from '@/test/ingredients';
-import { FLOUR, MILK, mealSummary } from '@/test/meals';
+import { CATEGORIES, UNITS } from '@/test/ingredients';
+import { EGGS, FLOUR, MILK, mealSummary } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -34,6 +35,13 @@ async function bodyOf(fetchMock: ReturnType<typeof mockApi>, route: string, inde
   const request = requestsTo(fetchMock, route)[index];
   if (!request) throw new Error(`no request to ${route}`);
   return (await request.json()) as unknown;
+}
+
+/** A select's options: label and whether it is disabled. */
+function optionsOf(select: HTMLElement) {
+  return within(select)
+    .getAllByRole('option')
+    .map((option) => [option.textContent, (option as HTMLOptionElement).disabled]);
 }
 
 function lineTexts(container: HTMLElement) {
@@ -360,13 +368,11 @@ describe('ListScreen', () => {
     }
 
     const routes = {
-      'GET /api/ingredients': (request: Request) =>
-        new URL(request.url).searchParams.get('q') === 'Mehl' ? [FLOUR] : [],
-      'GET /api/units': [
-        { unit: 'g', kind: 'mass' },
-        { unit: 'kg', kind: 'mass' },
-        { unit: 'piece', kind: 'count' },
-      ],
+      'GET /api/ingredients': (request: Request) => {
+        const q = new URL(request.url).searchParams.get('q');
+        return [FLOUR, MILK, EGGS].filter((ingredient) => ingredient.name === q);
+      },
+      'GET /api/units': UNITS,
       [`POST ${BASE}/extra-items`]: Response.json(listDetail(), { status: 201 }),
     };
 
@@ -418,6 +424,42 @@ describe('ListScreen', () => {
         id: A_UUID_V7,
         ingredient_id: FLOUR.id,
       });
+    });
+
+    it('offers the units that fit the picked ingredient and keeps one only while it fits (REF-02)', async () => {
+      const { user } = renderList(routes);
+
+      async function pick(name: string) {
+        const input = await screen.findByTestId(testIds.extraItemInput);
+        await user.clear(input);
+        await user.type(input, name);
+        // The suggestions of the previous search stay until the new ones arrive.
+        const suggestions = await screen.findByRole('list', { name: 'Matching ingredients' });
+        await user.click(
+          await within(suggestions).findByRole('button', { name: new RegExp(`^${name}`) }),
+        );
+        return within(screen.getByRole('form', { name: 'Add an item' })).getByLabelText('Unit');
+      }
+
+      let unit = await pick('Mehl');
+      expect(optionsOf(unit)).toEqual([
+        ['g', false],
+        ['kg', false],
+        ['tbsp', false],
+        ['tsp', false],
+      ]);
+      await user.selectOptions(unit, 'tbsp');
+      await user.click(screen.getByRole('button', { name: "Don't use Mehl" }));
+      // Spoons fit millilitres too.
+      unit = await pick('Milch');
+      expect(unit).toHaveValue('tbsp');
+      expect(optionsOf(unit).map(([label]) => label)).toEqual(['ml', 'l', 'tbsp', 'tsp']);
+      await user.click(screen.getByRole('button', { name: "Don't use Milch" }));
+      // Eggs are counted in pieces: the spoons go.
+      unit = await pick('Eier');
+      expect(unit).toHaveValue('piece');
+      expect(optionsOf(unit)).toEqual([['pcs', false]]);
+      expect(screen.queryByText(/doesn't fit/)).not.toBeInTheDocument();
     });
 
     it('lets me go back from a picked ingredient to typing', async () => {
@@ -641,6 +683,45 @@ describe('ListScreen', () => {
           1,
         ),
       );
+    });
+
+    it('marks an older item whose unit doesn’t fit and offers only units that do (LIST-06)', async () => {
+      const [flour, ...others] = EXTRA_ITEMS;
+      if (!flour) throw new Error('the flour item is missing');
+      const pieces = { ...flour, amount: 2, unit: 'piece' as const, unit_fits: false };
+      const { fetchMock, user } = renderList({
+        [`GET ${BASE}`]: listDetail({ extra_items: [pieces, ...others] }),
+        [`PATCH ${BASE}/extra-items/${FLOUR_EXTRA_ID}`]: listDetail(),
+      });
+
+      const lines = await screen.findByTestId(testIds.listLines);
+      await user.click(within(lines).getByRole('button', { name: /^Mehl/ }));
+      const dialog = await screen.findByRole('dialog', { name: 'Mehl' });
+      await user.click(within(dialog).getByRole('button', { name: 'Edit the item Mehl' }));
+      const edit = await screen.findByRole('dialog', { name: 'Edit item' });
+      const unit = within(edit).getByLabelText('Unit');
+
+      expect(unit).toHaveDisplayValue('pcs');
+      expect(unit).toHaveAccessibleDescription("Unit doesn't fit Mehl");
+      expect(unit).toBeInvalid();
+      // Mehl is counted in grams: pieces can't be chosen again.
+      expect(optionsOf(unit)).toEqual([
+        ['g', false],
+        ['kg', false],
+        ['tbsp', false],
+        ['tsp', false],
+        ['pcs', true],
+      ]);
+      await user.clear(within(edit).getByLabelText('Amount (optional)'));
+      await user.type(within(edit).getByLabelText('Amount (optional)'), '120');
+      await user.selectOptions(unit, 'g');
+      expect(within(edit).queryByText("Unit doesn't fit Mehl")).not.toBeInTheDocument();
+      await user.click(within(edit).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(edit).not.toBeInTheDocument());
+      await expect(
+        bodyOf(fetchMock, `PATCH ${BASE}/extra-items/${FLOUR_EXTRA_ID}`),
+      ).resolves.toEqual({ amount: 120, unit: 'g' });
     });
 
     it('edits a free-text item and clears its amount', async () => {

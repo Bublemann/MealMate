@@ -10,9 +10,10 @@ import { useIngredients, type IngredientSummary } from '@/features/ingredients/a
 import { IngredientCategoryUnit } from '@/features/ingredients/IngredientCategoryUnit';
 import { IngredientName } from '@/features/ingredients/IngredientName';
 import { ingredientLabel } from '@/features/ingredients/label';
-import { useCategories, type Unit } from '@/features/reference/api';
+import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { useConnected, useQueueOp } from '@/features/sync/context';
 import { categoryName } from '@/features/reference/labels';
+import { keptUnit } from '@/features/reference/units';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { parseAmount } from '@/i18n/format';
@@ -67,6 +68,7 @@ export function ExtraItemInput({
   const queue = useQueueOp(listId);
   const connected = useConnected();
   const categories = useCategories();
+  const units = useUnits();
   const debounced = useDebouncedValue(text.trim());
   const searching = debounced !== '' && !picked && connected;
   const suggestions = useIngredients(debounced, { enabled: searching });
@@ -93,7 +95,9 @@ export function ExtraItemInput({
     add.reset();
     edited();
     setPicked(ingredient);
-    setUnit(ingredient.base_unit);
+    // Another ingredient keeps the unit while it fits, else it starts with its base unit (REF-02).
+    const kept = units.data ? keptUnit(units.data, ingredient.base_unit, unit) : '';
+    setUnit(kept || ingredient.base_unit);
     setAmount('');
     setAmountInvalid(false);
   }
@@ -251,6 +255,8 @@ export function ExtraItemInput({
           <AmountFields
             amount={amount}
             unit={unit}
+            baseUnit={picked.base_unit}
+            name={pickedLabel ?? ''}
             onAmountChange={(value) => {
               edited();
               setAmountInvalid(false);

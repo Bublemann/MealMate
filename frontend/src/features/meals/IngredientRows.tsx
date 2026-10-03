@@ -10,6 +10,7 @@ import { IngredientPicker } from '@/features/ingredients/IngredientPicker';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { useUnits, type Unit } from '@/features/reference/api';
 import { unitLabel } from '@/features/reference/labels';
+import { fittingUnits, unitFits } from '@/features/reference/units';
 import { testIds } from '@/testIds';
 import { moved, newRow, withAmountText, type RowState } from './form';
 
@@ -27,7 +28,9 @@ interface IngredientRowsProps {
 
 /**
  * The meal's ingredient rows (MEAL-02): amount, unit and note per row, in an order the user
- * sets. New rows come from the ingredient picker, which can also create an ingredient (MEAL-03).
+ * sets. A row offers only the units that fit its ingredient's base unit (REF-02); an older amount
+ * that doesn't fit stays as it is, marked, until the user picks one that fits. New rows come from
+ * the ingredient picker, which can also create an ingredient (MEAL-03).
  */
 export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsProps) {
   const { t } = useTranslation();
@@ -133,6 +136,11 @@ function IngredientRow({
   const units = useUnits();
   const name = ingredientLabel(row.ingredient.name, row.ingredient.brand);
   const rowError = fieldError(`${path}.ingredient_id`) ?? fieldError(path);
+  const baseUnit = row.ingredient.base_unit;
+  const fitting = units.data && fittingUnits(units.data, baseUnit);
+  // Entered before the rule, or left by a base-unit change or a merge (D-33).
+  const fits =
+    !units.data || unitFits(units.data, baseUnit, row.unit, row.amountText.trim() !== '');
 
   return (
     <li
@@ -185,7 +193,10 @@ function IngredientRow({
             />
           )}
         </FormField>
-        <FormField label={t('meals.row.unit')} error={fieldError(`${path}.unit`)}>
+        <FormField
+          label={t('meals.row.unit')}
+          error={fits ? fieldError(`${path}.unit`) : t('meals.row.unitMismatch', { name })}
+        >
           {(control) => (
             <NativeSelect
               {...control}
@@ -195,14 +206,17 @@ function IngredientRow({
               }
             >
               <NativeSelectOption value="">{t('meals.row.unitNone')}</NativeSelectOption>
-              {units.data?.map(({ unit }) => (
+              {fitting?.map((unit) => (
                 <NativeSelectOption key={unit} value={unit}>
                   {unitLabel(t, unit)}
                 </NativeSelectOption>
               ))}
-              {/* The row's unit before the units have loaded. */}
-              {!units.data && row.unit && (
-                <NativeSelectOption value={row.unit}>{unitLabel(t, row.unit)}</NativeSelectOption>
+              {/* The row's unit before the units have loaded, or one that doesn't fit: shown,
+                  but once changed it can't be chosen again. */}
+              {row.unit && !fitting?.includes(row.unit) && (
+                <NativeSelectOption value={row.unit} disabled={fitting !== undefined}>
+                  {unitLabel(t, row.unit)}
+                </NativeSelectOption>
               )}
             </NativeSelect>
           )}

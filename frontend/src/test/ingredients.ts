@@ -34,14 +34,15 @@ export const CATEGORIES_WITH_ADDED: Schemas['Category'][] = [
   ...CATEGORIES.slice(-1),
 ].map((category, index) => ({ ...category, sort_order: index }));
 
+/** The units as the server lists them, each with the base units it fits (REF-02). */
 export const UNITS: Schemas['UnitInfo'][] = [
-  { unit: 'g', kind: 'mass' },
-  { unit: 'kg', kind: 'mass' },
-  { unit: 'ml', kind: 'volume' },
-  { unit: 'l', kind: 'volume' },
-  { unit: 'piece', kind: 'count' },
-  { unit: 'tbsp', kind: 'volume' },
-  { unit: 'tsp', kind: 'volume' },
+  { unit: 'g', kind: 'mass', base_units: ['g'] },
+  { unit: 'kg', kind: 'mass', base_units: ['g'] },
+  { unit: 'ml', kind: 'volume', base_units: ['ml'] },
+  { unit: 'l', kind: 'volume', base_units: ['ml'] },
+  { unit: 'piece', kind: 'count', base_units: ['piece'] },
+  { unit: 'tbsp', kind: 'volume', base_units: ['g', 'ml'] },
+  { unit: 'tsp', kind: 'volume', base_units: ['g', 'ml'] },
 ];
 
 export function summary(
@@ -77,8 +78,7 @@ export const APPLES: Schemas['Ingredient'] = {
   barcode: null,
   category_id: 'cat-fruit_vegetables',
   base_unit: 'g',
-  piece_weight_g: 180,
-  density_g_per_ml: null,
+  piece_weight_g: null,
   nutrients: { ...NO_VALUES, kcal: 52, protein: 0.3 },
   quantity_text: null,
   pack_quantity: null,
@@ -104,7 +104,6 @@ export function ingredient(overrides: Partial<Schemas['Ingredient']> = {}): Sche
     category_id: 'cat-other',
     base_unit: 'g',
     piece_weight_g: null,
-    density_g_per_ml: null,
     nutrients: NO_VALUES,
     quantity_text: null,
     pack_quantity: null,

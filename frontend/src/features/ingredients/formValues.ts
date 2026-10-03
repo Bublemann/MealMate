@@ -11,9 +11,6 @@ export const QUANTITY_TEXT_MAX_LENGTH = 40;
 /** The text fields of the form. */
 export const TEXT_FIELDS = ['name', 'brand', 'quantity_text'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];
-/** The optional number fields of the ingredient itself (never from Open Food Facts). */
-export const NUMBER_FIELDS = ['piece_weight_g', 'density_g_per_ml'] as const;
-export type NumberField = (typeof NUMBER_FIELDS)[number];
 
 /**
  * What the form shows, as typed: numbers stay text until saving, so a half-typed "0," isn't
@@ -27,8 +24,8 @@ export interface FormValues {
   /** A category guessed from Open Food Facts, by key (the ids are only known once loaded). */
   categoryKey: string | null;
   baseUnit: BaseUnit;
+  /** Only for base unit Stück (ING-02). */
   piece_weight_g: string;
-  density_g_per_ml: string;
   barcode: string;
   quantity_text: string;
   pack_quantity: string;
@@ -61,7 +58,6 @@ export function emptyValues(name = '', language: Language): FormValues {
     categoryKey: null,
     baseUnit: 'g',
     piece_weight_g: '',
-    density_g_per_ml: '',
     barcode: '',
     quantity_text: '',
     pack_quantity: '',
@@ -79,7 +75,6 @@ export function valuesFromIngredient(ingredient: Ingredient, language: Language)
     categoryKey: null,
     baseUnit: ingredient.base_unit,
     piece_weight_g: numberInputValue(ingredient.piece_weight_g, language),
-    density_g_per_ml: numberInputValue(ingredient.density_g_per_ml, language),
     barcode: ingredient.barcode ?? '',
     quantity_text: ingredient.quantity_text ?? '',
     pack_quantity: numberInputValue(ingredient.pack_quantity, language),
@@ -102,7 +97,7 @@ export function fitName(name: string): string {
 
 /**
  * The form with a barcode and, if Open Food Facts knows it, its proposal (BAR-03). What the
- * proposal doesn't have (piece weight, density, a name and a category guess when it has none)
+ * proposal doesn't have (the piece weight, a name and a category guess when it has none)
  * stays as it was: a category the user chose is kept unless the proposal guesses one.
  */
 export function valuesFromPrefill(

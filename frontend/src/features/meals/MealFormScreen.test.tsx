@@ -1,7 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BEN, errorResponse, mockApi, nodeFormClasses, requestsTo } from '@/test/api';
-import { bareMeal, CUISINES, EGGS, FLOUR, meal, MEAL_ROUTES, MILK, SALT } from '@/test/meals';
+import {
+  bareMeal,
+  CUISINES,
+  EGGS,
+  FLOUR,
+  meal,
+  MEAL_ROUTES,
+  MILK,
+  row as mealRow,
+  SALT,
+} from '@/test/meals';
 import { LIST_ID, listDetail } from '@/test/lists';
 import { ingredient, proposal } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
@@ -70,6 +80,13 @@ async function addIngredient(user: User, name: string) {
 
 function row(name: string): HTMLElement {
   return screen.getByRole('listitem', { name: `Ingredient ${name}` });
+}
+
+/** A select's options: label and whether it is disabled. */
+function optionsOf(select: HTMLElement) {
+  return within(select)
+    .getAllByRole('option')
+    .map((option) => [option.textContent, (option as HTMLOptionElement).disabled]);
 }
 
 describe('MealFormScreen (create)', () => {
@@ -297,6 +314,41 @@ describe('MealFormScreen (create)', () => {
       'Invalid format',
     );
     expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
+  });
+
+  it('offers only the units that fit each row’s ingredient (REF-02, MEAL-02)', async () => {
+    const { user } = renderForm('/meals/new');
+    await screen.findByTestId(testIds.mealForm);
+
+    await addIngredient(user, 'Mehl');
+    await addIngredient(user, 'Milch');
+    await addIngredient(user, 'Eier');
+
+    const labels = (name: string) =>
+      optionsOf(within(row(name)).getByLabelText('Unit')).map(([label]) => label);
+    await waitFor(() => expect(labels('Mehl')).toEqual(['No unit', 'g', 'kg', 'tbsp', 'tsp']));
+    expect(labels('Milch')).toEqual(['No unit', 'ml', 'l', 'tbsp', 'tsp']);
+    expect(labels('Eier')).toEqual(['No unit', 'pcs']);
+    // Typing an amount picks the base unit; eggs are counted in pieces.
+    await user.type(within(row('Eier')).getByLabelText('Amount'), '2');
+    expect(within(row('Eier')).getByLabelText('Unit')).toHaveDisplayValue('pcs');
+    expect(screen.queryByText(/doesn't fit/)).not.toBeInTheDocument();
+  });
+
+  it('marks an amount without a unit for an ingredient counted in grams', async () => {
+    const { user } = renderForm('/meals/new');
+    await screen.findByTestId(testIds.mealForm);
+
+    await addIngredient(user, 'Mehl');
+    const unit = within(row('Mehl')).getByLabelText('Unit');
+    await waitFor(() => expect(within(unit).getAllByRole('option')).toHaveLength(5));
+    await user.selectOptions(unit, 'No unit');
+    await user.type(within(row('Mehl')).getByLabelText('Amount'), '2');
+
+    // Without a unit, the amount counts as pieces: that doesn't fit grams.
+    expect(unit).toHaveAccessibleDescription("Unit doesn't fit Mehl");
+    await user.selectOptions(unit, 'kg');
+    expect(unit).not.toHaveAccessibleDescription();
   });
 
   it('takes a picked unit back when the amount is cleared', async () => {
@@ -539,6 +591,68 @@ describe('MealFormScreen (edit)', () => {
         { ingredient_id: EGGS.id, amount: 2, unit: 'piece' },
         { ingredient_id: SALT.id, amount: 5, unit: 'g', note: 'to taste' },
       ],
+    });
+  });
+
+  it('marks an older row whose unit doesn’t fit, keeps it, and offers only units that do (MEAL-02)', async () => {
+    const pieces = mealRow('row-1', 0, FLOUR, 2, 'piece', null, { unit_fits: false });
+    const old = meal({ ingredients: [pieces, ...meal().ingredients.slice(1)] });
+    const { fetchMock, user } = renderForm('/meals/meal-pancakes/edit', {
+      'GET /api/meals/meal-pancakes': old,
+      'PATCH /api/meals/meal-pancakes': meal(),
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+    const unit = within(row('Mehl')).getByLabelText('Unit');
+
+    expect(unit).toHaveDisplayValue('pcs');
+    await waitFor(() => expect(unit).toHaveAccessibleDescription("Unit doesn't fit Mehl"));
+    expect(unit).toBeInvalid();
+    // Mehl is counted in grams: pieces can't be chosen again once changed.
+    expect(optionsOf(unit)).toEqual([
+      ['No unit', false],
+      ['g', false],
+      ['kg', false],
+      ['tbsp', false],
+      ['tsp', false],
+      ['pcs', true],
+    ]);
+    // The other rows fit.
+    expect(within(row('Eier')).getByLabelText('Unit')).not.toHaveAccessibleDescription();
+
+    // Saved as it is, the row is kept.
+    await user.type(within(form).getByLabelText('Name'), ' süß');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'PATCH /api/meals/meal-pancakes')).toHaveLength(1),
+    );
+    await expect(bodyOf(fetchMock, 'PATCH /api/meals/meal-pancakes')).resolves.toEqual({
+      name: 'Pfannkuchen süß',
+    });
+  });
+
+  it('fixes an older row with a unit that fits', async () => {
+    const pieces = mealRow('row-1', 0, FLOUR, 2, 'piece', null, { unit_fits: false });
+    const old = meal({ ingredients: [pieces, ...meal().ingredients.slice(1)] });
+    const { fetchMock, user } = renderForm('/meals/meal-pancakes/edit', {
+      'GET /api/meals/meal-pancakes': old,
+      'PATCH /api/meals/meal-pancakes': meal(),
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+    const unit = within(row('Mehl')).getByLabelText('Unit');
+    await waitFor(() => expect(unit).toBeInvalid());
+
+    await user.clear(within(row('Mehl')).getByLabelText('Amount'));
+    await user.type(within(row('Mehl')).getByLabelText('Amount'), '200');
+    expect(unit).toBeInvalid(); // still pieces
+    await user.selectOptions(unit, 'g');
+    expect(unit).toBeValid();
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'PATCH /api/meals/meal-pancakes')).toHaveLength(1),
+    );
+    await expect(bodyOf(fetchMock, 'PATCH /api/meals/meal-pancakes')).resolves.toMatchObject({
+      ingredients: [{ ingredient_id: FLOUR.id, amount: 200, unit: 'g', note: null }, {}, {}, {}],
     });
   });
 

@@ -2,8 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import type { BaseUnit } from '@/features/ingredients/api';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
+import { fittingUnits, unitFits } from '@/features/reference/units';
 import { useLanguage } from '@/i18n';
 
 /** The longest free-text amount the server takes (LIST-06). */
@@ -12,16 +14,28 @@ export const MAX_AMOUNT_TEXT_LENGTH = 30;
 interface AmountFieldsProps {
   amount: string;
   unit: Unit;
+  /**
+   * The base unit the item is calculated with: only the units that fit it are offered (REF-02).
+   * Null when it isn't known (a copy kept offline by an older app version): every unit then.
+   */
+  baseUnit: BaseUnit | null;
+  /** The ingredient's name, for the mark of a unit that doesn't fit. */
+  name: string;
   onAmountChange: (amount: string) => void;
   onUnitChange: (unit: Unit) => void;
   amountError?: string;
   unitError?: string;
 }
 
-/** Optional amount and unit of an extra item linked to an ingredient (LIST-06). */
+/**
+ * Optional amount and unit of an extra item linked to an ingredient (LIST-06). An older amount
+ * whose unit doesn't fit is marked, and stays as it is until the user picks one that fits.
+ */
 export function AmountFields({
   amount,
   unit,
+  baseUnit,
+  name,
   onAmountChange,
   onUnitChange,
   amountError,
@@ -29,6 +43,11 @@ export function AmountFields({
 }: AmountFieldsProps) {
   const { t } = useTranslation();
   const units = useUnits();
+  const fitting =
+    units.data &&
+    (baseUnit ? fittingUnits(units.data, baseUnit) : units.data.map((info) => info.unit));
+  const fits =
+    !units.data || !baseUnit || unitFits(units.data, baseUnit, unit, amount.trim() !== '');
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -45,7 +64,10 @@ export function AmountFields({
           />
         )}
       </FormField>
-      <FormField label={t('lists.extra.unit')} error={unitError}>
+      <FormField
+        label={t('lists.extra.unit')}
+        error={fits ? unitError : t('lists.extra.unitMismatch', { name })}
+      >
         {(control) => (
           <NativeSelect
             {...control}
@@ -53,14 +75,17 @@ export function AmountFields({
             value={unit}
             onChange={(event) => onUnitChange(event.target.value as Unit)}
           >
-            {units.data?.map((info) => (
-              <NativeSelectOption key={info.unit} value={info.unit}>
-                {unitLabel(t, info.unit)}
+            {fitting?.map((option) => (
+              <NativeSelectOption key={option} value={option}>
+                {unitLabel(t, option)}
               </NativeSelectOption>
             ))}
-            {/* The chosen unit before the units have loaded. */}
-            {!units.data && (
-              <NativeSelectOption value={unit}>{unitLabel(t, unit)}</NativeSelectOption>
+            {/* The chosen unit before the units have loaded, or one that doesn't fit: shown, but
+                once changed it can't be chosen again. */}
+            {!fitting?.includes(unit) && (
+              <NativeSelectOption value={unit} disabled={fitting !== undefined}>
+                {unitLabel(t, unit)}
+              </NativeSelectOption>
             )}
           </NativeSelect>
         )}

@@ -105,7 +105,7 @@ describe('MealDetailScreen', () => {
               ingredient_id: 'ing-x',
               ingredient_name: 'Rübe',
               ingredient_brand: null,
-              reason: 'not_convertible',
+              reason: 'unit_mismatch',
               nutrient: null,
             },
             {
@@ -133,7 +133,7 @@ describe('MealDetailScreen', () => {
     const lines = within(screen.getByTestId(testIds.mealIncomplete)).getAllByRole('listitem');
     expect(lines.map((line) => line.textContent)).toEqual([
       'Eier: davon Zucker und Fett unbekannt',
-      'Rübe: Menge lässt sich nicht umrechnen (Stückgewicht oder Dichte fehlt)',
+      'Rübe: Einheit passt nicht',
       'Zimt: Nährwerte unbekannt',
       'Brötchen: Gewicht pro Stück fehlt',
     ]);

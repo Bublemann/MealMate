@@ -155,6 +155,8 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
           <AmountFields
             amount={amount}
             unit={unit}
+            baseUnit={item.base_unit}
+            name={name}
             onAmountChange={(value) => {
               setAmountInvalid(false);
               setAmount(value);
