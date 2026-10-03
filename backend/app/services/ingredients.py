@@ -144,11 +144,11 @@ async def _check_barcode_free(
         )
 
 
-def _pack_size_problems(body: IngredientCreate) -> list[FieldProblem]:
-    """The pack size comes only with an Open Food Facts proposal: nobody types it in (D-38)."""
-    if body.off is not None:
+def _pack_size_problems(sent: set[str], *, from_off: bool) -> list[FieldProblem]:
+    """The pack size comes only with an Open Food Facts proposal on create: nobody types it in
+    or edits it (D-38). Sent otherwise, even as null, it is refused."""
+    if from_off:
         return []
-    sent = body.model_fields_set
     return [
         FieldProblem(("body", field), FieldErrorCode.INVALID)
         for field in PACK_FIELDS
@@ -230,7 +230,7 @@ async def create_ingredient(
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     from_off = body.off is not None
     async with session.begin():
-        problems = _pack_size_problems(body)
+        problems = _pack_size_problems(body.model_fields_set, from_off=from_off)
         if from_off and barcode is None:
             problems.append(FieldProblem(("body", "barcode"), FieldErrorCode.REQUIRED))
         if problem := _piece_weight_problem(body.piece_weight_g, body.base_unit):
@@ -312,7 +312,7 @@ async def update_ingredient(
         if row is None:
             raise not_found()
         base_unit = body.base_unit or row.base_unit
-        problems: list[FieldProblem] = []
+        problems = _pack_size_problems(sent, from_off=False)
         if body.category_id is not None and (
             problem := await _category_problem(session, body.category_id, current=row.category_id)
         ):

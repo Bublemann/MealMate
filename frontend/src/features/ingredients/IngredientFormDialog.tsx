@@ -255,9 +255,9 @@ export function IngredientForm({
     const problems = new Set<string>();
     // Only pieces have a weight (ING-02): its field shows, and is sent, only for Stück. Leaving
     // Stück clears it on the server.
-    const counted = values.baseUnit === 'piece';
+    const inPieces = values.baseUnit === 'piece';
     let pieceWeight: number | null = null;
-    if (counted) {
+    if (inPieces) {
       const parsed = parseOptionalAmount(values.piece_weight_g);
       if (parsed.ok) pieceWeight = parsed.value;
       else problems.add('piece_weight_g');
@@ -322,7 +322,7 @@ export function IngredientForm({
     if (texts.barcode !== ingredient.barcode) body.barcode = texts.barcode;
     // A number field counts as changed when its text changed: a stored value with more decimals
     // than shown would otherwise be cut on every save.
-    if (counted && values.piece_weight_g.trim() !== initial.piece_weight_g) {
+    if (inPieces && values.piece_weight_g.trim() !== initial.piece_weight_g) {
       body.piece_weight_g = pieceWeight;
     }
     const changed: Partial<NutrientValues> = {};

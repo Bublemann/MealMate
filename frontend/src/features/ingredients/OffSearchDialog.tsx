@@ -1,5 +1,5 @@
 import { CircleAlert, RotateCcw, Search } from 'lucide-react';
-import { useEffect, useEffectEvent, useState, type FormEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { isApiError } from '@/api/errors';
@@ -120,7 +120,14 @@ export function OffSearchDialog({
   const searchInitialQuery = useEffectEvent(() => {
     if (!tooShort) run(query, 1);
   });
-  useEffect(() => searchInitialQuery(), []);
+  // Once, also where development mode runs effects twice: Open Food Facts limits how often it
+  // may be asked (BAR-08).
+  const searchedInitialQuery = useRef(false);
+  useEffect(() => {
+    if (searchedInitialQuery.current) return;
+    searchedInitialQuery.current = true;
+    searchInitialQuery();
+  }, []);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

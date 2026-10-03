@@ -6,7 +6,7 @@ ingredient's own values per 100 g, or per 100 ml for an ml ingredient.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Literal, NoReturn
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import (
     AfterValidator,
@@ -24,7 +24,6 @@ from app.domain.catalog import (
     BRAND_MAX_LENGTH,
     INGREDIENT_NAME_MAX_LENGTH,
     OFF_FIELDS,
-    PACK_FIELDS,
     PACK_QUANTITY_MAX,
     PIECE_WEIGHT_MAX_G,
     QUANTITY_TEXT_MAX_LENGTH,
@@ -71,11 +70,6 @@ def not_null[T](value: T | None) -> T:
     if value is None:
         raise PydanticCustomError("not_null", "may not be null")
     return value
-
-
-def refused(_value: object) -> NoReturn:
-    """For fields a request may not send at all (field code `invalid`), even as null."""
-    raise PydanticCustomError("refused", "may not be sent")
 
 
 IdInput = Annotated[str, StringConstraints(min_length=1, max_length=36)]
@@ -244,13 +238,12 @@ class IngredientUpdate(BaseModel):
     piece_weight_g: PieceWeightInput | None = None
     nutrients: NutrientValues | None = None
     # Not part of the API: sent anyway (e.g. by an app from before D-38), the pack size is
-    # refused rather than ignored, so nobody believes it was saved.
+    # refused by the service rather than ignored, so nobody believes it was saved.
     quantity_text: SkipJsonSchema[object] = None
     pack_quantity: SkipJsonSchema[object] = None
     pack_unit: SkipJsonSchema[object] = None
 
     check_not_null = field_validator("name", "category_id", "base_unit")(not_null)
-    check_no_pack_size = field_validator(*PACK_FIELDS, mode="before")(refused)
 
 
 class IngredientBarcodeLink(BaseModel):
