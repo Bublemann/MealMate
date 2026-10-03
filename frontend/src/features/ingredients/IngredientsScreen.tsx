@@ -10,7 +10,7 @@ import { NoMatches } from '@/components/NoMatches';
 import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
 import { useCategories, type Category } from '@/features/reference/api';
-import { pickableCategories } from '@/features/reference/categories';
+import { filterableCategories } from '@/features/reference/categories';
 import { categoryName } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { useTabMemory } from '@/lib/tabMemory';
@@ -23,7 +23,8 @@ import { IngredientName } from './IngredientName';
 
 /**
  * The Ingredients tab (ING-01, ING-03, UI-01, UI-03): the pinned block with the search (name and
- * brand), the filter panel (several categories, any of them) and the "New ingredient" tile, which
+ * brand), the filter panel (several categories, any of them, and *Uncategorized* while it holds
+ * ingredients) and the "New ingredient" tile, which
  * offers to create what was searched for. Below it one list in the server's order (dictionary
  * order, best matches first when searching), one line when there are no ingredients yet, or "No
  * matches". The scanner is not linked from here (BAR-01).
@@ -64,7 +65,7 @@ export function IngredientsScreen() {
                 label: t('ingredients.filter.categories'),
                 options:
                   categories.data &&
-                  pickableCategories(categories.data).map((category) => ({
+                  filterableCategories(categories.data, categoryIds).map((category) => ({
                     id: category.id,
                     label: categoryName(category, language),
                   })),

@@ -1,5 +1,6 @@
 """Ingredients: create with brand and barcode, search, similar hint, own values, admin categories
-(order seen on a shopping list, adding, renaming, deleting), merge.
+(order seen on a shopping list, adding, renaming, deleting and finding the uncategorized
+ingredients), merge.
 
 ING-01..05, NUT-02, REF-01 (plan § 12, M3; one kind of ingredient since 2026-09-28). All tests of
 a run share one database, so names get a unique tag; the tag is the same in both spellings of a
@@ -142,9 +143,10 @@ def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
 
 
 def test_member_filters_by_categories(member_page: Page, api: Api, member: Account) -> None:
-    """UI-01, UI-03, ING-03, D-23: the filter panel lists every category that can be picked;
-    ticked ones apply at once and show the ingredients of any of them; the button counts the
-    group; "Reset" and "Reset filters" clear them; the choice stays while the app is open."""
+    """UI-01, UI-03, ING-03, D-23: the filter panel lists every category that can be picked,
+    and *Uncategorized* while it holds ingredients; ticked ones apply at once and show the
+    ingredients of any of them; the button counts the group; "Reset" and "Reset filters" clear
+    them; the choice stays while the app is open."""
     page = member_page
     tag = unique("e2e")
     for name, category in (
@@ -169,7 +171,7 @@ def test_member_filters_by_categories(member_page: Page, api: Api, member: Accou
     expect(panel).to_have_attribute("data-testid", TEST_IDS["filterPanel"])
     group = panel.get_by_test_id(TEST_IDS["filterGroup"])
     expect(group).to_have_accessible_name(text("ingredients.filter.categories"))
-    expect(group.get_by_role("checkbox")).to_have_count(len(api.pickable_categories(member)))
+    expect(group.get_by_role("checkbox")).to_have_count(len(api.filterable_categories(member)))
 
     # Each tick applies at once, behind the open panel; several show any of them. The button
     # counts the group (its name is read once the panel, which hides the page from screen
@@ -344,9 +346,10 @@ def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> Non
 
 
 def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
-    """REF-01, D-30: an admin deletes a category they added, after a confirmation naming what
-    moves. Its ingredient shows "Uncategorized" and can get a new category, while a done list
-    keeps the deleted category's heading."""
+    """REF-01, D-30, ING-03: an admin deletes a category they added, after a confirmation naming
+    what moves. "Show" opens the Ingredients tab filtered to *Uncategorized*, where the ingredient
+    waits for a new category and gets one, while a done list keeps the deleted category's
+    heading."""
     tag = unique("e2e")
     name = f"Cheese bar {tag}"
     category = api.create_category(admin, f"Käsebar {tag}", name)
@@ -380,16 +383,27 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     expect(screen.get_by_role("status")).to_have_text(text("admin.categories.deleted", name=name))
     expect(order.get_by_role("button", name=name, exact=True)).to_have_count(0)
 
-    page.goto(f"/ingredients/{gouda['id']}")
+    # "Show": the Ingredients tab with *Uncategorized* as its only category and no search.
+    show = text("admin.categories.showUncategorized")
+    screen.get_by_role("button", name=show, exact=True).click()
+    expect(page.get_by_test_id(TEST_IDS["screenIngredients"])).to_be_visible()
+    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
+    expect(search).to_have_value("")
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
+    row = rows.filter(has_text=gouda["name"])
+    expect(row).to_contain_text(uncategorized)
+    button.click()
+    panel = page.get_by_role("dialog", name=text("filter.title"))
+    expect(panel.get_by_role("checkbox", checked=True)).to_have_count(1)
+    expect(panel.get_by_role("checkbox", name=uncategorized, exact=True)).to_be_checked()
+    panel.get_by_role("button", name=text("filter.done"), exact=True).click()
+
+    # Anyone can give it a new category; until then its detail and form show "Uncategorized".
+    row.click()
     detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
     expect(detail).to_contain_text(uncategorized)
-
-    page.goto(f"/lists/{done['id']}")
-    lines = page.get_by_test_id(TEST_IDS["doneLines"])
-    expect(lines.get_by_role("list", name=name, exact=True)).to_contain_text(gouda["name"])
-
-    # Anyone can give it a new category; the form shows "Uncategorized" until then.
-    page.goto(f"/ingredients/{gouda['id']}")
     page.get_by_test_id(TEST_IDS["editIngredient"]).click()
     form = page.get_by_test_id(TEST_IDS["ingredientForm"])
     field = form.get_by_label(text("ingredients.field.category"), exact=True)
@@ -399,6 +413,16 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     field.select_option(label=fruit)
     form.get_by_role("button", name=text("common.save")).click()
     expect(detail).to_contain_text(fruit)
+
+    # Back on the tab, still filtered to *Uncategorized*, it is no longer there.
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    search.fill(gouda["name"])
+    expect(page.get_by_text(text("common.noMatches"), exact=True)).to_be_visible()
+
+    page.goto(f"/lists/{done['id']}")
+    lines = page.get_by_test_id(TEST_IDS["doneLines"])
+    expect(lines.get_by_role("list", name=name, exact=True)).to_contain_text(gouda["name"])
 
 
 def test_categories_fit_the_largest_text_size(page: Page, admin: Account) -> None:

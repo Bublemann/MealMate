@@ -107,6 +107,11 @@ async def listed(api: AsyncClient, user: Account) -> list[Any]:
     return categories
 
 
+async def ingredient_counts(api: AsyncClient, user: Account) -> dict[str, int]:
+    """Each category's number of ingredients, by key."""
+    return {item["key"]: item["ingredient_count"] for item in await listed(api, user)}
+
+
 async def finished(api: AsyncClient, user: Account, list_id: str) -> Any:
     await start_shopping(api, user, list_id)
     return await applied(api, user, list_id, op("list.finish"))
@@ -264,6 +269,40 @@ async def test_a_delete_moves_the_ingredients_to_uncategorized(
         )
     ]
     assert events[0]["actor"]["id"] == admin.id
+
+
+async def test_uncategorized_counts_its_ingredients_until_each_has_a_new_category(
+    api: AsyncClient,
+    admin: Account,
+    anna: Account,
+    categories: dict[str, str],
+    ingredients: dict[str, Any],
+) -> None:
+    """ING-03, REF-01: the category list counts the ingredients that moved to *Uncategorized*,
+    so that the Ingredients tab offers it until each of them has a new category. A deleted
+    category holds none."""
+    feta = await create_ingredient(api, anna, "Feta", category_id=categories["cheese"])
+    assert await ingredient_counts(api, anna) == {
+        **dict.fromkeys(categories, 0),
+        "fruit_vegetables": 1,
+        "meat_fish": 1,
+        "cheese": 2,
+        "sausage_deli": 1,
+    }
+
+    await deleted(api, admin, categories["cheese"])
+
+    counts = await ingredient_counts(api, anna)
+    assert (counts["cheese"], counts["uncategorized"]) == (0, 2)
+    for ingredient, left in ((feta, 1), (ingredients["Gouda"], 0)):
+        response = await api.patch(
+            f"/api/ingredients/{ingredient['id']}",
+            json={"category_id": categories["dairy_eggs"]},
+            headers=anna.headers,
+        )
+        assert response.status_code == 200, response.text
+        counts = await ingredient_counts(api, anna)
+        assert (counts["uncategorized"], counts["dairy_eggs"]) == (left, 2 - left)
 
 
 async def test_free_text_items_on_drafts_move_to_other(

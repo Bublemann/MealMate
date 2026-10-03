@@ -25,3 +25,20 @@ export function notDeletedCategories<C extends CategoryState>(categories: readon
 export function pickableCategories<C extends CategoryState>(categories: readonly C[]): C[] {
   return notDeletedCategories(categories).filter((category) => category.key !== UNCATEGORIZED_KEY);
 }
+
+/**
+ * What the Ingredients tab's filter panel offers, in walking order (ING-03): what can be picked,
+ * and *Uncategorized* at its place while it holds ingredients, or while it is among `checked`, so
+ * that it can be unticked. Never a deleted category (D-30).
+ */
+export function filterableCategories(
+  categories: readonly Category[],
+  checked: readonly string[],
+): Category[] {
+  return notDeletedCategories(categories).filter(
+    (category) =>
+      category.key !== UNCATEGORIZED_KEY ||
+      category.ingredient_count > 0 ||
+      checked.includes(category.id),
+  );
+}

@@ -157,6 +157,7 @@
   "admin.categories.deleteKeeps": "Lists being shopped and done lists stay as they are. This can't be undone.",
   "admin.categories.deleteConfirm": "Delete",
   "admin.categories.deleted": "Category “{{name}}” deleted.",
+  "admin.categories.showUncategorized": "Show",
   "admin.events.title": "Activity log",
   "admin.events.empty": "Nothing has happened yet.",
   "admin.events.action.inviteCreate": "{{actor}} created an invite",

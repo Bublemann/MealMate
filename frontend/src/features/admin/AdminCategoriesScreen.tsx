@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { LoadError } from '@/components/LoadError';
@@ -41,6 +42,7 @@ import {
 import { categoryName } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
+import { useTabMemory } from '@/lib/tabMemory';
 import { testIds } from '@/testIds';
 import { AdminScreen } from './AdminScreen';
 import {
@@ -63,7 +65,9 @@ const NAME_PATHS: ReadonlySet<string> = new Set(['names.de', 'names.en']);
 /**
  * REF-01 / ADM-01: the categories in the store's walking order, moved with up/down buttons. A
  * category's name opens its dialog; "New category" adds one at the end. *Uncategorized* is only
- * moved, so its name is plain text; deleted categories aren't shown (D-30).
+ * moved, so its name is plain text; deleted categories aren't shown (D-30). After a delete,
+ * "Show" opens the Ingredients tab filtered to *Uncategorized*, where the moved ingredients wait
+ * for a new category (ING-03).
  */
 export function AdminCategoriesScreen() {
   const { t } = useTranslation();
@@ -206,9 +210,12 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
         {t('admin.categories.new')}
       </Button>
       <ErrorAlert error={reorder.error} />
-      <p role="status" className="text-sm text-muted-foreground">
-        {deleted && t('admin.categories.deleted', { name: deleted })}
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p role="status" className="text-sm text-muted-foreground">
+          {deleted && t('admin.categories.deleted', { name: deleted })}
+        </p>
+        {deleted && <ShowUncategorized categories={categories} />}
+      </div>
       <CategoryDialog
         editing={editing}
         onClose={() => setEditing(null)}
@@ -216,6 +223,32 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
         onDeleted={setDeleted}
       />
     </div>
+  );
+}
+
+/**
+ * "Show" (ING-03): the Ingredients tab with *Uncategorized* as its only category and no search,
+ * so that every ingredient of a deleted category can get a new one.
+ */
+function ShowUncategorized({ categories }: { categories: Category[] }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [, remember] = useTabMemory('ingredients');
+  const uncategorized = categories.find((category) => category.key === UNCATEGORIZED_KEY);
+  if (!uncategorized) return null;
+
+  return (
+    <Button
+      variant="outline"
+      size="compact"
+      className="max-w-full wrap-anywhere"
+      onClick={() => {
+        remember({ search: '', categoryIds: [uncategorized.id] });
+        void navigate('/ingredients');
+      }}
+    >
+      {t('admin.categories.showUncategorized')}
+    </Button>
   );
 }
 

@@ -39,14 +39,28 @@ TAGS_LIMIT = 20
 _CUISINE_POSITION = {key: position for position, key in enumerate(CUISINE_KEYS)}
 
 
-def category(row: CategoryRow) -> Category:
+def _names(row: CategoryRow) -> CategoryNames:
+    return CategoryNames(de=row.name_de, en=row.name_en)
+
+
+def category(row: CategoryRow, ingredient_count: int) -> Category:
     return Category(
         id=row.id,
         key=row.key,
-        names=CategoryNames(de=row.name_de, en=row.name_en),
+        names=_names(row),
         sort_order=row.sort_order,
         deleted=row.deleted_at is not None,
+        ingredient_count=ingredient_count,
     )
+
+
+async def _categories_in_order(session: AsyncSession) -> list[Category]:
+    """Every category, deleted ones included (D-30), in order, with its number of ingredients."""
+    counts = await ingredients_repo.counts_by_category(session)
+    return [
+        category(row, counts.get(row.id, 0))
+        for row in await reference_repo.categories_in_order(session)
+    ]
 
 
 def cuisine(row: CuisineRow) -> Cuisine:
@@ -63,7 +77,7 @@ def _cuisine_order(row: CuisineRow) -> tuple[int, int, str]:
 async def list_categories(session: AsyncSession) -> list[Category]:
     """Every category, deleted ones included (D-30), in order."""
     async with session.begin():
-        return [category(row) for row in await reference_repo.categories_in_order(session)]
+        return await _categories_in_order(session)
 
 
 async def can_pick(session: AsyncSession, category_id: str, *, keeping: str | None = None) -> bool:
@@ -171,7 +185,7 @@ async def reorder_categories(
             now=now,
         )
         await session.flush()
-        return [category(row) for row in await reference_repo.categories_in_order(session)]
+        return await _categories_in_order(session)
 
 
 def _taken_names(
@@ -223,7 +237,7 @@ async def create_category(
             details=_name_details(names),
         )
         await session.flush()
-        return category(row)
+        return category(row, 0)
 
 
 async def rename_category(
@@ -245,7 +259,7 @@ async def rename_category(
         taken = _taken_names(rows, names, own_id=row.id)
         if taken:
             raise validation_error(taken)
-        old = category(row).names
+        old = _names(row)
         if names != old:
             _set_names(row, names)
             row.updated_at = now
@@ -258,7 +272,7 @@ async def rename_category(
                 details={**_name_details(old, "old_"), **_name_details(names)},
             )
         await session.flush()
-        return category(row)
+        return category(row, await ingredients_repo.count_in_category(session, row.id))
 
 
 async def category_usage(session: AsyncSession, category_id: str) -> CategoryUsage:
@@ -309,7 +323,7 @@ async def delete_category(
             target_user_id=None,
             now=now,
             details={
-                **_name_details(category(row).names),
+                **_name_details(_names(row)),
                 "ingredients": moved,
                 "extra_items": len(extras),
             },
