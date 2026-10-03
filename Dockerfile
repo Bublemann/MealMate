@@ -14,7 +14,7 @@
 # by hand together with the base images.
 
 # --- Frontend: static build, the same for every platform ------------------------------------
-FROM --platform=$BUILDPLATFORM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS frontend-build
+FROM --platform=$BUILDPLATFORM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS frontend-build
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=secret,id=extra_ca,required=false \
