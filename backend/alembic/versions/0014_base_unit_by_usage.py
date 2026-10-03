@@ -26,8 +26,9 @@ The downgrade can't give back the base units, piece weights, densities and value
 this took, so it refuses while there are ingredients; the backup taken before the update is the
 way back. Without ingredients it adds the empty column again.
 
-The nutrient keys and maximums are copied from `app.domain.nutrients` as they were when this
-migration was written, so that later changes there cannot change what it does.
+The nutrient keys and maximums are copied from `app.domain.nutrients`, and the pending-update
+field names and `IGNORED` mark from `app.services.off_fields`, as they were when this migration
+was written, so that later changes there cannot change what it does.
 
 Revision ID: 0014
 Revises: 0013
@@ -50,7 +51,7 @@ NUTRIENT_FIELDS = {f"nutrients.{key}" for key in MAX_PER_100}
 IGNORED = "ignored"
 
 # Every amount of an ingredient that counts (rule 1), with its unit.
-_AMOUNTS = """
+_AMOUNTS_THAT_COUNT = """
     SELECT ingredient_id, unit FROM meal_ingredients WHERE amount IS NOT NULL
     UNION ALL
     SELECT list_extra_items.ingredient_id, list_extra_items.unit
@@ -66,7 +67,7 @@ def _counted_in_pieces(connection: sa.Connection) -> list[sa.RowMapping]:
     query = f"""
         SELECT id, base_unit, density_g_per_ml, pending_update, {nutrients} FROM ingredients
         WHERE base_unit IN ('g', 'ml') AND id IN (
-            SELECT ingredient_id FROM ({_AMOUNTS}) GROUP BY ingredient_id
+            SELECT ingredient_id FROM ({_AMOUNTS_THAT_COUNT}) GROUP BY ingredient_id
             HAVING sum(unit IS NOT NULL AND unit <> 'piece') = 0
         )
         ORDER BY id
@@ -82,8 +83,9 @@ def _per_100_g(key: str, value: float | None, density: float) -> float | None:
 
 
 def _without_pending_nutrients(value: str | None) -> str | None:
-    """A pending update without the nutrients the user hasn't ignored."""
-    stored = {} if value is None else json.loads(value)
+    """A pending update without the nutrients the user hasn't ignored. The app stores an empty
+    one as SQL NULL or as JSON `null`."""
+    stored = (None if value is None else json.loads(value)) or {}
     kept = {
         field: entry
         for field, entry in stored.items()
@@ -127,8 +129,8 @@ def downgrade() -> None:
         raise BaseUnitsByUsageError(
             "cannot downgrade below 0014: it gave ingredients their base unit by how they were "
             "used and dropped their densities and the piece weights of those counted in g or ml "
-            f"(D-34), which can't be given back to the {ingredients} ingredients there are; "
-            "restore the backup taken before the update instead"
+            f"(D-34), which can't be given back (ingredients: {ingredients}); restore the "
+            "backup taken before the update instead"
         )
     with op.batch_alter_table("ingredients", schema=None) as batch_op:
         batch_op.add_column(sa.Column("density_g_per_ml", sa.Float(), nullable=True))

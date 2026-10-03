@@ -1060,56 +1060,89 @@ def test_0014_counts_in_pieces_what_is_used_only_in_pieces(tmp_path: Path) -> No
     assert [after[name] for name in ("Milch", "Olivenöl")] == [("ml", None), ("ml", None)]
 
 
+NUTRIENT_COLUMNS = ("kcal", "protein", "carbs", "sugar", "fat")
+
+
+def what_0014_keeps(path: Path) -> dict[str, dict[str, object]]:
+    """Per ingredient, every column but the base unit, piece weight and density, and but the
+    values and pending update of Kokosmilch, the one ml ingredient with a density that becomes
+    Stück."""
+    kept: dict[str, dict[str, object]] = {}
+    for name, row in ingredients_by_unique_name(path).items():
+        changed = {"base_unit", "piece_weight_g", "density_g_per_ml"}
+        if name == "Kokosmilch":
+            changed |= {*NUTRIENT_COLUMNS, "pending_update"}
+        kept[name] = {column: value for column, value in row.items() if column not in changed}
+    return kept
+
+
 def test_0014_converts_the_values_of_an_ml_ingredient_with_a_density(tmp_path: Path) -> None:
-    """A former ml ingredient becomes per 100 g: with a density, its values are divided by it,
-    and its pending Open Food Facts nutrients go, as with a base-unit change (ING-02; an ignored
-    one stays remembered); without one, they are kept. Every other ingredient keeps its values."""
+    """A former ml ingredient becomes per 100 g: with a density, its values are divided by it
+    (one above the plausible maximum becomes unknown, BAR-10); without one, they are kept.
+    Either way its pending Open Food Facts nutrients go, as with a base-unit change (ING-02),
+    and an ignored one stays remembered. A former g ingredient keeps its values, even with a
+    density."""
     path = tmp_path / "data" / "mealmate.db"
     config = alembic_config(path)
     load_demo_0013(path)
+    execute(path, "UPDATE ingredients SET carbs = 99 WHERE name = 'Kokosmilch'")
+    execute(path, "UPDATE ingredients SET density_g_per_ml = 1.03 WHERE name = 'Eier'")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(
+            "UPDATE ingredients SET pending_update = ? WHERE name = 'Sojadrink'",
+            (json.dumps({"nutrients.kcal": {"current": 39, "proposed": 41}}),),
+        )
     before = ingredients_by_unique_name(path)
 
     command.upgrade(config, "0014")
 
     after = ingredients_by_unique_name(path)
     coconut = after["Kokosmilch"]
-    # 194 kcal, 1.94 g protein, ... per 100 ml at 0.97 g/ml.
-    assert [coconut[key] for key in ("kcal", "protein", "carbs", "sugar", "fat")] == pytest.approx(
-        [200, 2, 3, 2, 20]
-    )
+    # 194 kcal, 1.94 g protein, ... per 100 ml at 0.97 g/ml; 99 g carbs would be 102 g.
+    assert [coconut[key] for key in NUTRIENT_COLUMNS] == pytest.approx([200, 2, None, 2, 20])
     assert json.loads(str(coconut["pending_update"])) == {
         "name": {"current": "Kokosmilch", "proposed": "Kokosmilch cremig"},
         "nutrients.fat": {"current": 19.4, "proposed": 18, "ignored": True},
     }
     assert coconut["user_edited_fields"] == before["Kokosmilch"]["user_edited_fields"]
-    nutrients = ("kcal", "protein", "carbs", "sugar", "fat", "pending_update")
-    assert {
-        name: {key: row[key] for key in nutrients}
-        for name, row in after.items()
-        if name != "Kokosmilch"
-    } == {
-        name: {key: row[key] for key in nutrients}
-        for name, row in before.items()
-        if name != "Kokosmilch"
-    }
-    assert (after["Sojadrink"]["kcal"], after["Sojadrink"]["protein"]) == (39, 3.3)
+    soy = after["Sojadrink"]
+    assert (soy["base_unit"], soy["kcal"], soy["protein"], soy["pending_update"]) == (
+        "piece",
+        39,
+        3.3,
+        None,
+    )
+    eggs = after["Eier"]
+    assert eggs["base_unit"] == "piece"
+    assert [eggs[key] for key in NUTRIENT_COLUMNS] == [
+        before["Eier"][key] for key in NUTRIENT_COLUMNS
+    ]
+
+
+def test_0014_reads_an_empty_pending_update(tmp_path: Path) -> None:
+    """The app stores an empty pending update as SQL NULL or as JSON `null` (a refresh without
+    news); either is no pending update."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    execute(path, "UPDATE ingredients SET pending_update = 'null' WHERE name = 'Sojadrink'")
+
+    command.upgrade(config, "0014")
+
+    assert ingredients_by_unique_name(path)["Sojadrink"]["pending_update"] is None
 
 
 def test_0014_drops_the_density_and_changes_nothing_else(tmp_path: Path) -> None:
     """The density column goes; apart from base units, piece weights and the converted values
-    nothing changes: no row, no reference, and nothing of what lists being shopped and done
-    lists are made of, frozen rows and the attributes extra items copied included (D-08)."""
+    nothing changes (`updated_at` and `updated_by` included: this is nobody's edit), no row and
+    no reference, and nothing of what lists being shopped and done lists are made of, frozen
+    rows and the attributes extra items copied included (D-08)."""
     path = tmp_path / "data" / "mealmate.db"
     config = alembic_config(path)
     load_demo_0013(path)
     counts, references = row_counts(path), non_null_foreign_keys(path)
     lists = frozen_tables(path)
-    changed = {"base_unit", "piece_weight_g", "density_g_per_ml"}
-    before = {
-        name: {column: value for column, value in row.items() if column not in changed}
-        for name, row in ingredients_by_unique_name(path).items()
-        if name != "Kokosmilch"
-    }
+    before = what_0014_keeps(path)
     assert query(path, "SELECT count(*) FROM ingredients WHERE density_g_per_ml > 0") == [(4,)]
 
     command.upgrade(config, "0014")
@@ -1120,11 +1153,7 @@ def test_0014_drops_the_density_and_changes_nothing_else(tmp_path: Path) -> None
     assert row_counts(path) == counts
     assert non_null_foreign_keys(path) == references
     assert frozen_tables(path) == lists
-    assert {
-        name: {column: value for column, value in row.items() if column not in changed}
-        for name, row in ingredients_by_unique_name(path).items()
-        if name != "Kokosmilch"
-    } == before
+    assert what_0014_keeps(path) == before
     assert_clean(path)
 
 
@@ -1156,7 +1185,7 @@ def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
     )
 
 
-def _missing(seen: dict[str, dict[str, Any]], name: str) -> list[tuple[object, ...]]:
+def _nutrition_missing(seen: dict[str, dict[str, Any]], name: str) -> list[tuple[object, ...]]:
     [meal] = [meal for meal in seen.values() if meal.get("name") == name]
     return [(item["ingredient_name"], item["reason"]) for item in meal["nutrition"]["missing"]]
 
@@ -1188,8 +1217,8 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
         ("Tomatensalat", "Tomaten", 4, "piece"),
     ]
     assert ("Pfannkuchen", "Eier", 2, "piece") in _flagged_rows(before)
-    assert ("Eier", "unit_mismatch") in _missing(before, "Pfannkuchen")
-    assert [item for item in _missing(after, "Pfannkuchen") if item[0] == "Eier"] == []
+    assert ("Eier", "unit_mismatch") in _nutrition_missing(before, "Pfannkuchen")
+    assert [item for item in _nutrition_missing(after, "Pfannkuchen") if item[0] == "Eier"] == []
     drafts = [seen for seen in after.values() if seen.get("status") == "draft"]
     extras = [item for seen in drafts for item in seen["extra_items"] if item["amount"]]
     assert len(extras) == 5
@@ -1224,7 +1253,7 @@ def test_the_0014_downgrade_is_refused(tmp_path: Path) -> None:
     command.upgrade(config, "0014")
     before = dump_without(path)
 
-    with pytest.raises(RuntimeError, match=r"cannot downgrade below 0014: .* 39 ingredients"):
+    with pytest.raises(RuntimeError, match=r"cannot downgrade below 0014: .*\(ingredients: 39\)"):
         command.downgrade(config, "0013")
 
     assert current_revision(path) == "0014"
