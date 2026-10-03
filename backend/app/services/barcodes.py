@@ -54,12 +54,19 @@ async def user_language(session: AsyncSession, principal: Principal) -> str:
 
 
 async def lookup(
-    session: AsyncSession, off: OffClient, principal: Principal, text: str
+    session: AsyncSession,
+    off: OffClient,
+    principal: Principal,
+    text: str,
+    *,
+    own_only: bool = False,
 ) -> BarcodeLookup:
     """Look a barcode up (422 `invalid_format` if it is not a valid EAN/UPC code): an
     ingredient of ours, else Open Food Facts' proposal, else nothing (after a transient
     failure, Open Food Facts gets a second try before that, see `OffClient.fetch`). While too
-    many lookups wait for Open Food Facts: 503 `off.busy`."""
+    many lookups wait for Open Food Facts: 503 `off.busy`. With `own_only`, Open Food Facts
+    isn't asked: the edit pop-up's scan only needs to know whether another ingredient has
+    the barcode (BAR-03)."""
     barcode = ingredients.canonical_barcode(text, ("query", "barcode"))
     async with session.begin():
         row = await ingredients_repo.by_barcode(session, barcode)
@@ -68,6 +75,14 @@ async def lookup(
                 barcode=barcode,
                 found_in="db",
                 ingredient=await ingredients.detail(session, row),
+                proposal=None,
+                off_unavailable=False,
+            )
+        if own_only:
+            return BarcodeLookup(
+                barcode=barcode,
+                found_in="none",
+                ingredient=None,
                 proposal=None,
                 off_unavailable=False,
             )

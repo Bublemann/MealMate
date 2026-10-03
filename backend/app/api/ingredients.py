@@ -73,12 +73,14 @@ async def lookup_barcode(
     background: BackgroundTasks,
     now: Now,
     barcode: Annotated[str, Query(max_length=BARCODE_INPUT_MAX_LENGTH)],
+    own_only: bool = False,
 ) -> BarcodeLookup:
     """Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a
-    proposal, not saved). 422 `invalid_format` for a barcode with a wrong check digit, 503
-    `off.busy` while too many lookups wait for Open Food Facts. A stale ingredient from Open
-    Food Facts is refreshed after the response."""
-    result = await barcodes.lookup(session, refresh.off, principal, barcode)
+    proposal, not saved). With `own_only`, only our own ingredients: `none` then means that
+    no ingredient has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
+    barcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open
+    Food Facts. A stale ingredient from Open Food Facts is refreshed after the response."""
+    result = await barcodes.lookup(session, refresh.off, principal, barcode, own_only=own_only)
     if result.ingredient is not None:
         off_refresh.schedule_if_stale(background, refresh, database, [result.ingredient], now=now)
     return result

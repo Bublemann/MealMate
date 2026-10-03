@@ -727,9 +727,10 @@ export interface paths {
         /**
          * Lookup Barcode
          * @description Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a
-         *     proposal, not saved). 422 `invalid_format` for a barcode with a wrong check digit, 503
-         *     `off.busy` while too many lookups wait for Open Food Facts. A stale ingredient from Open
-         *     Food Facts is refreshed after the response.
+         *     proposal, not saved). With `own_only`, only our own ingredients: `none` then means that
+         *     no ingredient has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
+         *     barcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open
+         *     Food Facts. A stale ingredient from Open Food Facts is refreshed after the response.
          */
         get: operations["lookup_barcode"];
         put?: never;
@@ -4541,6 +4542,7 @@ export interface operations {
         parameters: {
             query: {
                 barcode: string;
+                own_only?: boolean;
             };
             header?: never;
             path?: never;

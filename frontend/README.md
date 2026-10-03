@@ -538,6 +538,10 @@ order.
 | `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
 | `ingredientFormScan`     | `ingredient-form-scan`     | Scan icon next to the name in the form      |
 | `ingredientFormFooter`   | `ingredient-form-footer`   | The form's pinned footer with "Save"        |
+| `ingredientScanNotice`   | `ingredient-scan-notice`   | The scan's notice below the barcode         |
+| `ingredientScanOpen`     | `ingredient-scan-open`     | "open" the ingredient a scan belongs to     |
+| `ingredientScanTake`     | `ingredient-scan-take`     | "use" it instead, in the picker             |
+| `ingredientScanRetry`    | `ingredient-scan-retry`    | "Try again" when Open Food Facts is slow    |
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
 | `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
