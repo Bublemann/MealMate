@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { api, unwrap, withLongTimeout } from '@/api/client';
 import type { components } from '@/api/generated/schema';
+import { CATEGORIES_KEY } from '@/features/reference/api';
 
 export type Ingredient = components['schemas']['Ingredient'];
 export type IngredientSummary = components['schemas']['IngredientSummary'];
@@ -37,6 +38,14 @@ const detailKey = (id: string) => [...INGREDIENTS_KEY, 'detail', id] as const;
 function invalidateSearches(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: [...INGREDIENTS_KEY, 'list'] });
   void queryClient.invalidateQueries({ queryKey: [...INGREDIENTS_KEY, 'similar'] });
+}
+
+/**
+ * The categories count their ingredients, which decides whether the filter panel offers
+ * *Uncategorized* (ING-03): a saved, merged or deleted ingredient may have changed the counts.
+ */
+function invalidateCategoryCounts(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
 }
 
 /** A summary as the lists show it, from a full ingredient (e.g. one just created). */
@@ -107,6 +116,7 @@ export function useCreateIngredient() {
     onSuccess: (ingredient) => {
       queryClient.setQueryData(detailKey(ingredient.id), ingredient);
       invalidateSearches(queryClient);
+      invalidateCategoryCounts(queryClient);
     },
   });
 }
@@ -128,6 +138,7 @@ export function useUpdateIngredient(id: string) {
     onSuccess: (ingredient) => {
       queryClient.setQueryData(detailKey(id), ingredient);
       invalidateSearches(queryClient);
+      invalidateCategoryCounts(queryClient);
     },
   });
 }
@@ -200,6 +211,7 @@ export function useOffSearch() {
  */
 function forgetIngredient(queryClient: QueryClient, id: string) {
   invalidateSearches(queryClient);
+  invalidateCategoryCounts(queryClient);
   void queryClient.invalidateQueries({ queryKey: detailKey(id), refetchType: 'none' });
   void queryClient.invalidateQueries({ queryKey: ['admin', 'events'] });
 }

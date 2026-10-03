@@ -157,6 +157,7 @@
   "admin.categories.deleteKeeps": "Listen, die gerade eingekauft werden, und erledigte Listen bleiben, wie sie sind. Das lässt sich nicht rückgängig machen.",
   "admin.categories.deleteConfirm": "Löschen",
   "admin.categories.deleted": "Kategorie „{{name}}“ gelöscht.",
+  "admin.categories.showUncategorized": "Zeigen",
   "admin.events.title": "Aktivitäten",
   "admin.events.empty": "Bisher ist nichts passiert.",
   "admin.events.action.inviteCreate": "{{actor}} hat eine Einladung erstellt",

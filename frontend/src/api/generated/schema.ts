@@ -1700,12 +1700,17 @@ export interface components {
          *     A `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and
          *     done lists still show it. It keeps its last `sort_order`, which the next category in the
          *     walking order took over: its lines come right after that one's.
+         *
+         *     `ingredient_count`: how many ingredients it holds, so that the Ingredients tab offers
+         *     *Uncategorized* in its filter only while it holds some (ING-03).
          */
         Category: {
             /** Deleted */
             deleted: boolean;
             /** Id */
             id: string;
+            /** Ingredient Count */
+            ingredient_count: number;
             /** Key */
             key: string | null;
             names: components["schemas"]["CategoryNames"];

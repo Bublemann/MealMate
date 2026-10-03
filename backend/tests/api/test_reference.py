@@ -12,6 +12,7 @@ from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.domain.text import normalize
 from app.models import AdminEvent, Cuisine, Tag
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
+from tests.catalog import category_ids, create_ingredient, ingredient_counts, set_category
 
 CATALOG_ROUTES = [
     ("GET", "/api/categories"),
@@ -78,6 +79,7 @@ async def test_categories_have_a_name_per_language(api: AsyncClient, anna: Accou
         "names": {"de": "Obst & Gemüse", "en": "Fruit & vegetables"},
         "sort_order": 0,
         "deleted": False,
+        "ingredient_count": 0,
     }
     assert (other["key"], other["names"]) == ("other", {"de": "Sonstiges", "en": "Other"})
     assert (last["key"], last["names"]) == (
@@ -88,6 +90,32 @@ async def test_categories_have_a_name_per_language(api: AsyncClient, anna: Accou
         (category.key, {"de": category.name_de, "en": category.name_en})
         for category in SEEDED_CATEGORIES
     ]
+
+
+async def test_categories_count_their_ingredients(
+    api: AsyncClient, anna: Account, admin: Account
+) -> None:
+    """Each category says how many ingredients it holds, so that the Ingredients tab offers
+    *Uncategorized* only while it holds some (ING-03). The answers of a new order and a rename
+    count them too."""
+    categories = await category_ids(api, anna)
+    gouda = await create_ingredient(api, anna, "Gouda", category_id=categories["cheese"])
+    await create_ingredient(api, anna, "Feta", category_id=categories["cheese"])
+    await create_ingredient(api, anna, "Salz")
+
+    counts = await ingredient_counts(api, anna)
+
+    assert counts == {**dict.fromkeys(CATEGORY_KEYS, 0), "cheese": 2, "other": 1}
+    listed = await listed_categories(api, anna)
+    reordered = await put_order(api, admin, [item["id"] for item in listed])
+    assert reordered.json() == listed
+    renamed = await patch_category(api, admin, categories["cheese"], "Käsetheke", "Cheese counter")
+    assert renamed.json()["ingredient_count"] == 2
+
+    await set_category(api, anna, gouda["id"], categories["dairy_eggs"])
+
+    counts = await ingredient_counts(api, anna)
+    assert (counts["cheese"], counts["dairy_eggs"]) == (1, 1)
 
 
 async def test_units(api: AsyncClient, anna: Account) -> None:
@@ -319,6 +347,7 @@ async def test_add_categories_at_the_end_of_the_order(
         "names": {"de": "Käsetheke", "en": "Cheese counter"},
         "sort_order": len(CATEGORY_KEYS),
         "deleted": False,
+        "ingredient_count": 0,
     }
     bakery = (await post_category(api, admin, "Backstube", "Bakehouse")).json()
     assert bakery["sort_order"] == len(CATEGORY_KEYS) + 1

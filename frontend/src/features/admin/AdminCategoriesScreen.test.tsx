@@ -2,11 +2,14 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { errorResponse, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
+import { openPanel } from '@/test/filters';
 import {
   CATEGORIES,
   CATEGORIES_AFTER_DELETE,
   CATEGORIES_WITH_UNCATEGORIZED,
   CHEESE_COUNTER,
+  REFERENCE_ROUTES,
+  summary,
   UNCATEGORIZED,
 } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
@@ -416,6 +419,59 @@ describe('AdminCategoriesScreen', () => {
     await waitFor(() =>
       expect(names()).toEqual(['1Fruit & vegetables', '2Dairy & eggs', '3Other', '4Uncategorized']),
     );
+  });
+
+  it('offers “Show” after a delete: the Ingredients tab with only Uncategorized ticked and no search (REF-01, ING-03)', async () => {
+    let deleted = false;
+    const fetchMock = mockApi({
+      'GET /api/me': TEST_ADMIN,
+      ...REFERENCE_ROUTES,
+      'GET /api/categories': () =>
+        deleted ? CATEGORIES_AFTER_DELETE : CATEGORIES_WITH_UNCATEGORIZED,
+      'GET /api/ingredients': (request: Request) =>
+        new URL(request.url).searchParams.getAll('category_id').includes('cat-uncategorized')
+          ? [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })]
+          : [summary('Milch', 'dairy_eggs')],
+      'GET /api/admin/categories/cat-cheese/usage': { ingredients: 1, extra_items: 0 },
+      'DELETE /api/admin/categories/cat-cheese': () => {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    // The Ingredients tab remembers a search and a category from before.
+    const { router, user } = renderApp('/ingredients', { user: TEST_ADMIN });
+    await screen.findByTestId(testIds.ingredientList);
+    await user.type(screen.getByLabelText('Search ingredients'), 'Milch');
+    let panel = await openPanel(user);
+    await user.click(within(panel).getByRole('checkbox', { name: 'Dairy & eggs' }));
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+    await act(() => router.navigate('/me/admin/categories'));
+    await screen.findByTestId(testIds.adminCategoryList);
+    expect(screen.queryByRole('button', { name: 'Show' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cheese' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit category' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Cheese?' });
+    await waitFor(() =>
+      expect(within(confirm).getByRole('button', { name: 'Delete' })).toBeEnabled(),
+    );
+    await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Category “Cheese” deleted.');
+
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+
+    expect(await screen.findByTestId(testIds.screenIngredients)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/ingredients');
+    expect(screen.getByLabelText('Search ingredients')).toHaveValue('');
+    expect(await screen.findByRole('link', { name: /^Gouda/ })).toBeVisible();
+    expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
+    const asked = requestsTo(fetchMock, 'GET /api/ingredients').at(-1)!;
+    expect(new URL(asked.url).searchParams.getAll('category_id')).toEqual(['cat-uncategorized']);
+    expect(new URL(asked.url).searchParams.get('q')).toBeNull();
+    panel = await openPanel(user);
+    expect(within(panel).getByRole('checkbox', { name: 'Uncategorized' })).toBeChecked();
+    expect(within(panel).getByRole('checkbox', { name: 'Dairy & eggs' })).not.toBeChecked();
   });
 
   it('keeps the confirmation open and says why when deleting fails', async () => {
