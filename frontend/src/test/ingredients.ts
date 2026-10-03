@@ -1,4 +1,5 @@
 import { within } from '@testing-library/react';
+import { expect } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { BEN, TEST_USER, userRef } from './api';
 
@@ -91,6 +92,17 @@ export function unitOptions(select: HTMLElement): [string | null, boolean][] {
   return within(select)
     .getAllByRole('option')
     .map((option) => [option.textContent, (option as HTMLOptionElement).disabled]);
+}
+
+/**
+ * The elements follow each other on the page in the order given (e.g. the ingredient form's
+ * fields); on failure, the indices show which ones are out of place.
+ */
+export function expectInPageOrder(elements: HTMLElement[]) {
+  const onPage = [...elements].sort((a, b) =>
+    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+  );
+  expect(onPage.map((element) => elements.indexOf(element))).toEqual(elements.map((_, i) => i));
 }
 
 export function summary(

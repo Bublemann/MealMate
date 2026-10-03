@@ -16,6 +16,7 @@ from pydantic import (
     StringConstraints,
     field_validator,
 )
+from pydantic.json_schema import SkipJsonSchema
 from pydantic_core import PydanticCustomError
 
 from app.domain.catalog import (
@@ -144,9 +145,9 @@ class Ingredient(BaseModel):
     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-    Facts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe
-    the pack (information only). `created_by` / `updated_by` are null for a deleted user
-    (ING-06).
+    Facts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` are the
+    pack size from Open Food Facts (information only, never user-edited, D-38). `created_by` /
+    `updated_by` are null for a deleted user (ING-06).
     """
 
     id: str
@@ -193,8 +194,10 @@ class IngredientCreate(BaseModel):
     ingredient has is 409 `ingredient.barcode_taken`.
 
     With `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs
-    its `barcode` (422 `required` without). Names need not be unique: the "similar ingredient
-    exists" hint (`GET /api/ingredients/similar`) is only a hint.
+    its `barcode` (422 `required` without). Only then are `quantity_text`, `pack_quantity` and
+    `pack_unit` taken, the pack size passed on from the proposal; without `off` they are refused
+    (422 `invalid`), as nobody types in a pack size (D-38). Names need not be unique: the
+    "similar ingredient exists" hint (`GET /api/ingredients/similar`) is only a hint.
     """
 
     name: IngredientNameInput
@@ -215,8 +218,10 @@ class IngredientUpdate(BaseModel):
     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
     only the nutrients it contains (null clears one).
 
-    On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,
-    the pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409
+    On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and
+    the nutrients) becomes user-edited (BAR-04). The pack size (`quantity_text`, `pack_quantity`,
+    `pack_unit`) comes only from Open Food Facts and is refused here, even as null (422
+    `invalid`, D-38). A new barcode must be free (409
     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
     another product's. The base unit may change freely; the values are not converted.
@@ -235,10 +240,12 @@ class IngredientUpdate(BaseModel):
     base_unit: BaseUnitName | None = None
     piece_weight_g: PieceWeightInput | None = None
     nutrients: NutrientValues | None = None
-    quantity_text: QuantityTextInput | None = None
-    pack_quantity: PackQuantityInput | None = None
-    pack_unit: Unit | None = None
     accept_unit_mismatch: bool | None = None
+    # Not part of the API: sent anyway (e.g. by an app from before D-38), the pack size is
+    # refused by the service rather than ignored, so nobody believes it was saved.
+    quantity_text: SkipJsonSchema[object] = None
+    pack_quantity: SkipJsonSchema[object] = None
+    pack_unit: SkipJsonSchema[object] = None
 
     check_not_null = field_validator("name", "category_id", "base_unit")(not_null)
 

@@ -248,11 +248,15 @@ describe('MealFormScreen (create)', () => {
     await user.click(await within(form).findByTestId(testIds.ingredientPickerCreate));
     await user.click(await screen.findByTestId(testIds.offSearchButton));
     const search = await screen.findByTestId(testIds.offSearchDialog);
+    // The magnifier searched for the name at once.
+    expect(await within(search).findByTestId(testIds.offSearchEmpty)).toBeVisible();
 
     await user.type(within(search).getByLabelText('Product name or brand'), '{Enter}');
 
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'GET /api/ingredients/off-search')).toHaveLength(2),
+    );
     expect(await within(search).findByTestId(testIds.offSearchEmpty)).toBeVisible();
-    expect(requestsTo(fetchMock, 'GET /api/ingredients/off-search')).toHaveLength(1);
     expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
     expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
   });

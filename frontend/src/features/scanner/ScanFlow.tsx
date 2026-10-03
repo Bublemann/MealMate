@@ -202,14 +202,10 @@ function ScannedForm({
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
-          {t(proposal ? 'scanner.form.titleFound' : 'scanner.form.titleNew')}
-        </h2>
-        <p className="text-muted-foreground">
-          {t(proposal ? 'scanner.form.textFound' : 'scanner.form.textNew')}
-        </p>
-      </div>
+      {/* Compact like "Neue Zutat": no text below the headline (D-35). */}
+      <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+        {t(proposal ? 'scanner.form.titleFound' : 'scanner.form.titleNew')}
+      </h2>
       {!proposal && (
         <div className="flex flex-col gap-3">
           <Notice
@@ -235,7 +231,7 @@ function ScannedForm({
         onSaved={(ingredient) => onSaved(toSummary(ingredient))}
         onPickExisting={onSaved}
       >
-        <div className="flex flex-col gap-2 border-t pt-4">
+        <div className="mt-4 flex flex-col gap-2 border-t pt-4">
           <Button
             type="button"
             variant="outline"

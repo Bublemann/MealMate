@@ -1,4 +1,3 @@
-import type { Unit } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import type { BaseUnit, EditedField, Ingredient, OffProposal } from './api';
 import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
@@ -6,15 +5,15 @@ import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
 /** The longest ingredient name the server accepts; a name from Open Food Facts may be longer. */
 export const NAME_MAX_LENGTH = 60;
 export const BRAND_MAX_LENGTH = 80;
-export const QUANTITY_TEXT_MAX_LENGTH = 40;
 
 /** The text fields of the form. */
-export const TEXT_FIELDS = ['name', 'brand', 'quantity_text'] as const;
+export const TEXT_FIELDS = ['name', 'brand'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];
 
 /**
  * What the form shows, as typed: numbers stay text until saving, so a half-typed "0," isn't
- * turned into something else, and a field counts as changed only when its text changed.
+ * turned into something else, and a field counts as changed only when its text changed. The
+ * pack size isn't typed in: it comes with an Open Food Facts proposal (D-38).
  */
 export interface FormValues {
   name: string;
@@ -27,9 +26,6 @@ export interface FormValues {
   /** Only for base unit Stück (ING-02). */
   piece_weight_g: string;
   barcode: string;
-  quantity_text: string;
-  pack_quantity: string;
-  pack_unit: Unit | '';
   nutrients: Record<NutrientKey, string>;
 }
 
@@ -59,9 +55,6 @@ export function emptyValues(name = '', language: Language): FormValues {
     baseUnit: 'g',
     piece_weight_g: '',
     barcode: '',
-    quantity_text: '',
-    pack_quantity: '',
-    pack_unit: '',
     nutrients: nutrientTexts(undefined, language),
   };
 }
@@ -76,9 +69,6 @@ export function valuesFromIngredient(ingredient: Ingredient, language: Language)
     baseUnit: ingredient.base_unit,
     piece_weight_g: numberInputValue(ingredient.piece_weight_g, language),
     barcode: ingredient.barcode ?? '',
-    quantity_text: ingredient.quantity_text ?? '',
-    pack_quantity: numberInputValue(ingredient.pack_quantity, language),
-    pack_unit: ingredient.pack_unit ?? '',
     nutrients: nutrientTexts(ingredient.nutrients, language),
   };
 }
@@ -114,9 +104,6 @@ export function valuesFromPrefill(
     categoryKey: proposal.category_key ?? current.categoryKey,
     baseUnit: proposal.nutrition_basis ?? current.baseUnit,
     barcode,
-    quantity_text: proposal.quantity_text?.slice(0, QUANTITY_TEXT_MAX_LENGTH) ?? '',
-    pack_quantity: numberInputValue(proposal.pack_quantity, language),
-    pack_unit: proposal.pack_unit ?? '',
     nutrients: nutrientTexts(proposal.nutrients, language),
   };
 }
@@ -140,8 +127,6 @@ export function editedFields(values: FormValues, proposed: FormValues): EditedFi
   for (const field of TEXT_FIELDS) {
     if (values[field].trim() !== proposed[field].trim()) edited.push(field);
   }
-  if (values.pack_quantity.trim() !== proposed.pack_quantity) edited.push('pack_quantity');
-  if (values.pack_unit !== proposed.pack_unit) edited.push('pack_unit');
   for (const key of NUTRIENT_KEYS) {
     if (values.nutrients[key].trim() !== proposed.nutrients[key]) edited.push(`nutrients.${key}`);
   }

@@ -341,10 +341,10 @@ def test_member_finds_a_product_by_name(
     dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
     dialog.get_by_test_id(TEST_IDS["offSearchButton"]).click()
 
+    # The magnifier searches the name typed so far at once (BAR-11).
     search = page.get_by_test_id(TEST_IDS["offSearchDialog"])
     field = search.get_by_label(text("ingredients.offSearch.label"), exact=True)
     expect(field).to_have_value(product.query)
-    field.press("Enter")
     results = search.get_by_test_id(TEST_IDS["offSearchResult"])
     ours = results.filter(has_text=f"({product.brand})")
     expect(ours).to_have_count(1)
@@ -378,7 +378,9 @@ def test_member_finds_a_product_by_name(
     page.get_by_test_id(TEST_IDS["newIngredient"]).click()
     dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
     dialog.get_by_test_id(TEST_IDS["offSearchButton"]).click()
+    # Without a name, the search starts empty.
     search = page.get_by_test_id(TEST_IDS["offSearchDialog"])
+    expect(search.get_by_label(text("ingredients.offSearch.label"), exact=True)).to_have_value("")
     search.get_by_label(text("ingredients.offSearch.label"), exact=True).fill(product.query)
     search.get_by_test_id(TEST_IDS["offSearchSubmit"]).click()
     known = search.get_by_test_id(TEST_IDS["offSearchResult"]).filter(has_text=f"({product.brand})")

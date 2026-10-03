@@ -1,22 +1,15 @@
 import { ScanBarcode, Search } from 'lucide-react';
-import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { isApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { useCategories, useUnits, type Unit } from '@/features/reference/api';
+import { NativeSelect } from '@/components/ui/native-select';
+import { useCategories } from '@/features/reference/api';
 import { CategoryOptions } from '@/features/reference/CategoryOptions';
 import { OTHER_KEY, pickableCategories } from '@/features/reference/categories';
 import { unitLabel } from '@/features/reference/labels';
@@ -46,7 +39,6 @@ import {
   emptyValues,
   NAME_MAX_LENGTH,
   proposalValues,
-  QUANTITY_TEXT_MAX_LENGTH,
   valuesFromIngredient,
   valuesFromPrefill,
   type FormValues,
@@ -63,8 +55,8 @@ import {
 import { OffAttribution } from './OffAttribution';
 import { OffSearchDialog } from './OffSearchDialog';
 
-// The scanner and its decoder are a chunk of their own (PERF-03), loaded when the field's "Scan"
-// is tapped.
+// The scanner and its decoder are a chunk of their own (PERF-03), loaded when the scan icon is
+// tapped.
 const BarcodeScanDialog = lazy(() =>
   import('@/features/scanner/BarcodeScanDialog').then((module) => ({
     default: module.BarcodeScanDialog,
@@ -72,9 +64,6 @@ const BarcodeScanDialog = lazy(() =>
 );
 
 const BASE_UNITS: readonly BaseUnit[] = ['g', 'ml', 'piece'];
-/** The number fields of the form, as typed. */
-type NumberField = 'piece_weight_g' | 'pack_quantity';
-const PACK_FIELDS = ['quantity_text', 'pack_quantity', 'pack_unit'] as const;
 /** The paths whose server errors are shown next to an input; others go to the alert. */
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'name',
@@ -83,7 +72,6 @@ const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'base_unit',
   'barcode',
   'piece_weight_g',
-  ...PACK_FIELDS,
   ...NUTRIENT_KEYS.map((key) => `nutrients.${key}`),
 ]);
 
@@ -103,14 +91,30 @@ interface IngredientFormDialogProps {
   onPickExisting?: (ingredient: IngredientSummary) => void;
 }
 
-/** Creates or edits an ingredient (ING-01/02, NUT-02) in a dialog. */
+/**
+ * Creates or edits an ingredient (ING-01/02/04, NUT-02) in the compact pop-up (D-35): the form
+ * scrolls between the headline and its footer with "Save", which stays in the visible area
+ * above the keyboard (UI-01).
+ */
 export function IngredientFormDialog({ open, onOpenChange, ...props }: IngredientFormDialogProps) {
   const { t } = useTranslation();
   const { ingredient } = props;
+  const nameRef = useRef<HTMLInputElement>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        className="gap-0 overflow-hidden"
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => {
+          // The cursor starts in the name only while it is empty (D-35): with a name, the
+          // keyboard would cover the icons and the category, so the pop-up itself takes the focus.
+          event.preventDefault();
+          const name = nameRef.current;
+          if (name && name.value === '') name.focus();
+          else if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {ingredient
@@ -119,10 +123,11 @@ export function IngredientFormDialog({ open, onOpenChange, ...props }: Ingredien
                 })
               : t('ingredients.form.createTitle')}
           </DialogTitle>
-          <DialogDescription>{t('ingredients.form.text')}</DialogDescription>
         </DialogHeader>
         {/* Mounted only while open, so every opening starts from the current values. */}
-        {open && <IngredientForm {...props} onClose={() => onOpenChange(false)} />}
+        {open && (
+          <IngredientForm {...props} nameRef={nameRef} onClose={() => onOpenChange(false)} />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -143,6 +148,8 @@ export interface IngredientFormProps {
   onPickExisting?: (ingredient: IngredientSummary) => void;
   /** Called after saving (or when there was nothing to save) and before leaving to a match. */
   onClose: () => void;
+  /** The name field, e.g. for the dialog to put the cursor there. */
+  nameRef?: Ref<HTMLInputElement>;
   /** More actions below the save button, e.g. the scan flow's "already in MealMate". */
   children?: ReactNode;
 }
@@ -161,11 +168,14 @@ interface Proposed {
 }
 
 /**
- * One form for every ingredient, new or existing, typed by hand or from Open Food Facts: name,
- * brand, category, base unit (g, ml or pieces), piece weight (pieces only),
- * nutrition per 100 g/ml, barcode (with a scan button) and package details under "More". A new
- * ingredient can be filled from an Open Food Facts search by name; its values are then saved in
- * one request with the fields the user changed named as edited (BAR-04).
+ * One form for every ingredient, new or existing, typed by hand or from Open Food Facts (ING-04,
+ * D-35). Top to bottom: the Open Food Facts attribution while its values are shown; the name with
+ * a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon (fills in
+ * the barcode); the barcode; the similar-ingredients hint; brand; category; base unit (g, ml or
+ * pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. "Save" sits in a
+ * footer below the fields, which scroll on their own. A product chosen in the search is saved in
+ * one request, with its pack size passed on and the fields the user changed named as edited
+ * (BAR-04, D-38).
  */
 export function IngredientForm({
   ingredient,
@@ -174,16 +184,15 @@ export function IngredientForm({
   onSaved,
   onPickExisting,
   onClose,
+  nameRef,
   children,
 }: IngredientFormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const categories = useCategories();
-  const units = useUnits();
   const create = useCreateIngredient();
   const update = useUpdateIngredient(ingredient?.id ?? '');
   const mutation = ingredient ? update : create;
-  const baseUnitId = useId();
 
   const [initial] = useState<FormValues>(() => {
     if (ingredient) return valuesFromIngredient(ingredient, language);
@@ -198,9 +207,6 @@ export function IngredientForm({
   const [refused, setRefused] = useState<Refused | null>(null);
   const [searching, setSearching] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(
-    () => initial.quantity_text !== '' || initial.pack_quantity !== '',
-  );
 
   // Neither a deleted category nor *Uncategorized* can be picked (ING-02, D-30).
   const pickable = pickableCategories(categories.data ?? []);
@@ -224,7 +230,9 @@ export function IngredientForm({
   const barcodeFixed = proposed !== null;
   const fromOff = proposed !== null || ingredient?.source === 'off';
   const edited = new Set<string>(ingredient?.source === 'off' ? ingredient.user_edited_fields : []);
-  const moreErrors = PACK_FIELDS.some((field) => fieldError(field) !== undefined);
+  const barcode = values.barcode.replace(/\s+/g, '');
+  // A new barcode would bring another product's values, so the server ends the updates.
+  const offBarcodeChanged = ingredient?.source === 'off' && barcode !== (ingredient.barcode ?? '');
 
   function set<K extends keyof FormValues>(field: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -242,12 +250,15 @@ export function IngredientForm({
 
   function choose(proposal: OffProposal) {
     const prefilled: Prefill = { barcode: proposal.barcode, proposal };
-    const next = valuesFromPrefill(prefilled, values, language);
-    setValues(next);
+    setValues(valuesFromPrefill(prefilled, values, language));
     setProposed({ prefill: prefilled, values: proposalValues(prefilled, language) });
-    setMoreOpen(next.quantity_text !== '' || next.pack_quantity !== '');
     setInvalid(new Set());
     create.reset();
+  }
+
+  function pickExisting(match: IngredientSummary) {
+    onClose();
+    onPickExisting?.(match);
   }
 
   function saved(result: Ingredient) {
@@ -268,13 +279,12 @@ export function IngredientForm({
     const problems = new Set<string>();
     // Only pieces have a weight (ING-02): its field shows, and is sent, only for Stück. Leaving
     // Stück clears it on the server.
-    const numberFields: readonly NumberField[] =
-      values.baseUnit === 'piece' ? ['piece_weight_g', 'pack_quantity'] : ['pack_quantity'];
-    const numbers = {} as Record<NumberField, number | null>;
-    for (const field of numberFields) {
-      const parsed = parseOptionalAmount(values[field]);
-      if (parsed.ok) numbers[field] = parsed.value;
-      else problems.add(field);
+    const inPieces = values.baseUnit === 'piece';
+    let pieceWeight: number | null = null;
+    if (inPieces) {
+      const parsed = parseOptionalAmount(values.piece_weight_g);
+      if (parsed.ok) pieceWeight = parsed.value;
+      else problems.add('piece_weight_g');
     }
     const nutrients = {} as Record<NutrientKey, number | null>;
     for (const key of NUTRIENT_KEYS) {
@@ -283,37 +293,34 @@ export function IngredientForm({
       else problems.add(`nutrients.${key}`);
     }
     setInvalid(problems);
-    if (problems.has('pack_quantity')) setMoreOpen(true);
     if (problems.size > 0) return;
 
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
-      barcode: values.barcode.replace(/\s+/g, '') || null,
-      quantity_text: values.quantity_text.trim() || null,
+      barcode: barcode || null,
     };
-    const packUnit: Unit | null = values.pack_unit === '' ? null : values.pack_unit;
 
     if (!ingredient) {
       const body: IngredientCreate = { name: texts.name, base_unit: values.baseUnit };
       if (selectedCategory) body.category_id = selectedCategory;
       if (texts.brand !== null) body.brand = texts.brand;
       if (texts.barcode !== null) body.barcode = texts.barcode;
-      if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
-      if (packUnit !== null) body.pack_unit = packUnit;
-      for (const field of numberFields) {
-        const value = numbers[field];
-        if (value !== null) body[field] = value;
-      }
+      if (pieceWeight !== null) body.piece_weight_g = pieceWeight;
       const given: Partial<NutrientValues> = {};
       for (const key of NUTRIENT_KEYS) {
         if (nutrients[key] !== null) given[key] = nutrients[key];
       }
       if (Object.keys(given).length > 0) body.nutrients = given;
-      if (proposed?.prefill.proposal) {
+      const proposal = proposed?.prefill.proposal;
+      if (proposal) {
+        // The pack size is Open Food Facts' alone, passed on as it came (D-38).
+        if (proposal.quantity_text !== null) body.quantity_text = proposal.quantity_text;
+        if (proposal.pack_quantity !== null) body.pack_quantity = proposal.pack_quantity;
+        if (proposal.pack_unit !== null) body.pack_unit = proposal.pack_unit;
         // Saved with its Open Food Facts origin; only the corrected values count as edited.
         body.off = {
-          off_last_modified_at: proposed.prefill.proposal.off_last_modified_at,
+          off_last_modified_at: proposal.off_last_modified_at,
           edited_fields: editedFields(values, proposed.values),
         };
       }
@@ -329,12 +336,10 @@ export function IngredientForm({
     if (selectedCategory !== ingredient.category_id) body.category_id = selectedCategory;
     if (values.baseUnit !== ingredient.base_unit) body.base_unit = values.baseUnit;
     if (texts.barcode !== ingredient.barcode) body.barcode = texts.barcode;
-    if (texts.quantity_text !== ingredient.quantity_text) body.quantity_text = texts.quantity_text;
-    if (packUnit !== ingredient.pack_unit) body.pack_unit = packUnit;
     // A number field counts as changed when its text changed: a stored value with more decimals
     // than shown would otherwise be cut on every save.
-    for (const field of numberFields) {
-      if (values[field].trim() !== initial[field]) body[field] = numbers[field];
+    if (inPieces && values.piece_weight_g.trim() !== initial.piece_weight_g) {
+      body.piece_weight_g = pieceWeight;
     }
     const changed: Partial<NutrientValues> = {};
     for (const key of NUTRIENT_KEYS) {
@@ -369,172 +374,61 @@ export function IngredientForm({
       onSubmit={onSubmit}
       noValidate
       data-testid={testIds.ingredientForm}
-      className="flex flex-col gap-4"
+      className="flex min-h-0 flex-col"
     >
-      {fromOff && <OffAttribution />}
-      <FormField label={t('ingredients.field.name')} error={fieldError('name')}>
-        {(control) => (
-          <Input
-            {...control}
-            name="name"
-            autoComplete="off"
-            required
-            maxLength={NAME_MAX_LENGTH}
-            value={values.name}
-            onChange={(event) => set('name', event.target.value)}
-          />
-        )}
-      </FormField>
-      {!ingredient && !prefill && (
-        <Button
-          type="button"
-          variant="outline"
-          className="self-start"
-          data-testid={testIds.offSearchButton}
-          onClick={() => setSearching(true)}
-        >
-          <Search aria-hidden="true" />
-          {t('ingredients.offSearch.open')}
-        </Button>
-      )}
-      <SimilarHint
-        name={values.name}
-        ingredient={ingredient}
-        onPickExisting={
-          onPickExisting &&
-          ((match) => {
-            onClose();
-            onPickExisting(match);
-          })
-        }
-        onNavigate={onClose}
-      />
-      <FormField
-        label={t('ingredients.field.brand')}
-        hint={editedHint('brand') ?? t('ingredients.field.brandHint')}
-        error={fieldError('brand')}
-      >
-        {(control) => (
-          <Input
-            {...control}
-            name="brand"
-            autoComplete="off"
-            maxLength={BRAND_MAX_LENGTH}
-            value={values.brand}
-            onChange={(event) => set('brand', event.target.value)}
-          />
-        )}
-      </FormField>
-      <FormField
-        label={t('ingredients.field.category')}
-        error={fieldError('category_id') && t('ingredients.field.categoryGone')}
-      >
-        {(control) => (
-          <NativeSelect
-            {...control}
-            name="category_id"
-            value={selectedCategory}
-            disabled={!categories.data}
-            onChange={(event) => set('categoryId', event.target.value)}
-          >
-            <CategoryOptions categories={categories.data ?? []} selected={selectedCategory} />
-          </NativeSelect>
-        )}
-      </FormField>
-      <ErrorAlert error={categories.error} />
-      <fieldset className="flex flex-col gap-2" aria-describedby={`${baseUnitId}-hint`}>
-        <legend className="mb-2 text-sm leading-none font-medium">
-          {t('ingredients.field.baseUnit')}
-        </legend>
-        <div className="flex flex-wrap gap-2">
-          {BASE_UNITS.map((unit) => (
-            <label
-              key={unit}
-              className="flex min-h-(--tap-target) flex-1 items-center gap-3 rounded-md border px-3 has-checked:border-primary has-checked:font-semibold"
-            >
-              <input
-                type="radio"
-                name="base_unit"
-                value={unit}
-                checked={values.baseUnit === unit}
-                onChange={() => set('baseUnit', unit)}
-                className="size-5 accent-primary"
-              />
-              {t(`ingredients.baseUnit.${unit}`)}
-            </label>
-          ))}
-        </div>
-        <p id={`${baseUnitId}-hint`} className="text-sm text-muted-foreground">
-          {ingredient
-            ? t('ingredients.field.baseUnitEditHint')
-            : t('ingredients.field.baseUnitHint')}
-        </p>
-        {serverFields.base_unit && (
-          <p className="text-sm font-medium text-destructive">{serverFields.base_unit}</p>
-        )}
-      </fieldset>
-      {values.baseUnit === 'piece' && (
+      {/* The fields scroll above the footer; the side padding keeps their focus rings in view. */}
+      <div className="-mx-2 flex min-h-0 flex-col gap-4 overflow-y-auto px-2 py-4">
+        {fromOff && <OffAttribution />}
         <FormField
-          label={t('ingredients.field.weightPerPiece')}
-          error={fieldError('piece_weight_g')}
+          label={t('ingredients.field.name')}
+          hint={editedHint('name')}
+          error={fieldError('name')}
         >
           {(control) => (
-            <Input
-              {...control}
-              name="piece_weight_g"
-              inputMode="decimal"
-              autoComplete="off"
-              value={values.piece_weight_g}
-              onChange={(event) => set('piece_weight_g', event.target.value)}
-            />
+            // At large text sizes the icons wrap below the name.
+            <div className="flex flex-wrap gap-2">
+              <Input
+                {...control}
+                ref={nameRef}
+                name="name"
+                autoComplete="off"
+                required
+                maxLength={NAME_MAX_LENGTH}
+                value={values.name}
+                onChange={(event) => set('name', event.target.value)}
+                className="flex-[1_1_12rem]"
+              />
+              <div className="flex gap-2">
+                {!ingredient && !prefill && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t('ingredients.offSearch.open')}
+                    data-testid={testIds.offSearchButton}
+                    onClick={() => setSearching(true)}
+                  >
+                    <Search aria-hidden="true" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label={t('ingredients.field.barcodeScan')}
+                  data-testid={testIds.ingredientFormScan}
+                  disabled={barcodeFixed}
+                  onClick={() => setScanning(true)}
+                >
+                  <ScanBarcode aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
           )}
         </FormField>
-      )}
-      <fieldset className="flex flex-col gap-3">
-        <legend className="mb-1 font-semibold">
-          {t('ingredients.form.nutritionTitle', {
-            unit: unitLabel(t, nutritionUnit(values.baseUnit)),
-          })}
-        </legend>
-        <p className="text-sm text-muted-foreground">{t('ingredients.form.nutritionHint')}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {NUTRIENT_KEYS.map((key) => (
-            <FormField
-              key={key}
-              label={nutrientLabel(t, key)}
-              hint={editedHint(`nutrients.${key}`)}
-              error={fieldError(`nutrients.${key}`)}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  name={`nutrients.${key}`}
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={values.nutrients[key]}
-                  onChange={(event) => {
-                    const text = event.target.value;
-                    setValues((current) => ({
-                      ...current,
-                      nutrients: { ...current.nutrients, [key]: text },
-                    }));
-                  }}
-                />
-              )}
-            </FormField>
-          ))}
-        </div>
-      </fieldset>
-      <div className="flex flex-col gap-2">
         <FormField
           label={t('ingredients.field.barcode')}
-          hint={t(
-            barcodeFixed
-              ? 'ingredients.field.barcodeFixed'
-              : ingredient?.source === 'off'
-                ? 'ingredients.field.barcodeOffHint'
-                : 'ingredients.field.barcodeHint',
-          )}
+          hint={offBarcodeChanged ? t('ingredients.field.barcodeOffHint') : undefined}
           error={barcodeTaken ? t('error.ingredient.barcode_taken') : fieldError('barcode')}
         >
           {(control) => (
@@ -544,101 +438,141 @@ export function IngredientForm({
               inputMode="numeric"
               autoComplete="off"
               maxLength={20}
+              placeholder={t('ingredients.field.barcodePlaceholder')}
               readOnly={barcodeFixed}
               value={values.barcode}
               onChange={(event) => set('barcode', event.target.value)}
             />
           )}
         </FormField>
-        {!barcodeFixed && (
-          <Button
-            type="button"
-            variant="outline"
-            className="self-start"
-            data-testid={testIds.barcodeFieldScan}
-            onClick={() => setScanning(true)}
-          >
-            <ScanBarcode aria-hidden="true" />
-            {t('ingredients.field.barcodeScan')}
-          </Button>
-        )}
-      </div>
-      <details
-        open={moreOpen || moreErrors}
-        onToggle={(event) => setMoreOpen(event.currentTarget.open)}
-        className="rounded-lg border px-3"
-      >
-        <summary className="flex min-h-(--tap-target) cursor-pointer items-center font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring">
-          {t('ingredients.form.more')}
-        </summary>
-        <div className="flex flex-col gap-4 pb-3">
+        <SimilarHint
+          name={values.name}
+          ingredient={ingredient}
+          onPickExisting={onPickExisting && pickExisting}
+          onNavigate={onClose}
+        />
+        <FormField
+          label={t('ingredients.field.brand')}
+          hint={editedHint('brand')}
+          error={fieldError('brand')}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              name="brand"
+              autoComplete="off"
+              maxLength={BRAND_MAX_LENGTH}
+              placeholder={t('ingredients.field.brandPlaceholder')}
+              value={values.brand}
+              onChange={(event) => set('brand', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          label={t('ingredients.field.category')}
+          error={fieldError('category_id') && t('ingredients.field.categoryGone')}
+        >
+          {(control) => (
+            <NativeSelect
+              {...control}
+              name="category_id"
+              value={selectedCategory}
+              disabled={!categories.data}
+              onChange={(event) => set('categoryId', event.target.value)}
+            >
+              <CategoryOptions categories={categories.data ?? []} selected={selectedCategory} />
+            </NativeSelect>
+          )}
+        </FormField>
+        <ErrorAlert error={categories.error} />
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm leading-none font-medium">
+            {t('ingredients.field.baseUnit')}
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {BASE_UNITS.map((unit) => (
+              <label
+                key={unit}
+                className="flex min-h-(--tap-target) flex-1 items-center gap-3 rounded-md border px-3 has-checked:border-primary has-checked:font-semibold"
+              >
+                <input
+                  type="radio"
+                  name="base_unit"
+                  value={unit}
+                  checked={values.baseUnit === unit}
+                  onChange={() => set('baseUnit', unit)}
+                  className="size-5 accent-primary"
+                />
+                {t(`ingredients.baseUnit.${unit}`)}
+              </label>
+            ))}
+          </div>
+          {serverFields.base_unit && (
+            <p className="text-sm font-medium text-destructive">{serverFields.base_unit}</p>
+          )}
+        </fieldset>
+        {values.baseUnit === 'piece' && (
           <FormField
-            label={t('ingredients.field.quantityText')}
-            hint={editedHint('quantity_text') ?? t('ingredients.field.quantityTextHint')}
-            error={fieldError('quantity_text')}
+            label={t('ingredients.field.weightPerPiece')}
+            error={fieldError('piece_weight_g')}
           >
             {(control) => (
               <Input
                 {...control}
-                name="quantity_text"
+                name="piece_weight_g"
+                inputMode="decimal"
                 autoComplete="off"
-                maxLength={QUANTITY_TEXT_MAX_LENGTH}
-                value={values.quantity_text}
-                onChange={(event) => set('quantity_text', event.target.value)}
+                value={values.piece_weight_g}
+                onChange={(event) => set('piece_weight_g', event.target.value)}
               />
             )}
           </FormField>
+        )}
+        <fieldset className="flex flex-col gap-3">
+          <legend className="mb-1 font-semibold">
+            {t('ingredients.form.nutritionTitle', {
+              unit: unitLabel(t, nutritionUnit(values.baseUnit)),
+            })}
+          </legend>
           <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label={t('ingredients.field.packQuantity')}
-              hint={editedHint('pack_quantity')}
-              error={fieldError('pack_quantity')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  name="pack_quantity"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={values.pack_quantity}
-                  onChange={(event) => set('pack_quantity', event.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField
-              label={t('ingredients.field.packUnit')}
-              hint={editedHint('pack_unit')}
-              error={fieldError('pack_unit')}
-            >
-              {(control) => (
-                <NativeSelect
-                  {...control}
-                  name="pack_unit"
-                  value={values.pack_unit}
-                  disabled={!units.data}
-                  onChange={(event) => set('pack_unit', event.target.value as Unit | '')}
-                >
-                  <NativeSelectOption value="">
-                    {t('ingredients.field.packUnitNone')}
-                  </NativeSelectOption>
-                  {units.data?.map(({ unit }) => (
-                    <NativeSelectOption key={unit} value={unit}>
-                      {unitLabel(t, unit)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              )}
-            </FormField>
+            {NUTRIENT_KEYS.map((key) => (
+              <FormField
+                key={key}
+                label={nutrientLabel(t, key)}
+                hint={editedHint(`nutrients.${key}`)}
+                error={fieldError(`nutrients.${key}`)}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    name={`nutrients.${key}`}
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={values.nutrients[key]}
+                    onChange={(event) => {
+                      const text = event.target.value;
+                      setValues((current) => ({
+                        ...current,
+                        nutrients: { ...current.nutrients, [key]: text },
+                      }));
+                    }}
+                  />
+                )}
+              </FormField>
+            ))}
           </div>
-          <ErrorAlert error={units.error} />
-        </div>
-      </details>
-      {showAlert && <ErrorAlert error={mutation.error} />}
-      <DialogFooter>
-        <Button type="submit" disabled={mutation.isPending || values.name.trim() === ''}>
+        </fieldset>
+      </div>
+      <div data-testid={testIds.ingredientFormFooter} className="flex flex-col gap-3 border-t pt-4">
+        {showAlert && <ErrorAlert error={mutation.error} />}
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={mutation.isPending || values.name.trim() === ''}
+        >
           {t('common.save')}
         </Button>
-      </DialogFooter>
+      </div>
       {children}
       {searching && (
         <OffSearchDialog
@@ -646,13 +580,7 @@ export function IngredientForm({
           onOpenChange={setSearching}
           initialQuery={values.name.trim()}
           onChoose={choose}
-          onPickExisting={
-            onPickExisting &&
-            ((match) => {
-              onClose();
-              onPickExisting(match);
-            })
-          }
+          onPickExisting={onPickExisting && pickExisting}
           onNavigate={onClose}
         />
       )}
@@ -661,7 +589,7 @@ export function IngredientForm({
           <BarcodeScanDialog
             open
             onOpenChange={setScanning}
-            onBarcode={(barcode) => set('barcode', barcode)}
+            onBarcode={(scanned) => set('barcode', scanned)}
           />
         </Suspense>
       )}
@@ -698,7 +626,9 @@ function SimilarHint({ name, ingredient, onPickExisting, onNavigate }: SimilarHi
   const matches = query ? (similar.data ?? []).filter((match) => match.id !== ingredient?.id) : [];
 
   return (
-    <div aria-live="polite">
+    // Without matches the live region stays for screen readers but takes back the form's gap
+    // above it, so the brand follows the barcode as closely as any field follows another.
+    <div aria-live="polite" className="empty:-mt-4">
       {matches.length > 0 && (
         <div
           data-testid={testIds.ingredientSimilar}

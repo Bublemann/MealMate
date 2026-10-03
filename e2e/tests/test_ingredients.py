@@ -47,10 +47,10 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     expect(form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)).to_have_count(0)
     form.get_by_label(text("nutrient.kcal"), exact=True).fill("52")
     form.get_by_label(text("ingredients.field.barcode"), exact=True).fill(barcode)
-    # The package is optional, under "More".
-    form.get_by_text(text("ingredients.form.more"), exact=True).click()
-    form.get_by_label(text("ingredients.field.quantityText"), exact=True).fill("1 kg")
-    form.get_by_role("button", name=text("common.save")).click()
+    # "Save" is in the footer below the fields (D-35).
+    page.get_by_test_id(TEST_IDS["ingredientFormFooter"]).get_by_role(
+        "button", name=text("common.save")
+    ).click()
 
     # The new ingredient opens, named with its brand.
     expect(page).to_have_url(re.compile(r"/ingredients/[\w-]+$"))
@@ -59,7 +59,6 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     expect(detail.get_by_role("heading", level=1)).to_have_text(label)
     expect(detail).to_contain_text(api.category_name(member, "fruit_vegetables"))
     expect(detail).to_contain_text(barcode)
-    expect(detail).to_contain_text("1 kg")
     expect(detail).to_contain_text(text("ingredients.detail.source.manual"))
     expect(nutrient_row(page, "kcal")).to_contain_text("52 kcal")
     ingredient_url = page.url

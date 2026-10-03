@@ -2129,9 +2129,9 @@ export interface components {
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
          *     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-         *     Facts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe
-         *     the pack (information only). `created_by` / `updated_by` are null for a deleted user
-         *     (ING-06).
+         *     Facts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` are the
+         *     pack size from Open Food Facts (information only, never user-edited, D-38). `created_by` /
+         *     `updated_by` are null for a deleted user (ING-06).
          */
         Ingredient: {
             /** Barcode */
@@ -2181,7 +2181,7 @@ export interface components {
             updated_by: components["schemas"]["UserRef"] | null;
             usage: components["schemas"]["IngredientUsage"];
             /** User Edited Fields */
-            user_edited_fields: ("name" | "brand" | "quantity_text" | "pack_quantity" | "pack_unit" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            user_edited_fields: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
         };
         /**
          * IngredientBarcodeLink
@@ -2205,8 +2205,10 @@ export interface components {
          *     ingredient has is 409 `ingredient.barcode_taken`.
          *
          *     With `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs
-         *     its `barcode` (422 `required` without). Names need not be unique: the "similar ingredient
-         *     exists" hint (`GET /api/ingredients/similar`) is only a hint.
+         *     its `barcode` (422 `required` without). Only then are `quantity_text`, `pack_quantity` and
+         *     `pack_unit` taken, the pack size passed on from the proposal; without `off` they are refused
+         *     (422 `invalid`), as nobody types in a pack size (D-38). Names need not be unique: the
+         *     "similar ingredient exists" hint (`GET /api/ingredients/similar`) is only a hint.
          */
         IngredientCreate: {
             /** Barcode */
@@ -2255,7 +2257,7 @@ export interface components {
          */
         IngredientOffOrigin: {
             /** Edited Fields */
-            edited_fields?: ("name" | "brand" | "quantity_text" | "pack_quantity" | "pack_unit" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            edited_fields?: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
             /** Off Last Modified At */
             off_last_modified_at?: string | null;
         };
@@ -2293,8 +2295,10 @@ export interface components {
          *     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
          *     only the nutrients it contains (null clears one).
          *
-         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,
-         *     the pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409
+         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and
+         *     the nutrients) becomes user-edited (BAR-04). The pack size (`quantity_text`, `pack_quantity`,
+         *     `pack_unit`) comes only from Open Food Facts and is refused here, even as null (422
+         *     `invalid`, D-38). A new barcode must be free (409
          *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
@@ -2319,13 +2323,8 @@ export interface components {
             /** Name */
             name?: string | null;
             nutrients?: components["schemas"]["NutrientValues"] | null;
-            /** Pack Quantity */
-            pack_quantity?: number | null;
-            pack_unit?: components["schemas"]["Unit"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
-            /** Quantity Text */
-            quantity_text?: string | null;
         };
         /**
          * IngredientUsage
@@ -3148,7 +3147,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "name" | "brand" | "quantity_text" | "pack_quantity" | "pack_unit" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
+            field: "name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
             /** Proposed */
             proposed: string | number | null;
         };

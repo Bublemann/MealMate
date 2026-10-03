@@ -1,10 +1,11 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
 import { errorResponse, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
 import {
   APPLES,
   CATEGORIES_WITH_UNCATEGORIZED,
+  expectInPageOrder,
   REFERENCE_ROUTES,
   summary,
   WEIDEHOF_MILK,
@@ -13,6 +14,12 @@ import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const MILK_PATH = `/api/ingredients/${WEIDEHOF_MILK.id}`;
+
+// jsdom has no camera: the scanner of the form's scan icon shows its manual input.
+vi.mock('@/features/scanner/decoder', () => ({
+  loadDecoder: () => Promise.resolve(),
+  decodeVideoFrame: () => Promise.resolve(null),
+}));
 
 function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 'ing-aepfel') {
   const fetchMock = mockApi({
@@ -110,9 +117,7 @@ describe('IngredientDetailScreen', () => {
     renderDetail({}, false, WEIDEHOF_MILK.id);
 
     await screen.findByTestId(testIds.ingredientNutrition);
-    expect(nutrientRow(/^Fat/)).toHaveTextContent(
-      'Changed in MealMate: updates from Open Food Facts keep it.3.6 g',
-    );
+    expect(nutrientRow(/^Fat/)).toHaveTextContent('FatChanged in MealMate3.6 g');
     expect(nutrientRow('Calories')).toHaveTextContent('64 kcal');
   });
 
@@ -146,13 +151,12 @@ describe('IngredientDetailScreen', () => {
   describe('newer values from Open Food Facts (BAR-06)', () => {
     const PENDING = {
       ...WEIDEHOF_MILK,
-      user_edited_fields: ['nutrients.kcal', 'name', 'brand', 'pack_unit'],
+      user_edited_fields: ['nutrients.kcal', 'name', 'brand'],
       pending_update: {
         fields: [
           { field: 'nutrients.kcal', current: 65, proposed: 64 },
           { field: 'name', current: 'Vollmilch', proposed: 'Frische Vollmilch' },
           { field: 'brand', current: 'Weidehof', proposed: null },
-          { field: 'pack_unit', current: 'l', proposed: 'ml' },
         ],
         off_last_modified_at: '2026-09-25T10:00:00Z',
       },
@@ -178,7 +182,6 @@ describe('IngredientDetailScreen', () => {
         'Calories: 65 kcal → 64 kcal',
         'Name: Vollmilch → Frische Vollmilch',
         'Brand: Weidehof → empty',
-        'Unit of the contents: l → ml',
       ]);
 
       await user.click(
@@ -247,9 +250,6 @@ describe('IngredientDetailScreen', () => {
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     expect(within(dialog).queryByTestId(testIds.ingredientSimilar)).not.toBeInTheDocument();
-    // Editing is not creating: no search at Open Food Facts here.
-    expect(within(dialog).queryByTestId(testIds.offSearchButton)).not.toBeInTheDocument();
-    expect(dialog).toHaveTextContent('Changing it converts nothing: check the values.');
     await user.click(within(dialog).getByLabelText('Millilitres (ml)'));
     await user.type(within(dialog).getByLabelText('Brand'), 'Hofgut');
     const kcal = within(dialog).getByLabelText('Calories');
@@ -390,7 +390,48 @@ describe('IngredientDetailScreen', () => {
     expect(within(confirm).getByRole('button', { name: 'Trotzdem ändern' })).toBeVisible();
   });
 
-  it('clears a barcode and marks the fields a user changed on an Open Food Facts ingredient', async () => {
+  it('has the compact layout without the magnifier, and no cursor in the name (ING-04, D-35)', async () => {
+    await i18n.changeLanguage('de');
+    const edited: typeof WEIDEHOF_MILK = {
+      ...WEIDEHOF_MILK,
+      user_edited_fields: ['name', 'nutrients.fat'],
+    };
+    const { user } = renderDetail({ [`GET ${MILK_PATH}`]: edited }, false, WEIDEHOF_MILK.id);
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Vollmilch (Weidehof) bearbeiten' });
+    // A name is filled in, so the keyboard stays down.
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(dialog).not.toHaveAccessibleDescription();
+    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const name = within(form).getByLabelText('Name');
+    const baseUnit = within(form).getByRole('group', { name: 'Basiseinheit' });
+    expectInPageOrder([
+      within(form).getByTestId(testIds.offAttribution),
+      name,
+      within(form).getByRole('button', { name: 'Barcode scannen' }),
+      within(form).getByLabelText('Barcode'),
+      within(form).getByLabelText('Marke'),
+      within(form).getByLabelText('Kategorie'),
+      baseUnit,
+      within(form).getByRole('group', { name: 'Nährwerte pro 100 ml (optional)' }),
+      within(dialog).getByTestId(testIds.ingredientFormFooter),
+    ]);
+    // Editing is not creating: no search at Open Food Facts here (BAR-11).
+    expect(
+      within(form).queryByRole('button', { name: 'In Open Food Facts suchen' }),
+    ).not.toBeInTheDocument();
+    // Each field changed in MealMate is marked briefly (BAR-04); the base unit has no warning.
+    expect(name).toHaveAccessibleDescription('In MealMate geändert');
+    expect(within(form).getByLabelText('Fett')).toHaveAccessibleDescription('In MealMate geändert');
+    expect(within(form).getByLabelText('Kalorien')).not.toHaveAccessibleDescription();
+    expect(within(form).getByLabelText('Marke')).not.toHaveAccessibleDescription();
+    expect(baseUnit).toHaveTextContent(/^BasiseinheitGramm \(g\)Milliliter \(ml\)Stück \(Stk\.\)$/);
+    // The pack size is shown on the detail page only, never edited (D-38).
+    expect(within(form).queryByText(/Packung/)).not.toBeInTheDocument();
+  });
+
+  it('clears the barcode of an Open Food Facts ingredient, warning only once it is changed', async () => {
     const { fetchMock, user } = renderDetail(
       { [`PATCH ${MILK_PATH}`]: { ...WEIDEHOF_MILK, barcode: null, source: 'manual' } },
       false,
@@ -399,14 +440,17 @@ describe('IngredientDetailScreen', () => {
 
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
-    expect(within(dialog).getByTestId(testIds.offAttribution)).toBeVisible();
-    expect(within(dialog).getByLabelText('Fat')).toHaveAccessibleDescription(
-      'Changed in MealMate: updates from Open Food Facts keep it.',
+    const barcode = within(dialog).getByLabelText('Barcode');
+    expect(barcode).not.toHaveAttribute('readonly');
+    expect(barcode).not.toHaveAccessibleDescription();
+    await user.clear(barcode);
+    expect(barcode).toHaveAccessibleDescription(
+      'With the barcode changed, this ingredient no longer gets updates from Open Food Facts.',
     );
-    expect(within(dialog).getByLabelText('Calories')).not.toHaveAccessibleDescription();
-    // Packed away under "More", opened because there is a package.
-    expect(within(dialog).getByLabelText('Package size as printed')).toBeVisible();
-    await user.clear(within(dialog).getByLabelText('Barcode'));
+    await user.type(barcode, ' 4006381 333931');
+    // The same barcode again, in another spelling: no warning.
+    expect(barcode).not.toHaveAccessibleDescription();
+    await user.clear(barcode);
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
@@ -415,12 +459,31 @@ describe('IngredientDetailScreen', () => {
     });
   });
 
+  it('gives an ingredient typed by hand its package’s barcode with the scan icon (ING-04)', async () => {
+    const { fetchMock, user } = renderDetail({
+      'PATCH /api/ingredients/ing-aepfel': { ...APPLES, barcode: '4006381333931' },
+    });
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    await user.click(within(dialog).getByTestId(testIds.ingredientFormScan));
+    const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
+    await user.type(within(scanner).getByTestId(testIds.barcodeInput), '4006381333931{Enter}');
+    await waitFor(() => expect(scanner).not.toBeInTheDocument());
+    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('4006381333931');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(
+      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
+    ).resolves.toEqual({ barcode: '4006381333931' });
+  });
+
   it('does not send stored numbers with more decimals than shown unless they were edited', async () => {
     const precise = {
       ...APPLES,
       base_unit: 'piece' as const,
       piece_weight_g: 180.55555555,
-      pack_quantity: 0.33333333,
       nutrients: { ...APPLES.nutrients, kcal: 52.66666667, protein: 0.33333333 },
     };
     const { fetchMock, user } = renderDetail({
@@ -459,26 +522,14 @@ describe('IngredientDetailScreen', () => {
     );
   });
 
-  it('warns that changing the barcode of a product from Open Food Facts ends its updates', async () => {
-    const { user } = renderDetail({}, false, WEIDEHOF_MILK.id);
-
-    await user.click(await screen.findByTestId(testIds.editIngredient));
-    const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
-    const barcode = within(dialog).getByLabelText('Barcode');
-    expect(barcode).not.toHaveAttribute('readonly');
-    expect(barcode).toHaveAccessibleDescription(
-      /^Changing it turns off the updates from Open Food Facts for this ingredient/,
-    );
-  });
-
-  it('shows the plain barcode hint for an ingredient typed by hand', async () => {
+  it('shows the barcode’s digit counts as a placeholder, not as a hint', async () => {
     const { user } = renderDetail();
 
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
-    expect(within(dialog).getByLabelText('Barcode')).toHaveAccessibleDescription(
-      'Optional: the 8, 12 or 13 digits under the bars.',
-    );
+    const barcode = within(dialog).getByLabelText('Barcode');
+    expect(barcode).toHaveAttribute('placeholder', '8, 12 or 13 digits');
+    expect(barcode).not.toHaveAccessibleDescription();
   });
 
   it('shows "not found" for an ingredient that is gone', async () => {

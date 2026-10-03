@@ -64,11 +64,11 @@ function renderSearch(routes: Record<string, unknown> = {}) {
 
 type User = ReturnType<typeof renderApp>['user'];
 
-/** Opens "New ingredient" with `name` typed, then the search dialog. */
+/** Opens "New ingredient" with `name` typed, then the search dialog from the magnifier. */
 async function openSearch(user: User, name = 'Milch') {
   await user.click(await screen.findByTestId(testIds.newIngredient));
   const form = await screen.findByTestId(testIds.ingredientForm);
-  await user.type(within(form).getByLabelText('Name'), name);
+  if (name) await user.type(within(form).getByLabelText('Name'), name);
   await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
   return screen.findByTestId(testIds.offSearchDialog);
 }
@@ -81,25 +81,42 @@ function searches(fetchMock: ReturnType<typeof mockApi>) {
 }
 
 describe('OffSearchDialog', () => {
-  it('searches only when asked to, never while typing (BAR-08)', async () => {
+  it('searches the typed name at once, then only when asked to, never while typing (BAR-08, BAR-11)', async () => {
     const { fetchMock, user } = renderSearch();
     const dialog = await openSearch(user);
 
+    // Tapping the magnifier is the explicit action: the name typed so far is searched at once.
     const field = within(dialog).getByLabelText('Product name or brand');
     expect(field).toHaveValue('Milch');
+    await within(dialog).findAllByTestId(testIds.offSearchResult);
+    expect(searches(fetchMock)).toEqual([{ q: 'Milch', page: '1' }]);
     await user.type(field, ' Weidehof');
     // A pause in typing sends nothing.
     await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(searches(fetchMock)).toEqual([]);
+    expect(searches(fetchMock)).toHaveLength(1);
 
     await user.type(field, '{Enter}');
-    await waitFor(() => expect(searches(fetchMock)).toEqual([{ q: 'Milch Weidehof', page: '1' }]));
+    await waitFor(() =>
+      expect(searches(fetchMock)).toEqual([
+        { q: 'Milch', page: '1' },
+        { q: 'Milch Weidehof', page: '1' },
+      ]),
+    );
     await within(dialog).findAllByTestId(testIds.offSearchResult);
     // Enter in the search field must not save the ingredient form behind the dialog.
     expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
 
     await user.click(within(dialog).getByRole('button', { name: 'Search' }));
-    await waitFor(() => expect(searches(fetchMock)).toHaveLength(2));
+    await waitFor(() => expect(searches(fetchMock)).toHaveLength(3));
+  });
+
+  it('opens with an empty search field when no name is typed (BAR-11)', async () => {
+    const { fetchMock, user } = renderSearch();
+    const dialog = await openSearch(user, '');
+
+    expect(within(dialog).getByLabelText('Product name or brand')).toHaveValue('');
+    expect(within(dialog).getByRole('button', { name: 'Search' })).toBeDisabled();
+    expect(searches(fetchMock)).toEqual([]);
   });
 
   it('needs at least two characters', async () => {
@@ -116,7 +133,6 @@ describe('OffSearchDialog', () => {
       'GET /api/ingredients/off-search': page([found({ ...MILK, name: '<b>Milch</b>' })]),
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
 
     const [result] = await within(dialog).findAllByTestId(testIds.offSearchResult);
     expect(result).toHaveTextContent('<b>Milch</b> (Weidehof)1 l · 64 kcal per 100 ml');
@@ -125,13 +141,12 @@ describe('OffSearchDialog', () => {
     );
   });
 
-  it('fills the form with the chosen product, which is saved in one request (BAR-04)', async () => {
+  it('fills the form with the chosen product, saved in one request with its pack size (BAR-04, D-38)', async () => {
     const created = ingredient({ id: 'ing-vollmilch', name: 'Frische Vollmilch 3,5 %' });
     const { fetchMock, user, router } = renderSearch({
       'POST /api/ingredients': Response.json(created, { status: 201 }),
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
     await user.click(first!);
 
@@ -146,8 +161,8 @@ describe('OffSearchDialog', () => {
     expect(within(form).getByLabelText('Calories')).toHaveValue('64');
     expect(within(form).getByLabelText('Barcode')).toHaveValue('4006381333931');
     expect(within(form).getByLabelText('Barcode')).toHaveAttribute('readonly');
-    expect(within(form).getByLabelText('Package size as printed')).toBeVisible();
-    expect(within(form).getByLabelText('Package size as printed')).toHaveValue('1 l');
+    // The barcode belongs to the values: the scan icon can't replace it.
+    expect(within(form).getByRole('button', { name: 'Scan barcode' })).toBeDisabled();
     expect(within(form).getByTestId(testIds.offAttribution)).toBeVisible();
     // Another product can still be chosen instead.
     expect(within(form).getByTestId(testIds.offSearchButton)).toBeVisible();
@@ -178,7 +193,6 @@ describe('OffSearchDialog', () => {
       'POST /api/ingredients': Response.json(ingredient({ id: 'ing-oats' }), { status: 201 }),
     });
     const dialog = await openSearch(user, 'Haferflocken');
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
     await user.click(first!);
 
@@ -214,7 +228,6 @@ describe('OffSearchDialog', () => {
       'POST /api/ingredients': Response.json(ingredient({ id: 'ing-new' }), { status: 201 }),
     });
     const dialog = await openSearch(user, 'Hafermilch');
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
     await user.click(first!);
 
@@ -247,7 +260,6 @@ describe('OffSearchDialog', () => {
     await user.type(within(form).getByLabelText('Name'), 'Milch');
     await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
     let dialog = await screen.findByTestId(testIds.offSearchDialog);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
 
     // Without a guess, the user's category stays …
     await user.click((await within(dialog).findAllByTestId(testIds.offSearchResult))[1]!);
@@ -257,7 +269,6 @@ describe('OffSearchDialog', () => {
     // … while a product's guess replaces it.
     await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
     dialog = await screen.findByTestId(testIds.offSearchDialog);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     await user.click((await within(dialog).findAllByTestId(testIds.offSearchResult))[0]!);
     await waitFor(() => expect(category).toHaveValue('cat-dairy_eggs'));
   });
@@ -267,7 +278,6 @@ describe('OffSearchDialog', () => {
       'GET /api/ingredients/ing-known': ingredient({ ...KNOWN, id: 'ing-known' }),
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
 
     const known = await within(dialog).findByRole('link', { name: /^Vollmilch \(Alpenhof\)/ });
     expect(known).toHaveTextContent('Already in MealMate');
@@ -280,7 +290,6 @@ describe('OffSearchDialog', () => {
   it('says when nothing is found; the values can still be typed', async () => {
     const { user } = renderSearch({ 'GET /api/ingredients/off-search': page([]) });
     const dialog = await openSearch(user, 'Quittenbrot');
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
 
     expect(await within(dialog).findByTestId(testIds.offSearchEmpty)).toHaveTextContent(
       'Nothing found – try brand and product name, or enter the values yourself.',
@@ -302,7 +311,6 @@ describe('OffSearchDialog', () => {
       },
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
 
     expect(await within(dialog).findByText('Open Food Facts is slow – try again.')).toBeVisible();
     await user.click(within(dialog).getByRole('button', { name: 'Try again' }));
@@ -321,7 +329,6 @@ describe('OffSearchDialog', () => {
           : page([found(OATS)], { page: 2 }),
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     await within(dialog).findAllByTestId(testIds.offSearchResult);
 
     await user.click(within(dialog).getByRole('button', { name: 'More results' }));
@@ -347,7 +354,6 @@ describe('OffSearchDialog', () => {
           : page([found(MILK), found(OATS)], { page: 2 }),
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     await within(dialog).findAllByTestId(testIds.offSearchResult);
 
     await user.click(within(dialog).getByRole('button', { name: 'More results' }));
@@ -373,7 +379,6 @@ describe('OffSearchDialog', () => {
       'GET /api/ingredients/off-search': page([found(proposal({ category_key: 'cheese' }))]),
     });
     const dialog = await openSearch(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
     const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
     await user.click(first!);
 
