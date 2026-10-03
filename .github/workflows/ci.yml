@@ -17,7 +17,7 @@ concurrency:
 
 env:
   UV_VERSION: "0.12.19"
-  NODE_VERSION: "24"
+  NODE_VERSION: "26"
 
 jobs:
   backend:
