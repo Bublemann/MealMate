@@ -27,7 +27,7 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@eslint/js"
         update-types: ["version-update:semver-major"]
-      # Types follow the Node LTS line the app runs on (26); bump together with Node.
+      # Types follow the Node line the app runs on (26); bump together with Node.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       # openapi-typescript 7 wants TypeScript 5; typescript-eslint 8 supports TypeScript < 6.1, and
@@ -35,6 +35,11 @@ updates:
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
 
+  # Node majors are not skipped: from Node 27 on, every major becomes LTS (one a year). A major
+  # still arrives here as "Current", about half a year before its LTS date in October; Docker
+  # cooldowns can't hold majors back that long. Move to it in one go: the Dockerfile and compose
+  # PRs, NODE_VERSION in ci.yml, @types/node, and the Node version in frontend/README.md and
+  # docs/plan.md.
   - package-ecosystem: docker
     directory: /
     schedule:
@@ -44,9 +49,6 @@ updates:
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
-    # From Node 27 on, every major becomes LTS (one a year), so none is skipped. A major arrives
-    # here as "Current", about half a year before its LTS date in October. Move to it together with
-    # the compose PR, NODE_VERSION in ci.yml and @types/node.
 
   # The node image of compose.dev.yml (the same digest as the Dockerfile's).
   - package-ecosystem: docker-compose
