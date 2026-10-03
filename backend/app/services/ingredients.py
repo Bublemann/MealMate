@@ -19,9 +19,10 @@ deletion (and is shown as the usage), and `on_ingredients_merged` repoints them 
 A base-unit change or a merge that would leave amounts not fitting (`amounts_that_would_not_fit`)
 asks first (`_check_amounts_fit`, D-33).
 
-Since D-32 an ingredient has no density, and a piece weight only when it is counted in pieces.
-A g or ml ingredient may still have both stored from before; they stay in their columns for the
-base-unit migration (D-34), but are never shown, taken or used to calculate (`attrs()`).
+Since D-32 an ingredient has no density, and a piece weight only when it is counted in pieces:
+migration 0014 dropped the density and cleared the piece weight of g and ml ingredients (D-34).
+A piece weight on a g or ml ingredient would still never be shown, taken or used to calculate
+(`attrs()`).
 """
 
 from collections.abc import Callable, Sequence
@@ -309,11 +310,10 @@ async def update_ingredient(
     their pending values go (BAR-04, BAR-06); a base unit whose values are per 100 of something
     else (g or ml) drops the pending nutrients, and a change to or from `piece` clears the piece
     weight unless one is sent along to `piece` (ING-02). A piece weight is refused unless the
-    ingredient is, or becomes, counted in pieces; a null one is ignored then, so the one a g or
-    ml ingredient has from before D-32 stays for the migration. A base-unit change that would
-    leave amounts that fit now not fitting (`stops_fitting`) changes nothing unless the request
-    accepts that (D-33). Clearing or changing the barcode makes it a manual ingredient
-    (`_make_manual`)."""
+    ingredient is, or becomes, counted in pieces; a null one is ignored then. A base-unit change
+    that would leave amounts that fit now not fitting (`stops_fitting`) changes nothing unless
+    the request accepts that (D-33). Clearing or changing the barcode makes it a manual
+    ingredient (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     async with session.begin():
@@ -364,7 +364,7 @@ async def update_ingredient(
         if body.base_unit is not None and body.base_unit != row.base_unit:
             old, new = BaseUnit(row.base_unit), BaseUnit(body.base_unit)
             # Leaving pieces drops the piece weight; coming to pieces takes only one sent along,
-            # not the hidden one a g or ml ingredient may have from before D-32.
+            # never a hidden one of a g or ml ingredient (none since migration 0014, D-34).
             if BaseUnit.PIECE in (old, new):
                 row.piece_weight_g = None
             if NUTRITION_BASIS[old] != NUTRITION_BASIS[new]:

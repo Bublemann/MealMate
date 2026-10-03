@@ -233,7 +233,7 @@ async def test_amounts_that_do_not_fit_sit_beside_the_rest(
     app: FastAPI, api: AsyncClient, anna: Account, ingredients: dict[str, Any]
 ) -> None:
     """AGG-03, D-33: "500 g + 2 Stk." for rolls counted in grams since their pieces were added;
-    a piece weight or density they still have from before D-32 converts nothing."""
+    a piece weight they still have from before D-32 converts nothing."""
     rolls = ingredients["Brötchen"]
     shopping_list = await create_list(api, anna)
     await extra_added(api, anna, shopping_list["id"], ingredient_id=rolls["id"], amount=2)
@@ -244,7 +244,7 @@ async def test_amounts_that_do_not_fit_sit_beside_the_rest(
     [item] = body["extra_items"]
     assert (item["base_unit"], item["unit_fits"]) == ("g", False)
 
-    await set_stored(app, rolls["id"], piece_weight_g=50, density_g_per_ml=0.3)
+    await set_stored(app, rolls["id"], piece_weight_g=50)
     body = await detail(api, anna, shopping_list["id"])
     assert lines(body)["Brötchen"] == ([(500, "g"), (2, "piece")], False)
 
