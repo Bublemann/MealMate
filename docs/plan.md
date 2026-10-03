@@ -598,7 +598,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 
 ### 10.3 Production image (`Dockerfile`)
 
-1. `frontend-build` (node:24-slim): `npm ci`, `npm run build` → `/frontend/dist`.
+1. `frontend-build` (node:26-slim): `npm ci`, `npm run build` → `/frontend/dist`.
 2. `backend-build` (python:3.14-slim@digest): `uv sync --frozen --no-dev` into `/opt/venv`.
 3. `runtime` (python:3.14-slim@digest):
    - copies the venv, the app, the Alembic files, the frontend `dist` and `deploy/` (to `/opt/mealmate/deploy`, the verified source of host files, § 11.5);
