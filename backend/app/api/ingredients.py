@@ -73,7 +73,7 @@ async def lookup_barcode(
     background: BackgroundTasks,
     now: Now,
     barcode: Annotated[str, Query(max_length=BARCODE_INPUT_MAX_LENGTH)],
-    own_only: bool = False,
+    own_only: Annotated[bool, Query()] = False,
 ) -> BarcodeLookup:
     """Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a
     proposal, not saved). With `own_only`, only our own ingredients: `none` then means that

@@ -79,6 +79,9 @@ const BarcodeScanDialog = lazy(() =>
 );
 
 const BASE_UNITS: readonly BaseUnit[] = ['g', 'ml', 'piece'];
+/** A link inside a hint or notice, as tall as a button. */
+const INLINE_LINK =
+  'inline-flex min-h-(--tap-target) items-center rounded-md px-2 font-medium text-primary underline underline-offset-4';
 /** The paths whose server errors are shown next to an input; others go to the alert. */
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'name',
@@ -154,9 +157,8 @@ export interface IngredientFormProps {
   /** Prefills the name of a new ingredient (e.g. from a search). */
   initialName?: string;
   /**
-   * Starts a new ingredient from a looked-up barcode no ingredient has (the scan flow, BAR-03):
-   * its barcode and, if Open Food Facts knows it, the proposed values. The barcode counts as
-   * scanned, so the similar-ingredients hint can attach it.
+   * Starts a new ingredient from a looked-up barcode (the scan flow, BAR-03): its barcode and,
+   * if Open Food Facts knows it, the proposed values.
    */
   prefill?: Prefill;
   /** Called with the saved ingredient, after `onClose`. */
@@ -239,7 +241,7 @@ export function IngredientForm({
   const lookup = useBarcodeLookup();
   // The last scanned barcode that no ingredient has: while it is in the field, the similar hint
   // can attach it to a match without one (BAR-03).
-  const [scanned, setScanned] = useState<string | null>(prefill?.barcode ?? null);
+  const [scanned, setScanned] = useState<string | null>(null);
 
   // Neither a deleted category nor *Uncategorized* can be picked (ING-02, D-30).
   const pickable = pickableCategories(categories.data ?? []);
@@ -267,7 +269,7 @@ export function IngredientForm({
   // A new barcode would bring another product's values, so the server ends the updates.
   const offBarcodeChanged = ingredient?.source === 'off' && barcode !== (ingredient.barcode ?? '');
   const scanNotice = scanNoticeState(lookup, ingredient);
-  const attachable = !ingredient && scanned !== null && barcode === scanned ? scanned : null;
+  const attachBarcode = !ingredient && scanned !== null && barcode === scanned ? scanned : null;
 
   function set<K extends keyof FormValues>(field: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -285,7 +287,7 @@ export function IngredientForm({
 
   /**
    * Fills the form with a product (BAR-03, BAR-11). Where it has no value, what the user typed
-   * stays, but not what a product chosen before had.
+   * stays, but not the texts and nutrients of a product chosen before.
    */
   function fill(proposal: OffProposal) {
     const prefilled: Prefill = { barcode: proposal.barcode, proposal };
@@ -539,7 +541,7 @@ export function IngredientForm({
         <SimilarHint
           name={values.name}
           ingredient={ingredient}
-          attachable={attachable}
+          attachBarcode={attachBarcode}
           onPickExisting={onPickExisting && pickExisting}
           onNavigate={onClose}
         />
@@ -697,23 +699,23 @@ export function IngredientForm({
 /** The scan's notice, from the lookup's state; none when it filled the form or nothing ran. */
 function scanNoticeState(
   lookup: ReturnType<typeof useBarcodeLookup>,
-  editing: Ingredient | undefined,
+  edited: Ingredient | undefined,
 ): ScanNoticeState | null {
   const barcode = lookup.variables?.barcode ?? '';
   if (lookup.isPending) return { kind: 'lookingUp', barcode };
   if (lookup.isError) {
     if (fieldErrorCodes(lookup.error).barcode !== undefined) return { kind: 'invalid', barcode };
-    if (!editing && isOffSlow(lookup.error)) return { kind: 'slow', barcode };
+    if (!edited && isOffSlow(lookup.error)) return { kind: 'slow', barcode };
     return { kind: 'failed', error: lookup.error };
   }
   const result = lookup.data;
   if (!result) return null;
   if (result.found_in === 'db') {
     const owner = result.ingredient;
-    return owner && owner.id !== editing?.id ? { kind: 'known', ingredient: owner } : null;
+    return owner && owner.id !== edited?.id ? { kind: 'known', ingredient: owner } : null;
   }
   // When editing, the barcode is only filled in.
-  if (editing) return null;
+  if (edited) return null;
   if (result.off_unavailable) return { kind: 'slow', barcode: result.barcode };
   return result.found_in === 'none' ? { kind: 'notFound' } : null;
 }
@@ -786,7 +788,7 @@ function ScanNotice({ state, onRetry, onPickExisting, onNavigate }: ScanNoticePr
           aria-describedby={textId}
           data-testid={testIds.ingredientScanOpen}
           onClick={onNavigate}
-          className="inline-flex min-h-(--tap-target) items-center rounded-md px-2 font-medium text-primary underline underline-offset-4"
+          className={INLINE_LINK}
         >
           {t('ingredients.scan.open')}
         </Link>
@@ -821,7 +823,7 @@ interface SimilarHintProps {
   name: string;
   ingredient?: Ingredient;
   /** A scanned barcode no ingredient has, while it is in the field (BAR-03). */
-  attachable: string | null;
+  attachBarcode: string | null;
   onPickExisting?: (ingredient: IngredientSummary) => void;
   onNavigate: () => void;
 }
@@ -836,7 +838,7 @@ interface SimilarHintProps {
 function SimilarHint({
   name,
   ingredient,
-  attachable,
+  attachBarcode,
   onPickExisting,
   onNavigate,
 }: SimilarHintProps) {
@@ -878,7 +880,8 @@ function SimilarHint({
           <ul className="flex flex-wrap gap-2">
             {matches.map((match) => {
               const label = ingredientLabel(match.name, match.brand);
-              const barcode = match.barcode ? null : attachable;
+              // A match with a barcode of its own is another package (D-21).
+              const toAttach = match.barcode ? null : attachBarcode;
               return (
                 <li key={match.id}>
                   {onPickExisting ? (
@@ -888,18 +891,18 @@ function SimilarHint({
                       variant="outline"
                       disabled={link.isPending}
                       onClick={() =>
-                        barcode === null ? onPickExisting(match) : attach(match, barcode)
+                        toAttach === null ? onPickExisting(match) : attach(match, toAttach)
                       }
                     >
                       {t('ingredients.similar.use', { name: label })}
                     </Button>
-                  ) : barcode !== null ? (
+                  ) : toAttach !== null ? (
                     <Button
                       type="button"
                       size="compact"
                       variant="outline"
                       disabled={link.isPending}
-                      onClick={() => attach(match, barcode)}
+                      onClick={() => attach(match, toAttach)}
                     >
                       {t('ingredients.similar.attach', { name: label })}
                     </Button>
@@ -907,7 +910,7 @@ function SimilarHint({
                     <Link
                       to={`/ingredients/${match.id}`}
                       onClick={onNavigate}
-                      className="inline-flex min-h-(--tap-target) items-center rounded-md px-2 font-medium text-primary underline underline-offset-4"
+                      className={INLINE_LINK}
                     >
                       {label}
                     </Link>

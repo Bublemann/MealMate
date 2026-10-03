@@ -115,9 +115,9 @@ export function valuesFromPrefill(
 }
 
 /**
- * The form as the user typed it, without the texts and nutrients an earlier proposal filled in
- * (`proposed` is its `proposalValues`) and the user left as they were: a product chosen instead
- * keeps only what was typed, not what another product had (BAR-03).
+ * The form without the texts and nutrients an earlier proposal filled in (`proposed` is its
+ * `proposalValues`) and the user left as they were: a product chosen instead keeps only the ones
+ * the user typed, so another product's values are never saved as user-edited (BAR-03, BAR-04).
  */
 export function typedValues(values: FormValues, proposed: FormValues): FormValues {
   const typed: FormValues = { ...values, nutrients: { ...values.nutrients } };

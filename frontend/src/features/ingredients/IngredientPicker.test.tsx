@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
@@ -242,7 +242,7 @@ describe('IngredientPicker, scanning in "New ingredient" (BAR-02, BAR-03)', () =
   });
 
   /** Types `name` into the picker and opens "New ingredient" for it. */
-  async function openNew(user: ReturnType<typeof userEvent.setup>, name: string) {
+  async function openNew(user: UserEvent, name: string) {
     await user.type(screen.getByLabelText('Search ingredient'), name);
     await user.click(await screen.findByTestId(testIds.ingredientPickerCreate));
     return screen.findByRole('dialog', { name: 'New ingredient' });
