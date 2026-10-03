@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-03 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38; finding uncategorized ingredients, ING-03 and REF-01) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 

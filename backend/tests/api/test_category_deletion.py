@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.models import AdminEvent, ListExtraItem
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import category_ids, create_ingredient
+from tests.catalog import category_ids, create_ingredient, ingredient_counts, set_category
 from tests.lists import (
     add_extra,
     added,
@@ -105,11 +105,6 @@ async def listed(api: AsyncClient, user: Account) -> list[Any]:
     assert response.status_code == 200
     categories: list[Any] = response.json()
     return categories
-
-
-async def ingredient_counts(api: AsyncClient, user: Account) -> dict[str, int]:
-    """Each category's number of ingredients, by key."""
-    return {item["key"]: item["ingredient_count"] for item in await listed(api, user)}
 
 
 async def finished(api: AsyncClient, user: Account, list_id: str) -> Any:
@@ -295,12 +290,7 @@ async def test_uncategorized_counts_its_ingredients_until_each_has_a_new_categor
     counts = await ingredient_counts(api, anna)
     assert (counts["cheese"], counts["uncategorized"]) == (0, 2)
     for ingredient, left in ((feta, 1), (ingredients["Gouda"], 0)):
-        response = await api.patch(
-            f"/api/ingredients/{ingredient['id']}",
-            json={"category_id": categories["dairy_eggs"]},
-            headers=anna.headers,
-        )
-        assert response.status_code == 200, response.text
+        await set_category(api, anna, ingredient["id"], categories["dairy_eggs"])
         counts = await ingredient_counts(api, anna)
         assert (counts["uncategorized"], counts["dairy_eggs"]) == (left, 2 - left)
 

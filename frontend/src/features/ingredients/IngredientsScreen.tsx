@@ -24,10 +24,10 @@ import { IngredientName } from './IngredientName';
 /**
  * The Ingredients tab (ING-01, ING-03, UI-01, UI-03): the pinned block with the search (name and
  * brand), the filter panel (several categories, any of them, and *Uncategorized* while it holds
- * ingredients) and the "New ingredient" tile, which
- * offers to create what was searched for. Below it one list in the server's order (dictionary
- * order, best matches first when searching), one line when there are no ingredients yet, or "No
- * matches". The scanner is not linked from here (BAR-01).
+ * ingredients) and the "New ingredient" tile, which offers to create what was searched for. Below
+ * it one list in the server's order (dictionary order, best matches first when searching), one
+ * line when there are no ingredients yet, or "No matches". The scanner is not linked from here
+ * (BAR-01).
  */
 export function IngredientsScreen() {
   const { t } = useTranslation();

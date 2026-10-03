@@ -156,8 +156,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   error when they fail to load or a change fails. Ingredients offers the categories (any of them,
   ING-03), with _Uncategorized_ only while it holds ingredients or is ticked
   (`filterableCategories`: the category list counts each category's ingredients, and saving,
-  merging or deleting an ingredient loads it again); Meals the user filter (MEAL-10), the cuisines (any of them) and the tags (all of them,
-  MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
+  merging or deleting an ingredient loads it again); Meals the user filter (MEAL-10), the
+  cuisines (any of them) and the tags (all of them, MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
   (`features/savedFilters/`): `useUserFilterGroup`, one checkbox per user whose meals or lists are
   visible, "Me" first, then the partner, and `useStateFilterGroup`, "Entwurf", "Einkauf" and
   "Erledigt". They are saved on the server in the profile's `filter_hidden` (`useSaveFilter`,

@@ -346,25 +346,47 @@ def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> Non
 
 
 def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
-    """REF-01, D-30, ING-03: an admin deletes a category they added, after a confirmation naming
-    what moves. "Show" opens the Ingredients tab filtered to *Uncategorized*, where the ingredient
-    waits for a new category and gets one, while a done list keeps the deleted category's
-    heading."""
+    """REF-01, D-30, ING-03: an admin adds a category and gives it to an ingredient, then deletes
+    it after a confirmation naming what moves. "Show" opens the Ingredients tab filtered to
+    *Uncategorized*, where the ingredient waits for a new category and gets one, while a done
+    list keeps the deleted category's heading."""
     tag = unique("e2e")
     name = f"Cheese bar {tag}"
-    category = api.create_category(admin, f"Käsebar {tag}", name)
-    gouda = api.create_ingredient(admin, f"Gouda {tag}", category_id=category["id"])
-    done = api.create_list(admin, f"Delete {tag}")
-    api.add_extra_item(admin, done["id"], ingredient_id=gouda["id"], amount=200, unit="g")
-    api.start_shopping(admin, done["id"])
-    api.finish_list(admin, done["id"])
+    gouda = api.create_ingredient(admin, f"Gouda {tag}")
     [built_in] = [c for c in api.categories(admin) if c["key"] == "uncategorized"]
     uncategorized = built_in["names"]["en"]
     other = api.category_name(admin, "other")
 
+    # The admin adds a category and gives it to Gouda.
     sign_in(page.context, admin)
     page.goto("/me/admin/categories")
     order = page.get_by_test_id(TEST_IDS["adminCategoryList"])
+    page.get_by_test_id(TEST_IDS["newCategory"]).click()
+    dialog = page.get_by_role("dialog", name=text("admin.categories.new"))
+    dialog.get_by_label(text("admin.categories.nameDe"), exact=True).fill(f"Käsebar {tag}")
+    dialog.get_by_label(text("admin.categories.nameEn"), exact=True).fill(name)
+    dialog.get_by_role("button", name=text("common.save")).click()
+    expect(dialog).to_be_hidden()
+    expect(order.get_by_role("button", name=name, exact=True)).to_be_visible()
+    # Within the app: a reload right away could still show the categories as stored before.
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
+    search.fill(gouda["name"])
+    rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
+    rows.filter(has_text=gouda["name"]).click()
+    detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    form = page.get_by_test_id(TEST_IDS["ingredientForm"])
+    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=name)
+    form.get_by_role("button", name=text("common.save")).click()
+    expect(detail).to_contain_text(name)
+    # A done list keeps Gouda under that category.
+    done = api.create_list(admin, f"Delete {tag}")
+    api.add_extra_item(admin, done["id"], ingredient_id=gouda["id"], amount=200, unit="g")
+    api.start_shopping(admin, done["id"])
+    api.finish_list(admin, done["id"])
+
+    page.goto("/me/admin/categories")
     # *Uncategorized* is in the order, but has no dialog.
     expect(order.get_by_role("listitem").filter(has_text=uncategorized)).to_have_count(1)
     expect(order.get_by_role("button", name=uncategorized, exact=True)).to_have_count(0)
@@ -387,11 +409,9 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     show = text("admin.categories.showUncategorized")
     screen.get_by_role("button", name=show, exact=True).click()
     expect(page.get_by_test_id(TEST_IDS["screenIngredients"])).to_be_visible()
-    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
     expect(search).to_have_value("")
     button = page.get_by_test_id(TEST_IDS["filterButton"])
     expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
-    rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
     row = rows.filter(has_text=gouda["name"])
     expect(row).to_contain_text(uncategorized)
     button.click()
@@ -402,10 +422,8 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
 
     # Anyone can give it a new category; until then its detail and form show "Uncategorized".
     row.click()
-    detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
     expect(detail).to_contain_text(uncategorized)
     page.get_by_test_id(TEST_IDS["editIngredient"]).click()
-    form = page.get_by_test_id(TEST_IDS["ingredientForm"])
     field = form.get_by_label(text("ingredients.field.category"), exact=True)
     expect(field).to_have_value(built_in["id"])
     expect(field.get_by_role("option", name=uncategorized, exact=True)).to_be_disabled()

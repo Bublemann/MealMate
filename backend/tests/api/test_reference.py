@@ -12,7 +12,7 @@ from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.domain.text import normalize
 from app.models import AdminEvent, Cuisine, Tag
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import category_ids, create_ingredient
+from tests.catalog import category_ids, create_ingredient, ingredient_counts, set_category
 
 CATALOG_ROUTES = [
     ("GET", "/api/categories"),
@@ -103,23 +103,18 @@ async def test_categories_count_their_ingredients(
     await create_ingredient(api, anna, "Feta", category_id=categories["cheese"])
     await create_ingredient(api, anna, "Salz")
 
-    listed = await listed_categories(api, anna)
+    counts = await ingredient_counts(api, anna)
 
-    counts = {item["key"]: item["ingredient_count"] for item in listed}
     assert counts == {**dict.fromkeys(CATEGORY_KEYS, 0), "cheese": 2, "other": 1}
+    listed = await listed_categories(api, anna)
     reordered = await put_order(api, admin, [item["id"] for item in listed])
     assert reordered.json() == listed
     renamed = await patch_category(api, admin, categories["cheese"], "Käsetheke", "Cheese counter")
     assert renamed.json()["ingredient_count"] == 2
 
-    moved = await api.patch(
-        f"/api/ingredients/{gouda['id']}",
-        json={"category_id": categories["dairy_eggs"]},
-        headers=anna.headers,
-    )
+    await set_category(api, anna, gouda["id"], categories["dairy_eggs"])
 
-    assert moved.status_code == 200, moved.text
-    counts = {item["key"]: item["ingredient_count"] for item in await listed_categories(api, anna)}
+    counts = await ingredient_counts(api, anna)
     assert (counts["cheese"], counts["dairy_eggs"]) == (1, 1)
 
 

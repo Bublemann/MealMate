@@ -54,7 +54,7 @@ def category(row: CategoryRow, ingredient_count: int) -> Category:
     )
 
 
-async def _categories_in_order(session: AsyncSession) -> list[Category]:
+async def _listed_categories(session: AsyncSession) -> list[Category]:
     """Every category, deleted ones included (D-30), in order, with its number of ingredients."""
     counts = await ingredients_repo.counts_by_category(session)
     return [
@@ -77,7 +77,7 @@ def _cuisine_order(row: CuisineRow) -> tuple[int, int, str]:
 async def list_categories(session: AsyncSession) -> list[Category]:
     """Every category, deleted ones included (D-30), in order."""
     async with session.begin():
-        return await _categories_in_order(session)
+        return await _listed_categories(session)
 
 
 async def can_pick(session: AsyncSession, category_id: str, *, keeping: str | None = None) -> bool:
@@ -185,7 +185,7 @@ async def reorder_categories(
             now=now,
         )
         await session.flush()
-        return await _categories_in_order(session)
+        return await _listed_categories(session)
 
 
 def _taken_names(
@@ -237,7 +237,7 @@ async def create_category(
             details=_name_details(names),
         )
         await session.flush()
-        return category(row, 0)
+        return category(row, ingredient_count=0)
 
 
 async def rename_category(
@@ -272,7 +272,8 @@ async def rename_category(
                 details={**_name_details(old, "old_"), **_name_details(names)},
             )
         await session.flush()
-        return category(row, await ingredients_repo.count_in_category(session, row.id))
+        count = await ingredients_repo.count_in_category(session, row.id)
+        return category(row, ingredient_count=count)
 
 
 async def category_usage(session: AsyncSession, category_id: str) -> CategoryUsage:

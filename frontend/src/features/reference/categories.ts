@@ -31,10 +31,9 @@ export function pickableCategories<C extends CategoryState>(categories: readonly
  * and *Uncategorized* at its place while it holds ingredients, or while it is among `checked`, so
  * that it can be unticked. Never a deleted category (D-30).
  */
-export function filterableCategories(
-  categories: readonly Category[],
-  checked: readonly string[],
-): Category[] {
+export function filterableCategories<
+  C extends CategoryState & Pick<Category, 'id' | 'ingredient_count'>,
+>(categories: readonly C[], checked: readonly string[]): C[] {
   return notDeletedCategories(categories).filter(
     (category) =>
       category.key !== UNCATEGORIZED_KEY ||
