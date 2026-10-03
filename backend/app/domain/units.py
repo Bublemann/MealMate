@@ -1,14 +1,18 @@
-"""Units and conversion into an ingredient's base unit (REF-02, NUT-05, plan § 5.6).
+"""Units, which units fit an ingredient, and conversion into its base unit (REF-02, NUT-05,
+plan § 5.6).
 
 Every unit has a kind (mass, volume, count) and a factor to the base unit of its kind (g, ml,
-piece). An ingredient counted in pieces (base unit `piece`, D-32) takes only pieces: grams or
-millilitres don't say how many pieces they are. For a g or ml ingredient, crossing kinds needs
-its attributes: piece weight for pieces, density for g↔ml. Spoons of a g-based ingredient
-without a density may be counted as 1 g/ml, flagged as an estimate; nutrition allows that
-(NUT-05), aggregation does not (AGG-03).
+piece). An ingredient's base unit decides which units its amounts can use (`fits`, D-32):
+grams take g, kg and spoons, millilitres ml, l and spoons, pieces only pieces. Nothing converts
+between grams, millilitres and pieces for a live ingredient: its attributes
+(`IngredientAttrs.live`) carry no density, and a piece weight only when it is counted in
+pieces. Meals and extra items frozen before D-32 copied a piece weight and density along with a
+g or ml base unit, and keep converting across kinds with them (LIST-11). Spoons of a g
+ingredient without a density may be counted as 1 g/ml, flagged as an estimate; nutrition allows
+that (NUT-05), aggregation does not (AGG-03).
 
-Adding a unit: add it to `Unit` (the order is the display order), `UNIT_KIND` and `UNIT_FACTOR`,
-add its translation `unit.<unit>`, and extend the tests (MNT-06).
+Adding a unit: add it to `Unit` (the order is the display order), `UNIT_KIND`, `UNIT_FACTOR` and
+`FITTING_UNITS`, add its translation `unit.<unit>`, and extend the tests (MNT-06).
 """
 
 from collections.abc import Mapping
@@ -72,6 +76,14 @@ SPOONS = frozenset({Unit.TBSP, Unit.TSP})
 BASE_KIND: Mapping[BaseUnit, UnitKind] = MappingProxyType(
     {BaseUnit.G: UnitKind.MASS, BaseUnit.ML: UnitKind.VOLUME, BaseUnit.PIECE: UnitKind.COUNT}
 )
+# The units an ingredient's amounts may use, by its base unit (REF-02, D-32).
+FITTING_UNITS: Mapping[BaseUnit, frozenset[Unit]] = MappingProxyType(
+    {
+        BaseUnit.G: frozenset({Unit.G, Unit.KG, Unit.TBSP, Unit.TSP}),
+        BaseUnit.ML: frozenset({Unit.ML, Unit.L, Unit.TBSP, Unit.TSP}),
+        BaseUnit.PIECE: frozenset({Unit.PIECE}),
+    }
+)
 # What an ingredient's nutrition values are per 100 of: g, or ml for an ml ingredient (ING-02).
 NUTRITION_BASIS: Mapping[BaseUnit, BaseUnit] = MappingProxyType(
     {BaseUnit.G: BaseUnit.G, BaseUnit.ML: BaseUnit.ML, BaseUnit.PIECE: BaseUnit.G}
@@ -93,6 +105,14 @@ class IngredientAttrs:
     def __post_init__(self) -> None:
         object.__setattr__(self, "base_unit", BaseUnit(self.base_unit))
 
+    @classmethod
+    def live(cls, base_unit: BaseUnit | str, piece_weight_g: float | None) -> IngredientAttrs:
+        """A live ingredient's attributes (D-32): no density, and its piece weight only when it
+        is counted in pieces, so nothing converts across kinds. A g or ml ingredient may still
+        have both stored from before; they are left out."""
+        base = BaseUnit(base_unit)
+        return cls(base, piece_weight_g if base == BaseUnit.PIECE else None, None)
+
 
 @dataclass(frozen=True)
 class Converted:
@@ -100,6 +120,15 @@ class Converted:
 
     value: float
     estimate: bool
+
+
+def fits(amount: float | None, unit: Unit | str | None, base_unit: BaseUnit | str) -> bool:
+    """Whether an amount fits an ingredient counted in `base_unit` (REF-02): its unit is one of
+    `FITTING_UNITS`. A row without an amount fits every base unit; an amount without a unit
+    counts as pieces. Units and base units may be given as the plain strings rows store."""
+    if amount is None:
+        return True
+    return Unit(unit or Unit.PIECE) in FITTING_UNITS[BaseUnit(base_unit)]
 
 
 def in_kind_base(amount: float, unit: Unit) -> float:
@@ -126,6 +155,8 @@ def convert(
     - volume: to ml by factor; to g by multiplying with the density. Without one, spoons count
       as 1 g/ml if `allow_estimate` (the result is flagged), ml and l stay unconvertible;
     - pieces: need the piece weight (to g), and for an ml ingredient also the density.
+
+    Only attributes frozen before D-32 have a density, or a piece weight with g or ml.
     """
     value = in_kind_base(amount, unit)
     if attrs.base_unit == BaseUnit.PIECE:

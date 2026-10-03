@@ -16,6 +16,10 @@ On an ingredient from Open Food Facts (`source` off), every Open Food Facts fiel
 
 References from meals and lists go through `services.hooks`: `ingredient_references` blocks
 deletion (and is shown as the usage), and `on_ingredients_merged` repoints them when merging.
+
+Since D-32 an ingredient has no density, and a piece weight only when it is counted in pieces.
+A g or ml ingredient may still have both stored from before; they stay in their columns for the
+base-unit migration (D-34), but are never shown, taken or used to calculate (`attrs()`).
 """
 
 from collections.abc import Sequence
@@ -112,8 +116,7 @@ async def detail(session: AsyncSession, row: IngredientRow) -> Ingredient:
         barcode=row.barcode,
         category_id=row.category_id,
         base_unit=base_unit_name(row.base_unit),
-        piece_weight_g=row.piece_weight_g,
-        density_g_per_ml=row.density_g_per_ml,
+        piece_weight_g=row.attrs().piece_weight_g,
         nutrients=NutrientValues.model_validate(row.nutrients()),
         quantity_text=row.quantity_text,
         pack_quantity=row.pack_quantity,
@@ -149,6 +152,13 @@ async def _check_barcode_free(
         raise ApiError(
             ErrorCode.INGREDIENT_BARCODE_TAKEN, status_code=409, params={"ingredient_id": owner}
         )
+
+
+def _piece_weight_problem(piece_weight_g: float | None, base_unit: str) -> FieldProblem | None:
+    """Only an ingredient counted in pieces takes a piece weight (ING-02, D-32)."""
+    if piece_weight_g is not None and base_unit != BaseUnit.PIECE:
+        return FieldProblem(("body", "piece_weight_g"), FieldErrorCode.INVALID)
+    return None
 
 
 async def _category_problem(session: AsyncSession, category_id: str) -> FieldProblem | None:
@@ -216,6 +226,8 @@ async def create_ingredient(
         problems: list[FieldProblem] = []
         if from_off and barcode is None:
             problems.append(FieldProblem(("body", "barcode"), FieldErrorCode.REQUIRED))
+        if problem := _piece_weight_problem(body.piece_weight_g, body.base_unit):
+            problems.append(problem)
         if body.category_id is not None and (
             problem := await _category_problem(session, body.category_id)
         ):
@@ -230,7 +242,6 @@ async def create_ingredient(
             category_id=body.category_id or await _other_category_id(session),
             base_unit=body.base_unit,
             piece_weight_g=body.piece_weight_g,
-            density_g_per_ml=body.density_g_per_ml,
             quantity_text=body.quantity_text,
             pack_quantity=body.pack_quantity,
             pack_unit=None if body.pack_unit is None else body.pack_unit.value,
@@ -283,7 +294,9 @@ async def update_ingredient(
     ingredient from Open Food Facts, the Open Food Facts fields sent become user-edited and
     their pending values go (BAR-04, BAR-06); a base unit whose values are per 100 of something
     else (g or ml) drops the pending nutrients, and leaving `piece` clears the piece weight
-    unless one is sent along (ING-02). Clearing or changing the barcode makes it a manual ingredient
+    (ING-02). A piece weight is refused unless the ingredient is, or becomes, counted in pieces;
+    a null one is ignored then, so the one a g or ml ingredient has from before D-32 stays for
+    the migration. Clearing or changing the barcode makes it a manual ingredient
     (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
@@ -291,10 +304,16 @@ async def update_ingredient(
         row = await ingredients_repo.get(session, ingredient_id)
         if row is None:
             raise not_found()
+        base_unit = body.base_unit or row.base_unit
+        problems: list[FieldProblem] = []
         if body.category_id is not None and (
             problem := await _category_problem(session, body.category_id)
         ):
-            raise validation_error([problem])
+            problems.append(problem)
+        if problem := _piece_weight_problem(body.piece_weight_g, base_unit):
+            problems.append(problem)
+        if problems:
+            raise validation_error(problems)
         if barcode is not None:
             await _check_barcode_free(session, barcode, except_id=row.id)
 
@@ -325,10 +344,8 @@ async def update_ingredient(
             if NUTRITION_BASIS[old] != NUTRITION_BASIS[new]:
                 decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
             row.base_unit = body.base_unit
-        if "piece_weight_g" in sent:
+        if "piece_weight_g" in sent and base_unit == BaseUnit.PIECE:
             row.piece_weight_g = body.piece_weight_g
-        if "density_g_per_ml" in sent:
-            row.density_g_per_ml = body.density_g_per_ml
         if "barcode" in sent and barcode != row.barcode:
             row.barcode = barcode
             if row.source == "off":

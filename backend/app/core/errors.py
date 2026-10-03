@@ -103,6 +103,8 @@ class FieldErrorCode(StrEnum):
     TAKEN = "taken"
     TOO_COMMON = "too_common"
     SAME_AS_USERNAME = "same_as_username"
+    # An amount whose unit doesn't fit its ingredient's base unit (REF-02).
+    UNIT_MISMATCH = "unit_mismatch"
 
 
 # A plain alias (not a `type` statement) so the OpenAPI schema inlines the union.

@@ -41,10 +41,10 @@ from app.domain.lists import (
     raised_servings,
 )
 from app.domain.reference import OTHER_CATEGORY
-from app.domain.units import Unit
+from app.domain.units import BaseUnit, Unit, fits
 from app.media import urls as media_urls
 from app.media.store import MediaStore
-from app.models import ListExtraItem, ListLineState, ListMeal, ShoppingList
+from app.models import Ingredient, ListExtraItem, ListLineState, ListMeal, ShoppingList
 from app.models import Meal as MealRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
@@ -67,6 +67,7 @@ from app.schemas.lists import (
 from app.schemas.users import UserRef
 from app.services import access, aggregation, detach, shopping
 from app.services.access import ListRights
+from app.services.ingredients import base_unit_name
 from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
 from app.services.users import hidden_by, user_refs
@@ -149,13 +150,20 @@ def _meal_entry(
     )
 
 
-def _extra_item(row: ListExtraItem, refs: Mapping[str, UserRef]) -> ExtraItem:
+def _extra_item(
+    content: aggregation.ListContent, row: ListExtraItem, refs: Mapping[str, UserRef]
+) -> ExtraItem:
+    base_unit = (
+        None if row.ingredient_id is None else aggregation.extra_attrs(content, row).base_unit
+    )
     return ExtraItem(
         id=row.id,
         ingredient_id=row.ingredient_id,
         text=row.text,
         amount=row.amount,
         unit=None if row.unit is None else Unit(row.unit),
+        base_unit=None if base_unit is None else base_unit_name(base_unit),
+        unit_fits=base_unit is None or fits(row.amount, row.unit, base_unit),
         amount_text=row.amount_text,
         category_id=row.category_id,
         added_by=None if row.added_by is None else refs.get(row.added_by),
@@ -213,7 +221,7 @@ async def list_detail(
             for row in list_meals
         ],
         lines=aggregation.lines(content, shopping_list, private_meals=private, refs=refs),
-        extra_items=[_extra_item(row, refs) for row in extras],
+        extra_items=[_extra_item(content, row, refs) for row in extras],
     )
 
 
@@ -654,13 +662,24 @@ def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
 
 async def _reference_problems(
     session: AsyncSession, *, ingredient_id: str | None, category_id: str | None
-) -> list[FieldProblem]:
+) -> tuple[list[FieldProblem], Ingredient | None]:
+    """Unknown references, and the ingredient if one was given and found."""
     problems = []
-    if ingredient_id is not None and await ingredients_repo.get(session, ingredient_id) is None:
-        problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
+    ingredient = None
+    if ingredient_id is not None:
+        ingredient = await ingredients_repo.get(session, ingredient_id)
+        if ingredient is None:
+            problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
     if category_id is not None and await reference_repo.get_category(session, category_id) is None:
         problems.append(_field("category_id", FieldErrorCode.INVALID))
-    return problems
+    return problems, ingredient
+
+
+def _unit_problems(
+    amount: float | None, unit: Unit | str | None, base_unit: BaseUnit | str
+) -> list[FieldProblem]:
+    """A linked item's unit must fit its ingredient's base unit (REF-02, LIST-06)."""
+    return [] if fits(amount, unit, base_unit) else [_field("unit", FieldErrorCode.UNIT_MISMATCH)]
 
 
 async def other_category_id(session: AsyncSession) -> str:
@@ -699,9 +718,12 @@ async def add_extra(
             )
             return detail, False
         problems = _create_problems(body)
-        problems += await _reference_problems(
+        found, ingredient = await _reference_problems(
             session, ingredient_id=body.ingredient_id, category_id=body.category_id
         )
+        problems += found
+        if ingredient is not None:
+            problems += _unit_problems(body.amount, body.unit, ingredient.base_unit)
         if problems:
             raise validation_error(problems)
         linked = body.ingredient_id is not None
@@ -748,7 +770,9 @@ async def update_extra(
 ) -> ListDetail:
     """Change the fields that were sent; a linked item stays linked and a free-text item
     stays free text (the other kind's fields are refused). While shopping, a linked item
-    moved to another ingredient takes that one's snapshot."""
+    moved to another ingredient takes that one's snapshot. A linked item whose ingredient,
+    amount or unit changes needs a unit that fits the base unit it is calculated with: the new
+    ingredient's, else its snapshot's or its ingredient's (D-33)."""
     sent = body.model_fields_set
     async with session.begin():
         shopping_list, rights = await _editable(session, principal, list_id)
@@ -779,14 +803,19 @@ async def update_extra(
                 "amount_text": body.amount_text if "amount_text" in sent else extra.amount_text,
                 "category_id": body.category_id or extra.category_id,
             }
-        problems += await _reference_problems(
+        found, ingredient = await _reference_problems(
             session,
             ingredient_id=body.ingredient_id if linked else None,
             category_id=None if linked else body.category_id,
         )
+        problems += found
+        if linked and not problems and _changed(extra, values):
+            moved = values["ingredient_id"] != extra.ingredient_id
+            base_unit = await _extra_base_unit(session, extra, ingredient if moved else None)
+            problems += _unit_problems(amount, unit, base_unit)
         if problems:
             raise validation_error(problems)
-        if any(getattr(extra, name) != value for name, value in values.items()):
+        if _changed(extra, values):
             if linked and values["ingredient_id"] != extra.ingredient_id:
                 extra.attrs_snapshot = None
             for name, value in values.items():
@@ -796,6 +825,25 @@ async def update_extra(
             extra.updated_at = now
             await touch(session, shopping_list, now)
         return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+
+
+def _changed(extra: ListExtraItem, values: Mapping[str, object]) -> bool:
+    return any(getattr(extra, name) != value for name, value in values.items())
+
+
+async def _extra_base_unit(
+    session: AsyncSession, extra: ListExtraItem, moved_to: Ingredient | None
+) -> str:
+    """The base unit a linked item is calculated with: the ingredient it moves to, else its
+    snapshot's, else its ingredient's (LIST-11)."""
+    if moved_to is not None:
+        return moved_to.base_unit
+    if extra.attrs_snapshot is not None:
+        return str(extra.attrs_snapshot["base_unit"])
+    ingredient = await ingredients_repo.get(session, str(extra.ingredient_id))
+    if ingredient is None:  # pragma: no cover -- the foreign key restricts deleting it
+        raise RuntimeError("a linked extra item's ingredient is missing")
+    return ingredient.base_unit
 
 
 async def delete_extra(

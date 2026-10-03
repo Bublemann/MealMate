@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.config import Settings
 from app.db.session import Database
@@ -27,7 +27,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref
+from tests.catalog import category_ids, create_ingredient, ref, set_stored
 from tests.lists import (
     UNCHECKED,
     added,
@@ -85,14 +85,21 @@ async def flour(api: AsyncClient, anna: Account, categories: dict[str, str]) -> 
 @pytest.fixture
 async def onions(api: AsyncClient, anna: Account, categories: dict[str, str]) -> Any:
     return await create_ingredient(
-        api, anna, "Zwiebeln", category_id=categories["fruit_vegetables"], piece_weight_g=150
+        api,
+        anna,
+        "Zwiebeln",
+        category_id=categories["fruit_vegetables"],
+        base_unit="piece",
+        piece_weight_g=150,
     )
 
 
 @pytest.fixture
 async def eggs(api: AsyncClient, anna: Account, categories: dict[str, str]) -> Any:
     """Counted in pieces, without a piece weight."""
-    return await create_ingredient(api, anna, "Eier", category_id=categories["dairy_eggs"])
+    return await create_ingredient(
+        api, anna, "Eier", category_id=categories["dairy_eggs"], base_unit="piece"
+    )
 
 
 def row(ingredient: Any, amount: float | None = None, unit: str | None = None) -> dict[str, Any]:
@@ -148,6 +155,8 @@ async def test_start_shopping(
     categories: dict[str, str],
 ) -> None:
     salt = await create_ingredient(api, anna, "Salz")
+    # A piece weight and density from before D-32 are not copied (LIST-11).
+    await set_stored(app, flour["id"], piece_weight_g=1000, density_g_per_ml=0.6)
     meal = await create_meal(
         api, anna, "Brot", servings=2, ingredients=[row(flour, 400, "g"), row(onions, 1, "piece")]
     )
@@ -155,7 +164,7 @@ async def test_start_shopping(
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     await added(api, anna, list_id, meal["id"], servings=4)
-    await extra_added(api, anna, list_id, ingredient_id=onions["id"], amount=300, unit="g")
+    await extra_added(api, anna, list_id, ingredient_id=onions["id"], amount=2)
     await extra_added(api, anna, list_id, text="Kerzen")
     await extra_added(api, anna, list_id, ingredient_id=salt["id"])
     await api.post(f"/api/lists/{list_id}/lines/{key(salt)}/hide", headers=anna.headers)
@@ -176,7 +185,7 @@ async def test_start_shopping(
     assert [(item["hidden"], item["new"], item["checked"]) for item in body["lines"]] == [
         (item["key"] == key(salt), False, False) for item in draft["lines"]
     ]
-    assert line(body, "Zwiebeln")["amounts"] == [{"value": 600, "unit": "g"}]
+    assert line(body, "Zwiebeln")["amounts"] == [{"value": 4, "unit": "piece"}]
     # The meal is frozen, but still linked (and shown with its photo).
     [entry] = body["meals"]
     assert (entry["meal_id"], entry["name"], entry["detached"]) == (meal["id"], "Brot", None)
@@ -186,18 +195,22 @@ async def test_start_shopping(
         (meal["id"], clock.now, None)
     ]
     rows = await scalars(app, select(ListMealIngredient).order_by(ListMealIngredient.position))
-    assert [(item.ingredient_name_snapshot, item.piece_weight_g_snapshot) for item in rows] == [
-        ("Mehl", None),
-        ("Zwiebeln", 150),
-    ]
+    assert [
+        (
+            item.ingredient_name_snapshot,
+            item.base_unit_snapshot,
+            item.piece_weight_g_snapshot,
+            item.density_snapshot,
+        )
+        for item in rows
+    ] == [("Mehl", "g", None, None), ("Zwiebeln", "piece", 150, None)]
     snapshots = await scalars(app, select(ListExtraItem.attrs_snapshot).order_by(ListExtraItem.id))
     assert snapshots == [
         {
             "name": "Zwiebeln",
             "brand": None,
-            "base_unit": "g",
+            "base_unit": "piece",
             "piece_weight_g": 150,
-            "density_g_per_ml": None,
             "category_id": categories["fruit_vegetables"],
         },
         None,
@@ -206,7 +219,6 @@ async def test_start_shopping(
             "brand": None,
             "base_unit": "g",
             "piece_weight_g": None,
-            "density_g_per_ml": None,
             "category_id": salt["category_id"],
         },
     ]
@@ -252,13 +264,11 @@ async def test_changes_of_meals_and_ingredients_leave_shopping_lists_alone(
     for name in ("Einkauf", "Entwurf"):
         shopping_list = await create_list(api, anna, name)
         await added(api, anna, shopping_list["id"], meal["id"])
-        await extra_added(
-            api, anna, shopping_list["id"], ingredient_id=onions["id"], amount=150, unit="g"
-        )
+        await extra_added(api, anna, shopping_list["id"], ingredient_id=onions["id"], amount=1)
         lists.append(shopping_list["id"])
     shopping_id, draft_id = lists
     before = await start_shopping(api, anna, shopping_id)
-    assert line(before, "Zwiebeln")["amounts"] == [{"value": 300, "unit": "g"}]
+    assert line(before, "Zwiebeln")["amounts"] == [{"value": 2, "unit": "piece"}]
 
     changes = {"name": "Rote Zwiebeln", "category_id": categories["other"], "piece_weight_g": 50}
     await api.patch(f"/api/ingredients/{onions['id']}", json=changes, headers=anna.headers)
@@ -277,7 +287,7 @@ async def test_changes_of_meals_and_ingredients_leave_shopping_lists_alone(
     draft = await detail(api, anna, draft_id)
     assert [(item["name"], item["category_id"], item["amounts"]) for item in draft["lines"]] == [
         ("Mehl", categories["baking"], [{"value": 250, "unit": "g"}]),
-        ("Rote Zwiebeln", categories["other"], [{"value": 150, "unit": "g"}]),
+        ("Rote Zwiebeln", categories["other"], [{"value": 1, "unit": "piece"}]),
     ]
     assert draft["meals"][0]["name"] == "Neues Brot"
 
@@ -310,16 +320,93 @@ async def test_a_piece_ingredient_is_frozen_with_its_piece_weight(
     [snapshot] = await scalars(app, select(ListExtraItem.attrs_snapshot))
     assert (snapshot["base_unit"], snapshot["piece_weight_g"]) == ("piece", 60)
 
-    changes = {"name": "Hühnereier", "base_unit": "g"}
-    response = await api.patch(f"/api/ingredients/{eggs['id']}", json=changes, headers=anna.headers)
-    assert (response.json()["base_unit"], response.json()["piece_weight_g"]) == ("g", None)
-    assert shown(await detail(api, anna, list_id)) == shown(before)
-
     # A checked line that needs another egg says so in pieces (LIST-12).
     await run_ops(api, anna, list_id, check(key(eggs)))
     body = await extra_added(api, anna, list_id, ingredient_id=eggs["id"], amount=1, unit="piece")
     assert line(body, "Eier")["amounts"] == [{"value": 5, "unit": "piece"}]
     assert line(body, "Eier")["needs_more"]["grown"] == [{"value": 1, "unit": "piece"}]
+
+    changes = {"name": "Hühnereier", "base_unit": "g"}
+    response = await api.patch(f"/api/ingredients/{eggs['id']}", json=changes, headers=anna.headers)
+    assert (response.json()["base_unit"], response.json()["piece_weight_g"]) == ("g", None)
+    after = await detail(api, anna, list_id)
+    assert shown(after) == shown(body)
+    # The items keep fitting the base unit they copied.
+    assert [item["unit_fits"] for item in after["extra_items"]] == [True, True]
+
+
+async def frozen_before_d32(app: FastAPI, ingredient_id: str, **attrs: Any) -> None:
+    """Give the frozen rows and extra items of an ingredient the attributes rows frozen before
+    D-32 copied: a piece weight with base unit g, a density with ml."""
+    database: Database = app.state.database
+    async with database.write_sessions() as session, session.begin():
+        await session.execute(
+            update(ListMealIngredient)
+            .where(ListMealIngredient.ingredient_id == ingredient_id)
+            .values(
+                base_unit_snapshot=attrs["base_unit"],
+                piece_weight_g_snapshot=attrs["piece_weight_g"],
+                density_snapshot=attrs["density_g_per_ml"],
+            )
+        )
+        extras = await session.scalars(
+            select(ListExtraItem).where(ListExtraItem.ingredient_id == ingredient_id)
+        )
+        for extra in extras:
+            extra.attrs_snapshot = {**(extra.attrs_snapshot or {}), **attrs}
+
+
+async def test_lists_frozen_before_d32_keep_their_conversions(
+    app: FastAPI, api: AsyncClient, anna: Account, onions: Any
+) -> None:
+    """LIST-11, AGG-03, D-08: a list being shopped keeps converting with the piece weight and
+    density its rows copied before D-32, and so does the done list; an amount added now, with
+    the attributes of now, sits beside them."""
+    oil = await create_ingredient(api, anna, "Öl", base_unit="ml")
+    meal = await create_meal(
+        api, anna, "Pfanne", ingredients=[row(onions, 2, "piece"), row(oil, 2, "tbsp")]
+    )
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    await added(api, anna, list_id, meal["id"])
+    await extra_added(api, anna, list_id, ingredient_id=onions["id"], amount=1)
+    await extra_added(api, anna, list_id, ingredient_id=oil["id"], amount=50, unit="ml")
+    await start_shopping(api, anna, list_id)
+    await frozen_before_d32(
+        app, onions["id"], base_unit="g", piece_weight_g=150, density_g_per_ml=None
+    )
+    await frozen_before_d32(
+        app, oil["id"], base_unit="ml", piece_weight_g=None, density_g_per_ml=0.92
+    )
+    # Extra items added in grams back then.
+    database: Database = app.state.database
+    async with database.write_sessions() as session, session.begin():
+        for ingredient_id, amount in ((onions["id"], 300), (oil["id"], 46)):
+            await session.execute(
+                update(ListExtraItem)
+                .where(ListExtraItem.ingredient_id == ingredient_id)
+                .values(amount=amount, unit="g")
+            )
+
+    body = await detail(api, anna, list_id)
+    # 2 onions of 150 g and 300 g; 46 g of oil are 50 ml, plus 2 tbsp.
+    assert line(body, "Zwiebeln")["amounts"] == [{"value": 600, "unit": "g"}]
+    assert line(body, "Öl")["amounts"] == [{"value": 80, "unit": "ml"}]
+    done = await finish(api, anna, list_id)
+    assert shown(done) == shown(body)
+
+    # Shopping again takes the meals and attributes of now: nothing converts across kinds.
+    response = await api.post(f"/api/lists/{list_id}/shop-again", headers=anna.headers)
+    copy = response.json()["list"]
+    assert line(copy, "Zwiebeln")["amounts"] == [
+        {"value": 300, "unit": "g"},
+        {"value": 2, "unit": "piece"},
+    ]
+    assert line(copy, "Öl")["amounts"] == [
+        {"value": 46, "unit": "g"},
+        {"value": 2, "unit": "tbsp"},
+    ]
+    assert [item["unit_fits"] for item in copy["extra_items"]] == [False, False]
 
 
 async def test_two_brands_of_the_same_thing_are_two_lines(
@@ -553,8 +640,8 @@ async def test_checked_lines_that_need_more(
     # Checking again replaces the snapshot.
     body = await run_ops(api, anna, list_id, *(check(line_key) for line_key in all_keys))
     assert all(item["checked"] and item["needs_more"] is None for item in body["lines"])
-    # A new unit, a part without an amount.
-    await extra_added(api, anna, list_id, ingredient_id=flour["id"], amount=2)
+    # A new unit (spoons of flour stay spoons), a part without an amount.
+    await extra_added(api, anna, list_id, ingredient_id=flour["id"], amount=2, unit="tbsp")
     body = await extra_added(api, anna, list_id, ingredient_id=eggs["id"])
     assert line(body, "Mehl")["needs_more"] == {
         "grown": [],
@@ -564,7 +651,7 @@ async def test_checked_lines_that_need_more(
     }
     assert line(body, "Mehl")["amounts"] == [
         {"value": 600, "unit": "g"},
-        {"value": 2, "unit": "piece"},
+        {"value": 2, "unit": "tbsp"},
     ]
     assert line(body, "Eier")["needs_more"] == {
         "grown": [],
@@ -598,8 +685,8 @@ async def test_checked_lines_that_need_more(
 async def test_more_pieces_are_shown_in_pieces(
     api: AsyncClient, anna: Account, onions: Any
 ) -> None:
-    """Compared in grams (the onions have a piece weight), but "3 Stk." checked at "2 Stk."
-    needs "+1 Stk.", not "+150 g"."""
+    """Compared in pieces, whatever the piece weight: "3 Stk." checked at "2 Stk." needs
+    "+1 Stk.", not "+150 g"."""
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     await extra_added(api, anna, list_id, ingredient_id=onions["id"], amount=2, unit="piece")

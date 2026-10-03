@@ -380,7 +380,6 @@ async def test_save_a_proposal_in_one_request(
         "category_id": body["category_id"],
         "base_unit": "g",
         "piece_weight_g": None,
-        "density_g_per_ml": None,
         "nutrients": OATS_NUTRIENTS | {"kcal": 370},
         "quantity_text": "500 g",
         "pack_quantity": 500,

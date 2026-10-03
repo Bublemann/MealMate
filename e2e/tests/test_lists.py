@@ -45,11 +45,15 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     onions = api.create_ingredient(
-        anna, f"Zwiebeln {tag}", category_key="fruit_vegetables", piece_weight_g=80
+        anna,
+        f"Zwiebeln {tag}",
+        category_key="fruit_vegetables",
+        base_unit="piece",
+        piece_weight_g=80,
     )
     flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
     oil = api.create_ingredient(
-        anna, f"Öl {tag}", category_key="sauces_spices_oils", base_unit="ml", density_g_per_ml=0.92
+        anna, f"Öl {tag}", category_key="sauces_spices_oils", base_unit="ml"
     )
     # Meal A for 2 servings, meal B for 4.
     tart = api.create_meal(

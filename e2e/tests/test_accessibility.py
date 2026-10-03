@@ -159,7 +159,11 @@ def test_no_serious_violations(
     if path == "/lists/:id":
         api = request.getfixturevalue("api")
         onions = api.create_ingredient(
-            account, unique("A11y onions"), category_key="fruit_vegetables", piece_weight_g=80
+            account,
+            unique("A11y onions"),
+            category_key="fruit_vegetables",
+            base_unit="piece",
+            piece_weight_g=80,
         )
         flour = api.create_ingredient(account, unique("A11y flour"))
         meal = api.create_meal(

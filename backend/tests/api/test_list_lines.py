@@ -7,9 +7,18 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from tests.accounts import Account, make_user
-from tests.catalog import category_ids, create_ingredient, ref
-from tests.lists import UNCHECKED, added, create_list, detail, extra_added, line, lines
+from tests.accounts import Account, fields, make_user
+from tests.catalog import category_ids, create_ingredient, ref, set_stored
+from tests.lists import (
+    UNCHECKED,
+    add_extra,
+    added,
+    create_list,
+    detail,
+    extra_added,
+    line,
+    lines,
+)
 from tests.meals import create_meal
 
 
@@ -34,15 +43,15 @@ async def ingredients(
 ) -> dict[str, Any]:
     """Ingredients in four categories, by name."""
     specs: dict[str, dict[str, Any]] = {
-        "Zwiebeln": {"category_id": categories["fruit_vegetables"], "piece_weight_g": 150},
-        "Mehl": {"category_id": categories["baking"]},
-        "Öl": {
-            "category_id": categories["sauces_spices_oils"],
-            "base_unit": "ml",
-            "density_g_per_ml": 0.92,
+        "Zwiebeln": {
+            "category_id": categories["fruit_vegetables"],
+            "base_unit": "piece",
+            "piece_weight_g": 150,
         },
+        "Mehl": {"category_id": categories["baking"]},
+        "Öl": {"category_id": categories["sauces_spices_oils"], "base_unit": "ml"},
         "Salz": {"category_id": categories["sauces_spices_oils"]},
-        "Brötchen": {"category_id": categories["bread_bakery"]},
+        "Brötchen": {"category_id": categories["bread_bakery"], "base_unit": "piece"},
     }
     return {name: await create_ingredient(api, anna, name, **body) for name, body in specs.items()}
 
@@ -220,27 +229,45 @@ async def test_extra_items(
     assert candles["added_by"] == ref(anna)
 
 
-async def test_different_kinds_stay_side_by_side_until_they_convert(
-    api: AsyncClient, anna: Account, ingredients: dict[str, Any]
+async def test_amounts_that_do_not_fit_sit_beside_the_rest(
+    app: FastAPI, api: AsyncClient, anna: Account, ingredients: dict[str, Any]
 ) -> None:
-    """AGG-03: "500 g + 2 Stk." while there is no piece weight; merged once there is one."""
+    """AGG-03, D-33: "500 g + 2 Stk." for rolls counted in grams since their pieces were added;
+    a piece weight or density they still have from before D-32 converts nothing."""
     rolls = ingredients["Brötchen"]
-    meal = await create_meal(api, anna, "Frühstück", ingredients=[row(rolls, 500, "g")])
     shopping_list = await create_list(api, anna)
-    await added(api, anna, shopping_list["id"], meal["id"])
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=rolls["id"], amount=2)
+    await extra_added(api, anna, shopping_list["id"], ingredient_id=rolls["id"], amount=2)
+    await set_stored(app, rolls["id"], base_unit="g")
+    meal = await create_meal(api, anna, "Frühstück", ingredients=[row(rolls, 500, "g")])
+    body = await added(api, anna, shopping_list["id"], meal["id"])
+    assert lines(body)["Brötchen"] == ([(500, "g"), (2, "piece")], False)
+    [item] = body["extra_items"]
+    assert (item["base_unit"], item["unit_fits"]) == ("g", False)
+
+    await set_stored(app, rolls["id"], piece_weight_g=50, density_g_per_ml=0.3)
+    body = await detail(api, anna, shopping_list["id"])
     assert lines(body)["Brötchen"] == ([(500, "g"), (2, "piece")], False)
 
-    edit = {"piece_weight_g": 50}
-    await api.patch(f"/api/ingredients/{rolls['id']}", json=edit, headers=anna.headers)
-    assert lines(await detail(api, anna, shopping_list["id"]))["Brötchen"] == ([(600, "g")], False)
+
+async def test_spoons_of_a_g_ingredient_are_their_own_segment(
+    api: AsyncClient, anna: Account, ingredients: dict[str, Any]
+) -> None:
+    """AGG-03: spoons of a Gramm ingredient never turn into grams on a list."""
+    flour = ingredients["Mehl"]
+    meal = await create_meal(
+        api, anna, "Soße", ingredients=[row(flour, 100, "g"), row(flour, 2, "tbsp")]
+    )
+    shopping_list = await create_list(api, anna)
+    body = await added(api, anna, shopping_list["id"], meal["id"])
+    assert lines(body)["Mehl"] == ([(100, "g"), (2, "tbsp")], False)
 
 
 async def test_a_piece_ingredient_in_whole_pieces(
-    api: AsyncClient, anna: Account, categories: dict[str, str]
+    app: FastAPI, api: AsyncClient, anna: Account, categories: dict[str, str]
 ) -> None:
     """AGG-03/04: a Stück ingredient's pieces, with or without the unit, merge into one total in
-    Stk., rounded up; amounts in other units sit beside it, even with a piece weight."""
+    Stk., rounded up; amounts in other units are refused, and an older one sits beside it, even
+    with a piece weight."""
     eggs = await create_ingredient(
         api,
         anna,
@@ -259,9 +286,16 @@ async def test_a_piece_ingredient_in_whole_pieces(
     assert lines(body)["Eier"] == ([(4, "piece")], False)
     body = await extra_added(api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=2)
     assert lines(body)["Eier"] == ([(6, "piece")], False)
-    body = await extra_added(
+    response = await add_extra(
         api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=100, unit="g"
     )
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
+    await set_stored(app, eggs["id"], base_unit="g")
+    await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=100, unit="g"
+    )
+    await set_stored(app, eggs["id"], base_unit="piece")
+    body = await detail(api, anna, shopping_list["id"])
     assert lines(body)["Eier"] == ([(100, "g"), (6, "piece")], False)
 
 
@@ -293,15 +327,13 @@ async def test_live_meals_follow_their_meal(
 async def test_detached_meals_keep_their_frozen_rows(
     api: AsyncClient, anna: Account, ingredients: dict[str, Any], meal_a: Any
 ) -> None:
-    """LIST-15: a detached meal keeps contributing what it contributed when it went away,
-    with the ingredient attributes of that moment; only the servings still scale it."""
+    """LIST-15: a detached meal keeps contributing what it contributed when it went away; only
+    the servings still scale it."""
     rolls = ingredients["Brötchen"]
-    rows = [row(rolls, 2, "piece"), row(rolls, 100, "g")]
-    live = await create_meal(api, anna, "Frühstück", ingredients=rows)
-    gone = await create_meal(api, anna, "Brunch", servings=2, ingredients=rows)
-    live_list = await create_list(api, anna)
+    gone = await create_meal(
+        api, anna, "Brunch", servings=2, ingredients=[row(rolls, 2, "piece"), row(rolls, 1)]
+    )
     frozen_list = await create_list(api, anna)
-    await added(api, anna, live_list["id"], live["id"])
     await added(api, anna, frozen_list["id"], gone["id"], servings=2)
     await added(api, anna, frozen_list["id"], meal_a["id"], servings=2)
     # Renamed and resized after it was added: the frozen copy takes what it is now.
@@ -328,20 +360,12 @@ async def test_detached_meals_keep_their_frozen_rows(
         "meal_servings": 4,
         "detached": "deleted",
     }
-    assert lines(after)["Brötchen"] == ([(50, "g"), (1, "piece")], False)
-
-    # A piece weight now merges the live meal's parts, not the frozen ones.
-    await api.patch(
-        f"/api/ingredients/{rolls['id']}", json={"piece_weight_g": 50}, headers=anna.headers
-    )
-    assert lines(await detail(api, anna, live_list["id"]))["Brötchen"] == ([(200, "g")], False)
-    body = await detail(api, anna, frozen_list["id"])
-    assert lines(body)["Brötchen"] == ([(50, "g"), (1, "piece")], False)
+    assert lines(after)["Brötchen"] == ([(2, "piece")], False)  # 3 * 2/4, rounded up
 
     # The servings of a detached meal still scale its rows; removing it takes them away.
     url = f"/api/lists/{frozen_list['id']}/meals/{entry['id']}"
     body = (await api.patch(url, json={"servings": 8}, headers=anna.headers)).json()
-    assert lines(body)["Brötchen"] == ([(200, "g"), (4, "piece")], False)
+    assert lines(body)["Brötchen"] == ([(6, "piece")], False)
     body = (await api.delete(url, headers=anna.headers)).json()
     assert "Brötchen" not in lines(body)
     assert [meal["name"] for meal in body["meals"]] == ["Zwiebelkuchen"]

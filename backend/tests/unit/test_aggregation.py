@@ -34,6 +34,9 @@ HEAVY_APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=200, density_g_per_ml=
 HONEY = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=1.4)
 EGGS = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
 APPLE_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=180, density_g_per_ml=None)
+# Live ingredients carry no density, and a piece weight only when counted in pieces (D-32).
+LIVE_ONION = IngredientAttrs.live(BaseUnit.G, piece_weight_g=150)
+LIVE_MILK = IngredientAttrs.live(BaseUnit.ML, piece_weight_g=1030)
 MEAL = SourceRef("meal", "m1")
 
 
@@ -66,7 +69,8 @@ def seg(**values: float) -> dict[UnitKind, float]:
         ([part(1, Unit.TBSP), part(3, Unit.TSP)], seg(volume=30), False, True),
         ([part(1, Unit.TBSP), part(100, Unit.ML)], seg(volume=115), False, False),
         ([part(0.2, Unit.L, OIL)], seg(volume=200), False, False),
-        # Mixed kinds: converted to the base unit where possible.
+        # Mixed kinds: converted to the base unit where possible, which only rows frozen
+        # before D-32 allow (a piece weight or density with g or ml).
         ([part(500, Unit.G, ONION), part(2, Unit.PIECE, ONION)], seg(mass=800), False, False),
         ([part(500, Unit.G), part(2, Unit.PIECE)], seg(mass=500, count=2), False, False),
         ([part(100, Unit.G), part(2, Unit.TBSP)], seg(mass=100, volume=30), False, True),
@@ -87,6 +91,31 @@ def seg(**values: float) -> dict[UnitKind, float]:
             seg(volume=15, count=1),
             False,
             True,
+        ),
+        # Live ingredients convert only within their kind (AGG-03, D-32): spoons of a g
+        # ingredient and amounts that don't fit sit beside the rest.
+        (
+            [part(500, Unit.G, LIVE_ONION), part(2, Unit.PIECE, LIVE_ONION)],
+            seg(mass=500, count=2),
+            False,
+            False,
+        ),
+        (
+            [part(100, Unit.G, LIVE_ONION), part(2, Unit.TBSP, LIVE_ONION)],
+            seg(mass=100, volume=30),
+            False,
+            True,
+        ),
+        (
+            [
+                part(1, Unit.L, LIVE_MILK),
+                part(1, Unit.TBSP, LIVE_MILK),
+                part(103, Unit.G, LIVE_MILK),
+                part(1, Unit.PIECE, LIVE_MILK),
+            ],
+            seg(mass=103, volume=1015, count=1),
+            False,
+            False,
         ),
         # A piece ingredient: its pieces add up; other kinds sit beside them, even with a
         # piece weight (AGG-03).
@@ -152,6 +181,8 @@ def test_totals(
         ([part(100, Unit.G), part(100, Unit.ML, OIL)], None, None),
         ([part(2, Unit.PIECE, EGGS), part(120, Unit.G, EGGS)], None, None),
         ([part(2, Unit.PIECE, APPLES), part(1, Unit.PIECE, APPLE_PIECES)], None, None),
+        ([part(500, Unit.G, LIVE_ONION), part(2, Unit.PIECE, LIVE_ONION)], None, None),
+        ([part(1, Unit.L, LIVE_MILK), part(103, Unit.G, LIVE_MILK)], None, None),
     ],
 )
 def test_base_total(
