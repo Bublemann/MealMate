@@ -8,9 +8,9 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import type { IngredientSummary } from '@/features/ingredients/api';
 import { IngredientPicker } from '@/features/ingredients/IngredientPicker';
 import { ingredientLabel } from '@/features/ingredients/label';
-import { useUnits, type Unit } from '@/features/reference/api';
+import type { Unit } from '@/features/reference/api';
 import { unitLabel } from '@/features/reference/labels';
-import { fittingUnits, unitFits } from '@/features/reference/units';
+import { useUnitChoice } from '@/features/reference/units';
 import { testIds } from '@/testIds';
 import { moved, newRow, withAmountText, type RowState } from './form';
 
@@ -133,14 +133,13 @@ function IngredientRow({
   onRemove,
 }: IngredientRowProps) {
   const { t } = useTranslation();
-  const units = useUnits();
   const name = ingredientLabel(row.ingredient.name, row.ingredient.brand);
   const rowError = fieldError(`${path}.ingredient_id`) ?? fieldError(path);
-  const baseUnit = row.ingredient.base_unit;
-  const fitting = units.data && fittingUnits(units.data, baseUnit);
-  // Entered before the rule, or left by a base-unit change or a merge (D-33).
-  const fits =
-    !units.data || unitFits(units.data, baseUnit, row.unit, row.amountText.trim() !== '');
+  const unitChoice = useUnitChoice(
+    row.ingredient.base_unit,
+    row.unit,
+    row.amountText.trim() !== '',
+  );
 
   return (
     <li
@@ -195,7 +194,9 @@ function IngredientRow({
         </FormField>
         <FormField
           label={t('meals.row.unit')}
-          error={fits ? fieldError(`${path}.unit`) : t('meals.row.unitMismatch', { name })}
+          error={
+            unitChoice.fits ? fieldError(`${path}.unit`) : t('meals.row.unitMismatch', { name })
+          }
         >
           {(control) => (
             <NativeSelect
@@ -205,19 +206,14 @@ function IngredientRow({
                 onChange({ ...row, unit: event.target.value as Unit | '', unitChosen: true })
               }
             >
-              <NativeSelectOption value="">{t('meals.row.unitNone')}</NativeSelectOption>
-              {fitting?.map((unit) => (
-                <NativeSelectOption key={unit} value={unit}>
+              <NativeSelectOption value="" disabled={!unitChoice.noUnitFits}>
+                {t('meals.row.unitNone')}
+              </NativeSelectOption>
+              {unitChoice.options.map(({ unit, disabled }) => (
+                <NativeSelectOption key={unit} value={unit} disabled={disabled}>
                   {unitLabel(t, unit)}
                 </NativeSelectOption>
               ))}
-              {/* The row's unit before the units have loaded, or one that doesn't fit: shown,
-                  but once changed it can't be chosen again. */}
-              {row.unit && !fitting?.includes(row.unit) && (
-                <NativeSelectOption value={row.unit} disabled={fitting !== undefined}>
-                  {unitLabel(t, row.unit)}
-                </NativeSelectOption>
-              )}
             </NativeSelect>
           )}
         </FormField>

@@ -94,7 +94,8 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
   const [amount, setAmount] = useState(
     item.amount === null ? '' : formatNumber(item.amount, language, { useGrouping: false }),
   );
-  const [unit, setUnit] = useState<Unit>(item.unit ?? 'piece');
+  // Without an amount, the item starts on its base unit (REF-02).
+  const [unit, setUnit] = useState<Unit>(item.unit ?? item.base_unit ?? 'piece');
   const [amountText, setAmountText] = useState(item.amount_text ?? '');
   const [categoryId, setCategoryId] = useState(item.category_id ?? '');
   const [amountInvalid, setAmountInvalid] = useState(false);

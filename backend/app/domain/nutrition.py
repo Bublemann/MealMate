@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.domain.nutrients import NUTRIENT_KEYS
-from app.domain.units import BaseUnit, IngredientAttrs, Unit, convert, fits
+from app.domain.units import BaseUnit, IngredientAttrs, Unit, convert, counted_unit, fits
 
 MissingReason = Literal["no_amount", "unit_mismatch", "no_piece_weight", "unknown_value"]
 
@@ -72,7 +72,7 @@ def meal_nutrition(rows: Sequence[MealRow], servings: int) -> MealNutrition:
         if row.amount is None:
             missing.append(Missing(row.ingredient_id, row.ingredient_name, "no_amount"))
             continue
-        unit = row.unit or Unit.PIECE
+        unit = counted_unit(row.amount, row.unit)
         # A fitting amount always converts (with the 1 g/ml estimate), one that doesn't fit
         # never does, whatever piece weight or density the attributes have.
         converted = (

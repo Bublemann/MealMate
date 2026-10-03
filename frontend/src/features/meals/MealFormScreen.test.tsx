@@ -13,7 +13,7 @@ import {
   SALT,
 } from '@/test/meals';
 import { LIST_ID, listDetail } from '@/test/lists';
-import { ingredient, proposal } from '@/test/ingredients';
+import { ingredient, proposal, unitOptions } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -80,13 +80,6 @@ async function addIngredient(user: User, name: string) {
 
 function row(name: string): HTMLElement {
   return screen.getByRole('listitem', { name: `Ingredient ${name}` });
-}
-
-/** A select's options: label and whether it is disabled. */
-function optionsOf(select: HTMLElement) {
-  return within(select)
-    .getAllByRole('option')
-    .map((option) => [option.textContent, (option as HTMLOptionElement).disabled]);
 }
 
 describe('MealFormScreen (create)', () => {
@@ -325,7 +318,7 @@ describe('MealFormScreen (create)', () => {
     await addIngredient(user, 'Eier');
 
     const labels = (name: string) =>
-      optionsOf(within(row(name)).getByLabelText('Unit')).map(([label]) => label);
+      unitOptions(within(row(name)).getByLabelText('Unit')).map(([label]) => label);
     await waitFor(() => expect(labels('Mehl')).toEqual(['No unit', 'g', 'kg', 'tbsp', 'tsp']));
     expect(labels('Milch')).toEqual(['No unit', 'ml', 'l', 'tbsp', 'tsp']);
     expect(labels('Eier')).toEqual(['No unit', 'pcs']);
@@ -347,8 +340,12 @@ describe('MealFormScreen (create)', () => {
 
     // Without a unit, the amount counts as pieces: that doesn't fit grams.
     expect(unit).toHaveAccessibleDescription("Unit doesn't fit Mehl");
+    expect(within(unit).getByRole('option', { name: 'No unit' })).toBeDisabled();
     await user.selectOptions(unit, 'kg');
     expect(unit).not.toHaveAccessibleDescription();
+    // Without an amount, the row fits whatever the unit ("to taste").
+    await user.clear(within(row('Mehl')).getByLabelText('Amount'));
+    expect(within(unit).getByRole('option', { name: 'No unit' })).toBeEnabled();
   });
 
   it('takes a picked unit back when the amount is cleared', async () => {
@@ -607,9 +604,9 @@ describe('MealFormScreen (edit)', () => {
     expect(unit).toHaveDisplayValue('pcs');
     await waitFor(() => expect(unit).toHaveAccessibleDescription("Unit doesn't fit Mehl"));
     expect(unit).toBeInvalid();
-    // Mehl is counted in grams: pieces can't be chosen again once changed.
-    expect(optionsOf(unit)).toEqual([
-      ['No unit', false],
+    // Mehl is counted in grams: pieces, or no unit with an amount, can't be chosen again.
+    expect(unitOptions(unit)).toEqual([
+      ['No unit', true],
       ['g', false],
       ['kg', false],
       ['tbsp', false],

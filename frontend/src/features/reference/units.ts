@@ -1,7 +1,5 @@
-import type { Unit, UnitInfo } from './api';
-
-/** What an ingredient is counted in (ING-02): `g`, `ml` or `piece`. */
-type BaseUnit = UnitInfo['base_units'][number];
+import type { BaseUnit } from '@/features/ingredients/api';
+import { useUnits, type Unit, type UnitInfo } from './api';
 
 /**
  * The units an ingredient counted in `baseUnit` takes (REF-02), in display order. Which units fit
@@ -34,4 +32,41 @@ export function keptUnit(
   unit: Unit | '',
 ): Unit | '' {
   return unit !== '' && fittingUnits(units, baseUnit).includes(unit) ? unit : '';
+}
+
+export interface UnitOption {
+  unit: Unit;
+  /** An older unit that doesn't fit: shown while it is chosen, but it can't be chosen again. */
+  disabled: boolean;
+}
+
+/**
+ * The unit choices of an amount of an ingredient counted in `baseUnit` (REF-02): the units that
+ * fit, then an older unit that doesn't (D-33), disabled, so it stays shown until the user picks one
+ * that fits. `fits` follows the amount and unit as entered, so the mark of a unit that doesn't fit
+ * comes and goes with the user's edits; the server judges what is stored the same way (`unit_fits`)
+ * and refuses a new amount that doesn't fit. `noUnitFits` tells whether "no unit" would fit: an
+ * amount without a unit counts as pieces, a row without an amount fits anything. Until the units
+ * have loaded, the chosen unit is the only choice and counts as fitting; without a known base
+ * unit, every unit is offered.
+ */
+export function useUnitChoice(
+  baseUnit: BaseUnit | null,
+  unit: Unit | '',
+  hasAmount: boolean,
+): { options: UnitOption[]; fits: boolean; noUnitFits: boolean } {
+  const units = useUnits();
+  if (!units.data) {
+    return { options: unit ? [{ unit, disabled: false }] : [], fits: true, noUnitFits: true };
+  }
+  const fitting = baseUnit
+    ? fittingUnits(units.data, baseUnit)
+    : units.data.map((info) => info.unit);
+  const options = fitting.map((option) => ({ unit: option, disabled: false }));
+  if (unit && !fitting.includes(unit)) options.push({ unit, disabled: true });
+  return {
+    options,
+    fits: !baseUnit || unitFits(units.data, baseUnit, unit, hasAmount),
+    noUnitFits: !baseUnit || unitFits(units.data, baseUnit, '', hasAmount),
+  };
 }

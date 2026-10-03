@@ -15,6 +15,7 @@ from app.domain.units import (
     Unit,
     UnitKind,
     convert,
+    counted_unit,
     fits,
     in_kind_base,
 )
@@ -96,6 +97,15 @@ def test_in_kind_base(amount: float, unit: Unit, expected: float) -> None:
 def test_fits(base_unit: BaseUnit, amount: float | None, unit: Unit | None, expected: bool) -> None:
     """The fitting units of each base unit (REF-02, D-32)."""
     assert fits(amount, unit, base_unit) is expected
+
+
+@pytest.mark.parametrize(
+    ("amount", "unit", "expected"),
+    [(2, Unit.TBSP, Unit.TBSP), (2, "g", Unit.G), (2, None, Unit.PIECE), (None, None, None)],
+)
+def test_counted_unit(amount: float | None, unit: Unit | str | None, expected: Unit | None) -> None:
+    """An amount without a unit counts as pieces (REF-02)."""
+    assert counted_unit(amount, unit) is expected
 
 
 def test_fits_takes_plain_strings() -> None:

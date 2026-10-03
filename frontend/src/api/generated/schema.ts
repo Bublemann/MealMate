@@ -2232,8 +2232,9 @@ export interface components {
          *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
-         *     Changing it away from `piece` clears the piece weight. A piece weight is only taken for an
-         *     ingredient that is (or becomes) counted in pieces (422 `invalid` otherwise, D-32).
+         *     Changing it clears the piece weight, unless the change to `piece` sends one. A piece weight
+         *     is only taken for an ingredient that is (or becomes) counted in pieces (422 `invalid`
+         *     otherwise, D-32).
          */
         IngredientUpdate: {
             /** Barcode */

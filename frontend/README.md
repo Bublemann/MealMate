@@ -100,10 +100,14 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `IngredientCategoryUnit` ("Milchprodukte & Eier · ml") as the grey line below. Two brands of the
   same thing are different ingredients and separate list lines.
 - **Units** (REF-02, D-32): a meal row and a linked extra item offer only the units that fit their
-  ingredient's base unit. `/api/units` names the base units each unit fits, and
-  `features/reference/units.ts` filters by them. An older amount that doesn't fit (D-33) keeps its
+  ingredient's base unit. `/api/units` names the base units each unit fits, and `useUnitChoice`
+  (`features/reference/units.ts`) offers those. An older amount that doesn't fit (D-33) keeps its
   unit, shown but no longer selectable, with "Einheit passt nicht zu <Zutat>" as the field's
-  error; the server keeps it while the row is sent back unchanged.
+  error. With an amount, "Keine Einheit" counts as pieces, so a meal row offers it only where
+  pieces fit, or while the row has no amount ("nach Geschmack"). The mark follows the amount and
+  unit as they are typed, by the same table, so it doesn't wait for the server; the server judges what is
+  stored the same way (`unit_fits`), keeps such a row while it is sent back unchanged and refuses
+  a new one.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps

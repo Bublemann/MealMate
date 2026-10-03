@@ -41,7 +41,7 @@ from app.domain.lists import (
     raised_servings,
 )
 from app.domain.reference import OTHER_CATEGORY
-from app.domain.units import BaseUnit, Unit, fits
+from app.domain.units import BaseUnit, Unit, counted_unit, fits
 from app.media import urls as media_urls
 from app.media.store import MediaStore
 from app.models import Ingredient, ListExtraItem, ListLineState, ListMeal, ShoppingList
@@ -660,10 +660,11 @@ def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
     ]
 
 
-async def _reference_problems(
+async def _find_references(
     session: AsyncSession, *, ingredient_id: str | None, category_id: str | None
 ) -> tuple[list[FieldProblem], Ingredient | None]:
-    """Unknown references, and the ingredient if one was given and found."""
+    """Look up the referenced ingredient and category: the problems with unknown ones, and the
+    ingredient if one was given and found."""
     problems = []
     ingredient = None
     if ingredient_id is not None:
@@ -691,9 +692,8 @@ async def other_category_id(session: AsyncSession) -> str:
 
 def _stored_unit(amount: float | None, unit: Unit | str | None) -> str | None:
     """An amount without a unit counts as pieces."""
-    if amount is not None and unit is None:
-        return Unit.PIECE.value
-    return None if unit is None else Unit(unit).value
+    stored = counted_unit(amount, unit)
+    return None if stored is None else stored.value
 
 
 async def add_extra(
@@ -718,7 +718,7 @@ async def add_extra(
             )
             return detail, False
         problems = _create_problems(body)
-        found, ingredient = await _reference_problems(
+        found, ingredient = await _find_references(
             session, ingredient_id=body.ingredient_id, category_id=body.category_id
         )
         problems += found
@@ -803,7 +803,7 @@ async def update_extra(
                 "amount_text": body.amount_text if "amount_text" in sent else extra.amount_text,
                 "category_id": body.category_id or extra.category_id,
             }
-        found, ingredient = await _reference_problems(
+        found, ingredient = await _find_references(
             session,
             ingredient_id=body.ingredient_id if linked else None,
             category_id=None if linked else body.category_id,

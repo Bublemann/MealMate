@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
+from typing import overload
 
 
 class Unit(StrEnum):
@@ -122,13 +123,25 @@ class Converted:
     estimate: bool
 
 
+@overload
+def counted_unit(amount: float, unit: Unit | str | None) -> Unit: ...
+@overload
+def counted_unit(amount: float | None, unit: Unit | str | None) -> Unit | None: ...
+def counted_unit(amount: float | None, unit: Unit | str | None) -> Unit | None:
+    """The unit an amount counts in, and is stored with (REF-02): its own, or pieces for an
+    amount without a unit. A unit may be given as the plain string rows store."""
+    if unit is not None:
+        return Unit(unit)
+    return None if amount is None else Unit.PIECE
+
+
 def fits(amount: float | None, unit: Unit | str | None, base_unit: BaseUnit | str) -> bool:
-    """Whether an amount fits an ingredient counted in `base_unit` (REF-02): its unit is one of
-    `FITTING_UNITS`. A row without an amount fits every base unit; an amount without a unit
-    counts as pieces. Units and base units may be given as the plain strings rows store."""
+    """Whether an amount fits an ingredient counted in `base_unit` (REF-02): the unit it counts
+    in is one of `FITTING_UNITS`. A row without an amount fits every base unit. Units and base
+    units may be given as the plain strings rows store."""
     if amount is None:
         return True
-    return Unit(unit or Unit.PIECE) in FITTING_UNITS[BaseUnit(base_unit)]
+    return counted_unit(amount, unit) in FITTING_UNITS[BaseUnit(base_unit)]
 
 
 def in_kind_base(amount: float, unit: Unit) -> float:

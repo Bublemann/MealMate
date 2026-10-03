@@ -203,7 +203,7 @@ def test_no_serious_violations(
     offline_line = ""  # the line checked off offline on "/lists/:id/offline"
     if path == "/lists/:id/offline":
         api = request.getfixturevalue("api")
-        onions = api.create_ingredient(account, unique("A11y onions"))
+        onions = api.create_ingredient(account, unique("A11y onions"), base_unit="piece")
         # A second line: checking off the last one would offer to finish.
         flour = api.create_ingredient(account, unique("A11y flour"))
         meal = api.create_meal(

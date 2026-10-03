@@ -42,7 +42,8 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     form.get_by_label(text("ingredients.field.category"), exact=True).select_option(
         label=api.category_name(member, "fruit_vegetables")
     )
-    form.get_by_label(text("ingredients.field.pieceWeight"), exact=True).fill("180")
+    # Counted in grams: no weight per piece (D-32).
+    expect(form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)).to_have_count(0)
     form.get_by_label(text("nutrient.kcal"), exact=True).fill("52")
     form.get_by_label(text("ingredients.field.barcode"), exact=True).fill(barcode)
     # The package is optional, under "More".

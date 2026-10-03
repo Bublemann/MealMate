@@ -3,9 +3,9 @@ import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import type { BaseUnit } from '@/features/ingredients/api';
-import { useCategories, useUnits, type Unit } from '@/features/reference/api';
+import { useCategories, type Unit } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
-import { fittingUnits, unitFits } from '@/features/reference/units';
+import { useUnitChoice } from '@/features/reference/units';
 import { useLanguage } from '@/i18n';
 
 /** The longest free-text amount the server takes (LIST-06). */
@@ -42,12 +42,7 @@ export function AmountFields({
   unitError,
 }: AmountFieldsProps) {
   const { t } = useTranslation();
-  const units = useUnits();
-  const fitting =
-    units.data &&
-    (baseUnit ? fittingUnits(units.data, baseUnit) : units.data.map((info) => info.unit));
-  const fits =
-    !units.data || !baseUnit || unitFits(units.data, baseUnit, unit, amount.trim() !== '');
+  const unitChoice = useUnitChoice(baseUnit, unit, amount.trim() !== '');
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -66,7 +61,7 @@ export function AmountFields({
       </FormField>
       <FormField
         label={t('lists.extra.unit')}
-        error={fits ? unitError : t('lists.extra.unitMismatch', { name })}
+        error={unitChoice.fits ? unitError : t('lists.extra.unitMismatch', { name })}
       >
         {(control) => (
           <NativeSelect
@@ -75,18 +70,11 @@ export function AmountFields({
             value={unit}
             onChange={(event) => onUnitChange(event.target.value as Unit)}
           >
-            {fitting?.map((option) => (
-              <NativeSelectOption key={option} value={option}>
-                {unitLabel(t, option)}
+            {unitChoice.options.map((option) => (
+              <NativeSelectOption key={option.unit} value={option.unit} disabled={option.disabled}>
+                {unitLabel(t, option.unit)}
               </NativeSelectOption>
             ))}
-            {/* The chosen unit before the units have loaded, or one that doesn't fit: shown, but
-                once changed it can't be chosen again. */}
-            {!fitting?.includes(unit) && (
-              <NativeSelectOption value={unit} disabled={fitting !== undefined}>
-                {unitLabel(t, unit)}
-              </NativeSelectOption>
-            )}
           </NativeSelect>
         )}
       </FormField>

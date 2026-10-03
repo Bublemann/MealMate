@@ -23,7 +23,7 @@ from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
 from app.domain.nutrition import meal_nutrition
 from app.domain.text import normalize, sort_key
-from app.domain.units import Unit, fits
+from app.domain.units import Unit, counted_unit, fits
 from app.media.store import MediaStore
 from app.models import Meal as MealRow
 from app.models import MealIngredient
@@ -170,13 +170,8 @@ async def _meal(
 type RowKey = tuple[str, float | None, str | None]
 
 
-def _stored_unit(amount: float | None, unit: Unit | None) -> Unit | None:
-    """An amount without a unit counts as pieces."""
-    return Unit.PIECE if unit is None and amount is not None else unit
-
-
 def _input_key(row: MealIngredientInput) -> RowKey:
-    unit = _stored_unit(row.amount, row.unit)
+    unit = counted_unit(row.amount, row.unit)
     return row.ingredient_id, row.amount, None if unit is None else unit.value
 
 
@@ -250,7 +245,7 @@ async def _set_rows(
     """Replace the meal's rows, reusing the existing ones by position (their ids stay). An
     amount without a unit counts as pieces."""
     for position, item in enumerate(rows):
-        unit = _stored_unit(item.amount, item.unit)
+        unit = counted_unit(item.amount, item.unit)
         values = {
             "ingredient_id": item.ingredient_id,
             "amount": item.amount,
