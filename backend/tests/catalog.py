@@ -72,8 +72,8 @@ async def create_from_off(
 
 async def set_stored(app: FastAPI, ingredient_id: str, **values: Any) -> None:
     """Change an ingredient's columns directly, as the API no longer would: a base unit changed
-    before D-32 left its amounts as they were, and a g or ml ingredient may still have the piece
-    weight and density it had then."""
+    before D-32 left its amounts as they were, and a g or ml ingredient had a piece weight then
+    (until migration 0014 cleared it, D-34)."""
     database: Database = app.state.database
     async with database.write_sessions() as session, session.begin():
         await session.execute(

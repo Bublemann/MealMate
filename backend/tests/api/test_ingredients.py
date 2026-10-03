@@ -252,22 +252,23 @@ async def test_limits_are_inclusive(api: AsyncClient, anna: Account) -> None:
     assert from_off["pack_quantity"] == 100_000
 
 
-async def test_density_is_gone(app: FastAPI, api: AsyncClient, anna: Account) -> None:
-    """D-32: no density in or out; one sent by an older app is ignored."""
+async def test_density_is_gone(api: AsyncClient, anna: Account) -> None:
+    """D-32: no density in or out; one sent by an older app is ignored (migration 0014 dropped
+    its column, D-34)."""
     oil = await create_ingredient(api, anna, "Olivenöl", base_unit="ml", density_g_per_ml=0.92)
     assert "density_g_per_ml" not in oil
     body = (await patch(api, anna, oil["id"], density_g_per_ml=0.9)).json()
     assert "density_g_per_ml" not in body
-    assert await scalars(app, select(Ingredient.density_g_per_ml)) == [None]
 
 
 async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
     app: FastAPI, api: AsyncClient, anna: Account
 ) -> None:
-    """A piece weight and density from before D-32 are neither shown nor touched: they stay for
-    the migration (D-34). A null piece weight is ignored; a new one is refused."""
+    """A piece weight a g or ml ingredient has from before D-32 is neither shown nor touched
+    (migration 0014 cleared them, D-34, but `attrs()` doesn't rely on that). A null piece weight
+    is ignored; a new one is refused."""
     apples = await create_ingredient(api, anna, "Äpfel")
-    await set_stored(app, apples["id"], piece_weight_g=180, density_g_per_ml=0.8)
+    await set_stored(app, apples["id"], piece_weight_g=180)
     assert (await get(api, anna, apples["id"]))["piece_weight_g"] is None
 
     body = (await patch(api, anna, apples["id"], name="Apfel", piece_weight_g=None)).json()
@@ -275,7 +276,6 @@ async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
     response = await patch(api, anna, apples["id"], name="Äpfel", piece_weight_g=150)
     assert fields(response) == {("body", "piece_weight_g"): "invalid"}
     assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
-    assert await scalars(app, select(Ingredient.density_g_per_ml)) == [0.8]
 
     # Counted in millilitres, it still has it; counted in pieces, it has the piece weight sent
     # along, or none: the hidden one would surprise (ING-02).

@@ -78,10 +78,9 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
     base_unit: Mapped[str] = mapped_column(String(5), default="g")
-    # Only used for `piece` (D-32); a g or ml ingredient may still have one from before, and a
-    # density, until the base-unit migration (D-34). See `attrs()`.
+    # Only for `piece` (D-32); migration 0014 cleared it on g and ml ingredients and dropped
+    # the density (D-34). See `attrs()`.
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
-    density_g_per_ml: Mapped[float | None] = mapped_column(Float)
     quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))
     pack_quantity: Mapped[float | None] = mapped_column(Float)
     pack_unit: Mapped[str | None] = mapped_column(String(10))
