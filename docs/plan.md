@@ -150,7 +150,7 @@ MealMate/
 | Barcode | zxing-wasm, lazy-loaded, **wasm served by the app** | EAN-13/8, UPC-A/E; typed-in barcode as fallback |
 | Frontend tests | Vitest, Testing Library, fake-indexeddb, eslint, prettier, `tsc` | |
 | E2E | pytest-playwright (pinned; Chromium + WebKit, iPhone device profiles), axe-core | |
-| Node | 24 LTS | |
+| Node | 26 | LTS from 2026-10-28 |
 | CI/CD | GitHub Actions (SHA-pinned), ghcr.io, native arm64 runners (`ubuntu-24.04-arm`), Sigstore attestations | |
 
 ## 5. Backend design
@@ -600,7 +600,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 
 ### 10.3 Production image (`Dockerfile`)
 
-1. `frontend-build` (node:24-slim): `npm ci`, `npm run build` → `/frontend/dist`.
+1. `frontend-build` (node:26-slim): `npm ci`, `npm run build` → `/frontend/dist`.
 2. `backend-build` (python:3.14-slim@digest): `uv sync --frozen --no-dev` into `/opt/venv`.
 3. `runtime` (python:3.14-slim@digest):
    - copies the venv, the app, the Alembic files, the frontend `dist` and `deploy/` (to `/opt/mealmate/deploy`, the verified source of host files, § 11.5);

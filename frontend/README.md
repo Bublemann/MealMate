@@ -20,7 +20,7 @@ the backend. What to build is in [`docs/requirements.md`](../docs/requirements.m
 | Tests        | Vitest, Testing Library, jsdom                                                         |
 | Quality      | ESLint (typescript-eslint, react-hooks, jsx-a11y), Prettier, `tsc`                     |
 
-Node.js ≥ 22.12 (CI and the image use Node 24).
+Node.js ≥ 22.12 (CI and the image use Node 26).
 
 ## Commands
 
