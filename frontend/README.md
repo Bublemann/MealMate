@@ -442,7 +442,8 @@ UI language (`names.de`, `names.en` in `GET /api/categories`), and one helper sh
 name in the UI language, else in English. Admins add, rename and delete categories (REF-01), so
 there is nothing to add to the language files. The category list also returns deleted categories,
 for the headings of lists being shopped and done lists; pickers offer only the categories that
-aren't deleted, without _Uncategorized_.
+aren't deleted, without _Uncategorized_ (`pickableCategories` in `features/reference/categories.ts`),
+and show an ingredient's or item's current category that isn't among them as a disabled choice.
 
 **Adding a language** (I18N-01):
 

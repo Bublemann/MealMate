@@ -5,8 +5,17 @@ import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { CATEGORIES } from '@/test/ingredients';
-import { FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listDetail, shoppingList } from '@/test/lists';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
+import {
+  FEED_LISTS,
+  feedPage,
+  line,
+  LIST_ID,
+  LIST_ROUTES,
+  listDetail,
+  shoppingList,
+  SHOPPING_LINES,
+} from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import { DB_NAME, DB_VERSION, openSyncStorage, userMetaKey } from './storage';
@@ -18,11 +27,14 @@ const NEVER = () => new Promise<never>(() => undefined);
 const FAIL = () => Promise.reject(new TypeError('Failed to fetch'));
 
 /** The local copy as a previous visit left it: the list, the categories, a complete sync. */
-async function storeCopy(list: Schemas['ListDetail'], { synced = true } = {}) {
+async function storeCopy(
+  list: Schemas['ListDetail'],
+  { synced = true, categories = CATEGORIES } = {},
+) {
   const storage = await openSyncStorage();
   await storage.putList({ id: list.id, userId: TEST_USER.id, detail: list, storedAt: 1_000 });
   await storage.setMeta(userMetaKey('categories', TEST_USER.id), {
-    categories: CATEGORIES,
+    categories,
     storedAt: 1_000,
   });
   if (synced) await storage.setMeta(userMetaKey('lastSync', TEST_USER.id), 1_000);
@@ -115,6 +127,19 @@ describe('lists from the local copy (SYNC-09)', () => {
 
     const lines = await screen.findByTestId(testIds.listLines);
     expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
+  });
+
+  it('heads lines of a deleted category with its stored name (D-30)', async () => {
+    const gouda = line({ key: 'i:ing-gouda', name: 'Gouda', category_id: 'cat-cheese' });
+    await storeCopy(shoppingList({ lines: [...SHOPPING_LINES, gouda] }), {
+      categories: CATEGORIES_AFTER_DELETE,
+    });
+    serverGone(FAIL);
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    const lines = await screen.findByTestId(testIds.shoppingLines);
+    expect(within(lines).getByRole('list', { name: 'Cheese' })).toHaveTextContent('Gouda');
   });
 
   it('loads the categories again over ones an older app version stored without names', async () => {

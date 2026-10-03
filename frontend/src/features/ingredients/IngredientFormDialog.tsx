@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
+import { OTHER_KEY, pickableCategories } from '@/features/reference/categories';
 import { categoryName, unitLabel } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
@@ -190,13 +191,21 @@ export function IngredientForm({
     () => initial.quantity_text !== '' || initial.pack_quantity !== '',
   );
 
-  // Categories admins added have no key (REF-01), so a missing guess must not match them.
+  // Neither a deleted category nor *Uncategorized* can be picked (ING-02, D-30).
+  const pickable = pickableCategories(categories.data ?? []);
+  // Categories admins added have no key (REF-01), so a missing guess must not match them; a guess
+  // of a deleted category falls back to *Other*, as no guess does.
   const guessed =
     values.categoryKey === null
       ? undefined
-      : categories.data?.find((category) => category.key === values.categoryKey);
-  const defaultCategory = guessed ?? categories.data?.find((category) => category.key === 'other');
+      : pickable.find((category) => category.key === values.categoryKey);
+  const defaultCategory = guessed ?? pickable.find((category) => category.key === OTHER_KEY);
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
+  // An uncategorized ingredient shows *Uncategorized* as its category without offering it, so it
+  // can be saved as it is; so does a category deleted while the form is open.
+  const unpickable = categories.data?.find(
+    (category) => category.id === selectedCategory && !pickable.includes(category),
+  );
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken =
     isApiError(mutation.error) && mutation.error.code === 'ingredient.barcode_taken';
@@ -296,6 +305,10 @@ export function IngredientForm({
       onClose();
       onSaved?.(result);
     };
+    // The category was deleted meanwhile (REF-01): the categories load again to pick another.
+    const failed = (error: Error) => {
+      if ('category_id' in fieldErrorMessagesByPath(t, error)) void categories.refetch();
+    };
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
@@ -328,7 +341,7 @@ export function IngredientForm({
           edited_fields: editedFields(values, proposed.values),
         };
       }
-      create.mutate(body, { onSuccess: saved });
+      create.mutate(body, { onSuccess: saved, onError: failed });
       return;
     }
 
@@ -356,7 +369,7 @@ export function IngredientForm({
       saved(ingredient);
       return;
     }
-    update.mutate(body, { onSuccess: saved });
+    update.mutate(body, { onSuccess: saved, onError: failed });
   }
 
   return (
@@ -420,7 +433,10 @@ export function IngredientForm({
           />
         )}
       </FormField>
-      <FormField label={t('ingredients.field.category')} error={fieldError('category_id')}>
+      <FormField
+        label={t('ingredients.field.category')}
+        error={fieldError('category_id') && t('ingredients.field.categoryGone')}
+      >
         {(control) => (
           <NativeSelect
             {...control}
@@ -429,7 +445,12 @@ export function IngredientForm({
             disabled={!categories.data}
             onChange={(event) => set('categoryId', event.target.value)}
           >
-            {categories.data?.map((category) => (
+            {unpickable && (
+              <NativeSelectOption value={unpickable.id} disabled>
+                {categoryName(unpickable, language)}
+              </NativeSelectOption>
+            )}
+            {pickable.map((category) => (
               <NativeSelectOption key={category.id} value={category.id}>
                 {categoryName(category, language)}
               </NativeSelectOption>

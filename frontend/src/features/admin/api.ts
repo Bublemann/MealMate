@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
+import { INGREDIENTS_KEY } from '@/features/ingredients/api';
+import { LISTS_KEY } from '@/features/lists/keys';
 import { CATEGORIES_KEY, type Category } from '@/features/reference/api';
+import { orderedCategories } from '@/features/reference/categories';
 
 export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
@@ -125,7 +128,8 @@ export function useReorderCategories() {
     scope: CATEGORIES_SCOPE,
     mutationFn: (categoryIds: string[]) => {
       // A category added after the tap was saved before this order (the scope): it stays last.
-      const added = (queryClient.getQueryData<Category[]>(CATEGORIES_KEY) ?? [])
+      // Deleted categories are no longer in the order (D-30).
+      const added = orderedCategories(queryClient.getQueryData<Category[]>(CATEGORIES_KEY) ?? [])
         .map(({ id }) => id)
         .filter((id) => !categoryIds.includes(id));
       return unwrap(
@@ -185,6 +189,54 @@ export function useRenameCategory(categoryId: string) {
         categories?.map((existing) => (existing.id === category.id ? category : existing)),
       );
       void queryClient.invalidateQueries({ queryKey: EVENTS_KEY });
+    },
+  });
+}
+
+/** ADM-01: what deleting a category would move, for the confirmation; loaded once it opens. */
+export function useCategoryUsage(categoryId: string, { enabled }: { enabled: boolean }) {
+  return useQuery({
+    queryKey: ['admin', 'categories', categoryId, 'usage'],
+    queryFn: ({ signal }) =>
+      unwrap(
+        api.GET('/api/admin/categories/{category_id}/usage', {
+          params: { path: { category_id: categoryId } },
+          signal,
+        }),
+      ),
+    enabled,
+    // The counts change whenever someone edits an ingredient or a list.
+    staleTime: 0,
+  });
+}
+
+/**
+ * REF-01: deletes a category. Its ingredients move to *Uncategorized* and its free-text items on
+ * drafts to *Other*, so the categories, the ingredients and the lists are loaded again. Until the
+ * categories are back, the cached one is marked as deleted: lists being shopped and done lists
+ * still name it (D-30), but pickers and the order no longer offer it.
+ */
+export function useDeleteCategory(categoryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: CATEGORIES_SCOPE,
+    mutationFn: () =>
+      unwrap(
+        api.DELETE('/api/admin/categories/{category_id}', {
+          params: { path: { category_id: categoryId } },
+        }),
+      ),
+    onSuccess: async () => {
+      // A reload after a failed order must not bring the category back.
+      await queryClient.cancelQueries({ queryKey: CATEGORIES_KEY });
+      queryClient.setQueryData<Category[]>(CATEGORIES_KEY, (categories) =>
+        categories?.map((existing) =>
+          existing.id === categoryId ? { ...existing, deleted: true } : existing,
+        ),
+      );
+      for (const queryKey of [CATEGORIES_KEY, INGREDIENTS_KEY, LISTS_KEY, EVENTS_KEY]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 }

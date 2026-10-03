@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { BEN } from '@/test/api';
-import { CATEGORIES } from '@/test/ingredients';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
 import { CANDLES_EXTRA_ID, checkedBy, doneList, listDetail, shoppingList } from '@/test/lists';
 import { ME } from '@/test/meals';
 import { applyPending, extraLineKey, type PendingList } from './applyPending';
@@ -153,6 +153,19 @@ describe('applyPending', () => {
       OPTIONS,
     );
     expect(lineOf(shown, 'Zahnseide').category_id).toBe('cat-other');
+  });
+
+  it('adds to Other once the category was deleted, or in Uncategorized, as the server does (LIST-06)', () => {
+    const shown = applyPending(
+      shoppingList(),
+      [
+        op('extra.add', { extra_id: NEW_ID, text: 'Feta', category_id: 'cat-cheese' }),
+        op('extra.add', { extra_id: OTHER_NEW_ID, text: 'Brie', category_id: 'cat-uncategorized' }),
+      ],
+      { ...OPTIONS, categories: CATEGORIES_AFTER_DELETE },
+    );
+    expect(lineOf(shown, 'Feta').category_id).toBe('cat-other');
+    expect(lineOf(shown, 'Brie').category_id).toBe('cat-other');
   });
 
   it('takes the category key of an op an older app version queued (D-31)', () => {

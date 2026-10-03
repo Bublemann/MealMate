@@ -2,7 +2,13 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { errorResponse, mockApi, requestsTo } from '@/test/api';
-import { ingredient, proposal, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import {
+  CATEGORIES_AFTER_DELETE,
+  ingredient,
+  proposal,
+  REFERENCE_ROUTES,
+  summary,
+} from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -359,5 +365,20 @@ describe('OffSearchDialog', () => {
       'Frische Vollmilch 3,5 % (Weidehof)1 l · 64 kcal per 100 ml',
       'Haferflocken zart (Kornmühle)500 g · 372 kcal per 100 g',
     ]);
+  });
+
+  it('falls back to Other when the guessed category was deleted (REF-01)', async () => {
+    const { user } = renderSearch({
+      'GET /api/categories': CATEGORIES_AFTER_DELETE,
+      'GET /api/ingredients/off-search': page([found(proposal({ category_key: 'cheese' }))]),
+    });
+    const dialog = await openSearch(user);
+    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
+    const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
+    await user.click(first!);
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    const form = screen.getByTestId(testIds.ingredientForm);
+    await waitFor(() => expect(within(form).getByLabelText('Category')).toHaveValue('cat-other'));
   });
 });

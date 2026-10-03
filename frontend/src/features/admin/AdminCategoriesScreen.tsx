@@ -1,5 +1,5 @@
 import { notifyManager, type UseMutationResult } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import {
   useEffect,
   useId,
@@ -8,11 +8,21 @@ import {
   useState,
   type FormEvent,
   type MouseEvent,
+  type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { LoadError } from '@/components/LoadError';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,13 +33,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useCategories, type Category } from '@/features/reference/api';
+import { orderedCategories, OTHER_KEY, UNCATEGORIZED_KEY } from '@/features/reference/categories';
 import { categoryName } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
 import { testIds } from '@/testIds';
 import { AdminScreen } from './AdminScreen';
 import {
+  useCategoryUsage,
   useCreateCategory,
+  useDeleteCategory,
   useRenameCategory,
   useReorderCategories,
   type CategoryNames,
@@ -45,7 +58,8 @@ const NAME_PATHS: ReadonlySet<string> = new Set(['names.de', 'names.en']);
 
 /**
  * REF-01 / ADM-01: the categories in the store's walking order, moved with up/down buttons. A
- * category's name opens its dialog; "New category" adds one at the end.
+ * category's name opens its dialog; "New category" adds one at the end. *Uncategorized* is only
+ * moved, so its name is plain text; deleted categories aren't shown (D-30).
  */
 export function AdminCategoriesScreen() {
   const { t } = useTranslation();
@@ -67,12 +81,19 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
   const reorder = useReorderCategories();
   // The order on screen while moves wait for the server; null shows the saved one.
   const [moved, setMoved] = useState<string[] | null>(null);
-  const order = useMemo(() => moved ?? categories.map(({ id }) => id), [moved, categories]);
+  const order = useMemo(
+    () => moved ?? orderedCategories(categories).map(({ id }) => id),
+    [moved, categories],
+  );
   // After a move the focus follows the moved category (its button may have become disabled).
   const [focus, setFocus] = useState<{ id: string; direction: Direction } | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
-  // The button that opened the dialog gets the focus back when it closes.
+  // The name of the category just deleted, for the message below the list.
+  const [deleted, setDeleted] = useState<string | null>(null);
+  // The button that opened the dialog gets the focus back when it closes; after a delete it is
+  // gone, so "New category" gets it.
   const opener = useRef<HTMLElement | null>(null);
+  const newButton = useRef<HTMLButtonElement>(null);
   const baseId = useId();
   const buttonId = (id: string, direction: Direction) => `${baseId}-${id}-${direction}`;
   const byId = new Map(categories.map((category) => [category.id, category]));
@@ -131,14 +152,18 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
               >
                 {index + 1}
               </span>
-              <Button
-                variant="ghost"
-                aria-haspopup="dialog"
-                className="min-w-0 flex-[1_1_8rem] justify-start px-2 text-left wrap-anywhere"
-                onClick={(event) => open(event, category)}
-              >
-                {name}
-              </Button>
+              {category.key === UNCATEGORIZED_KEY ? (
+                <span className="min-w-0 flex-[1_1_8rem] px-2 py-2 wrap-anywhere">{name}</span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  aria-haspopup="dialog"
+                  className="min-w-0 flex-[1_1_8rem] justify-start px-2 text-left wrap-anywhere"
+                  onClick={(event) => open(event, category)}
+                >
+                  {name}
+                </Button>
+              )}
               <div className="ml-auto flex flex-wrap justify-end">
                 <Button
                   id={buttonId(id, 'up')}
@@ -166,6 +191,7 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
         })}
       </ol>
       <Button
+        ref={newButton}
         data-testid={testIds.newCategory}
         variant="outline"
         aria-haspopup="dialog"
@@ -176,10 +202,14 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
         {t('admin.categories.new')}
       </Button>
       <ErrorAlert error={reorder.error} />
+      <p role="status" className="text-sm text-muted-foreground">
+        {deleted && t('admin.categories.deleted', { name: deleted })}
+      </p>
       <CategoryDialog
         editing={editing}
         onClose={() => setEditing(null)}
-        onClosed={() => opener.current?.focus()}
+        onClosed={() => (opener.current?.isConnected ? opener.current : newButton.current)?.focus()}
+        onDeleted={setDeleted}
       />
     </div>
   );
@@ -190,13 +220,16 @@ interface CategoryDialogProps {
   onClose: () => void;
   /** Where the focus goes once it has closed. */
   onClosed: () => void;
+  /** After a delete, with the deleted category's name. */
+  onDeleted: (name: string) => void;
 }
 
 /**
- * A category's German and English name, for a new category or one being renamed (REF-01). It
- * fits into the space above the keyboard and scrolls at the largest text sizes (UI-01).
+ * A category's German and English name, for a new category or one being renamed (REF-01), and
+ * "Delete" for every category but *Other*. It fits into the space above the keyboard and scrolls
+ * at the largest text sizes (UI-01).
  */
-function CategoryDialog({ editing, onClose, onClosed }: CategoryDialogProps) {
+function CategoryDialog({ editing, onClose, onClosed, onDeleted }: CategoryDialogProps) {
   const { t } = useTranslation();
 
   return (
@@ -216,7 +249,15 @@ function CategoryDialog({ editing, onClose, onClosed }: CategoryDialogProps) {
         </DialogHeader>
         {editing === 'new' && <NewCategoryForm onDone={onClose} />}
         {editing && editing !== 'new' && (
-          <RenameCategoryForm key={editing.id} category={editing} onDone={onClose} />
+          <RenameCategoryForm
+            key={editing.id}
+            category={editing}
+            onDone={onClose}
+            onDeleted={(name) => {
+              onDeleted(name);
+              onClose();
+            }}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -228,19 +269,37 @@ function NewCategoryForm({ onDone }: { onDone: () => void }) {
   return <NamesForm initial={{ de: '', en: '' }} save={create} onDone={onDone} />;
 }
 
-function RenameCategoryForm({ category, onDone }: { category: Category; onDone: () => void }) {
+interface RenameCategoryFormProps {
+  category: Category;
+  onDone: () => void;
+  onDeleted: (name: string) => void;
+}
+
+function RenameCategoryForm({ category, onDone, onDeleted }: RenameCategoryFormProps) {
   const rename = useRenameCategory(category.id);
-  return <NamesForm initial={category.names} save={rename} onDone={onDone} />;
+  return (
+    <NamesForm
+      initial={category.names}
+      save={rename}
+      onDone={onDone}
+      // *Other* is the default of new ingredients and free-text items: it always exists.
+      extraAction={
+        category.key !== OTHER_KEY && <DeleteCategory category={category} onDeleted={onDeleted} />
+      }
+    />
+  );
 }
 
 interface NamesFormProps {
   initial: CategoryNames;
   save: UseMutationResult<Category, Error, CategoryNames>;
   onDone: () => void;
+  /** Another button in the footer, before "Save". */
+  extraAction?: ReactNode;
 }
 
 /** Both names are required; a name another category has shows its error at its field. */
-function NamesForm({ initial, save, onDone }: NamesFormProps) {
+function NamesForm({ initial, save, onDone, extraAction }: NamesFormProps) {
   const { t } = useTranslation();
   const [names, setNames] = useState(initial);
   const trimmed = { de: names.de.trim(), en: names.en.trim() };
@@ -284,10 +343,94 @@ function NamesForm({ initial, save, onDone }: NamesFormProps) {
       </FormField>
       <ErrorAlert error={needsErrorAlert(fields, NAME_PATHS) ? save.error : null} />
       <DialogFooter>
+        {extraAction}
         <Button type="submit" disabled={!complete || save.isPending}>
           {t('common.save')}
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+/**
+ * "Delete" and its confirmation (REF-01), which says how many ingredients move to
+ * *Uncategorized* and how many free-text items on drafts to *Other*, and that lists being
+ * shopped and done lists stay as they are. It stays open while the delete is sent, so an error
+ * shows in it.
+ */
+function DeleteCategory({
+  category,
+  onDeleted,
+}: {
+  category: Category;
+  onDeleted: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const language = useLanguage();
+  const categories = useCategories();
+  const [confirming, setConfirming] = useState(false);
+  const usage = useCategoryUsage(category.id, { enabled: confirming });
+  const remove = useDeleteCategory(category.id);
+  const name = categoryName(category, language);
+  const builtIn = (key: string) => {
+    const found = categories.data?.find((other) => other.key === key);
+    return found ? categoryName(found, language) : '';
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className="text-destructive"
+        onClick={() => {
+          remove.reset();
+          setConfirming(true);
+        }}
+      >
+        <Trash2 aria-hidden="true" />
+        {t('admin.categories.delete')}
+      </Button>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('admin.categories.deleteTitle', { name })}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {usage.data
+                ? [
+                    t('admin.categories.deleteIngredients', {
+                      count: usage.data.ingredients,
+                      uncategorized: builtIn(UNCATEGORIZED_KEY),
+                    }),
+                    t('admin.categories.deleteItems', {
+                      count: usage.data.extra_items,
+                      other: builtIn(OTHER_KEY),
+                    }),
+                    t('admin.categories.deleteKeeps'),
+                  ].join(' ')
+                : t('common.loading')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ErrorAlert error={usage.error ?? remove.error} />
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={!usage.data || remove.isPending}
+              onClick={() =>
+                remove.mutate(undefined, {
+                  onSuccess: () => {
+                    setConfirming(false);
+                    onDeleted(name);
+                  },
+                })
+              }
+            >
+              {t('admin.categories.deleteConfirm')}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

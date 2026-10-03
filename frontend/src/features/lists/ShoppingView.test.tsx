@@ -8,6 +8,7 @@ import {
   checkedBy,
   doneList,
   FLOUR_EXTRA_ID,
+  line,
   LIST_ID,
   LIST_ROUTES,
   listDetail,
@@ -15,7 +16,7 @@ import {
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
-import { CATEGORIES, CHEESE_COUNTER } from '@/test/ingredients';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE, CHEESE_COUNTER } from '@/test/ingredients';
 import { ME } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { SyncEngine } from '@/features/sync/engine';
@@ -688,6 +689,19 @@ describe('offline (SYNC-03)', () => {
     ]);
   });
 
+  it('offers neither Uncategorized nor a deleted category for a free-text item (LIST-06)', async () => {
+    const { user } = renderList({ 'GET /api/categories': CATEGORIES_AFTER_DELETE });
+    await screen.findByTestId(testIds.shoppingLines);
+
+    await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
+    const form = screen.getByRole('form', { name: 'Add an item' });
+    expect(
+      within(within(form).getByLabelText('Category'))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Other']);
+  });
+
   it('sends everything in order once the connection is back', async () => {
     const { user, fetchMock } = renderList();
     await screen.findByTestId(testIds.shoppingLines);
@@ -1007,6 +1021,22 @@ describe('done list (SHOP-05/06)', () => {
 
     const lines = await screen.findByTestId(testIds.doneLines);
     expect(within(lines).getByRole('list', { name: 'Chilled goods' })).toHaveTextContent('Milch');
+  });
+
+  it('keeps the heading of a deleted category, after the one that took its place (D-30)', async () => {
+    const gouda = line({ key: 'i:ing-gouda', name: 'Gouda', category_id: 'cat-cheese' });
+    renderList({
+      [`GET ${BASE}`]: doneList({ lines: [...SHOPPING_LINES, gouda] }),
+      'GET /api/categories': CATEGORIES_AFTER_DELETE,
+    });
+
+    const lines = await screen.findByTestId(testIds.doneLines);
+    expect(within(lines).getByRole('list', { name: 'Cheese' })).toHaveTextContent('Gouda');
+    expect(
+      within(lines)
+        .getAllByRole('heading')
+        .map((heading) => heading.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Other', 'Cheese']);
   });
 
   it('shops again: a new draft, saying how many meals were left out', async () => {

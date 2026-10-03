@@ -2,6 +2,7 @@ import type { components } from '@/api/generated/schema';
 import { BEN, TEST_USER, userRef } from './api';
 
 type Schemas = components['schemas'];
+type Category = Schemas['Category'];
 
 const NAMES = {
   fruit_vegetables: { de: 'Obst & Gemüse', en: 'Fruit & vegetables' },
@@ -11,12 +12,13 @@ const NAMES = {
 } as const;
 const KEYS = Object.keys(NAMES) as (keyof typeof NAMES)[];
 
-/** A few categories in their walking order, named as seeded (the real seed has 17). */
+/** A few categories in their walking order, named as seeded (the real seed has 18). */
 export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   id: `cat-${key}`,
   key,
   names: NAMES[key],
   sort_order: index,
+  deleted: false,
 }));
 
 /** A category an admin added (REF-01): it has no key, and goes last until it is moved. */
@@ -25,7 +27,38 @@ export const CHEESE_COUNTER: Schemas['Category'] = {
   key: null,
   names: { de: 'Käsetheke', en: 'Cheese counter' },
   sort_order: CATEGORIES.length,
+  deleted: false,
 };
+
+/**
+ * The built-in *Uncategorized* (REF-01), seeded last: it holds the ingredients of deleted
+ * categories and is never picked by hand.
+ */
+export const UNCATEGORIZED: Schemas['Category'] = {
+  id: 'cat-uncategorized',
+  key: 'uncategorized',
+  names: { de: 'Ohne Kategorie', en: 'Uncategorized' },
+  sort_order: CATEGORIES.length,
+  deleted: false,
+};
+
+/** The categories with *Uncategorized*, as the seed has them. */
+export const CATEGORIES_WITH_UNCATEGORIZED: Schemas['Category'][] = [...CATEGORIES, UNCATEGORIZED];
+
+/**
+ * The categories once an admin deleted Cheese (D-30): it stays in the list, marked as deleted,
+ * with its last place, which *Other* took over, so it comes right after *Other*.
+ */
+export const CATEGORIES_AFTER_DELETE: Schemas['Category'][] = (() => {
+  const [fruit, dairy, cheese, other] = CATEGORIES as [Category, Category, Category, Category];
+  return [
+    fruit,
+    dairy,
+    { ...other, sort_order: 2 },
+    { ...cheese, sort_order: 2, deleted: true },
+    { ...UNCATEGORIZED, sort_order: 3 },
+  ];
+})();
 
 /** The categories with CHEESE_COUNTER moved before *Other*, as an admin may do. */
 export const CATEGORIES_WITH_ADDED: Schemas['Category'][] = [

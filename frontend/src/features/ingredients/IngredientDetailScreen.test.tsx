@@ -2,7 +2,13 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
 import { errorResponse, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
-import { APPLES, REFERENCE_ROUTES, summary, WEIDEHOF_MILK } from '@/test/ingredients';
+import {
+  APPLES,
+  CATEGORIES_WITH_UNCATEGORIZED,
+  REFERENCE_ROUTES,
+  summary,
+  WEIDEHOF_MILK,
+} from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -251,6 +257,36 @@ describe('IngredientDetailScreen', () => {
     ).resolves.toEqual({ brand: 'Hofgut', base_unit: 'ml', nutrients: { kcal: 55 } });
     expect(nutrientRow('Calories')).toHaveTextContent('55 kcal');
     expect(screen.getByRole('heading', { level: 1, name: 'Äpfel (Hofgut)' })).toBeVisible();
+  });
+
+  it('shows Uncategorized, and saves its other fields without asking for a category (ING-02)', async () => {
+    const uncategorized = { ...APPLES, category_id: 'cat-uncategorized' };
+    const { fetchMock, user } = renderDetail({
+      'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED,
+      'GET /api/ingredients/ing-aepfel': uncategorized,
+      'PATCH /api/ingredients/ing-aepfel': { ...uncategorized, brand: 'Hofgut' },
+    });
+
+    expect(await screen.findByText('Uncategorized')).toBeVisible();
+    await user.click(screen.getByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    const category = within(dialog).getByLabelText('Category');
+    // The current value, which can't be picked again.
+    expect(category).toHaveDisplayValue('Uncategorized');
+    expect(within(category).getByRole('option', { name: 'Uncategorized' })).toBeDisabled();
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .filter((option) => !(option as HTMLOptionElement).disabled)
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other']);
+    await user.type(within(dialog).getByLabelText('Brand'), 'Hofgut');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(
+      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
+    ).resolves.toEqual({ brand: 'Hofgut' });
   });
 
   it('edits an ingredient counted in pieces; leaving “Pieces” clears its piece weight (ING-02)', async () => {
