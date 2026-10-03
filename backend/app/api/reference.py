@@ -15,7 +15,9 @@ router = APIRouter(prefix="/api", tags=["reference"], responses=ERROR_RESPONSES)
 
 @router.get("/categories")
 async def list_categories(principal: CurrentUser, session: ReadSession) -> list[Category]:
-    """All categories in the shop's walking order."""
+    """Every category in the shop's walking order, deleted ones included: lists being shopped and
+    done lists still show them (D-30). A deleted one comes after the category that took over its
+    place."""
     return await reference.list_categories(session)
 
 

@@ -54,7 +54,7 @@ from app.schemas.ingredients import (
     IngredientUsage,
 )
 from app.schemas.nutrition import NutrientValues
-from app.services import events, hooks
+from app.services import events, hooks, reference
 from app.services.off_fields import (
     IGNORED,
     drop_pending,
@@ -151,8 +151,12 @@ async def _check_barcode_free(
         )
 
 
-async def _category_problem(session: AsyncSession, category_id: str) -> FieldProblem | None:
-    if await reference_repo.get_category(session, category_id) is None:
+async def _category_problem(
+    session: AsyncSession, category_id: str, *, current: str | None = None
+) -> FieldProblem | None:
+    """A deleted category and *Uncategorized* can't be picked (ING-02); keeping the category an
+    ingredient has is always fine, so an uncategorized one can be saved as it is."""
+    if category_id != current and await reference.pickable_category(session, category_id) is None:
         return FieldProblem(("body", "category_id"), FieldErrorCode.INVALID)
     return None
 
@@ -292,7 +296,7 @@ async def update_ingredient(
         if row is None:
             raise not_found()
         if body.category_id is not None and (
-            problem := await _category_problem(session, body.category_id)
+            problem := await _category_problem(session, body.category_id, current=row.category_id)
         ):
             raise validation_error([problem])
         if barcode is not None:

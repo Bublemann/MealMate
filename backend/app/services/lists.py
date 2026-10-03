@@ -65,7 +65,7 @@ from app.schemas.lists import (
     ListUpdate,
 )
 from app.schemas.users import UserRef
-from app.services import access, aggregation, detach, shopping
+from app.services import access, aggregation, detach, reference, shopping
 from app.services.access import ListRights
 from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
@@ -421,8 +421,9 @@ async def _copy(
 ) -> ListCopyResult:
     """A new draft of the principal from a list: same name, the meals that still exist and
     they may see (the current versions, live again), with their servings, and the extra items
-    (unchecked, without snapshots). `left_out` counts the other meals (VIS-06). Hidden lines
-    and check states are not copied (LIST-07)."""
+    (unchecked, without snapshots; a free-text item whose category was deleted goes to *Other*,
+    LIST-06). `left_out` counts the other meals (VIS-06). Hidden lines and check states are not
+    copied (LIST-07)."""
     visible = await access.visible_owner_ids(session, principal.user_id, "meals")
     list_meals = (await lists_repo.meals_for(session, [source.id]))[source.id]
     meals = await meals_repo.by_ids(session, (row.meal_id for row in list_meals))
@@ -445,7 +446,7 @@ async def _copy(
                 amount=extra.amount,
                 unit=extra.unit,
                 amount_text=extra.amount_text,
-                category_id=extra.category_id,
+                category_id=await _copied_category_id(session, extra),
                 added_by=principal.user_id,
                 created_at=now,
                 updated_at=now,
@@ -454,6 +455,16 @@ async def _copy(
     await session.flush()
     detail = await list_detail(session, media, principal.user_id, copy, rights, now=now)
     return ListCopyResult(list=detail, left_out=len(list_meals) - len(kept))
+
+
+async def _copied_category_id(session: AsyncSession, extra: ListExtraItem) -> str | None:
+    """The category of a copied free-text item: its own, unless that was deleted (LIST-06).
+    A linked item has none."""
+    if extra.category_id is None:
+        return None
+    if await reference.pickable_category(session, extra.category_id) is None:
+        return await other_category_id(session)
+    return extra.category_id
 
 
 async def copy_list(
@@ -653,12 +664,22 @@ def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
 
 
 async def _reference_problems(
-    session: AsyncSession, *, ingredient_id: str | None, category_id: str | None
+    session: AsyncSession,
+    *,
+    ingredient_id: str | None,
+    category_id: str | None,
+    current_category_id: str | None = None,
 ) -> list[FieldProblem]:
+    """An unknown ingredient, or a category a free-text item can't be put into: a deleted one or
+    *Uncategorized* (LIST-06). An item keeps the category it has, even a deleted one."""
     problems = []
     if ingredient_id is not None and await ingredients_repo.get(session, ingredient_id) is None:
         problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
-    if category_id is not None and await reference_repo.get_category(session, category_id) is None:
+    if (
+        category_id is not None
+        and category_id != current_category_id
+        and await reference.pickable_category(session, category_id) is None
+    ):
         problems.append(_field("category_id", FieldErrorCode.INVALID))
     return problems
 
@@ -783,6 +804,7 @@ async def update_extra(
             session,
             ingredient_id=body.ingredient_id if linked else None,
             category_id=None if linked else body.category_id,
+            current_category_id=extra.category_id,
         )
         if problems:
             raise validation_error(problems)

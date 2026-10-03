@@ -13,6 +13,7 @@
           "user.delete",
           "category.create",
           "category.rename",
+          "category.delete",
           "category.reorder",
           "ingredient.merge",
           "ingredient.delete",
@@ -299,8 +300,12 @@
         "type": "object"
       },
       "Category": {
-        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other*; the categories admins add\nhave none.",
+        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other* and `uncategorized` for\n*Uncategorized*; the categories admins add have none.\n\nA `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and\ndone lists still show it. It keeps its last `sort_order`, which the next category in the\nwalking order took over: its lines come right after that one's.",
         "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -328,7 +333,8 @@
           "id",
           "key",
           "names",
-          "sort_order"
+          "sort_order",
+          "deleted"
         ],
         "title": "Category",
         "type": "object"
@@ -347,7 +353,7 @@
         "type": "object"
       },
       "CategoryNames": {
-        "description": "A category's name in each UI language (I18N-04, D-31). Both are required; each is unique\nin its language among the categories, ignoring case, umlauts and accents (REF-01).",
+        "description": "A category's name in each UI language (I18N-04, D-31). Both are required; each is unique\nin its language among the categories that aren't deleted, ignoring case, umlauts and accents\n(REF-01).",
         "properties": {
           "de": {
             "maxLength": 40,
@@ -370,7 +376,7 @@
         "type": "object"
       },
       "CategoryOrder": {
-        "description": "Every category id exactly once, in the new order.",
+        "description": "Every category that isn't deleted exactly once, *Uncategorized* included, in the new\norder.",
         "properties": {
           "category_ids": {
             "items": {
@@ -399,6 +405,25 @@
           "names"
         ],
         "title": "CategoryRename",
+        "type": "object"
+      },
+      "CategoryUsage": {
+        "description": "What deleting a category would move (ADM-01): its `ingredients` to *Uncategorized*, and\nthe free-text extra items on drafts (`extra_items`) to *Other*.",
+        "properties": {
+          "extra_items": {
+            "title": "Extra Items",
+            "type": "integer"
+          },
+          "ingredients": {
+            "title": "Ingredients",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ingredients",
+          "extra_items"
+        ],
+        "title": "CategoryUsage",
         "type": "object"
       },
       "CodeCheckRequest": {
@@ -747,6 +772,8 @@
           "admin.self_forbidden",
           "admin.last_admin",
           "admin.public_url_missing",
+          "category.not_deletable",
+          "category.not_renamable",
           "ingredient.in_use",
           "ingredient.barcode_taken",
           "ingredient.has_barcode",
@@ -4692,7 +4719,7 @@
     },
     "/api/admin/categories/order": {
       "put": {
-        "description": "Set the category order to the shop's walking order; every category exactly once.",
+        "description": "Set the category order to the shop's walking order: every category that isn't deleted\nexactly once, *Uncategorized* included. Returns every category, as `GET /api/categories`\ndoes.",
         "operationId": "admin_reorder_categories",
         "requestBody": {
           "content": {
@@ -4742,8 +4769,47 @@
       }
     },
     "/api/admin/categories/{category_id}": {
+      "delete": {
+        "description": "Delete a category: its ingredients move to *Uncategorized* and its free-text items on\ndrafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and\n*Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not\nfound.",
+        "operationId": "admin_delete_category",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Delete Category",
+        "tags": [
+          "admin"
+        ]
+      },
       "patch": {
-        "description": "Replace both names of a category, seeded ones included. A name another category has in\nthat language is a `taken` field error.",
+        "description": "Replace both names of a category, seeded ones included; *Uncategorized* can't be renamed\n(409 `category.not_renamable`). A name another category has in that language is a `taken`\nfield error. A deleted category is not found.",
         "operationId": "admin_rename_category",
         "parameters": [
           {
@@ -4794,6 +4860,54 @@
           }
         ],
         "summary": "Admin Rename Category",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/categories/{category_id}/usage": {
+      "get": {
+        "description": "How many ingredients and free-text items on drafts deleting the category would move, for\nthe confirmation. A deleted category is not found.",
+        "operationId": "admin_category_usage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryUsage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Category Usage",
         "tags": [
           "admin"
         ]
@@ -5722,7 +5836,7 @@
     },
     "/api/categories": {
       "get": {
-        "description": "All categories in the shop's walking order.",
+        "description": "Every category in the shop's walking order, deleted ones included: lists being shopped and\ndone lists still show them (D-30). A deleted one comes after the category that took over its\nplace.",
         "operationId": "list_categories",
         "responses": {
           "200": {

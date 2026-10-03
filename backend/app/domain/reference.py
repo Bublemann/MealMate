@@ -1,9 +1,9 @@
 """Seeded reference data (REF-01, REF-03, requirements appendix A).
 
-The migrations that seed these (0003, and 0009 for the category names) spell them out
-themselves, since migrations are frozen history; a migration test checks both agree. Adding a
-cuisine: a new migration that inserts it, the key here, and the translations `cuisine.<key>`
-(MNT-06). Category names are data, not translations (I18N-04, D-31).
+The migrations that seed these (0003, 0009 for the category names, 0013 for *Uncategorized*)
+spell them out themselves, since migrations are frozen history; a migration test checks both
+agree. Adding a cuisine: a new migration that inserts it, the key here, and the translations
+`cuisine.<key>` (MNT-06). Category names are data, not translations (I18N-04, D-31).
 """
 
 from typing import NamedTuple
@@ -34,10 +34,13 @@ SEEDED_CATEGORIES: tuple[SeededCategory, ...] = (
     SeededCategory("drinks", "Getränke", "Drinks"),
     SeededCategory("household_hygiene", "Drogerie & Haushalt", "Household & toiletries"),
     SeededCategory("other", "Sonstiges", "Other"),
+    SeededCategory("uncategorized", "Ohne Kategorie", "Uncategorized"),
 )
 CATEGORY_KEYS: tuple[str, ...] = tuple(category.key for category in SEEDED_CATEGORIES)
-# Always exists (REF-01); the default category of new ingredients and free-text items.
+# Both always exist (REF-01). *Other* is the default category of new ingredients and free-text
+# items; *Uncategorized* takes the ingredients of a deleted category and is never picked by hand.
 OTHER_CATEGORY = "other"
+UNCATEGORIZED_CATEGORY = "uncategorized"
 
 # Listed in this order, before cuisines added by users.
 CUISINE_KEYS: tuple[str, ...] = (

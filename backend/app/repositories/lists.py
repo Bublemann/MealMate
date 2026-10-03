@@ -208,6 +208,22 @@ async def extras_for(
     return extras
 
 
+async def draft_extras_in_category(
+    session: AsyncSession, category_id: str
+) -> Sequence[ListExtraItem]:
+    """The free-text extra items in a category on drafts that are not deleted."""
+    result = await session.execute(
+        select(ListExtraItem)
+        .join(ShoppingList, ShoppingList.id == ListExtraItem.list_id)
+        .where(
+            ListExtraItem.category_id == category_id,
+            ListExtraItem.deleted_at.is_(None),
+            ShoppingList.status == "draft",
+        )
+    )
+    return result.scalars().all()
+
+
 async def get_extra(session: AsyncSession, extra_id: str) -> ListExtraItem | None:
     """An extra item by id, on any list, deleted or not."""
     return await session.get(ListExtraItem, extra_id)

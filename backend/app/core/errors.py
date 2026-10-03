@@ -55,6 +55,11 @@ class ErrorCode(StrEnum):
     ADMIN_LAST_ADMIN = "admin.last_admin"
     ADMIN_PUBLIC_URL_MISSING = "admin.public_url_missing"
 
+    # 409: *Other* and *Uncategorized* always exist, so neither can be deleted (REF-01).
+    CATEGORY_NOT_DELETABLE = "category.not_deletable"
+    # 409: *Uncategorized* can only be moved, not renamed (REF-01).
+    CATEGORY_NOT_RENAMABLE = "category.not_renamable"
+
     # 409: the ingredient is still referenced; `params` counts the references per kind
     # (`meals`, `lists`).
     INGREDIENT_IN_USE = "ingredient.in_use"

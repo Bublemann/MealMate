@@ -17,7 +17,8 @@ the frontend (AGG-01).
    of the meals, then extra items), so ingredient edits no longer change the list (LIST-11).
    Two brands of the same thing are two ingredients and so two lines. A free-text line shows
    its text and category. Lines are sorted by category order, then normalised name and brand,
-   then key (AGG-05), and carry their hidden state (LIST-07).
+   then key (AGG-05), and carry their hidden state (LIST-07). A deleted category keeps its last
+   `sort_order` (D-30), so a tie goes to the category that isn't deleted, then by category id.
 4. Outside a draft, lines carry their check state (plan § 5.7): a line without a stored state
    is `new` while shopping; a checked line that needs more since it was checked (or a free-text
    item that was edited) is reported unchecked, with the reason (LIST-12). Nothing is stored
@@ -415,10 +416,13 @@ def lines(
         extra = extras[line_key.removeprefix(TEXT_KEY_PREFIX)]
         return _Label(extra.text or "", None, extra.category_id or other_category_id)
 
-    def order(line_key: str) -> tuple[int, str, str]:
+    def order(line_key: str) -> tuple[int, bool, str, str, str]:
         label = describe(line_key)
+        category = content.categories[label.category_id]
         return (
-            content.categories[label.category_id].sort_order,
+            category.sort_order,
+            category.deleted_at is not None,
+            category.id,
             normalize(label.name),
             normalize(label.brand or ""),
         )

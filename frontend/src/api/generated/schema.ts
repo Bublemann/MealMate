@@ -56,7 +56,9 @@ export interface paths {
         get?: never;
         /**
          * Admin Reorder Categories
-         * @description Set the category order to the shop's walking order; every category exactly once.
+         * @description Set the category order to the shop's walking order: every category that isn't deleted
+         *     exactly once, *Uncategorized* included. Returns every category, as `GET /api/categories`
+         *     does.
          */
         put: operations["admin_reorder_categories"];
         post?: never;
@@ -76,15 +78,44 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Admin Delete Category
+         * @description Delete a category: its ingredients move to *Uncategorized* and its free-text items on
+         *     drafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and
+         *     *Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not
+         *     found.
+         */
+        delete: operations["admin_delete_category"];
         options?: never;
         head?: never;
         /**
          * Admin Rename Category
-         * @description Replace both names of a category, seeded ones included. A name another category has in
-         *     that language is a `taken` field error.
+         * @description Replace both names of a category, seeded ones included; *Uncategorized* can't be renamed
+         *     (409 `category.not_renamable`). A name another category has in that language is a `taken`
+         *     field error. A deleted category is not found.
          */
         patch: operations["admin_rename_category"];
+        trace?: never;
+    };
+    "/api/admin/categories/{category_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Category Usage
+         * @description How many ingredients and free-text items on drafts deleting the category would move, for
+         *     the confirmation. A deleted category is not found.
+         */
+        get: operations["admin_category_usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/admin/events": {
@@ -494,7 +525,9 @@ export interface paths {
         };
         /**
          * List Categories
-         * @description All categories in the shop's walking order.
+         * @description Every category in the shop's walking order, deleted ones included: lists being shopped and
+         *     done lists still show them (D-30). A deleted one comes after the category that took over its
+         *     place.
          */
         get: operations["list_categories"];
         put?: never;
@@ -1549,7 +1582,7 @@ export interface components {
          * @description What an admin (or the command line, with no actor) did.
          * @enum {string}
          */
-        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.create" | "category.rename" | "category.reorder" | "ingredient.merge" | "ingredient.delete" | "system.backup_request";
+        AdminAction: "invite.create" | "invite.revoke" | "user.reset_link" | "user.role_change" | "user.deactivate" | "user.reactivate" | "user.delete" | "category.create" | "category.rename" | "category.delete" | "category.reorder" | "ingredient.merge" | "ingredient.delete" | "system.backup_request";
         /**
          * AdminEvent
          * @description `actor` is null for the command line or a deleted admin, `target` for a deleted user.
@@ -1661,10 +1694,16 @@ export interface components {
         /**
          * Category
          * @description Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking
-         *     order). `key` names a seeded category, e.g. `other` for *Other*; the categories admins add
-         *     have none.
+         *     order). `key` names a seeded category, e.g. `other` for *Other* and `uncategorized` for
+         *     *Uncategorized*; the categories admins add have none.
+         *
+         *     A `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and
+         *     done lists still show it. It keeps its last `sort_order`, which the next category in the
+         *     walking order took over: its lines come right after that one's.
          */
         Category: {
+            /** Deleted */
+            deleted: boolean;
             /** Id */
             id: string;
             /** Key */
@@ -1683,7 +1722,8 @@ export interface components {
         /**
          * CategoryNames
          * @description A category's name in each UI language (I18N-04, D-31). Both are required; each is unique
-         *     in its language among the categories, ignoring case, umlauts and accents (REF-01).
+         *     in its language among the categories that aren't deleted, ignoring case, umlauts and accents
+         *     (REF-01).
          */
         CategoryNames: {
             /** De */
@@ -1693,7 +1733,8 @@ export interface components {
         };
         /**
          * CategoryOrder
-         * @description Every category id exactly once, in the new order.
+         * @description Every category that isn't deleted exactly once, *Uncategorized* included, in the new
+         *     order.
          */
         CategoryOrder: {
             /** Category Ids */
@@ -1705,6 +1746,17 @@ export interface components {
          */
         CategoryRename: {
             names: components["schemas"]["CategoryNames"];
+        };
+        /**
+         * CategoryUsage
+         * @description What deleting a category would move (ADM-01): its `ingredients` to *Uncategorized*, and
+         *     the free-text extra items on drafts (`extra_items`) to *Other*.
+         */
+        CategoryUsage: {
+            /** Extra Items */
+            extra_items: number;
+            /** Ingredients */
+            ingredients: number;
         };
         /** CodeCheckRequest */
         CodeCheckRequest: {
@@ -1827,7 +1879,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "ingredient.in_use" | "ingredient.barcode_taken" | "ingredient.has_barcode" | "ingredient.no_pending_update" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "ingredient.in_use" | "ingredient.barcode_taken" | "ingredient.has_barcode" | "ingredient.no_pending_update" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -3317,6 +3369,35 @@ export interface operations {
             };
         };
     };
+    admin_delete_category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     admin_rename_category: {
         parameters: {
             query?: never;
@@ -3339,6 +3420,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Category"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_category_usage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryUsage"];
                 };
             };
             /** @description Error envelope; `code` names the error */
