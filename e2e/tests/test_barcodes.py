@@ -401,9 +401,7 @@ def test_member_finds_a_product_by_name(
     expect(row).to_have_accessible_name(text("meals.row.label", name=label))
 
     # Searched again from the Ingredients tab, it is already in MealMate and opens.
-    page.goto("/ingredients")
-    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
-    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    dialog = open_new_ingredient(page)
     dialog.get_by_test_id(TEST_IDS["offSearchButton"]).click()
     # Without a name, the search starts empty.
     search = page.get_by_test_id(TEST_IDS["offSearchDialog"])

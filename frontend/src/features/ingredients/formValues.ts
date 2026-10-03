@@ -29,13 +29,6 @@ export interface FormValues {
   nutrients: Record<NutrientKey, string>;
 }
 
-/** A barcode looked up or a result of the Open Food Facts search, to start a new ingredient. */
-export interface Prefill {
-  barcode: string;
-  /** The values from Open Food Facts; null for a barcode it doesn't know (or couldn't answer). */
-  proposal: OffProposal | null;
-}
-
 function nutrientTexts(
   values: Partial<Record<NutrientKey, number | null>> | undefined,
   language: Language,
@@ -86,17 +79,16 @@ export function fitName(name: string): string {
 }
 
 /**
- * The form with a barcode and, if Open Food Facts knows it, its proposal (BAR-03). What the
- * proposal has no value for (the piece weight, and a name, brand, category guess, base unit or
- * nutrient when it has none) stays as it was: a category the user chose is kept unless the
+ * The form filled with an Open Food Facts proposal, its barcode included (BAR-03, BAR-11). What
+ * the proposal has no value for (the piece weight, and a name, brand, category guess, base unit
+ * or nutrient when it has none) stays as it was: a category the user chose is kept unless the
  * proposal guesses one.
  */
-export function valuesFromPrefill(
-  { barcode, proposal }: Prefill,
+export function valuesFromProposal(
+  proposal: OffProposal,
   current: FormValues,
   language: Language,
 ): FormValues {
-  if (!proposal) return { ...current, barcode };
   const nutrients = { ...current.nutrients };
   for (const key of NUTRIENT_KEYS) {
     const value = proposal.nutrients[key];
@@ -109,7 +101,7 @@ export function valuesFromPrefill(
     categoryId: proposal.category_key ? null : current.categoryId,
     categoryKey: proposal.category_key ?? current.categoryKey,
     baseUnit: proposal.nutrition_basis ?? current.baseUnit,
-    barcode,
+    barcode: proposal.barcode,
     nutrients,
   };
 }
@@ -135,8 +127,8 @@ export function typedValues(values: FormValues, proposed: FormValues): FormValue
  * keeps what the proposal lacks (a name typed before choosing a product without one is the
  * user's, not Open Food Facts').
  */
-export function proposalValues(prefill: Prefill, language: Language): FormValues {
-  return valuesFromPrefill(prefill, emptyValues('', language), language);
+export function proposalValues(proposal: OffProposal, language: Language): FormValues {
+  return valuesFromProposal(proposal, emptyValues('', language), language);
 }
 
 /**

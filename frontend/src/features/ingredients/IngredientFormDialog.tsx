@@ -56,9 +56,8 @@ import {
   proposalValues,
   typedValues,
   valuesFromIngredient,
-  valuesFromPrefill,
+  valuesFromProposal,
   type FormValues,
-  type Prefill,
 } from './formValues';
 import { ingredientLabel } from './label';
 import {
@@ -134,9 +133,10 @@ export function IngredientFormDialog({ open, onOpenChange, ...props }: Ingredien
         onOpenAutoFocus={(event) => {
           // The cursor starts in the name only while it is empty (D-35): with a name, the
           // keyboard would cover the icons and the category, so the pop-up itself takes the focus.
+          // So it does after a scan, as after the scan icon's: the lookup may fill the name in.
           event.preventDefault();
           const name = nameRef.current;
-          if (name && name.value === '') name.focus();
+          if (name && name.value === '' && props.initialScan === undefined) name.focus();
           else if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
         }}
       >
@@ -191,7 +191,7 @@ type ScanNoticeState =
 
 /** The Open Food Facts proposal and its own values, to tell which ones the user changed. */
 interface Proposed {
-  prefill: Prefill;
+  proposal: OffProposal;
   /** `proposalValues`: without what the form kept because the proposal lacks it. */
   values: FormValues;
 }
@@ -288,12 +288,11 @@ function IngredientForm({
    * stays, but not the texts and nutrients of a product chosen before.
    */
   function fill(proposal: OffProposal) {
-    const prefilled: Prefill = { barcode: proposal.barcode, proposal };
     const earlier = proposed?.values;
     setValues((current) =>
-      valuesFromPrefill(prefilled, earlier ? typedValues(current, earlier) : current, language),
+      valuesFromProposal(proposal, earlier ? typedValues(current, earlier) : current, language),
     );
-    setProposed({ prefill: prefilled, values: proposalValues(prefilled, language) });
+    setProposed({ proposal, values: proposalValues(proposal, language) });
     setInvalid(new Set());
     create.reset();
   }
@@ -398,7 +397,7 @@ function IngredientForm({
         if (nutrients[key] !== null) given[key] = nutrients[key];
       }
       if (Object.keys(given).length > 0) body.nutrients = given;
-      const proposal = proposed?.prefill.proposal;
+      const proposal = proposed?.proposal;
       if (proposal) {
         // The pack size is Open Food Facts' alone, passed on as it came (D-38).
         if (proposal.quantity_text !== null) body.quantity_text = proposal.quantity_text;

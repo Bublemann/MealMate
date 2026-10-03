@@ -447,16 +447,12 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
   const LOOKUP = 'GET /api/ingredients/lookup';
 
   /**
-   * The lookup as the server answers it: asked about our own ingredients alone, it knows nothing
-   * of the barcode; asked in full, Open Food Facts answers `off` (or the function's answer).
+   * The lookup route as the server answers it: asked about our own ingredients alone, it knows
+   * nothing of the barcode; asked in full, Open Food Facts answers with `off()`.
    */
-  function lookup(off: unknown) {
+  function lookupRoute(off: () => unknown) {
     return (request: Request) =>
-      new URL(request.url).searchParams.get('own_only') === 'true'
-        ? lookupResult()
-        : typeof off === 'function'
-          ? (off as () => unknown)()
-          : off;
+      new URL(request.url).searchParams.get('own_only') === 'true' ? lookupResult() : off();
   }
 
   /** Taps the meal form's "Scan barcode" and types `digits` into the scanner. */
@@ -520,7 +516,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
       source: 'off',
     });
     const { fetchMock, user } = renderForm('/meals/new', {
-      [LOOKUP]: lookup(off.route),
+      [LOOKUP]: lookupRoute(off.route),
       'POST /api/ingredients': Response.json(created, { status: 201 }),
     });
 
@@ -531,6 +527,8 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     expect(within(dialog).getByTestId(testIds.ingredientScanNotice)).toHaveTextContent(
       `Looking up ${BARCODE}…`,
     );
+    // No cursor in the name, as after a scan inside it: the lookup may still fill it in.
+    await waitFor(() => expect(dialog).toHaveFocus());
     await off.answer(
       lookupResult({
         found_in: 'off',
@@ -568,7 +566,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
   it('fills in only a barcode Open Food Facts does not know, with its notice; Save adds the row (BAR-03)', async () => {
     const created = ingredient({ id: 'ing-quitten', name: 'Quitten', barcode: BARCODE });
     const { fetchMock, user } = renderForm('/meals/new', {
-      [LOOKUP]: lookup(lookupResult()),
+      [LOOKUP]: lookupRoute(() => lookupResult()),
       'POST /api/ingredients': Response.json(created, { status: 201 }),
     });
 
@@ -600,7 +598,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
       errorResponse(503, 'off.busy'),
       lookupResult({ found_in: 'off', proposal: proposal() }),
     ];
-    const { user } = renderForm('/meals/new', { [LOOKUP]: lookup(() => answers.shift()) });
+    const { user } = renderForm('/meals/new', { [LOOKUP]: lookupRoute(() => answers.shift()) });
 
     await scanInMealForm(user, BARCODE);
 
@@ -621,7 +619,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
   it('“Use Milch” gives a similar ingredient without a barcode the scanned one and adds its row (BAR-03)', async () => {
     await i18n.changeLanguage('de');
     const { fetchMock, user } = renderForm('/meals/new', {
-      [LOOKUP]: lookup(lookupResult()),
+      [LOOKUP]: lookupRoute(() => lookupResult()),
       'GET /api/ingredients/similar': [MILK],
       'POST /api/ingredients/ing-milch/barcode': ingredient({ ...MILK, barcode: BARCODE }),
     });
