@@ -198,6 +198,15 @@ class Api:
         *Uncategorized* (REF-01)."""
         return [c for c in self.ordered_categories(account) if c["key"] != "uncategorized"]
 
+    def filterable_categories(self, account: Account) -> list[dict[str, Any]]:
+        """The categories the Ingredients tab's filter panel offers, in walking order: those
+        pickers offer, and *Uncategorized* while it holds ingredients (ING-03)."""
+        return [
+            c
+            for c in self.ordered_categories(account)
+            if c["key"] != "uncategorized" or c["ingredient_count"] > 0
+        ]
+
     def category_name(self, account: Account, key: str, language: str = "en") -> str:
         """The name of the category `key` in `language`, as the app shows it: category names
         come from the server, not from the translations (D-31)."""

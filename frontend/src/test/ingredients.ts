@@ -13,13 +13,17 @@ const NAMES = {
 } as const;
 const KEYS = Object.keys(NAMES) as (keyof typeof NAMES)[];
 
-/** A few categories in their walking order, named as seeded (the real seed has 18). */
+/**
+ * A few categories in their walking order, named as seeded (the real seed has 18). Their
+ * ingredient counts only matter for *Uncategorized*, which the Ingredients tab offers by its count.
+ */
 export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   id: `cat-${key}`,
   key,
   names: NAMES[key],
   sort_order: index,
   deleted: false,
+  ingredient_count: 0,
 }));
 
 /** A category an admin added (REF-01): it has no key, and goes last until it is moved. */
@@ -29,11 +33,12 @@ export const CHEESE_COUNTER: Schemas['Category'] = {
   names: { de: 'Käsetheke', en: 'Cheese counter' },
   sort_order: CATEGORIES.length,
   deleted: false,
+  ingredient_count: 0,
 };
 
 /**
  * The built-in *Uncategorized* (REF-01), seeded last: it holds the ingredients of deleted
- * categories and is never picked by hand.
+ * categories and is never picked by hand. Empty, as seeded.
  */
 export const UNCATEGORIZED: Schemas['Category'] = {
   id: 'cat-uncategorized',
@@ -41,6 +46,7 @@ export const UNCATEGORIZED: Schemas['Category'] = {
   names: { de: 'Ohne Kategorie', en: 'Uncategorized' },
   sort_order: CATEGORIES.length,
   deleted: false,
+  ingredient_count: 0,
 };
 
 /** The categories with *Uncategorized*, as the seed has them. */
@@ -48,7 +54,8 @@ export const CATEGORIES_WITH_UNCATEGORIZED: Schemas['Category'][] = [...CATEGORI
 
 /**
  * The categories once an admin deleted Cheese (D-30): it stays in the list, marked as deleted,
- * with its last place, which *Other* took over, so it comes right after *Other*.
+ * with its last place, which *Other* took over, so it comes right after *Other*. Its one
+ * ingredient moved to *Uncategorized*.
  */
 export const CATEGORIES_AFTER_DELETE: Schemas['Category'][] = (() => {
   const [fruit, dairy, cheese, other] = CATEGORIES as [Category, Category, Category, Category];
@@ -57,7 +64,7 @@ export const CATEGORIES_AFTER_DELETE: Schemas['Category'][] = (() => {
     dairy,
     { ...other, sort_order: 2 },
     { ...cheese, sort_order: 2, deleted: true },
-    { ...UNCATEGORIZED, sort_order: 3 },
+    { ...UNCATEGORIZED, sort_order: 3, ingredient_count: 1 },
   ];
 })();
 

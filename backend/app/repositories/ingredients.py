@@ -83,6 +83,14 @@ async def count_in_category(session: AsyncSession, category_id: str) -> int:
     return result.scalar_one()
 
 
+async def counts_by_category(session: AsyncSession) -> dict[str, int]:
+    """The number of ingredients in each category that holds any, by category id."""
+    result = await session.execute(
+        select(Ingredient.category_id, func.count()).group_by(Ingredient.category_id)
+    )
+    return {category_id: count for category_id, count in result}
+
+
 async def move_category(session: AsyncSession, from_id: str, into_id: str) -> int:
     """Move every ingredient of a category into another, as no one's edit: who changed it
     last, and when, stay (plan § 6). Returns how many moved."""

@@ -326,7 +326,8 @@ async def test_a_piece_ingredient_is_frozen_with_its_piece_weight(
     assert line(body, "Eier")["amounts"] == [{"value": 5, "unit": "piece"}]
     assert line(body, "Eier")["needs_more"]["grown"] == [{"value": 1, "unit": "piece"}]
 
-    changes = {"name": "Hühnereier", "base_unit": "g"}
+    # The meal's pieces won't fit grams any more (D-33).
+    changes = {"name": "Hühnereier", "base_unit": "g", "accept_unit_mismatch": True}
     response = await api.patch(f"/api/ingredients/{eggs['id']}", json=changes, headers=anna.headers)
     assert (response.json()["base_unit"], response.json()["piece_weight_g"]) == ("g", None)
     after = await detail(api, anna, list_id)

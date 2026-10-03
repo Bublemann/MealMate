@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-02 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-03 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38; finding uncategorized ingredients, ING-03 and REF-01) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -139,7 +139,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - Admins **add**, **rename**, **delete** and **reorder** categories to match the store (ADM-01). A new category goes to the end of the walking order. A rename shows on every list, old ones included (LIST-11).
   - **Names:** both are required, at most 40 characters each, and unique per language among the categories that aren't deleted, ignoring case, umlauts and accents. Seeded names count.
   - `Other / Sonstiges` and `Uncategorized / Ohne Kategorie` always exist. *Other* can be renamed and moved, but not deleted. *Uncategorized* can only be moved, and is never picked by hand (ING-02, LIST-06).
-  - **Deleting** a category moves its ingredients to *Uncategorized*, so the lines of drafts, which follow the ingredients, move there too; only detached meals (LIST-15), which are frozen, keep it. Free-text items on drafts move to *Other* (LIST-06). Lists being shopped and done lists keep the deleted category (LIST-11, D-30).
+  - **Deleting** a category moves its ingredients to *Uncategorized*, so the lines of drafts, which follow the ingredients, move there too; only detached meals (LIST-15), which are frozen, keep it. Free-text items on drafts move to *Other* (LIST-06). Lists being shopped and done lists keep the deleted category (LIST-11, D-30). The message after a delete offers "Zeigen", which opens the Ingredients tab with *Uncategorized* as its only category and no search (ING-03).
   - A deleted category can't be restored, and its names can be reused.
   - The Open Food Facts category guess (BAR-03) only ever names a seeded category; a guess of a deleted one falls back to *Other*.
 - **REF-02** **Units:** `g`, `kg`, `ml`, `l`, `piece`, `tbsp`, `tsp`. They are fixed and shown translated (`Stk.`/`pcs`, `EL`/`tbsp`, `TL`/`tsp`).
@@ -173,7 +173,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **ING-03** Search covers the name and the brand and ignores case, umlauts and accents: `apfel`, `Äpfel` and `aepfel` all find "Äpfel". Everywhere an ingredient is shown, the brand follows the name ("Milch (Weihenstephan)"). When a user creates an ingredient, a "similar ingredient already exists" hint is shown; it doesn't block creating it. The **Ingredients tab**:
   - is one A–Z list in **dictionary order** by name, then brand. Dictionary order ignores case and accents and sorts ä/ö/ü as a/o/u and ß as ss, so "Äpfel" sits next to "Apfel". With a search, the best matches come first ("Milch" above "Buttermilch"), then the same order;
   - shows in each row the name with the brand and the barcode icon, and the category and base unit in the grey line ("Milchprodukte & Eier · ml", or "Milchprodukte & Eier · Stk." for eggs counted in pieces);
-  - offers several categories in its filter panel (UI-01); an ingredient matches **any** of them;
+  - offers several categories in its filter panel (UI-01); an ingredient matches **any** of them. *Uncategorized* is offered at its place in the walking order while it holds ingredients, or while it is ticked, so that every ingredient whose category was deleted can be found; deleted categories never are (REF-01);
   - turns its "Neue Zutat" tile into "„Quitten“ anlegen" while a search text is present, which opens "Neue Zutat" with that name filled in.
 - **ING-04** An ingredient is created in **"Neue Zutat"**, from the Ingredients tab or the meal form (MEAL-03), in one of three ways:
   - by **typing**: the name alone is enough;
