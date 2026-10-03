@@ -73,19 +73,24 @@ class MealPhoto(BaseModel):
 
 
 class MealIngredientRow(BaseModel):
-    """An ingredient row; `amount` and `unit` are both null for e.g. "salt, to taste"."""
+    """An ingredient row; `amount` and `unit` are both null for e.g. "salt, to taste".
+    `unit_fits` is false for an amount whose unit doesn't fit the ingredient's base unit
+    (REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is
+    kept as it is (MEAL-02, D-33)."""
 
     id: str
     position: int
     ingredient: IngredientSummary
     amount: float | None
     unit: Unit | None
+    unit_fits: bool
     note: str | None
 
 
 class MealNutritionMissing(BaseModel):
-    """Why a row does not (fully) count: no amount, an amount that cannot be converted to the
-    ingredient's base unit, or an unknown value for `nutrient` (NUT-04)."""
+    """Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the
+    ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown
+    value for `nutrient` (NUT-04)."""
 
     ingredient_id: str
     ingredient_name: str
@@ -97,7 +102,7 @@ class MealNutritionMissing(BaseModel):
 class MealNutrition(BaseModel):
     """Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing
     contributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of
-    a g-based ingredient without density were counted as 1 g/ml (NUT-05). The totals are not
+    a g ingredient were counted as 1 g/ml (NUT-05). The totals are not
     bounded by the per-100 maximums of `NutrientValues`."""
 
     per_meal: NutrientValues
@@ -151,7 +156,10 @@ class MealSummary(BaseModel):
 
 class MealIngredientInput(BaseModel):
     """`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an
-    amount is refused (`ingredients.<i>.amount` `required`). An empty note is stored as null."""
+    amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's
+    base unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already
+    has the very same row (ingredient, amount and unit), which is kept as it is (MEAL-02). An
+    empty note is stored as null."""
 
     ingredient_id: IdInput
     amount: AmountInput | None = None

@@ -57,6 +57,19 @@ def based_on_text(name: str, owner: str) -> str:
     return text("meals.detail.basedOn").replace("<mealLink/>", name).replace("<owner/>", owner)
 
 
+def open_user_filter(page: Page) -> Locator:
+    """Opens the filter panel on Meals and returns its user filter (MEAL-10)."""
+    page.get_by_test_id(TEST_IDS["filterButton"]).click()
+    panel = page.get_by_role("dialog", name=text("filter.title"))
+    return panel.get_by_role("group", name=text("meals.filter.users"), exact=True)
+
+
+def close_filter_panel(page: Page) -> None:
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+    panel.get_by_role("button", name=text("filter.done"), exact=True).click()
+    expect(panel).to_be_hidden()
+
+
 def soup(api: Api, owner: Account, tag: str) -> dict[str, Any]:
     """A public meal of `owner` with one ingredient row."""
     lentils = api.create_ingredient(owner, f"Linsen {tag}", nutrients={"kcal": 350})
@@ -86,22 +99,28 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
         nutrients={"kcal": 64},
     )
     eggs = api.create_ingredient(
-        member, f"Eier {tag}", category_key="dairy_eggs", piece_weight_g=60, nutrients={"kcal": 155}
+        member,
+        f"Eier {tag}",
+        category_key="dairy_eggs",
+        base_unit="piece",
+        piece_weight_g=60,
+        nutrients={"kcal": 155},
     )
     salt = api.create_ingredient(member, f"Salz {tag}")
     name = f"Pfannkuchen {tag}"
 
     page.goto("/meals")
     expect(page.get_by_test_id(TEST_IDS["screenMeals"])).to_be_visible()
-    # "New meal", or the empty state's action while the member sees no meals yet.
-    create = re.compile(
-        f"^({re.escape(text('meals.new'))}|{re.escape(text('meals.empty.action'))})$"
-    )
-    page.get_by_role("button", name=create).click()
-    expect(page).to_have_url(re.compile(r"/meals/new$"))
+    # The "New meal" tile offers to create what was searched for, with that name (MEAL-09).
+    tile = page.get_by_test_id(TEST_IDS["newMeal"])
+    expect(tile).to_have_accessible_name(text("meals.new"))
+    page.get_by_test_id(TEST_IDS["mealSearch"]).fill(name)
+    expect(tile).to_have_accessible_name(text("meals.createNamed", name=name))
+    tile.click()
+    expect(page).to_have_url(re.compile(r"/meals/new\?name="))
 
     form = page.get_by_test_id(TEST_IDS["mealForm"])
-    form.get_by_label(text("meals.field.name"), exact=True).fill(name)
+    expect(form.get_by_label(text("meals.field.name"), exact=True)).to_have_value(name)
     form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True).click()
     expect(form.get_by_label(text("meals.field.servings"), exact=True)).to_have_value("2")
     add_row(page, flour["name"], "200", "g")
@@ -148,6 +167,69 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     origin = urlsplit(base_url)
     assert (source.scheme, source.netloc) == (origin.scheme, origin.netloc)
     assert source.path.startswith("/api/media/")
+
+
+def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Account) -> None:
+    """A Stück journey (ING-02, ING-03, NUT-05, AGG-04, D-32): "Eier" counted in pieces of
+    60 g, "2 Stk." in a meal, nutrition from the piece weight, a list line in whole pieces."""
+    page = member_page
+    tag = unique("e2e")
+    name = f"Eier {tag}"
+    dairy = api.category_name(member, "dairy_eggs")
+
+    page.goto("/ingredients")
+    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
+    form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
+    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=dairy)
+    # The weight per piece shows only for Stück.
+    piece_weight = form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)
+    expect(piece_weight).to_have_count(0)
+    form.get_by_role("radio", name=text("ingredients.baseUnit.piece"), exact=True).check()
+    piece_weight.fill("60")
+    for key, value in (("kcal", "155"), ("protein", "13"), ("carbs", "1"), ("sugar", "1"),
+                       ("fat", "11")):  # fmt: skip
+        form.get_by_label(text(f"nutrient.{key}"), exact=True).fill(value)
+    form.get_by_role("button", name=text("common.save")).click()
+
+    detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+    expect(detail.get_by_role("heading", level=1)).to_have_text(name)
+    expect(detail).to_contain_text(text("ingredients.baseUnit.piece"))
+    expect(detail).to_contain_text("60 g")
+
+    # The grey line on the Ingredients tab names the pieces.
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
+    row = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role(
+        "link", name=re.compile(f"^{re.escape(name)} ")
+    )
+    expect(row).to_contain_text(f"{dairy} · {text('unit.piece')}")
+
+    # 2 eggs for 4 servings: 2 x 60 g = 120 g, x 155 kcal / 100 g = 186 kcal; nothing missing.
+    page.goto("/meals/new")
+    meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
+    meal_form.get_by_label(text("meals.field.name"), exact=True).fill(f"Rührei {tag}")
+    more = meal_form.get_by_role("button", name=text("meals.field.servingsMore"), exact=True)
+    for _ in range(3):
+        more.click()
+    expect(meal_form.get_by_label(text("meals.field.servings"), exact=True)).to_have_value("4")
+    add_row(page, name, "2", "piece")
+    meal_form.get_by_role("button", name=text("meals.form.create"), exact=True).click()
+    expect(page).to_have_url(MEAL_URL)
+    expect(nutrient_row(page, "kcal")).to_contain_text("186 kcal")
+    expect(page.get_by_test_id(TEST_IDS["mealIncomplete"])).to_have_count(0)
+
+    # Made for 3 on a list: 1.5 eggs, bought as 2.
+    shopping_list = api.create_list(member, f"Frühstück {tag}")
+    api.add_list_meal(member, shopping_list["id"], meal_id(page), servings=3)
+    page.goto(f"/lists/{shopping_list['id']}")
+    line = (
+        page.get_by_test_id(TEST_IDS["listLines"])
+        .get_by_test_id(TEST_IDS["listLine"])
+        .filter(has_text=name)
+    )
+    expect(line).to_contain_text(f"2 {text('unit.piece')}")
 
 
 def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
@@ -204,7 +286,8 @@ def test_private_meals_are_hidden_except_from_the_partner(
     invite_user: Callable[..., Account],
     make_couple: Callable[[Account, Account], None],
 ) -> None:
-    """Journey 9 (VIS-02, CPL-04, MEAL-10): "meals public" off hides meals and chip."""
+    """Journey 9 (VIS-02, CPL-04, MEAL-10): "meals public" off hides the meals and the user in
+    the user filter."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     partner = invite_user(unique("paul"), unique("Paul"))
@@ -214,11 +297,12 @@ def test_private_meals_are_hidden_except_from_the_partner(
     # Carl's own meal: his list is never empty, whatever other tests left in the database.
     own = api.create_meal(carl, f"Eintopf {tag}")
 
-    # Carl sees Anna's meal and her chip.
+    # Carl sees Anna's meal, and her in the user filter, ticked.
     sign_in(page.context, carl)
     page.goto("/meals")
-    chips = page.get_by_test_id(TEST_IDS["mealUserChips"])
-    expect(chips.get_by_role("button", name=anna.display_name, exact=True)).to_be_visible()
+    users = open_user_filter(page)
+    expect(users.get_by_role("checkbox", name=anna.display_name, exact=True)).to_be_checked()
+    close_filter_panel(page)
     page.get_by_test_id(TEST_IDS["mealSearch"]).fill(tag)
     cards = page.get_by_test_id(TEST_IDS["mealList"]).get_by_test_id(TEST_IDS["mealCard"])
     expect(cards).to_have_count(2)
@@ -235,11 +319,13 @@ def test_private_meals_are_hidden_except_from_the_partner(
     expect(switch).not_to_be_checked()
     expect(switch).to_be_enabled()
 
-    # Carl no longer sees the meal, the chip or the meal's page.
+    # Carl no longer sees the meal, her in the user filter or the meal's page.
     page.reload()
     expect(page.get_by_test_id(TEST_IDS["screenMeals"])).to_be_visible()
-    expect(chips.get_by_role("button", name=text("meals.chips.me"), exact=True)).to_be_visible()
-    expect(chips.get_by_role("button", name=anna.display_name, exact=True)).to_have_count(0)
+    users = open_user_filter(page)
+    expect(users.get_by_role("checkbox", name=text("filter.me"), exact=True)).to_be_checked()
+    expect(users.get_by_role("checkbox", name=anna.display_name, exact=True)).to_have_count(0)
+    close_filter_panel(page)
     page.get_by_test_id(TEST_IDS["mealSearch"]).fill(tag)
     expect(cards).to_have_count(1)
     expect(cards).to_contain_text(own["name"])
@@ -254,5 +340,7 @@ def test_private_meals_are_hidden_except_from_the_partner(
     partner_detail = partner_page.get_by_test_id(TEST_IDS["screenMeal"])
     expect(partner_detail.get_by_role("heading", level=1)).to_have_text(meal["name"])
     partner_page.goto("/meals")
-    partner_chips = partner_page.get_by_test_id(TEST_IDS["mealUserChips"])
-    expect(partner_chips.get_by_role("button", name=anna.display_name, exact=True)).to_be_visible()
+    partner_users = open_user_filter(partner_page)
+    expect(
+        partner_users.get_by_role("checkbox", name=anna.display_name, exact=True)
+    ).to_be_checked()

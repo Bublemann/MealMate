@@ -371,4 +371,62 @@ describe('AdminEventsScreen', () => {
       '2026-09-26T10:00:00Z',
     );
   });
+
+  it('names categories in the UI language, as they were called then (REF-01)', async () => {
+    const event = (id: string, action: AdminEvent['action'], details: AdminEvent['details']) => ({
+      id,
+      actor: ADMIN_REF,
+      action,
+      target: null,
+      details,
+      created_at: '2026-09-27T10:00:00Z',
+    });
+    const events: AdminEvent[] = [
+      event('e4', 'category.delete', {
+        name_de: 'Käsetheke',
+        name_en: 'Cheese counter',
+        ingredients: 3,
+        extra_items: 1,
+      }),
+      event('e3', 'category.rename', {
+        old_name_de: 'Käse',
+        old_name_en: 'Cheese',
+        name_de: 'Käsetheke',
+        name_en: 'Cheese counter',
+      }),
+      // Only the English name changed.
+      event('e2', 'category.rename', {
+        old_name_de: 'Getränke',
+        old_name_en: 'Drinks',
+        name_de: 'Getränke',
+        name_en: 'Beverages',
+      }),
+      event('e1', 'category.create', { name_de: 'Backstube', name_en: 'Bakehouse' }),
+    ];
+    const { authSession } = renderAdmin('/me/admin/events', { 'GET /api/admin/events': events });
+    const descriptions = () =>
+      within(screen.getByTestId(testIds.eventList))
+        .getAllByRole('listitem')
+        .map((row) => row.firstChild?.textContent);
+
+    await screen.findByTestId(testIds.eventList);
+    expect(descriptions()).toEqual([
+      'Admin deleted the category Cheese counter (moved: 3 ingredients, 1 free-text item)',
+      'Admin renamed the category Cheese to Cheese counter',
+      'Admin renamed the category Drinks to Beverages',
+      'Admin added the category Bakehouse',
+    ]);
+
+    authSession.setUser({ ...authSession.getState().user!, language: 'de' });
+    await i18n.changeLanguage('de');
+    await waitFor(() =>
+      expect(descriptions()).toEqual([
+        'Admin hat die Kategorie Käsetheke gelöscht (verschoben: 3 Zutaten, 1 Freitext-Artikel)',
+        'Admin hat die Kategorie Käse in Käsetheke umbenannt',
+        // The German name stayed.
+        'Admin hat den Namen der Kategorie Getränke in einer anderen Sprache geändert',
+        'Admin hat die Kategorie Backstube angelegt',
+      ]),
+    );
+  });
 });

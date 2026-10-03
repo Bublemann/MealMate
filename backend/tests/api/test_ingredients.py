@@ -23,8 +23,9 @@ from tests.catalog import (
     create_from_off,
     create_ingredient,
     ref,
+    set_stored,
 )
-from tests.lists import create_list, detail, extra_added
+from tests.lists import create_list, detail, extra_added, set_status, start_shopping
 from tests.meals import create_meal
 
 
@@ -57,7 +58,7 @@ async def get(api: AsyncClient, user: Account, ingredient_id: str) -> Any:
     return response.json()
 
 
-async def search(api: AsyncClient, user: Account, **params: str) -> list[str]:
+async def search(api: AsyncClient, user: Account, **params: str | list[str]) -> list[str]:
     """The labels found: the name, with the brand in brackets."""
     response = await api.get("/api/ingredients", params=params, headers=user.headers)
     assert response.status_code == 200, response.text
@@ -85,7 +86,6 @@ async def test_create_with_defaults(api: AsyncClient, anna: Account) -> None:
         "category_id": categories["other"],
         "base_unit": "g",
         "piece_weight_g": None,
-        "density_g_per_ml": None,
         "nutrients": NO_NUTRIENTS,
         "quantity_text": None,
         "pack_quantity": None,
@@ -114,29 +114,22 @@ async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
         barcode=" 4006381 333931 ",
         category_id=categories["dairy_eggs"],
         base_unit="ml",
-        piece_weight_g=1030,
-        density_g_per_ml=1.03,
         nutrients={"kcal": 64, "fat": 3.5, "sugar": None},
-        quantity_text="1 l",
-        pack_quantity=1,
-        pack_unit="l",
     )
     assert (body["name"], body["brand"], body["barcode"]) == ("Milch", "Weihenstephan", EAN_13)
     assert body["category_id"] == categories["dairy_eggs"]
-    assert (body["base_unit"], body["piece_weight_g"], body["density_g_per_ml"]) == (
-        "ml",
-        1030,
-        1.03,
-    )
+    assert (body["base_unit"], body["piece_weight_g"]) == ("ml", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"kcal": 64, "fat": 3.5}
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("1 l", 1, "l")
-    # Typed by hand: nothing to refresh, nothing marked.
+    # Typed by hand: no pack size (D-38), nothing to refresh, nothing marked.
+    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == (None, None, None)
     assert (body["source"], body["user_edited_fields"], body["fetched_at"]) == ("manual", [], None)
 
 
 async def test_empty_optional_texts_are_null(api: AsyncClient, anna: Account) -> None:
-    body = await create_ingredient(api, anna, "Eier", brand="  ", quantity_text="")
-    assert (body["brand"], body["quantity_text"]) == (None, None)
+    body = await create_ingredient(api, anna, "Eier", brand="  ")
+    assert body["brand"] is None
+    body = await create_from_off(api, anna, "Milch", EAN_13, quantity_text=" ")
+    assert body["quantity_text"] is None
 
 
 async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Account) -> None:
@@ -163,10 +156,14 @@ async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Ac
         ({"name": "Äp\nfel"}, "name", "invalid_format"),
         ({"name": "́"}, "name", "invalid_format"),
         ({"base_unit": "kg"}, "base_unit", "invalid"),
+        ({"base_unit": "pieces"}, "base_unit", "invalid"),
+        ({"base_unit": "piece", "piece_weight_g": 0}, "piece_weight_g", "out_of_range"),
+        ({"base_unit": "piece", "piece_weight_g": 10_000.5}, "piece_weight_g", "out_of_range"),
         ({"piece_weight_g": 0}, "piece_weight_g", "out_of_range"),
         ({"piece_weight_g": 10_000.5}, "piece_weight_g", "out_of_range"),
-        ({"density_g_per_ml": 0.09}, "density_g_per_ml", "out_of_range"),
-        ({"density_g_per_ml": 5.01}, "density_g_per_ml", "out_of_range"),
+        # Only an ingredient counted in pieces has a piece weight (D-32).
+        ({"piece_weight_g": 60}, "piece_weight_g", "invalid"),
+        ({"base_unit": "ml", "piece_weight_g": 1030}, "piece_weight_g", "invalid"),
         ({"barcode": ""}, "barcode", "too_short"),
         ({"barcode": "1" * 33}, "barcode", "too_long"),
         ({"brand": "x" * 81}, "brand", "too_long"),
@@ -245,14 +242,52 @@ async def test_limits_are_inclusive(api: AsyncClient, anna: Account) -> None:
         api,
         anna,
         "Grenzfall",
+        base_unit="piece",
         piece_weight_g=10_000,
-        density_g_per_ml=5,
         nutrients={"kcal": 900, "protein": 0, "carbs": 100, "sugar": 100, "fat": 100},
-        pack_quantity=100_000,
     )
     assert body["nutrients"] == {"kcal": 900, "protein": 0, "carbs": 100, "sugar": 100, "fat": 100}
-    other = await create_ingredient(api, anna, "Leicht", density_g_per_ml=0.1)
-    assert other["density_g_per_ml"] == 0.1
+    assert body["piece_weight_g"] == 10_000
+    from_off = await create_from_off(api, anna, "Großpackung", EAN_13, pack_quantity=100_000)
+    assert from_off["pack_quantity"] == 100_000
+
+
+async def test_density_is_gone(api: AsyncClient, anna: Account) -> None:
+    """D-32: no density in or out; one sent by an older app is ignored (migration 0014 dropped
+    its column, D-34)."""
+    oil = await create_ingredient(api, anna, "Olivenöl", base_unit="ml", density_g_per_ml=0.92)
+    assert "density_g_per_ml" not in oil
+    body = (await patch(api, anna, oil["id"], density_g_per_ml=0.9)).json()
+    assert "density_g_per_ml" not in body
+
+
+async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """A piece weight a g or ml ingredient has from before D-32 is neither shown nor touched
+    (migration 0014 cleared them, D-34, but `attrs()` doesn't rely on that). A null piece weight
+    is ignored; a new one is refused."""
+    apples = await create_ingredient(api, anna, "Äpfel")
+    await set_stored(app, apples["id"], piece_weight_g=180)
+    assert (await get(api, anna, apples["id"]))["piece_weight_g"] is None
+
+    body = (await patch(api, anna, apples["id"], name="Apfel", piece_weight_g=None)).json()
+    assert (body["name"], body["piece_weight_g"]) == ("Apfel", None)
+    response = await patch(api, anna, apples["id"], name="Äpfel", piece_weight_g=150)
+    assert fields(response) == {("body", "piece_weight_g"): "invalid"}
+    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
+
+    # Counted in millilitres, it still has it; counted in pieces, it has the piece weight sent
+    # along, or none: the hidden one would surprise (ING-02).
+    await patch(api, anna, apples["id"], base_unit="ml")
+    await patch(api, anna, apples["id"], base_unit="g")
+    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
+    body = (await patch(api, anna, apples["id"], base_unit="piece")).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
+    await patch(api, anna, apples["id"], base_unit="g")
+    await set_stored(app, apples["id"], piece_weight_g=180)
+    body = (await patch(api, anna, apples["id"], base_unit="piece", piece_weight_g=150)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 150)
 
 
 async def test_unknown_ingredient(api: AsyncClient, anna: Account) -> None:
@@ -407,11 +442,58 @@ async def test_create_from_open_food_facts(
     )
     assert body["source"] == "off"
     assert body["barcode"] == "2000000000015"
+    # The pack size, passed on from the proposal (D-38).
+    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("500 g", 500, "g")
     # Only the fields the user changed compared with the proposal, in field order.
     assert body["user_edited_fields"] == ["name", "nutrients.kcal"]
     assert body["off_last_modified_at"] == "2026-01-01T00:00:00Z"
     assert body["fetched_at"] == "2026-09-27T12:00:00Z"
     assert body["pending_update"] is None
+
+
+@pytest.mark.parametrize(
+    "pack",
+    [{"quantity_text": "500 g"}, {"pack_quantity": 500}, {"pack_unit": "g"}, {"pack_unit": None}],
+)
+async def test_the_pack_size_needs_an_open_food_facts_origin(
+    api: AsyncClient, anna: Account, pack: dict[str, Any]
+) -> None:
+    """The pack size is Open Food Facts' alone (ING-02, D-38): typed by hand, it is refused."""
+    response = await post(api, anna, name="Haferflocken", barcode=EAN_13, **pack)
+    assert response.status_code == 422
+    assert fields(response) == {("body", field): "invalid" for field in pack}
+
+
+@pytest.mark.parametrize(
+    ("pack", "field", "code"),
+    [
+        ({"quantity_text": "x" * 41}, "quantity_text", "too_long"),
+        ({"quantity_text": "500͸ g"}, "quantity_text", "invalid_format"),
+        ({"pack_quantity": 0}, "pack_quantity", "out_of_range"),
+        ({"pack_quantity": 100_001}, "pack_quantity", "out_of_range"),
+        ({"pack_unit": "cup"}, "pack_unit", "invalid"),
+    ],
+)
+async def test_invalid_pack_sizes(
+    api: AsyncClient, anna: Account, pack: dict[str, Any], field: str, code: str
+) -> None:
+    off = {"edited_fields": []}
+    response = await post(api, anna, name="Haferflocken", barcode=EAN_13, off=off, **pack)
+    assert response.status_code == 422
+    assert fields(response) == {("body", field): code}
+
+
+async def test_the_pack_size_is_never_edited(api: AsyncClient, anna: Account) -> None:
+    """Not even an edited pack size from the proposal is marked (BAR-04)."""
+    response = await post(
+        api,
+        anna,
+        name="Haferflocken",
+        barcode=EAN_13,
+        quantity_text="1 kg",
+        off={"edited_fields": ["quantity_text"]},
+    )
+    assert fields(response) == {("body", "off", "edited_fields", 0): "invalid"}
 
 
 async def test_from_open_food_facts_needs_a_barcode(api: AsyncClient, anna: Account) -> None:
@@ -438,44 +520,43 @@ async def test_editing_an_off_ingredient_marks_the_fields(
         oats["id"],
         name="Zarte Haferflocken",
         brand=None,
-        quantity_text="500 g",
         nutrients={"kcal": 372, "fat": None},
+        base_unit="piece",
         piece_weight_g=1,
         category_id=oats["category_id"],
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert (body["name"], body["brand"], body["quantity_text"]) == (
-        "Zarte Haferflocken",
-        None,
-        "500 g",
-    )
+    assert (body["name"], body["brand"]) == ("Zarte Haferflocken", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"kcal": 372}
-    # Only Open Food Facts fields are marked (not the piece weight or category).
-    assert body["user_edited_fields"] == [
-        "name",
-        "brand",
-        "quantity_text",
-        "nutrients.kcal",
-        "nutrients.fat",
-    ]
+    # Only Open Food Facts fields are marked (not the base unit, piece weight or category).
+    assert body["user_edited_fields"] == ["name", "brand", "nutrients.kcal", "nutrients.fat"]
     assert (body["created_by"], body["updated_by"]) == (ref(anna), ref(ben))
     assert body["updated_at"] == "2026-09-27T12:10:00Z"
 
-    body = (await patch(api, ben, oats["id"], pack_quantity=500, pack_unit="g")).json()
-    assert (body["pack_quantity"], body["pack_unit"]) == (500, "g")
-    body = (await patch(api, ben, oats["id"], pack_unit=None, nutrients=None)).json()
-    assert (body["pack_quantity"], body["pack_unit"]) == (500, None)
-    assert body["user_edited_fields"] == [
-        "name",
-        "brand",
-        "quantity_text",
-        "pack_quantity",
-        "pack_unit",
-        "nutrients.kcal",
-        "nutrients.fat",
-    ]
+
+@pytest.mark.parametrize(
+    "pack",
+    [
+        {"quantity_text": "1 kg"},
+        {"pack_quantity": 1000},
+        {"pack_unit": "kg"},
+        {"quantity_text": None, "pack_quantity": None, "pack_unit": None},
+    ],
+)
+async def test_the_pack_size_is_refused_on_update(
+    api: AsyncClient, anna: Account, pack: dict[str, Any]
+) -> None:
+    """Never edited, so never user-edited (BAR-04, D-38): sent anyway, it is refused, not
+    ignored, and nothing changes."""
+    oats = await create_from_off(
+        api, anna, "Haferflocken", EAN_13, quantity_text="500 g", pack_quantity=500, pack_unit="g"
+    )
+    response = await patch(api, anna, oats["id"], name="Hafer", **pack)
+    assert response.status_code == 422
+    assert fields(response) == {("body", field): "invalid" for field in pack}
+    assert await get(api, anna, oats["id"]) == oats
 
 
 def open_food_facts_data(body: dict[str, Any]) -> tuple[Any, ...]:
@@ -608,30 +689,128 @@ async def test_search_by_brand(api: AsyncClient, anna: Account) -> None:
     ]
 
 
-async def test_list_by_category_order_then_name(api: AsyncClient, anna: Account) -> None:
+async def test_list_in_dictionary_order(api: AsyncClient, anna: Account) -> None:
+    """ING-03, D-27: by name, then brand, whatever the category. Ä sorts as A, ß as ss and è as
+    e; real letter pairs keep their place ("Paella" before "Pak", "Sauer" before "Saure")."""
     categories = await category_ids(api, anna)
-    await create_ingredient(api, anna, "Salz", category_id=categories["sauces_spices_oils"])
-    await create_ingredient(api, anna, "Zwiebeln", category_id=categories["fruit_vegetables"])
-    await create_ingredient(api, anna, "Äpfel", category_id=categories["fruit_vegetables"])
-    await create_ingredient(api, anna, "Alufolie")
-    await create_ingredient(api, anna, "Gouda", brand="Milram", category_id=categories["cheese"])
-    await create_ingredient(
-        api, anna, "Gouda", brand="Frau Antje", category_id=categories["cheese"]
-    )
+    fruit = categories["fruit_vegetables"]
+    for name, brand, category in (
+        ("Salz", None, "sauces_spices_oils"),
+        ("Zwiebeln", None, "fruit_vegetables"),
+        ("Saure Sahne", None, "dairy_eggs"),
+        ("Äpfel", None, "fruit_vegetables"),
+        ("Pak Choi", None, "fruit_vegetables"),
+        ("Milch", "Müller", "dairy_eggs"),
+        ("Alufolie", None, "other"),
+        ("Sauerkraut", None, "canned_jars"),
+        ("Milch", None, "dairy_eggs"),
+        ("Apfelessig", None, "sauces_spices_oils"),
+        ("Paella-Reis", None, "pasta_rice_grains"),
+        ("Milch", "MUH", "dairy_eggs"),
+        ("Weizenmehl", None, "baking"),
+        ("Croissant", None, "bread_bakery"),
+        ("Ananas", None, "fruit_vegetables"),
+        ("Weißkohl", None, "fruit_vegetables"),
+        ("Crème fraîche", None, "dairy_eggs"),
+    ):
+        await create_ingredient(api, anna, name, brand=brand, category_id=categories[category])
 
     assert await search(api, anna) == [
-        "Äpfel",
-        "Zwiebeln",
-        "Gouda (Frau Antje)",
-        "Gouda (Milram)",
-        "Salz",
         "Alufolie",
+        "Ananas",
+        "Äpfel",
+        "Apfelessig",
+        "Crème fraîche",
+        "Croissant",
+        "Milch",
+        "Milch (MUH)",
+        "Milch (Müller)",
+        "Paella-Reis",
+        "Pak Choi",
+        "Salz",
+        "Sauerkraut",
+        "Saure Sahne",
+        "Weißkohl",
+        "Weizenmehl",
+        "Zwiebeln",
     ]
     assert await search(api, anna, q="  ") == await search(api, anna)
-    fruit = categories["fruit_vegetables"]
-    assert await search(api, anna, category_id=fruit) == ["Äpfel", "Zwiebeln"]
+    assert await search(api, anna, category_id=fruit) == [
+        "Ananas",
+        "Äpfel",
+        "Pak Choi",
+        "Weißkohl",
+        "Zwiebeln",
+    ]
     assert await search(api, anna, category_id=fruit, q="zw") == ["Zwiebeln"]
     assert await search(api, anna, category_id="unknown") == []
+
+
+async def test_list_of_several_categories(api: AsyncClient, anna: Account) -> None:
+    """ING-03, UI-01, D-23: several categories match any of them, in one list in dictionary
+    order; a search narrows them down. An unknown category adds nothing."""
+    categories = await category_ids(api, anna)
+    fruit, dairy = categories["fruit_vegetables"], categories["dairy_eggs"]
+    for name, category in (
+        ("Zwiebeln", "fruit_vegetables"),
+        ("Salz", "sauces_spices_oils"),
+        ("Milch", "dairy_eggs"),
+        ("Äpfel", "fruit_vegetables"),
+        ("Butter", "dairy_eggs"),
+        ("Alufolie", "other"),
+    ):
+        await create_ingredient(api, anna, name, category_id=categories[category])
+
+    both = ["Äpfel", "Butter", "Milch", "Zwiebeln"]
+    assert await search(api, anna, category_id=[fruit, dairy]) == both
+    assert await search(api, anna, category_id=[dairy, fruit, "unknown"]) == both
+    assert await search(api, anna, category_id=[fruit, dairy], q="i") == ["Milch", "Zwiebeln"]
+    assert await search(api, anna, category_id=[fruit, fruit]) == ["Äpfel", "Zwiebeln"]
+
+
+async def test_renaming_moves_the_ingredient(api: AsyncClient, anna: Account) -> None:
+    await create_ingredient(api, anna, "Apfelessig")
+    apples = await create_ingredient(api, anna, "Bratäpfel")
+    await create_ingredient(api, anna, "Milch", brand="MUH")
+    milk = await create_ingredient(api, anna, "Milch", brand="Alnatura")
+
+    assert (await patch(api, anna, apples["id"], name="Äpfel")).status_code == 200
+    assert (await patch(api, anna, milk["id"], brand="Müller")).status_code == 200
+
+    assert await search(api, anna) == ["Äpfel", "Apfelessig", "Milch (MUH)", "Milch (Müller)"]
+
+
+async def test_search_ranks_then_dictionary_order(api: AsyncClient, anna: Account) -> None:
+    """ING-03: the best matches first ("Milch" above "Buttermilch"), each rank in dictionary
+    order."""
+    for name, brand in (
+        ("Buttermilch", None),
+        ("Milch", "Müller"),
+        ("Milchreis", None),
+        ("Milch", "MUH"),
+        ("Milch", None),
+        ("Pflaumenmus", None),
+        ("Müsli", None),
+        ("Hummus", None),
+        ("Muskatnuss", None),
+        ("Apfelmus", None),
+    ):
+        await create_ingredient(api, anna, name, brand=brand)
+
+    assert await search(api, anna, q="milch") == [
+        "Milch",
+        "Milch (MUH)",
+        "Milch (Müller)",
+        "Milchreis",
+        "Buttermilch",
+    ]
+    assert await search(api, anna, q="mus") == [
+        "Muskatnuss",
+        "Müsli",
+        "Apfelmus",
+        "Hummus",
+        "Pflaumenmus",
+    ]
 
 
 async def test_summaries(api: AsyncClient, anna: Account) -> None:
@@ -703,7 +882,7 @@ async def test_anyone_edits_and_is_recorded(
 ) -> None:
     categories = await category_ids(api, anna)
     apples = await create_ingredient(
-        api, anna, "Apfel", piece_weight_g=180, density_g_per_ml=0.8, nutrients={"kcal": 52}
+        api, anna, "Apfel", base_unit="piece", piece_weight_g=180, nutrients={"kcal": 52}
     )
     clock.advance(minutes=5)
 
@@ -722,8 +901,7 @@ async def test_anyone_edits_and_is_recorded(
     body = response.json()
     assert (body["name"], body["brand"]) == ("Äpfel", "Bio")
     assert body["category_id"] == categories["fruit_vegetables"]
-    assert body["piece_weight_g"] is None
-    assert body["density_g_per_ml"] == 0.8  # not sent, kept
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"protein": 0.3}
     assert body["user_edited_fields"] == []
     assert body["created_by"] == ref(anna)
@@ -731,8 +909,6 @@ async def test_anyone_edits_and_is_recorded(
     assert body["created_at"] == "2026-09-27T12:00:00Z"
     assert body["updated_at"] == "2026-09-27T12:05:00Z"
     assert await get(api, anna, apples["id"]) == body
-    cleared = (await patch(api, anna, apples["id"], density_g_per_ml=None)).json()
-    assert cleared["density_g_per_ml"] is None
     assert await search(api, anna, q="bio") == ["Äpfel (Bio)"]
 
 
@@ -749,6 +925,185 @@ async def test_the_base_unit_changes_freely(api: AsyncClient, anna: Account) -> 
     oil = await create_ingredient(api, anna, "Olivenöl", barcode=EAN_13, nutrients={"fat": 92})
     body = (await patch(api, anna, oil["id"], base_unit="ml")).json()
     assert (body["base_unit"], body["nutrients"]["fat"]) == ("ml", 92)
+
+
+# --- base unit Stück (ING-02, D-32) -----------------------------------------------------------
+
+
+async def test_a_piece_ingredient_with_a_piece_weight(api: AsyncClient, anna: Account) -> None:
+    eggs = await create_ingredient(
+        api, anna, "Eier", base_unit="piece", piece_weight_g=60, nutrients={"kcal": 155}
+    )
+    assert (eggs["base_unit"], eggs["piece_weight_g"], eggs["nutrients"]["kcal"]) == (
+        "piece",
+        60,
+        155,
+    )
+    assert await get(api, anna, eggs["id"]) == eggs
+    response = await api.get("/api/ingredients", params={"q": "eier"}, headers=anna.headers)
+    assert [(item["name"], item["base_unit"]) for item in response.json()] == [("Eier", "piece")]
+
+    body = (await patch(api, anna, eggs["id"], piece_weight_g=10_000)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 10_000)
+    body = (await patch(api, anna, eggs["id"], piece_weight_g=None)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
+    without = await create_ingredient(api, anna, "Brötchen", base_unit="piece")
+    assert (without["base_unit"], without["piece_weight_g"]) == ("piece", None)
+
+
+async def test_counting_an_ingredient_in_pieces(api: AsyncClient, anna: Account) -> None:
+    """Nothing is converted: the values are per 100 g as before; a piece weight comes along."""
+    rolls = await create_ingredient(api, anna, "Brötchen", nutrients={"kcal": 270})
+    body = (await patch(api, anna, rolls["id"], base_unit="piece", piece_weight_g=50)).json()
+    assert (body["base_unit"], body["piece_weight_g"], body["nutrients"]["kcal"]) == (
+        "piece",
+        50,
+        270,
+    )
+
+
+@pytest.mark.parametrize("base_unit", ["g", "ml"])
+async def test_leaving_pieces_clears_the_piece_weight(
+    api: AsyncClient, anna: Account, base_unit: str
+) -> None:
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    assert (await patch(api, anna, eggs["id"], name="Eier (M)")).json()["piece_weight_g"] == 60
+    same = (await patch(api, anna, eggs["id"], base_unit="piece")).json()
+    assert same["piece_weight_g"] == 60
+
+    body = (await patch(api, anna, eggs["id"], base_unit=base_unit)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == (base_unit, None)
+    # Back to pieces, it has none.
+    body = (await patch(api, anna, eggs["id"], base_unit="piece")).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
+
+    # One sent along is refused: a g or ml ingredient has none (D-32).
+    again = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    response = await patch(api, anna, again["id"], base_unit=base_unit, piece_weight_g=55)
+    assert fields(response) == {("body", "piece_weight_g"): "invalid"}
+    assert (await get(api, anna, again["id"]))["piece_weight_g"] == 60
+
+
+# --- a base-unit change that leaves amounts not fitting (ING-02, D-33) ------------------------
+
+
+def amount(ingredient: Any, value: float | None = None, unit: str | None = None) -> Any:
+    """A meal row of the ingredient."""
+    return {"ingredient_id": ingredient["id"], "amount": value, "unit": unit}
+
+
+async def meal_amounts(api: AsyncClient, user: Account, meal_id: str) -> list[Any]:
+    """A meal's rows as `(amount, unit, unit_fits)`."""
+    response = await api.get(f"/api/meals/{meal_id}", headers=user.headers)
+    assert response.status_code == 200, response.text
+    return [
+        (row["amount"], row["unit"], row["unit_fits"]) for row in response.json()["ingredients"]
+    ]
+
+
+async def extra_amounts(api: AsyncClient, user: Account, list_id: str) -> list[Any]:
+    """A list's extra items as `(amount, unit, unit_fits)`."""
+    body = await detail(api, user, list_id)
+    return [(item["amount"], item["unit"], item["unit_fits"]) for item in body["extra_items"]]
+
+
+async def test_a_base_unit_change_that_leaves_amounts_not_fitting_asks_first(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
+) -> None:
+    """Counted are the meals with rows, and the drafts with linked extra items, whose amounts fit
+    now and wouldn't fit the new base unit. Nothing is saved until the request accepts that, and
+    then nothing is converted: those amounts are kept and flagged."""
+    eggs = await create_ingredient(api, anna, "Eier")
+    flour = await create_ingredient(api, anna, "Mehl")
+    omelette = await create_meal(
+        api, anna, "Omelett", ingredients=[amount(eggs, 120, "g"), amount(eggs, 1, "tbsp")]
+    )
+    cake = await create_meal(
+        api, ben, "Kuchen", ingredients=[amount(flour, 500, "g"), amount(eggs, 0.2, "kg")]
+    )
+    # A row without an amount fits every base unit.
+    await create_meal(api, ben, "Pfannkuchen", ingredients=[amount(eggs), amount(flour, 250, "g")])
+    draft = await create_list(api, anna)
+    await extra_added(api, anna, draft["id"], ingredient_id=eggs["id"], amount=500, unit="g")
+    await extra_added(api, anna, draft["id"], ingredient_id=eggs["id"])
+    other_draft = await create_list(api, ben)
+    await extra_added(api, ben, other_draft["id"], ingredient_id=eggs["id"])
+    before = await get(api, anna, eggs["id"])
+    clock.advance(minutes=1)
+
+    response = await patch(api, ben, eggs["id"], base_unit="piece", name="Eier (M)")
+
+    assert response.status_code == 409
+    assert error(response) == "ingredient.unit_mismatch"
+    assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
+    assert await get(api, anna, eggs["id"]) == before
+
+    response = await patch(
+        api, ben, eggs["id"], base_unit="piece", name="Eier (M)", accept_unit_mismatch=True
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["name"], body["base_unit"], body["updated_by"]) == ("Eier (M)", "piece", ref(ben))
+    assert await meal_amounts(api, anna, omelette["id"]) == [(120, "g", False), (1, "tbsp", False)]
+    assert await meal_amounts(api, ben, cake["id"]) == [(500, "g", True), (0.2, "kg", False)]
+    assert await extra_amounts(api, anna, draft["id"]) == [(500, "g", False), (None, None, True)]
+
+
+async def test_a_base_unit_change_no_amount_depends_on_asks_nothing(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """Spoons fit g and ml alike, a row without an amount fits every base unit, and an amount
+    that doesn't fit already (D-33) can't stop fitting; accepting is fine when nothing would."""
+    flour = await create_ingredient(api, anna, "Mehl")
+    rolls = await create_ingredient(api, anna, "Brötchen", base_unit="piece")
+    meal = await create_meal(
+        api, anna, "Brot", ingredients=[amount(flour, 2, "tbsp"), amount(flour), amount(rolls, 2)]
+    )
+    # Counted in grams since before D-33, so its pieces don't fit.
+    await set_stored(app, rolls["id"], base_unit="g")
+
+    for ingredient, base_unit, accept in (
+        (flour, "ml", False),
+        (rolls, "ml", False),
+        (rolls, "piece", False),
+        (rolls, "g", True),
+    ):
+        body: dict[str, Any] = {"base_unit": base_unit}
+        if accept:
+            body["accept_unit_mismatch"] = True
+        response = await patch(api, anna, ingredient["id"], **body)
+        assert response.status_code == 200, (base_unit, response.text)
+        assert response.json()["base_unit"] == base_unit
+    assert await meal_amounts(api, anna, meal["id"]) == [
+        (2, "tbsp", True),
+        (None, None, True),
+        (2, "piece", False),
+    ]
+
+
+async def test_lists_being_shopped_and_done_lists_do_not_count(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """LIST-11, D-08: their linked extra items keep the base unit they copied when shopping
+    started, so a base-unit change neither asks about them nor changes them."""
+    eggs = await create_ingredient(api, anna, "Eier")
+    shopping, done = await create_list(api, anna, "Einkauf"), await create_list(api, anna, "Fertig")
+    for shopping_list, grams in ((shopping, 500), (done, 250)):
+        await extra_added(
+            api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=grams, unit="g"
+        )
+        await start_shopping(api, anna, shopping_list["id"])
+    await set_status(app, done["id"], "done")
+    lists = [await detail(api, anna, item["id"]) for item in (shopping, done)]
+
+    response = await patch(api, anna, eggs["id"], base_unit="piece")
+
+    assert response.status_code == 200, response.text
+    after = [await detail(api, anna, item["id"]) for item in (shopping, done)]
+    for old, new in zip(lists, after, strict=True):
+        assert (new["lines"], new["extra_items"]) == (old["lines"], old["extra_items"])
+        assert [item["unit_fits"] for item in new["extra_items"]] == [True]
 
 
 async def test_invalid_updates(api: AsyncClient, anna: Account) -> None:
@@ -782,7 +1137,7 @@ async def test_null_is_refused_for_required_fields(
 async def test_an_empty_update_only_records_the_editor(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel", piece_weight_g=180)
+    apples = await create_ingredient(api, anna, "Äpfel", base_unit="piece", piece_weight_g=180)
     clock.advance(minutes=1)
     body = (await patch(api, ben, apples["id"])).json()
     changed = {"updated_by": None, "updated_at": None}
@@ -794,7 +1149,7 @@ async def test_an_empty_update_only_records_the_editor(
 async def test_deleted_creator(
     app: FastAPI, api: AsyncClient, anna: Account, ben: Account, admin: Account
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
+    apples = await create_ingredient(api, anna, "Äpfel", base_unit="piece")
     await patch(api, ben, apples["id"], piece_weight_g=180)
     assert (
         await api.delete(f"/api/admin/users/{anna.id}", headers=admin.headers)
@@ -820,10 +1175,12 @@ async def test_usage(api: AsyncClient, anna: Account, ben: Account) -> None:
 # --- merge and delete (ING-05, admins) ---------------------------------------------------------
 
 
-async def merge(api: AsyncClient, user: Account, ingredient_id: str, into_id: str) -> Any:
+async def merge(
+    api: AsyncClient, user: Account, ingredient_id: str, into_id: str, **body: Any
+) -> Any:
     return await api.post(
         f"/api/admin/ingredients/{ingredient_id}/merge",
-        json={"into_id": into_id},
+        json={"into_id": into_id, **body},
         headers=user.headers,
     )
 
@@ -850,7 +1207,7 @@ async def test_merge(
 
     monkeypatch.setattr(hooks, "on_ingredients_merged", on_ingredients_merged)
     duplicate = await create_ingredient(api, anna, "Paradeiser", nutrients={"kcal": 20})
-    tomatoes = await create_ingredient(api, anna, "Tomaten", piece_weight_g=100, base_unit="ml")
+    tomatoes = await create_ingredient(api, anna, "Tomaten", piece_weight_g=100, base_unit="piece")
     clock.advance(minutes=10)
 
     response = await merge(api, admin, duplicate["id"], tomatoes["id"])
@@ -947,7 +1304,7 @@ async def test_merging_moves_meal_rows_and_list_lines(
     api: AsyncClient, anna: Account, admin: Account
 ) -> None:
     duplicate = await create_ingredient(api, anna, "Paradeiser")
-    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    tomatoes = await create_ingredient(api, anna, "Tomaten", base_unit="piece")
     salt = await create_ingredient(api, anna, "Salz")
     meal = await create_meal(
         api,
@@ -962,17 +1319,90 @@ async def test_merging_moves_meal_rows_and_list_lines(
     shopping_list = await create_list(api, anna)
     await extra_added(api, anna, shopping_list["id"], ingredient_id=duplicate["id"])
 
-    assert (await merge(api, admin, duplicate["id"], tomatoes["id"])).status_code == 200
+    response = await merge(api, admin, duplicate["id"], tomatoes["id"], accept_unit_mismatch=True)
+    assert response.status_code == 200, response.text
 
     response = await api.get(f"/api/meals/{meal['id']}", headers=anna.headers)
-    rows = [(row["id"], row["ingredient"]["id"]) for row in response.json()["ingredients"]]
+    rows = [
+        (row["id"], row["ingredient"]["id"], row["unit_fits"])
+        for row in response.json()["ingredients"]
+    ]
+    # Nothing is converted: 200 g of the merged ingredient don't fit Tomaten (D-33).
     assert rows == [
-        (meal["ingredients"][0]["id"], tomatoes["id"]),
-        (meal["ingredients"][1]["id"], salt["id"]),
-        (meal["ingredients"][2]["id"], tomatoes["id"]),
+        (meal["ingredients"][0]["id"], tomatoes["id"], True),
+        (meal["ingredients"][1]["id"], salt["id"], True),
+        (meal["ingredients"][2]["id"], tomatoes["id"], False),
     ]
     lines = (await detail(api, anna, shopping_list["id"]))["lines"]
     assert [line["key"] for line in lines] == [f"i:{tomatoes['id']}"]
+
+
+async def test_a_merge_across_base_units_names_the_amounts_that_wont_fit(
+    app: FastAPI, api: AsyncClient, anna: Account, admin: Account
+) -> None:
+    """ING-05, D-33: counted are the duplicate's amounts (meal rows, and linked extra items on
+    drafts) that won't fit the ingredient that stays, those that didn't fit the duplicate
+    either included. Nothing is merged until the request accepts that, and then nothing is
+    converted."""
+    duplicate = await create_ingredient(api, anna, "Ei", base_unit="ml")
+    old = await create_meal(api, anna, "Eierlikör", ingredients=[amount(duplicate, 100, "ml")])
+    # Counted in grams since, so its millilitres don't fit (D-33).
+    await set_stored(app, duplicate["id"], base_unit="g")
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    omelette = await create_meal(
+        api,
+        anna,
+        "Omelett",
+        ingredients=[
+            amount(duplicate, 120, "g"),
+            amount(duplicate, 1, "tbsp"),
+            amount(duplicate),
+            amount(eggs, 2),
+        ],
+    )
+    draft = await create_list(api, anna)
+    await extra_added(api, anna, draft["id"], ingredient_id=duplicate["id"], amount=0.5, unit="kg")
+
+    response = await merge(api, admin, duplicate["id"], eggs["id"])
+
+    assert response.status_code == 409
+    assert error(response) == "ingredient.unit_mismatch"
+    assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
+    assert sorted(await scalars(app, select(Ingredient.name))) == ["Ei", "Eier"]
+    assert await events(api, admin) == []
+
+    response = await merge(api, admin, duplicate["id"], eggs["id"], accept_unit_mismatch=True)
+
+    assert response.status_code == 200, response.text
+    assert await scalars(app, select(Ingredient.name)) == ["Eier"]
+    assert await meal_amounts(api, anna, old["id"]) == [(100, "ml", False)]
+    assert await meal_amounts(api, anna, omelette["id"]) == [
+        (120, "g", False),
+        (1, "tbsp", False),
+        (None, None, True),
+        (2, "piece", True),
+    ]
+    assert await extra_amounts(api, anna, draft["id"]) == [(0.5, "kg", False)]
+
+
+async def test_a_merge_with_nothing_that_wont_fit_asks_nothing(
+    app: FastAPI, api: AsyncClient, anna: Account, admin: Account
+) -> None:
+    """Spoons fit g and ml alike and a row without an amount fits every base unit; within one
+    base unit, amounts that don't fit already (D-33) only stay flagged."""
+    sugar = await create_ingredient(api, anna, "Zucker")
+    syrup = await create_ingredient(api, anna, "Zuckersirup", base_unit="ml")
+    duplicate = await create_ingredient(api, anna, "Paradeiser", base_unit="piece")
+    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    tea = await create_meal(api, anna, "Tee", ingredients=[amount(sugar, 2, "tbsp"), amount(sugar)])
+    salad = await create_meal(api, anna, "Salat", ingredients=[amount(duplicate, 2)])
+    await set_stored(app, duplicate["id"], base_unit="g")
+
+    for source, target in ((sugar, syrup), (duplicate, tomatoes)):
+        response = await merge(api, admin, source["id"], target["id"])
+        assert response.status_code == 200, response.text
+    assert await meal_amounts(api, anna, tea["id"]) == [(2, "tbsp", True), (None, None, True)]
+    assert await meal_amounts(api, anna, salad["id"]) == [(2, "piece", False)]
 
 
 @pytest.mark.parametrize(

@@ -16,6 +16,7 @@ import pytest
 from conftest import (
     COSIGN_DEFINITE_ERROR,
     COSIGN_NETWORK_ERROR,
+    COSIGN_UNSIGNED_ERROR,
     DEPLOY,
     SETUP,
     lib,
@@ -37,10 +38,13 @@ DEFINITE = [
     "CertificateIdentity found, last error: expected issuer value to match "
     '"https://token.actions.githubusercontent.com", got "https://accounts.google.com"',
     "no valid bundles exist in registry",
+    "no matching attestations: x509: certificate has expired or is not yet valid",
     "no matching signatures: invalid signature when validating ASN.1 encoded signature",
     "no signatures found",
     "expected GitHub Workflow Ref not found in certificate",
 ]
+# No attestation at all: refused, but not blacklisted (a release may still be signing).
+UNSIGNED = [COSIGN_UNSIGNED_ERROR, "no matching attestations:", "no matching attestations"]
 TRANSIENT = [
     COSIGN_NETWORK_ERROR,
     "GET https://ghcr.io/v2/bublemann/mealmate/referrers/sha256:abc: unexpected status code 503 "
@@ -57,7 +61,9 @@ TRANSIENT = [
 
 @pytest.mark.parametrize(
     ("message", "kind"),
-    [(m, "definite") for m in DEFINITE] + [(m, "transient") for m in TRANSIENT],
+    [(m, "definite") for m in DEFINITE]
+    + [(m, "unsigned") for m in UNSIGNED]
+    + [(m, "transient") for m in TRANSIENT],
 )
 def test_cosign_failures_are_classified(message: str, kind: str) -> None:
     text = f"Error: {message}\nerror during command execution: {message}\n"
@@ -93,6 +99,18 @@ def test_a_definite_failure_is_not_retried(shims: Path, tmp_path: Path) -> None:
     assert result.stdout.strip() == "status=1"
     assert attempts == 1
     assert f"cosign: Error: {identity}" in result.stderr, "cosign's stderr is logged"
+
+
+def test_no_attestation_yet_is_reported_as_unsigned_without_retries(
+    shims: Path, tmp_path: Path
+) -> None:
+    result, attempts = verify(
+        shims, tmp_path, MM_TEST_COSIGN="fail", MM_TEST_COSIGN_ERROR=COSIGN_UNSIGNED_ERROR
+    )
+    assert result.stdout.strip() == "status=3"
+    assert attempts == 1
+    assert "no build provenance yet (a release may still be signing)" in result.stderr
+    assert "provenance is invalid" not in result.stderr
 
 
 def test_a_network_failure_is_retried_then_reported_as_unknown(shims: Path, tmp_path: Path) -> None:

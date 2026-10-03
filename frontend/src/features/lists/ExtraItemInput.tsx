@@ -7,11 +7,14 @@ import { RemovableChip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useIngredients, type IngredientSummary } from '@/features/ingredients/api';
+import { IngredientCategoryUnit } from '@/features/ingredients/IngredientCategoryUnit';
 import { IngredientName } from '@/features/ingredients/IngredientName';
 import { ingredientLabel } from '@/features/ingredients/label';
-import { useCategories, type Unit } from '@/features/reference/api';
+import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { useConnected, useQueueOp } from '@/features/sync/context';
-import { categoryName, unitLabel } from '@/features/reference/labels';
+import { categoryName } from '@/features/reference/labels';
+import { keptUnit } from '@/features/reference/units';
+import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { parseAmount } from '@/i18n/format';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -46,6 +49,7 @@ export function ExtraItemInput({
   shopping?: boolean;
 }) {
   const { t } = useTranslation();
+  const language = useLanguage();
   const inputId = useId();
   const hintId = `${inputId}-hint`;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,13 +68,16 @@ export function ExtraItemInput({
   const queue = useQueueOp(listId);
   const connected = useConnected();
   const categories = useCategories();
-  const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
+  const units = useUnits();
   const debounced = useDebouncedValue(text.trim());
   const searching = debounced !== '' && !picked && connected;
   const suggestions = useIngredients(debounced, { enabled: searching });
   const matches = searching ? (suggestions.data ?? []).slice(0, MAX_SUGGESTIONS) : [];
   const typed = text.trim();
   const pickedLabel = picked ? ingredientLabel(picked.name, picked.brand) : null;
+  const pickedCategory = picked
+    ? categories.data?.find(({ id }) => id === picked.category_id)
+    : undefined;
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, add.error);
   const shownFields = picked ? ['amount', 'unit'] : ['text', 'amount_text', 'category_id'];
@@ -88,7 +95,9 @@ export function ExtraItemInput({
     add.reset();
     edited();
     setPicked(ingredient);
-    setUnit(ingredient.base_unit);
+    // Another ingredient keeps the unit while it fits, else it starts with its base unit (REF-02).
+    const kept = units.data ? keptUnit(units.data, ingredient.base_unit, unit) : '';
+    setUnit(kept || ingredient.base_unit);
     setAmount('');
     setAmountInvalid(false);
   }
@@ -141,12 +150,11 @@ export function ExtraItemInput({
     // A second Enter while the first is being stored must not add the item twice.
     if (queuing.current) return;
     queuing.current = true;
-    const categoryKey = categoryKeys.get(chosenCategory);
     const payload = {
       extra_id: uuidv7(),
       text: typed,
       ...(amountText.trim() ? { amount_text: amountText.trim() } : {}),
-      ...(categoryKey ? { category_key: categoryKey } : {}),
+      ...(chosenCategory ? { category_id: chosenCategory } : {}),
     };
     try {
       if (await queue(shoppingOps.addExtra(payload, stampOp()))) clear();
@@ -189,9 +197,11 @@ export function ExtraItemInput({
               >
                 {pickedLabel}
               </RemovableChip>
-              <span className="text-sm text-muted-foreground">
-                {categoryName(t, categoryKeys.get(picked.category_id) ?? 'other')}
-              </span>
+              {pickedCategory && (
+                <span className="text-sm text-muted-foreground">
+                  {categoryName(pickedCategory, language)}
+                </span>
+              )}
             </div>
           ) : (
             <>
@@ -223,24 +233,21 @@ export function ExtraItemInput({
             aria-label={t('lists.extra.suggestions')}
             className="flex flex-col divide-y rounded-lg border"
           >
-            {matches.map((ingredient) => {
-              const key = categoryKeys.get(ingredient.category_id);
-              return (
-                <li key={ingredient.id}>
-                  <button
-                    type="button"
-                    onClick={() => pick(ingredient)}
-                    className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    <IngredientName ingredient={ingredient} />
-                    <span className="text-sm text-muted-foreground">
-                      {key ? `${categoryName(t, key)} · ` : ''}
-                      {unitLabel(t, ingredient.base_unit)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {matches.map((ingredient) => (
+              <li key={ingredient.id}>
+                <button
+                  type="button"
+                  onClick={() => pick(ingredient)}
+                  className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+                >
+                  <IngredientName ingredient={ingredient} />
+                  <IngredientCategoryUnit
+                    ingredient={ingredient}
+                    categories={categories.data ?? []}
+                  />
+                </button>
+              </li>
+            ))}
           </ul>
         )}
         <ErrorAlert error={suggestions.error} />
@@ -248,6 +255,8 @@ export function ExtraItemInput({
           <AmountFields
             amount={amount}
             unit={unit}
+            baseUnit={picked.base_unit}
+            name={pickedLabel ?? ''}
             onAmountChange={(value) => {
               edited();
               setAmountInvalid(false);

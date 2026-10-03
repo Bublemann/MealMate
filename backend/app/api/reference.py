@@ -15,13 +15,15 @@ router = APIRouter(prefix="/api", tags=["reference"], responses=ERROR_RESPONSES)
 
 @router.get("/categories")
 async def list_categories(principal: CurrentUser, session: ReadSession) -> list[Category]:
-    """All categories in the shop's walking order."""
+    """Every category in the shop's walking order, deleted ones included: lists being shopped and
+    done lists still show them (D-30). A deleted one comes after the category that took over its
+    place."""
     return await reference.list_categories(session)
 
 
 @router.get("/units")
 async def list_units(principal: CurrentUser) -> list[UnitInfo]:
-    """All units in display order, with their kind."""
+    """All units in display order, with their kind and the base units they fit."""
     return reference.list_units()
 
 

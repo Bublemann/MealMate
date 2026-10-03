@@ -1,12 +1,27 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
-import { errorResponse, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
-import { APPLES, REFERENCE_ROUTES, summary, WEIDEHOF_MILK } from '@/test/ingredients';
+import { errorResponse, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
+import {
+  APPLES,
+  CATEGORIES_WITH_UNCATEGORIZED,
+  expectInPageOrder,
+  lookupResult,
+  REFERENCE_ROUTES,
+  scanInForm,
+  summary,
+  WEIDEHOF_MILK,
+} from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const MILK_PATH = `/api/ingredients/${WEIDEHOF_MILK.id}`;
+
+// jsdom has no camera: the scanner of the form's scan icon shows its manual input.
+vi.mock('@/features/scanner/decoder', () => ({
+  loadDecoder: () => Promise.resolve(),
+  decodeVideoFrame: () => Promise.resolve(null),
+}));
 
 function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 'ing-aepfel') {
   const fetchMock = mockApi({
@@ -20,6 +35,15 @@ function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 
   return {
     fetchMock,
     ...renderApp(`/ingredients/${id}`, admin ? { user: TEST_ADMIN } : {}),
+  };
+}
+
+/** 409 `ingredient.unit_mismatch` (D-33) unless the request accepts it, then `accepted`. */
+function unlessAccepted(accepted: unknown, params: Record<string, number>) {
+  return async (request: Request) => {
+    const body = (await request.json()) as { accept_unit_mismatch?: boolean };
+    if (body.accept_unit_mismatch) return accepted;
+    return Response.json({ code: 'ingredient.unit_mismatch', params, fields: [] }, { status: 409 });
   };
 }
 
@@ -37,8 +61,9 @@ describe('IngredientDetailScreen', () => {
     expect(await within(screenEl).findByText('Fruit & vegetables')).toBeVisible();
     expect(screenEl).toHaveTextContent('Brandnot set');
     expect(screenEl).toHaveTextContent('Base unitGrams (g)');
-    expect(screenEl).toHaveTextContent('Weight of one piece180 g');
-    expect(screenEl).toHaveTextContent('Densitynot set');
+    // Only pieces have a weight, and nothing has a density (D-32).
+    expect(screenEl).not.toHaveTextContent('Weight of one piece');
+    expect(screenEl).not.toHaveTextContent('Density');
     expect(screenEl).toHaveTextContent('Barcodenot set');
     expect(screenEl).toHaveTextContent('Packagenot set');
     expect(screenEl).toHaveTextContent('SourceEntered by hand');
@@ -94,10 +119,25 @@ describe('IngredientDetailScreen', () => {
     renderDetail({}, false, WEIDEHOF_MILK.id);
 
     await screen.findByTestId(testIds.ingredientNutrition);
-    expect(nutrientRow(/^Fat/)).toHaveTextContent(
-      'Changed in MealMate: updates from Open Food Facts keep it.3.6 g',
-    );
+    expect(nutrientRow(/^Fat/)).toHaveTextContent('FatChanged in MealMate3.6 g');
     expect(nutrientRow('Calories')).toHaveTextContent('64 kcal');
+  });
+
+  it('shows an ingredient counted in pieces with its piece weight, nutrition per 100 g (ING-02)', async () => {
+    const eggs = {
+      ...APPLES,
+      id: 'ing-eier',
+      name: 'Eier',
+      base_unit: 'piece' as const,
+      piece_weight_g: 60,
+    };
+    renderDetail({ 'GET /api/ingredients/ing-eier': eggs }, false, 'ing-eier');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Eier' })).toBeVisible();
+    const screenEl = screen.getByTestId(testIds.screenIngredient);
+    expect(screenEl).toHaveTextContent('Base unitPieces (pcs)');
+    expect(screenEl).toHaveTextContent('Weight of one piece60 g');
+    expect(screen.getByRole('heading', { name: 'Nutrition per 100 g' })).toBeVisible();
   });
 
   it('formats numbers in German', async () => {
@@ -113,13 +153,12 @@ describe('IngredientDetailScreen', () => {
   describe('newer values from Open Food Facts (BAR-06)', () => {
     const PENDING = {
       ...WEIDEHOF_MILK,
-      user_edited_fields: ['nutrients.kcal', 'name', 'brand', 'pack_unit'],
+      user_edited_fields: ['nutrients.kcal', 'name', 'brand'],
       pending_update: {
         fields: [
           { field: 'nutrients.kcal', current: 65, proposed: 64 },
           { field: 'name', current: 'Vollmilch', proposed: 'Frische Vollmilch' },
           { field: 'brand', current: 'Weidehof', proposed: null },
-          { field: 'pack_unit', current: 'l', proposed: 'ml' },
         ],
         off_last_modified_at: '2026-09-25T10:00:00Z',
       },
@@ -145,7 +184,6 @@ describe('IngredientDetailScreen', () => {
         'Calories: 65 kcal → 64 kcal',
         'Name: Vollmilch → Frische Vollmilch',
         'Brand: Weidehof → empty',
-        'Unit of the contents: l → ml',
       ]);
 
       await user.click(
@@ -214,9 +252,6 @@ describe('IngredientDetailScreen', () => {
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     expect(within(dialog).queryByTestId(testIds.ingredientSimilar)).not.toBeInTheDocument();
-    // Editing is not creating: no search at Open Food Facts here.
-    expect(within(dialog).queryByTestId(testIds.offSearchButton)).not.toBeInTheDocument();
-    expect(dialog).toHaveTextContent('Changing it converts nothing: check the values.');
     await user.click(within(dialog).getByLabelText('Millilitres (ml)'));
     await user.type(within(dialog).getByLabelText('Brand'), 'Hofgut');
     const kcal = within(dialog).getByLabelText('Calories');
@@ -233,7 +268,172 @@ describe('IngredientDetailScreen', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Äpfel (Hofgut)' })).toBeVisible();
   });
 
-  it('clears a barcode and marks the fields a user changed on an Open Food Facts ingredient', async () => {
+  it('shows Uncategorized, and saves its other fields without asking for a category (ING-02)', async () => {
+    const uncategorized = { ...APPLES, category_id: 'cat-uncategorized' };
+    const { fetchMock, user } = renderDetail({
+      'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED,
+      'GET /api/ingredients/ing-aepfel': uncategorized,
+      'PATCH /api/ingredients/ing-aepfel': { ...uncategorized, brand: 'Hofgut' },
+    });
+
+    expect(await screen.findByText('Uncategorized')).toBeVisible();
+    await user.click(screen.getByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    const category = within(dialog).getByLabelText('Category');
+    // The current value, which can't be picked again.
+    expect(category).toHaveDisplayValue('Uncategorized');
+    expect(within(category).getByRole('option', { name: 'Uncategorized' })).toBeDisabled();
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .filter((option) => !(option as HTMLOptionElement).disabled)
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other']);
+    await user.type(within(dialog).getByLabelText('Brand'), 'Hofgut');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(
+      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
+    ).resolves.toEqual({ brand: 'Hofgut' });
+  });
+
+  it('edits an ingredient counted in pieces; leaving “Pieces” clears its piece weight (ING-02)', async () => {
+    const eggs = { ...APPLES, id: 'ing-eier', name: 'Eier', base_unit: 'piece' as const };
+    const { fetchMock, user } = renderDetail(
+      {
+        'GET /api/ingredients/ing-eier': { ...eggs, piece_weight_g: 60 },
+        'PATCH /api/ingredients/ing-eier': { ...eggs, base_unit: 'g', piece_weight_g: null },
+      },
+      false,
+      'ing-eier',
+    );
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Eier' });
+    expect(within(dialog).getByLabelText('Pieces (pcs)')).toBeChecked();
+    expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
+    await user.click(within(dialog).getByLabelText('Grams (g)'));
+    expect(within(dialog).queryByLabelText('Weight per piece (g)')).not.toBeInTheDocument();
+    // Back to pieces by mistake: its own piece weight is back.
+    await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
+    expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
+    await user.click(within(dialog).getByLabelText('Grams (g)'));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    // The server clears the piece weight (ING-02).
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(
+      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-eier')[0]?.json(),
+    ).resolves.toEqual({ base_unit: 'g' });
+  });
+
+  it('asks before a base-unit change leaves amounts not fitting, and saves only when told to (ING-02)', async () => {
+    const path = 'PATCH /api/ingredients/ing-aepfel';
+    const { fetchMock, user } = renderDetail({
+      [path]: unlessAccepted({ ...APPLES, base_unit: 'piece' }, { meals: 3, lists: 1, amounts: 5 }),
+    });
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    const confirm = await screen.findByRole('alertdialog', { name: 'Change the base unit?' });
+    expect(confirm).toHaveAttribute('data-testid', testIds.baseUnitConfirm);
+    expect(confirm).toHaveTextContent(
+      "Äpfel is used in g in 3 meals and on 1 draft. Those amounts won't fit any more.",
+    );
+    // Cancel goes back to the form as it was; nothing is saved, and nothing is an error.
+    await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(confirm).not.toBeInTheDocument());
+    expect(within(dialog).getByLabelText('Pieces (pcs)')).toBeChecked();
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, path)).toHaveLength(1);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    const again = await screen.findByRole('alertdialog', { name: 'Change the base unit?' });
+    await user.click(within(again).getByRole('button', { name: 'Change anyway' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    const bodies = await Promise.all(
+      requestsTo(fetchMock, path).map((request) => request.json() as Promise<unknown>),
+    );
+    expect(bodies).toEqual([
+      { base_unit: 'piece' },
+      { base_unit: 'piece' },
+      { base_unit: 'piece', accept_unit_mismatch: true },
+    ]);
+    expect(screen.getByTestId(testIds.screenIngredient)).toHaveTextContent('Base unitPieces (pcs)');
+  });
+
+  it('names a single draft in German when a base-unit change asks', async () => {
+    await i18n.changeLanguage('de');
+    const eggs = { ...APPLES, id: 'ing-eier', name: 'Eier', base_unit: 'piece' as const };
+    const { user } = renderDetail(
+      {
+        'GET /api/ingredients/ing-eier': eggs,
+        'PATCH /api/ingredients/ing-eier': unlessAccepted(eggs, { meals: 0, lists: 1, amounts: 1 }),
+      },
+      false,
+      'ing-eier',
+    );
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Eier bearbeiten' });
+    await user.click(within(dialog).getByLabelText('Gramm (g)'));
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+
+    const confirm = await screen.findByRole('alertdialog', { name: 'Basiseinheit ändern?' });
+    expect(confirm).toHaveTextContent(
+      'Eier wird auf 1 Entwurf in Stk. verwendet. Diese Mengen passen dann nicht mehr.',
+    );
+    expect(within(confirm).getByRole('button', { name: 'Abbrechen' })).toBeVisible();
+    expect(within(confirm).getByRole('button', { name: 'Trotzdem ändern' })).toBeVisible();
+  });
+
+  it('has the compact layout without the magnifier, and no cursor in the name (ING-04, D-35)', async () => {
+    await i18n.changeLanguage('de');
+    const edited: typeof WEIDEHOF_MILK = {
+      ...WEIDEHOF_MILK,
+      user_edited_fields: ['name', 'nutrients.fat'],
+    };
+    const { user } = renderDetail({ [`GET ${MILK_PATH}`]: edited }, false, WEIDEHOF_MILK.id);
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Vollmilch (Weidehof) bearbeiten' });
+    // A name is filled in, so the keyboard stays down.
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(dialog).not.toHaveAccessibleDescription();
+    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const name = within(form).getByLabelText('Name');
+    const baseUnit = within(form).getByRole('group', { name: 'Basiseinheit' });
+    expectInPageOrder([
+      within(form).getByTestId(testIds.offAttribution),
+      name,
+      within(form).getByRole('button', { name: 'Barcode scannen' }),
+      within(form).getByLabelText('Barcode'),
+      within(form).getByLabelText('Marke'),
+      within(form).getByLabelText('Kategorie'),
+      baseUnit,
+      within(form).getByRole('group', { name: 'Nährwerte pro 100 ml (optional)' }),
+      within(dialog).getByTestId(testIds.ingredientFormFooter),
+    ]);
+    // Editing is not creating: no search at Open Food Facts here (BAR-11).
+    expect(
+      within(form).queryByRole('button', { name: 'In Open Food Facts suchen' }),
+    ).not.toBeInTheDocument();
+    // Each field changed in MealMate is marked briefly (BAR-04); the base unit has no warning.
+    expect(name).toHaveAccessibleDescription('In MealMate geändert');
+    expect(within(form).getByLabelText('Fett')).toHaveAccessibleDescription('In MealMate geändert');
+    expect(within(form).getByLabelText('Kalorien')).not.toHaveAccessibleDescription();
+    expect(within(form).getByLabelText('Marke')).not.toHaveAccessibleDescription();
+    expect(baseUnit).toHaveTextContent(/^BasiseinheitGramm \(g\)Milliliter \(ml\)Stück \(Stk\.\)$/);
+    // The pack size is shown on the detail page only, never edited (D-38).
+    expect(within(form).queryByText(/Packung/)).not.toBeInTheDocument();
+  });
+
+  it('clears the barcode of an Open Food Facts ingredient, warning only once it is changed', async () => {
     const { fetchMock, user } = renderDetail(
       { [`PATCH ${MILK_PATH}`]: { ...WEIDEHOF_MILK, barcode: null, source: 'manual' } },
       false,
@@ -242,14 +442,17 @@ describe('IngredientDetailScreen', () => {
 
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
-    expect(within(dialog).getByTestId(testIds.offAttribution)).toBeVisible();
-    expect(within(dialog).getByLabelText('Fat')).toHaveAccessibleDescription(
-      'Changed in MealMate: updates from Open Food Facts keep it.',
+    const barcode = within(dialog).getByLabelText('Barcode');
+    expect(barcode).not.toHaveAttribute('readonly');
+    expect(barcode).not.toHaveAccessibleDescription();
+    await user.clear(barcode);
+    expect(barcode).toHaveAccessibleDescription(
+      'With the barcode changed, this ingredient no longer gets updates from Open Food Facts.',
     );
-    expect(within(dialog).getByLabelText('Calories')).not.toHaveAccessibleDescription();
-    // Packed away under "More", opened because there is a package.
-    expect(within(dialog).getByLabelText('Package size as printed')).toBeVisible();
-    await user.clear(within(dialog).getByLabelText('Barcode'));
+    await user.type(barcode, ' 4006381 333931');
+    // The same barcode again, in another spelling: no warning.
+    expect(barcode).not.toHaveAccessibleDescription();
+    await user.clear(barcode);
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
@@ -258,12 +461,85 @@ describe('IngredientDetailScreen', () => {
     });
   });
 
+  it('gives an ingredient typed by hand its package’s barcode with the scan icon, without asking Open Food Facts (ING-04, BAR-03)', async () => {
+    const { fetchMock, user } = renderDetail({
+      'GET /api/ingredients/lookup': lookupResult(),
+      'PATCH /api/ingredients/ing-aepfel': { ...APPLES, barcode: '4006381333931' },
+    });
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    await scanInForm(user, dialog, '4006381333931');
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Barcode')).toHaveValue('4006381333931'),
+    );
+    // Only whether another ingredient has it is asked; nothing else changes.
+    const [lookup] = requestsTo(fetchMock, 'GET /api/ingredients/lookup');
+    expect(new URL(lookup!.url).search).toBe('?barcode=4006381333931&own_only=true');
+    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Äpfel');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(
+      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
+    ).resolves.toEqual({ barcode: '4006381333931' });
+  });
+
+  it('names the ingredient a scanned barcode belongs to instead of filling it in (BAR-02)', async () => {
+    const { fetchMock, user, router } = renderDetail({
+      'GET /api/ingredients/lookup': lookupResult({
+        barcode: WEIDEHOF_MILK.barcode!,
+        found_in: 'db',
+        ingredient: WEIDEHOF_MILK,
+      }),
+    });
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
+
+    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    expect(notice).toHaveTextContent(/^Already belongs to Vollmilch \(Weidehof\)open$/);
+    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
+    await user.click(within(notice).getByRole('link', { name: 'open' }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/ingredients/${WEIDEHOF_MILK.id}`),
+    );
+    expect(dialog).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')).toHaveLength(0);
+  });
+
+  it('fills in an ingredient’s own barcode scanned again, without a notice', async () => {
+    const { user } = renderDetail(
+      {
+        'GET /api/ingredients/lookup': lookupResult({
+          barcode: WEIDEHOF_MILK.barcode!,
+          found_in: 'db',
+          ingredient: WEIDEHOF_MILK,
+        }),
+      },
+      false,
+      WEIDEHOF_MILK.id,
+    );
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
+    const barcode = within(dialog).getByLabelText('Barcode');
+    await user.clear(barcode);
+    await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
+
+    await waitFor(() => expect(barcode).toHaveValue(WEIDEHOF_MILK.barcode));
+    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+  });
+
   it('does not send stored numbers with more decimals than shown unless they were edited', async () => {
     const precise = {
       ...APPLES,
+      base_unit: 'piece' as const,
       piece_weight_g: 180.55555555,
-      density_g_per_ml: 1.03333333,
-      pack_quantity: 0.33333333,
       nutrients: { ...APPLES.nutrients, kcal: 52.66666667, protein: 0.33333333 },
     };
     const { fetchMock, user } = renderDetail({
@@ -302,26 +578,14 @@ describe('IngredientDetailScreen', () => {
     );
   });
 
-  it('warns that changing the barcode of a product from Open Food Facts ends its updates', async () => {
-    const { user } = renderDetail({}, false, WEIDEHOF_MILK.id);
-
-    await user.click(await screen.findByTestId(testIds.editIngredient));
-    const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
-    const barcode = within(dialog).getByLabelText('Barcode');
-    expect(barcode).not.toHaveAttribute('readonly');
-    expect(barcode).toHaveAccessibleDescription(
-      /^Changing it turns off the updates from Open Food Facts for this ingredient/,
-    );
-  });
-
-  it('shows the plain barcode hint for an ingredient typed by hand', async () => {
+  it('shows the barcode’s digit counts as a placeholder, not as a hint', async () => {
     const { user } = renderDetail();
 
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
-    expect(within(dialog).getByLabelText('Barcode')).toHaveAccessibleDescription(
-      'Optional: the 8, 12 or 13 digits under the bars.',
-    );
+    const barcode = within(dialog).getByLabelText('Barcode');
+    expect(barcode).toHaveAttribute('placeholder', '8, 12 or 13 digits');
+    expect(barcode).not.toHaveAccessibleDescription();
   });
 
   it('shows "not found" for an ingredient that is gone', async () => {
@@ -372,6 +636,81 @@ describe('IngredientAdminActions', () => {
       requestsTo(fetchMock, 'POST /api/admin/ingredients/ing-aepfel/merge')[0]?.json(),
     ).resolves.toEqual({ into_id: apfel.id });
     expect(await screen.findByRole('heading', { level: 1, name: 'Apfel' })).toBeVisible();
+  });
+
+  it('names the amounts that won’t fit the ingredient that stays, and merges when told to (ING-05)', async () => {
+    const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
+    const path = 'POST /api/admin/ingredients/ing-aepfel/merge';
+    const accepted = heldRoute();
+    const { fetchMock, user, router } = renderDetail(
+      {
+        'GET /api/ingredients': (request: Request) =>
+          new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
+        [path]: async (request: Request) =>
+          (await unlessAccepted(null, { meals: 2, lists: 1, amounts: 4 })(request)) ??
+          accepted.route(),
+      },
+      true,
+    );
+
+    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
+    await user.type(within(dialog).getByLabelText('Ingredient that stays'), 'Eie');
+    await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Merge Äpfel into Eier?' });
+    expect(within(confirm).queryByTestId(testIds.mergeUnitMismatch)).not.toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Merge' }));
+
+    // The same confirmation now names the count; nothing is merged yet.
+    const count = await within(confirm).findByTestId(testIds.mergeUnitMismatch);
+    expect(count).toHaveTextContent("4 amounts won't fit Eier afterwards.");
+    expect(count).toHaveAttribute('role', 'alert');
+    expect(router.state.location.pathname).toBe('/ingredients/ing-aepfel');
+    await user.click(within(confirm).getByRole('button', { name: 'Merge anyway' }));
+
+    // While it merges, the count stays and the button waits.
+    expect(within(confirm).getByTestId(testIds.mergeUnitMismatch)).toBeVisible();
+    expect(within(confirm).getByRole('button', { name: 'Merge anyway' })).toBeDisabled();
+    await accepted.answer({ ...APPLES, id: eggs.id, name: 'Eier', base_unit: 'piece' });
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${eggs.id}`));
+    const bodies = await Promise.all(
+      requestsTo(fetchMock, path).map((request) => request.json() as Promise<unknown>),
+    );
+    expect(bodies).toEqual([
+      { into_id: eggs.id },
+      { into_id: eggs.id, accept_unit_mismatch: true },
+    ]);
+  });
+
+  it('names a single amount that won’t fit in German', async () => {
+    await i18n.changeLanguage('de');
+    const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
+    const { user } = renderDetail(
+      {
+        'GET /api/ingredients': (request: Request) =>
+          new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
+        'POST /api/admin/ingredients/ing-aepfel/merge': unlessAccepted(APPLES, {
+          meals: 1,
+          lists: 0,
+          amounts: 1,
+        }),
+      },
+      true,
+    );
+
+    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Äpfel zusammenführen mit …' });
+    await user.type(within(dialog).getByLabelText('Zutat, die bleibt'), 'Eie');
+    await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
+    const confirm = await screen.findByRole('alertdialog', {
+      name: 'Äpfel mit Eier zusammenführen?',
+    });
+    await user.click(within(confirm).getByRole('button', { name: 'Zusammenführen' }));
+
+    expect(await within(confirm).findByTestId(testIds.mergeUnitMismatch)).toHaveTextContent(
+      '1 Menge passt danach nicht zu Eier.',
+    );
+    expect(within(confirm).getByRole('button', { name: 'Trotzdem zusammenführen' })).toBeVisible();
   });
 
   it('explains why an ingredient in use cannot be deleted', async () => {

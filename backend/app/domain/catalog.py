@@ -1,4 +1,5 @@
-"""Input rules for ingredients, cuisines and tags (ING-02, REF-03, REF-04, BAR-10).
+"""Input rules for ingredients, categories, cuisines and tags (ING-02, REF-01, REF-03, REF-04,
+BAR-10).
 
 Names are stored as typed (trimmed) and compared through `normalize()` (`*_norm` columns).
 Typed text with control, format, surrogate, private-use or unassigned characters is refused
@@ -11,6 +12,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
 
 INGREDIENT_NAME_MAX_LENGTH = 60
+CATEGORY_NAME_MAX_LENGTH = 40
 CUISINE_NAME_MAX_LENGTH = 40
 TAG_NAME_MAX_LENGTH = 30
 BRAND_MAX_LENGTH = 80
@@ -19,24 +21,21 @@ BARCODE_INPUT_MAX_LENGTH = 32
 
 # Exclusive lower bound 0, inclusive upper bound.
 PIECE_WEIGHT_MAX_G = 10_000.0
-DENSITY_MIN_G_PER_ML = 0.1
-DENSITY_MAX_G_PER_ML = 5.0
 PACK_QUANTITY_MAX = 100_000.0
 
 # Normalised names can be longer than typed ones ("ß" → "ss", compatibility forms).
 NAME_NORM_FACTOR = 4
 
 # The fields of an ingredient that Open Food Facts provides and refreshes (BAR-04..06), other
-# than the nutrients. Each one a user changes on an ingredient from Open Food Facts is recorded
-# as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base unit, piece weight
-# and density are the user's alone: a refresh never touches them.
-OFF_DATA_FIELDS: tuple[str, ...] = (
-    "name",
-    "brand",
-    "quantity_text",
-    "pack_quantity",
-    "pack_unit",
-)
+# than the nutrients and the pack size. Each one a user changes on an ingredient from Open Food
+# Facts is recorded as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base
+# unit and piece weight are the user's alone: a refresh never touches them.
+OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand")
+
+# The pack size (ING-02, D-38): Open Food Facts' alone. It is never typed in or edited, so it is
+# never user-edited and a refresh always updates it; "user-edited" marks on it from before D-38
+# are ignored, not rewritten.
+PACK_FIELDS: tuple[str, ...] = ("quantity_text", "pack_quantity", "pack_unit")
 
 
 def nutrient_field(key: str) -> str:

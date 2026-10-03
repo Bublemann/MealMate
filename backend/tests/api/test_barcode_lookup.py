@@ -103,6 +103,45 @@ async def test_a_known_barcode_goes_straight_to_its_ingredient(
     assert not off_api.calls  # our own database first; a manual ingredient is never refreshed
 
 
+async def test_own_only_looks_at_our_ingredients_without_asking_open_food_facts(
+    api: AsyncClient, anna: Account, off_api: respx.MockRouter
+) -> None:
+    """The edit pop-up's scan (BAR-03): a barcode another ingredient has is named, any other one
+    is only filled in, so Open Food Facts isn't asked."""
+    oats_ingredient = await create_ingredient(api, anna, "Haferflocken", barcode=UPC_A)
+    off = route(off_api, OATS).respond(json=oats())
+
+    known = await api.get(
+        "/api/ingredients/lookup",
+        params={"barcode": UPC_A, "own_only": "true"},
+        headers=anna.headers,
+    )
+    unknown = await api.get(
+        "/api/ingredients/lookup",
+        params={"barcode": OATS, "own_only": "true"},
+        headers=anna.headers,
+    )
+    invalid = await api.get(
+        "/api/ingredients/lookup",
+        params={"barcode": "4006381333932", "own_only": "true"},
+        headers=anna.headers,
+    )
+
+    assert known.status_code == 200
+    assert (known.json()["found_in"], known.json()["ingredient"]) == ("db", oats_ingredient)
+    assert unknown.status_code == 200
+    assert unknown.json() == {
+        "barcode": OATS,
+        "found_in": "none",
+        "ingredient": None,
+        "proposal": None,
+        "off_unavailable": False,
+    }
+    assert invalid.status_code == 422
+    assert fields(invalid) == {("query", "barcode"): "invalid_format"}
+    assert not off.called
+
+
 async def test_an_open_food_facts_proposal_is_not_saved(
     app: FastAPI, api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
@@ -380,7 +419,6 @@ async def test_save_a_proposal_in_one_request(
         "category_id": body["category_id"],
         "base_unit": "g",
         "piece_weight_g": None,
-        "density_g_per_ml": None,
         "nutrients": OATS_NUTRIENTS | {"kcal": 370},
         "quantity_text": "500 g",
         "pack_quantity": 500,

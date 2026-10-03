@@ -32,8 +32,9 @@ class ShoppingList(IdMixin, TimestampMixin, Base):
 
     `name` null shows the translated default name (LIST-02). `version` is incremented in SQL
     (`version + 1`) on every change of the list or anything in it, together with `updated_at`
-    ("most recently edited first", UI-02). `reminder_seed` picks the reminder (LIST-14).
-    `shopping_started_at` and `finished_at` belong to shopping mode and history (M5b).
+    (the local copy's order, SYNC-02). The list feed orders by `created_at`, so a list keeps
+    its place (UI-02). `reminder_seed` picks the reminder (LIST-14). `shopping_started_at` and
+    `finished_at` belong to shopping mode and done lists (M5b, SHOP-05).
     """
 
     __tablename__ = "shopping_lists"
@@ -116,7 +117,7 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
         CheckConstraint("position >= 0", name="position"),
         CheckConstraint("amount IS NULL OR amount > 0", name="amount"),
         CheckConstraint("unit IS NULL OR amount IS NOT NULL", name="unit_needs_amount"),
-        CheckConstraint("base_unit_snapshot IN ('g', 'ml')", name="base_unit_snapshot"),
+        CheckConstraint("base_unit_snapshot IN ('g', 'ml', 'piece')", name="base_unit_snapshot"),
         UniqueConstraint("list_meal_id", "position"),
     )
 
@@ -129,7 +130,7 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
     )
     ingredient_name_snapshot: Mapped[str] = mapped_column(String(INGREDIENT_NAME_MAX_LENGTH))
     ingredient_brand_snapshot: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
-    base_unit_snapshot: Mapped[str] = mapped_column(String(2))
+    base_unit_snapshot: Mapped[str] = mapped_column(String(5))
     piece_weight_g_snapshot: Mapped[float | None] = mapped_column(Float)
     density_snapshot: Mapped[float | None] = mapped_column(Float)
     category_id_snapshot: Mapped[str] = mapped_column(

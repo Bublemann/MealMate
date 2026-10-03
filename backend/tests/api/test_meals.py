@@ -20,10 +20,11 @@ from tests.accounts import (
     fields,
     make_couple,
     make_user,
+    save_filters,
     scalars,
     set_privacy,
 )
-from tests.catalog import EAN_13, create_ingredient, ref
+from tests.catalog import EAN_13, create_ingredient, ref, set_stored
 from tests.meals import create_meal, get_meal, list_meals, upload
 
 NO_VALUES = {"kcal": None, "protein": None, "carbs": None, "sugar": None, "fat": None}
@@ -126,7 +127,7 @@ async def test_create_with_only_a_name(api: AsyncClient, anna: Account) -> None:
 async def test_create_with_everything(
     api: AsyncClient, anna: Account, cuisines: dict[str, str], flour: Any, salt: Any
 ) -> None:
-    eggs = await create_ingredient(api, anna, "Eier", piece_weight_g=60)
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
 
     meal = await create_meal(
         api,
@@ -161,6 +162,7 @@ async def test_create_with_everything(
         (2, summary(salt), None, None, "nach Geschmack"),
         (3, summary(flour), 1, "tbsp", None),  # the same ingredient twice is fine
     ]
+    assert all(row["unit_fits"] for row in meal["ingredients"])
     assert len({row["id"] for row in meal["ingredients"]}) == 4
     assert (await get_meal(api, anna, meal["id"])).json() == meal
 
@@ -322,6 +324,114 @@ async def test_names_may_repeat(api: AsyncClient, anna: Account, ben: Account) -
     assert await list_meals(api, anna) == ["Curry", "curry", "Curry"]
 
 
+# --- units that fit the base unit (REF-02, MEAL-02, D-33) -------------------------------------
+
+FITTING = {
+    "g": ["g", "kg", "tbsp", "tsp"],
+    "ml": ["ml", "l", "tbsp", "tsp"],
+    "piece": ["piece", None],
+}
+NOT_FITTING = {
+    "g": ["ml", "l", "piece", None],
+    "ml": ["g", "kg", "piece", None],
+    "piece": ["g", "kg", "ml", "l", "tbsp", "tsp"],
+}
+
+
+def unit_row(ingredient: Any, unit: str | None, amount: float = 2) -> dict[str, Any]:
+    return {"ingredient_id": ingredient["id"], "amount": amount, "unit": unit}
+
+
+@pytest.mark.parametrize("base_unit", ["g", "ml", "piece"])
+async def test_units_that_fit_are_taken(api: AsyncClient, anna: Account, base_unit: str) -> None:
+    ingredient = await create_ingredient(api, anna, "Zutat", base_unit=base_unit)
+    rows = [unit_row(ingredient, unit) for unit in FITTING[base_unit]]
+    rows.append({"ingredient_id": ingredient["id"], "note": "nach Geschmack"})
+
+    meal = await create_meal(api, anna, "M", ingredients=rows)
+
+    assert [row["unit_fits"] for row in meal["ingredients"]] == [True] * len(rows)
+
+
+@pytest.mark.parametrize("base_unit", ["g", "ml", "piece"])
+async def test_units_that_do_not_fit_are_refused(
+    api: AsyncClient, anna: Account, salt: Any, base_unit: str
+) -> None:
+    """A new amount that doesn't fit is refused on its row's unit, on create and update."""
+    ingredient = await create_ingredient(api, anna, "Zutat", base_unit=base_unit)
+    rows = [unit_row(salt, "g"), *(unit_row(ingredient, unit) for unit in NOT_FITTING[base_unit])]
+    expected = {
+        ("body", "ingredients", index, "unit"): "unit_mismatch" for index in range(1, len(rows))
+    }
+
+    response = await api.post(
+        "/api/meals", json={"name": "M", "ingredients": rows}, headers=anna.headers
+    )
+    assert response.status_code == 422
+    assert fields(response) == expected
+
+    meal = await create_meal(api, anna, "M", ingredients=rows[:1])
+    response = await patch(api, anna, meal["id"], ingredients=rows)
+    assert fields(response) == expected
+    assert (await get_meal(api, anna, meal["id"])).json() == meal
+
+
+async def test_rows_that_do_not_fit_are_kept_as_they_are(
+    app: FastAPI, api: AsyncClient, anna: Account, flour: Any
+) -> None:
+    """MEAL-02, D-33: an older row that doesn't fit stays, flagged, while it is sent back as it
+    is (same ingredient, amount and unit), wherever it moved; changing it needs a fitting
+    unit. Its nutrition is unknown and named in the marker (NUT-05)."""
+    onions = await create_ingredient(
+        api, anna, "Zwiebeln", base_unit="piece", piece_weight_g=150, nutrients={"kcal": 40}
+    )
+    meal = await create_meal(
+        api,
+        anna,
+        "Zwiebelkuchen",
+        ingredients=[
+            unit_row(onions, "piece"),
+            unit_row(onions, None, 1),
+            unit_row(flour, "g", 200),
+        ],
+    )
+    # 3 onions of 150 g, 200 g of flour.
+    assert meal["nutrition"]["per_meal"]["kcal"] == pytest.approx(180 + 728)
+    # Counted in grams since: the pieces don't fit any more, and nothing converts them, not
+    # even a piece weight it still has from before D-32.
+    await set_stored(app, onions["id"], base_unit="g")
+
+    old = (await get_meal(api, anna, meal["id"])).json()
+    assert [row["unit_fits"] for row in old["ingredients"]] == [False, False, True]
+    assert old["nutrition"]["per_meal"]["kcal"] == pytest.approx(728)
+    assert [(item["ingredient_name"], item["reason"]) for item in old["nutrition"]["missing"]] == [
+        ("Zwiebeln", "unit_mismatch"),
+        ("Zwiebeln", "unit_mismatch"),
+    ]
+
+    kept = [
+        unit_row(flour, "g", 200),
+        {**unit_row(onions, None, 1), "note": "fein gehackt"},
+        unit_row(onions, "piece"),
+    ]
+    response = await patch(api, anna, meal["id"], ingredients=kept)
+    assert response.status_code == 200, response.text
+    assert [(row["amount"], row["unit"], row["unit_fits"], row["note"])
+            for row in response.json()["ingredients"]] == [
+        (200, "g", True, None),
+        (1, "piece", False, "fein gehackt"),
+        (2, "piece", False, None),
+    ]  # fmt: skip
+
+    changed = [kept[0], kept[1], unit_row(onions, "piece", 3)]
+    response = await patch(api, anna, meal["id"], ingredients=changed)
+    assert fields(response) == {("body", "ingredients", 2, "unit"): "unit_mismatch"}
+
+    fixed = [kept[0], kept[1], unit_row(onions, "g", 300)]
+    response = await patch(api, anna, meal["id"], ingredients=fixed)
+    assert [row["unit_fits"] for row in response.json()["ingredients"]] == [True, False, True]
+
+
 # --- nutrition (NUT-03..06) -----------------------------------------------------------------
 
 
@@ -332,7 +442,12 @@ async def test_nutrition_per_meal_and_per_serving(
         api, anna, "Milch", base_unit="ml", nutrients=values(64, 3.4, 4.8, 4.8, 3.5)
     )
     eggs = await create_ingredient(
-        api, anna, "Eier", piece_weight_g=60, nutrients=values(155, 13, 1.1, 1.1, 11)
+        api,
+        anna,
+        "Eier",
+        base_unit="piece",
+        piece_weight_g=60,
+        nutrients=values(155, 13, 1.1, 1.1, 11),
     )
     meal = await create_meal(
         api,
@@ -365,7 +480,9 @@ async def test_nutrition_per_meal_and_per_serving(
 
 async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
     butter = await create_ingredient(api, anna, "Butter", nutrients=values(741, 0.6, 0.6, 0.6, 82))
-    bread = await create_ingredient(api, anna, "Brot", nutrients=values(245, 8.5, 45, 3, 1.6))
+    bread = await create_ingredient(
+        api, anna, "Brot", base_unit="piece", nutrients=values(245, 8.5, 45, 3, 1.6)
+    )
     pasta = await create_ingredient(
         api, anna, "Nudeln", brand="Barilla", barcode=EAN_13, nutrients=values(355, 12, 70, 3, 2)
     )
@@ -390,9 +507,60 @@ async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
     assert nutrition["estimate"] is True
     assert nutrition["incomplete"] is True
     assert [(item["ingredient_name"], item["reason"]) for item in nutrition["missing"]] == [
-        ("Brot", "not_convertible")
+        ("Brot", "no_piece_weight")
     ]
     assert meal["ingredients"][2]["ingredient"]["brand"] == "Barilla"
+
+
+async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) -> None:
+    """NUT-05: pieces of a Stück ingredient, and an amount without a unit, count with the piece
+    weight against the values per 100 g. Without a piece weight they are unknown and named as
+    such."""
+    eggs = await create_ingredient(
+        api,
+        anna,
+        "Eier",
+        base_unit="piece",
+        piece_weight_g=60,
+        nutrients=values(155, 13, 1.1, 1.1, 11),
+    )
+    rolls = await create_ingredient(
+        api, anna, "Brötchen", base_unit="piece", nutrients=values(270, 9, 50, 3, 3)
+    )
+    meal = await create_meal(
+        api,
+        anna,
+        "Frühstück",
+        servings=2,
+        ingredients=[
+            {"ingredient_id": eggs["id"], "amount": 2, "unit": "piece"},
+            {"ingredient_id": eggs["id"], "amount": 1},
+            {"ingredient_id": rolls["id"], "amount": 4, "unit": "piece"},
+        ],
+    )
+
+    nutrition = meal["nutrition"]
+    # 3 eggs of 60 g: 180 g.
+    assert nutrition["per_meal"] == pytest.approx(values(279, 23.4, 1.98, 1.98, 19.8))
+    assert nutrition["per_serving"] == pytest.approx(values(139.5, 11.7, 0.99, 0.99, 9.9))
+    assert (nutrition["incomplete"], nutrition["estimate"]) == (True, False)
+    assert [(item["ingredient_name"], item["reason"]) for item in nutrition["missing"]] == [
+        ("Brötchen", "no_piece_weight"),
+    ]
+    assert [(row["amount"], row["unit"]) for row in meal["ingredients"]] == [
+        (2, "piece"),
+        (1, "piece"),
+        (4, "piece"),
+    ]
+
+    response = await api.patch(
+        f"/api/ingredients/{rolls['id']}", json={"piece_weight_g": 60}, headers=anna.headers
+    )
+    assert response.status_code == 200
+    nutrition = (await get_meal(api, anna, meal["id"])).json()["nutrition"]
+    # 4 rolls of 60 g: 240 g more.
+    assert nutrition["per_meal"]["kcal"] == pytest.approx(279 + 648)
+    assert nutrition["missing"] == []
 
 
 async def test_unknown_values_are_listed_per_nutrient(api: AsyncClient, anna: Account) -> None:
@@ -836,6 +1004,52 @@ async def test_search(api: AsyncClient, anna: Account, cuisines: dict[str, str])
     assert await list_meals(api, anna, q="nichts") == []
 
 
+async def test_dictionary_order(api: AsyncClient, anna: Account) -> None:
+    """MEAL-09, D-27: Ä sorts as A, so "Äpfel im Schlafrock" sits next to "Apfelstrudel"; real
+    letter pairs keep their place ("Feuer" before "Feurige", "Paella" before "Palatschinken")."""
+    for name in (
+        "Palatschinken",
+        "Feurige Nudeln",
+        "Apfelstrudel",
+        "Paella",
+        "Äpfel im Schlafrock",
+        "Feuertopf",
+        "Ananas-Curry",
+    ):
+        await create_meal(api, anna, name)
+
+    assert await list_meals(api, anna) == [
+        "Ananas-Curry",
+        "Äpfel im Schlafrock",
+        "Apfelstrudel",
+        "Feuertopf",
+        "Feurige Nudeln",
+        "Paella",
+        "Palatschinken",
+    ]
+
+
+async def test_renamed_and_copied_meals_keep_dictionary_order(
+    api: AsyncClient, anna: Account
+) -> None:
+    await create_meal(api, anna, "Apfelstrudel")
+    meal = await create_meal(api, anna, "Bratäpfel")
+    await create_meal(api, anna, "Ananas-Curry")
+
+    await api.patch(
+        f"/api/meals/{meal['id']}", json={"name": "Äpfel im Schlafrock"}, headers=anna.headers
+    )
+    copy = await api.post(f"/api/meals/{meal['id']}/copy", headers=anna.headers)
+
+    assert copy.status_code == 201
+    assert await list_meals(api, anna) == [
+        "Ananas-Curry",
+        "Äpfel im Schlafrock",
+        "Äpfel im Schlafrock",
+        "Apfelstrudel",
+    ]
+
+
 async def test_filters(api: AsyncClient, anna: Account, cuisines: dict[str, str]) -> None:
     curry = await create_meal(api, anna, "Curry", cuisine_id=cuisines["indian"], tags=["Scharf"])
     await create_meal(api, anna, "Dal", cuisine_id=cuisines["indian"])
@@ -849,6 +1063,29 @@ async def test_filters(api: AsyncClient, anna: Account, cuisines: dict[str, str]
     assert await list_meals(api, anna, tag_id="unknown") == []
 
 
+async def test_several_cuisines_match_any_and_several_tags_all(
+    api: AsyncClient, anna: Account, cuisines: dict[str, str]
+) -> None:
+    curry = await create_meal(
+        api, anna, "Curry", cuisine_id=cuisines["indian"], tags=["Scharf", "Schnell"]
+    )
+    await create_meal(api, anna, "Dal", cuisine_id=cuisines["indian"], tags=["Schnell"])
+    await create_meal(api, anna, "Pad Thai", cuisine_id=cuisines["thai"], tags=["Scharf"])
+    await create_meal(api, anna, "Chili", tags=["Scharf", "Schnell"])
+    await create_meal(api, anna, "Suppe", cuisine_id=cuisines["french"])
+    hot, quick = (tag["id"] for tag in curry["tags"])
+
+    indian_or_thai = {"cuisine_id": [cuisines["indian"], cuisines["thai"]]}
+    assert await list_meals(api, anna, **indian_or_thai) == ["Curry", "Dal", "Pad Thai"]
+    assert await list_meals(api, anna, tag_id=[hot, quick]) == ["Chili", "Curry"]
+    assert await list_meals(api, anna, **indian_or_thai, tag_id=[hot]) == ["Curry", "Pad Thai"]
+    assert await list_meals(api, anna, **indian_or_thai, tag_id=[hot, quick]) == ["Curry"]
+    # A tag no meal has leaves nothing, as every tag must match.
+    assert await list_meals(api, anna, tag_id=[hot, "unknown"]) == []
+    # The same tag twice is still one tag.
+    assert await list_meals(api, anna, tag_id=[quick, quick]) == ["Chili", "Curry", "Dal"]
+
+
 async def test_filter_chips(api: AsyncClient, anna: Account, ben: Account, carl: Account) -> None:
     await create_meal(api, anna, "Anna's")
     await create_meal(api, ben, "Ben's")
@@ -856,10 +1093,7 @@ async def test_filter_chips(api: AsyncClient, anna: Account, ben: Account, carl:
     await set_privacy(api, carl, meals_public=False)
 
     assert await list_meals(api, anna) == ["Anna's", "Ben's"]
-    response = await api.patch(
-        "/api/me", json={"filter_hidden": {"meals": [ben.id], "lists": []}}, headers=anna.headers
-    )
-    assert response.status_code == 200
+    await save_filters(api, anna, meals=[ben.id])
     assert await list_meals(api, anna) == ["Anna's"]
     # Explicit owners replace the saved chips, but never widen what is visible.
     assert await list_meals(api, anna, owner_ids=[ben.id]) == ["Ben's"]
@@ -870,9 +1104,7 @@ async def test_filter_chips(api: AsyncClient, anna: Account, ben: Account, carl:
     assert await list_meals(api, anna, owner_ids=[carl.id]) == []
     assert await list_meals(api, anna, owner_ids=["someone"]) == []
     # Hiding yourself works too.
-    await api.patch(
-        "/api/me", json={"filter_hidden": {"meals": [anna.id], "lists": []}}, headers=anna.headers
-    )
+    await save_filters(api, anna, meals=[anna.id])
     assert await list_meals(api, anna) == ["Ben's"]
 
 
@@ -901,9 +1133,7 @@ async def test_meal_tags_are_those_of_visible_meals(
     # A private meal's tags do not leak; a tag no meal uses any more is not offered.
     assert await meal_tags(api, carl) == ["Asia", "Italienisch", "Scharf"]
     # The filter chips narrow the meals, not the tags to filter by.
-    await api.patch(
-        "/api/me", json={"filter_hidden": {"meals": [carl.id], "lists": []}}, headers=anna.headers
-    )
+    await save_filters(api, anna, meals=[carl.id])
     assert await meal_tags(api, anna) == ["Asia", "Backen", "Italienisch", "Scharf"]
     # The autocomplete keeps the shared pool (REF-04).
     pool = await api.get("/api/tags", params={"q": "verg"}, headers=carl.headers)

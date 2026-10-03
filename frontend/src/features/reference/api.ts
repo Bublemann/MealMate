@@ -1,4 +1,10 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 
@@ -18,15 +24,16 @@ const REFERENCE_STALE_MS = 60 * 60 * 1000;
 // loaded again when a screen using it mounts or the app regains focus.
 export const CATEGORIES_STALE_MS = 5 * 60 * 1000;
 
+/** The categories in the store's walking order (REF-01, ADM-01), with their names (D-31). */
+export const categoriesQuery = queryOptions({
+  queryKey: CATEGORIES_KEY,
+  queryFn: ({ signal }) => unwrap(api.GET('/api/categories', { signal })),
+  staleTime: CATEGORIES_STALE_MS,
+});
+
 /** The categories in the store's walking order (REF-01, ADM-01). */
 export function useCategories() {
-  return useQuery({
-    queryKey: CATEGORIES_KEY,
-    queryFn: ({ signal }) => unwrap(api.GET('/api/categories', { signal })),
-    staleTime: CATEGORIES_STALE_MS,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-  });
+  return useQuery({ ...categoriesQuery, refetchOnMount: true, refetchOnWindowFocus: true });
 }
 
 /** The fixed units in display order (REF-02). */

@@ -1,61 +1,108 @@
-import { ChevronRight, History, ListChecks, Plus, ShoppingCart } from 'lucide-react';
-import { useId } from 'react';
+import {
+  ChevronRight,
+  CircleCheck,
+  Lock,
+  ShoppingCart,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
-import { EmptyState } from '@/components/EmptyState';
+import { EmptyLine } from '@/components/EmptyLine';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { FilterPanel } from '@/components/FilterPanel';
+import { InitialMarker } from '@/components/InitialMarker';
 import { LoadError } from '@/components/LoadError';
 import { LoadingState } from '@/components/LoadingState';
+import { NoMatches } from '@/components/NoMatches';
+import { OfflineNotice } from '@/components/OfflineNotice';
+import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
-import { UserFilterChips } from '@/components/UserFilterChips';
-import { Button } from '@/components/ui/button';
-import { useCurrentUser } from '@/features/auth/context';
 import { useCouple } from '@/features/couple/api';
 import { FirstLoginHints } from '@/features/hints/FirstLoginHints';
-import { useConnected, usePendingFinishes } from '@/features/sync/context';
+import { useConnected, usePendingFinishes, useSyncEngine } from '@/features/sync/context';
 import { SyncIndicator } from '@/features/sync/SyncIndicator';
+import { useUserFilterGroup } from '@/features/savedFilters/useUserFilterGroup';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
-import { testIds, type TestId } from '@/testIds';
-import { useCreateList, useListUsers, useLists, useToggleListChip, type ListSummary } from './api';
+import { cn } from '@/lib/utils';
+import { testIds } from '@/testIds';
+import { showsLocalCopy, useCreateList, useListFeed, type ListSummary } from './api';
 import { listDisplayName } from './format';
+import { FEED_KEY } from './keys';
 import type { ListViewState } from './ListScreen';
+import { useStateFilterGroup } from '@/features/savedFilters/useStateFilterGroup';
+
+/** What the saved user filter and state filter hide in the feed (UI-02). */
+interface FeedFilters {
+  hides: (list: ListSummary) => boolean;
+  /** A user or a state is unticked. */
+  active: boolean;
+  /** A change is being saved, or the feed is loading again after it. */
+  saving: boolean;
+  /** Ticks every user and state again. */
+  reset: () => void;
+}
 
 /**
- * The Lists tab, where the app opens (UI-02): a large "Continue shopping" card for each of my
- * lists being shopped, "+ New list" and my drafts (mine and the partner's shared ones), most
- * recently edited first, the entry to the history, then others' lists with their own user chips.
+ * The Lists tab, where the app opens (UI-02, UI-03): the pinned block with the "New list" tile
+ * and the filter button, the first-login hints and the sync notice, then the list feed: every list
+ * I can see, in every state, as far as the saved user filter and state filter show them, newest
+ * created first, the next 30 as I scroll down. Offline the filters don't apply, so their button
+ * is disabled.
  */
 export function ListsScreen() {
   const { t } = useTranslation();
+  const connected = useConnected();
+  const userFilter = useUserFilterGroup('lists', {
+    label: t('lists.filter.users'),
+    reloadKey: FEED_KEY,
+  });
+  const stateFilter = useStateFilterGroup({
+    label: t('lists.filter.states'),
+    reloadKey: FEED_KEY,
+  });
+  const filters: FeedFilters = {
+    hides: (list) => userFilter.hidden.has(list.owner.id) || stateFilter.hidden.has(list.status),
+    active: userFilter.group.active || stateFilter.group.active,
+    saving: userFilter.saving || stateFilter.saving,
+    reset: () => {
+      userFilter.reset();
+      stateFilter.reset();
+    },
+  };
 
   return (
-    <Screen title={t('nav.lists')} testId={testIds.screenLists}>
+    <Screen variant="tab" title={t('nav.lists')} testId={testIds.screenLists}>
+      <ListsPinnedBlock
+        filter={
+          <FilterPanel
+            groups={[userFilter.group, stateFilter.group]}
+            onReset={filters.reset}
+            disabled={!connected}
+          />
+        }
+      />
       {/* Only when there is something to say: offline, or changes waiting (SYNC-07). */}
       <SyncIndicator quiet />
       <FirstLoginHints />
-      <MyLists />
-      <HistoryEntry />
-      <OthersLists />
+      <ListFeed filters={filters} />
     </Screen>
   );
 }
 
 /**
- * LIST-01: "+ New list" creates a draft right away and opens it with the meal picker. Lists being
- * shopped come first, as "Continue shopping" cards (UI-02). Creating a list needs the server, so
- * offline the button is disabled rather than failing on a tap (SYNC-03).
+ * The pinned block (UI-01) with the filter button and the "New list" tile (LIST-01), which
+ * creates a draft right away and opens it with the meal picker. Creating a list needs the server,
+ * so offline the tile is disabled rather than failing on a tap.
  */
-function MyLists() {
+function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const headingId = useId();
-  const lists = useLists('mine');
-  const finishing = usePendingFinishes();
   const create = useCreateList();
   const connected = useConnected();
-  const canCreate = connected && !create.isPending;
 
   function newList() {
     create.mutate(undefined, {
@@ -66,186 +113,150 @@ function MyLists() {
     });
   }
 
-  // Until the first answer (or the local copy, SYNC-09) it is unknown whether there are lists at
-  // all: nothing of the filled view shows before it is certain (UI-03).
-  if (!lists.data) {
-    return lists.error ? <LoadError error={lists.error} /> : <LoadingState />;
-  }
-
-  if (lists.data.length === 0) {
-    return (
-      <div className="flex flex-col gap-3">
-        <EmptyState
-          icon={ListChecks}
-          title={t('lists.empty.title')}
-          text={t('lists.empty.text')}
-          actionLabel={t('lists.empty.action')}
-          onAction={canCreate ? newList : undefined}
-          actionTestId={testIds.newList}
-        />
-        <ErrorAlert error={create.error} />
-      </div>
-    );
-  }
-
-  // Finished here but not sent yet: already in the history as far as this phone knows.
-  const current = lists.data.filter((list) => !finishing.has(list.id));
-  const shopping = current.filter((list) => list.status === 'shopping');
-  const drafts = current.filter((list) => list.status !== 'shopping');
-
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4">
-      {shopping.map((list) => (
-        <ContinueShopping key={list.id} list={list} />
-      ))}
-      <Button
-        data-testid={testIds.newList}
-        onClick={newList}
-        disabled={!canCreate}
-        className="self-start"
-      >
-        <Plus aria-hidden="true" />
-        {t('lists.new')}
-      </Button>
+    <>
+      <PinnedBlock
+        filter={filter}
+        newTile={{
+          label: t('lists.new'),
+          onClick: newList,
+          disabled: !connected || create.isPending,
+          testId: testIds.newList,
+        }}
+      />
       <ErrorAlert error={create.error} />
-      <h2 id={headingId} className="text-xl font-semibold">
-        {t('lists.mine.title')}
-      </h2>
-      {drafts.length === 0 && <p className="text-muted-foreground">{t('lists.mine.noDrafts')}</p>}
-      {drafts.length > 0 && <ListCards lists={drafts} testId={testIds.listDrafts} />}
-    </section>
-  );
-}
-
-/** UI-02: a list being shopped, as a large card at the top. */
-function ContinueShopping({ list }: { list: ListSummary }) {
-  const { t } = useTranslation();
-  const language = useLanguage();
-
-  return (
-    <Link
-      to={`/lists/${list.id}`}
-      data-testid={testIds.continueShopping}
-      className="flex min-h-(--tap-target) items-center gap-4 rounded-xl bg-primary px-5 py-4 text-primary-foreground shadow-sm outline-none hover:bg-primary/90 focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-    >
-      <ShoppingCart aria-hidden="true" className="size-8 shrink-0" />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-lg font-semibold">{t('lists.continue.title')}</span>
-        <span className="break-words">{listDisplayName(list, t, language)}</span>
-      </span>
-      <ChevronRight aria-hidden="true" className="size-6 shrink-0" />
-    </Link>
-  );
-}
-
-/** SHOP-05: the way to the history, between my lists and others' (UI-02). */
-function HistoryEntry() {
-  const { t } = useTranslation();
-
-  return (
-    <Link
-      to="/lists/history"
-      data-testid={testIds.historyLink}
-      className="flex min-h-(--tap-target) items-center gap-3 rounded-xl border bg-card px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring"
-    >
-      <History aria-hidden="true" className="size-6 shrink-0 text-primary" />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="font-medium">{t('lists.history.entry')}</span>
-        <span className="text-sm text-muted-foreground">{t('lists.history.entryText')}</span>
-      </span>
-      <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
-    </Link>
+    </>
   );
 }
 
 /**
- * Other users' lists I may look at (public ones, and my partner's unshared ones), read-only,
- * with one chip per user; the choice is saved separately from the meal chips (UI-02, VIS-02).
- * There is no chip for me: my own lists are never here.
+ * The feed below the pinned block (UI-02). Until the server's first page arrives it is the local
+ * copy (SYNC-09); offline it is only the local copy, because read-only and done lists need a
+ * connection. The copy ignores the saved filters; the server leaves out what they hide, and a
+ * list hidden by a change still being saved goes at once. A list finished here whose finish
+ * hasn't been sent yet stays hidden.
  */
-function OthersLists() {
+function ListFeed({ filters }: { filters: FeedFilters }) {
   const { t } = useTranslation();
-  const headingId = useId();
-  const user = useCurrentUser();
-  const users = useListUsers();
-  const lists = useLists('others');
-  const toggle = useToggleListChip();
-  const hidden = user.filter_hidden.lists;
-  const others = users.data?.filter((person) => person.id !== user.id);
-  // The server leaves out hidden owners; a chip switched off just now hides them right away.
-  const shown = lists.data?.filter((list) => !hidden.includes(list.owner.id));
+  const engine = useSyncEngine();
+  const feed = useListFeed();
+  const connected = useConnected();
+  const finishing = usePendingFinishes();
+  // Offline the sync notice says why nothing loads.
+  const error = connected ? feed.error : null;
+  const lists = connected
+    ? feed.data?.pages.flatMap((page) => page.lists)
+    : engine.copiedSummaries();
+  // The local copy ignores the saved filters (UI-02).
+  const filtersApply = connected && !showsLocalCopy(feed);
+
+  if (!lists) {
+    if (feed.error) return <LoadError error={feed.error} />;
+    // Offline before the copy was ever complete: the server's lists need a connection.
+    if (!connected && feed.data) {
+      return <OfflineNotice message={t('sync.offline.page')} testId={testIds.offlineNotice} />;
+    }
+    // Until the first answer (or the copy) it is unknown whether there are lists at all.
+    return <LoadingState />;
+  }
+  const shown = lists.filter(
+    (list) => !finishing.has(list.id) && !(filtersApply && filters.hides(list)),
+  );
+  if (shown.length === 0) {
+    // An empty copy and a failed first page: whether there are lists at all is unknown.
+    if (error) return <LoadError error={error} />;
+    if (filtersApply && filters.active) return <NoMatches onReset={filters.reset} />;
+    // The answer from before users or states were ticked again says nothing about the lists.
+    if (filters.saving) return <LoadingState />;
+    return <EmptyLine text={t('lists.empty')} />;
+  }
 
   return (
-    <section
-      aria-labelledby={headingId}
-      data-testid={testIds.othersLists}
-      className="flex flex-col gap-3"
-    >
-      <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-xl font-semibold">
-          {t('lists.others.title')}
-        </h2>
-        <p className="text-muted-foreground">{t('lists.others.text')}</p>
-      </div>
-      <LoadError error={users.error} />
-      {others && others.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <UserFilterChips
-            users={others}
-            hidden={hidden}
-            meId={user.id}
-            meLabel={t('meals.chips.me')}
-            label={t('lists.chips.label')}
-            testId={testIds.listUserChips}
-            onChange={(next) => toggle.mutate(next)}
-          />
-          <ErrorAlert error={toggle.error} />
-        </div>
+    <div className="flex flex-col gap-3">
+      {/* E.g. the first page failed while the copy is shown. */}
+      <LoadError error={feed.isFetchNextPageError ? null : error} />
+      <ul
+        data-testid={testIds.listFeed}
+        aria-label={t('lists.feedLabel')}
+        className="flex flex-col divide-y rounded-xl border bg-card"
+      >
+        {shown.map((list) => (
+          <li key={list.id}>
+            <ListRow list={list} />
+          </li>
+        ))}
+      </ul>
+      {connected && feed.hasNextPage && (
+        <FeedEnd
+          onReached={feed.fetchNextPage}
+          // Not while the feed loads (a page, or all of them again), nor right after a page
+          // failed: that would ask again and again. The next load of the feed resumes it.
+          paused={feed.isFetching || feed.isFetchNextPageError}
+          loading={feed.isFetchingNextPage}
+        />
       )}
-      {lists.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
-      {/* One offline message per section. */}
-      <LoadError error={users.error ? null : lists.error} />
-      {shown && shown.length === 0 && (
-        <p className="text-muted-foreground">
-          {others?.some((person) => hidden.includes(person.id))
-            ? t('lists.others.noneShown')
-            : t('lists.others.empty')}
-        </p>
-      )}
-      {shown && shown.length > 0 && <ListCards lists={shown} />}
-    </section>
+      <LoadError error={feed.isFetchNextPageError ? error : null} />
+    </div>
   );
 }
 
-export function ListCards({ lists, testId }: { lists: ListSummary[]; testId?: TestId }) {
+interface FeedEndProps {
+  onReached: () => unknown;
+  paused: boolean;
+  loading: boolean;
+}
+
+/**
+ * The end of the loaded part of the feed: when it comes near the screen, the next page is loaded
+ * (UI-02). The observer starts again after every load, so it reports the end again if it is
+ * still in view.
+ */
+function FeedEnd({ onReached, paused, loading }: FeedEndProps) {
+  const { t } = useTranslation();
+  const end = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const target = end.current;
+    if (!target || paused || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) onReached();
+      },
+      { rootMargin: '0px 0px 50% 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [onReached, paused]);
+
   return (
-    <ul data-testid={testId} className="flex flex-col divide-y rounded-xl border bg-card">
-      {lists.map((list) => (
-        <li key={list.id}>
-          <ListCard list={list} />
-        </li>
-      ))}
-    </ul>
+    <p ref={end} role="status" className="text-muted-foreground">
+      {loading ? t('common.loading') : null}
+    </p>
   );
 }
 
-function ListCard({ list }: { list: ListSummary }) {
+/**
+ * One list (UI-02): the owner's initial, the name and date, icons for a shared list, a read-only
+ * one, one being shopped and a done one, and "3 meals · 5 items" with who shares it or whose it
+ * is and when it was bought. The partner's name comes with the couple.
+ */
+function ListRow({ list }: { list: ListSummary }) {
   const { t } = useTranslation();
   const language = useLanguage();
-  const couple = useCouple();
-  const partner = couple.data?.partner;
+  const partner = useCouple().data?.partner;
+  // My list shared with my partner, or my partner's that I may change.
+  const shared = list.is_owner ? list.shared_with_partner : list.can_edit;
   const details = [
-    list.status === 'shopping' ? t('lists.card.shopping') : null,
-    list.status === 'done' && list.finished_at
-      ? t('lists.card.boughtOn', { date: formatDayMonth(list.finished_at, language) })
-      : null,
     t('lists.card.meals', { count: list.meal_count }),
     t('lists.card.items', { count: list.line_count }),
     list.is_owner
-      ? list.shared_with_partner && partner
+      ? shared && partner
         ? t('lists.card.sharedWith', { name: userLabel(t, partner) })
         : null
-      : t('lists.card.by', { name: userLabel(t, list.owner) }),
+      : t(shared ? 'lists.card.sharedBy' : 'lists.card.by', { name: userLabel(t, list.owner) }),
+    list.status === 'done' && list.finished_at
+      ? t('lists.card.boughtOn', { date: formatDayMonth(list.finished_at, language) })
+      : null,
   ].filter((detail) => detail !== null);
 
   return (
@@ -254,11 +265,37 @@ function ListCard({ list }: { list: ListSummary }) {
       data-testid={testIds.listCard}
       className="flex min-h-(--tap-target) items-center gap-3 px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
     >
+      <InitialMarker user={list.owner} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-medium break-words">{listDisplayName(list, t, language)}</span>
         <span className="text-sm text-muted-foreground">{details.join(' · ')}</span>
       </span>
+      <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
+        {shared && <RowIcon icon={Users} label={t('lists.card.shared')} />}
+        {!list.can_edit && <RowIcon icon={Lock} label={t('lists.card.readOnly')} />}
+        {list.status === 'shopping' && (
+          <RowIcon icon={ShoppingCart} label={t('lists.card.shopping')} className="text-primary" />
+        )}
+        {list.status === 'done' && <RowIcon icon={CircleCheck} label={t('lists.card.done')} />}
+      </span>
       <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
     </Link>
+  );
+}
+
+/** An icon that marks the kind of list; screen readers read its name. */
+function RowIcon({
+  icon: Icon,
+  label,
+  className,
+}: {
+  icon: LucideIcon;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <span role="img" aria-label={label} className={cn('flex', className)}>
+      <Icon aria-hidden="true" className="size-5" />
+    </span>
   );
 }

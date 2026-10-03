@@ -34,8 +34,9 @@ SCREENS = [
     Screen("/login", "anonymous", (TEST_IDS["screenLogin"],)),
     # The invite code is appended in the test: /join#<code>.
     Screen("/join", "anonymous", (TEST_IDS["screenJoin"],)),
-    # A draft of the member's and another user's public list are created in the test.
-    Screen("/lists", "member", (TEST_IDS["listDrafts"], TEST_IDS["othersLists"])),
+    # A draft and a done list of the member's and another user's public list are created in the
+    # test, so the feed shows a row of each kind.
+    Screen("/lists", "member", (TEST_IDS["newList"], TEST_IDS["listFeed"])),
     # A list with meals, lines and a removed line is created in the test: /lists/<id>.
     Screen(
         "/lists/:id",
@@ -54,19 +55,28 @@ SCREENS = [
         "member",
         (TEST_IDS["offlineBanner"], TEST_IDS["linePending"], TEST_IDS["syncStatus"]),
     ),
-    # A done list of the member's is created in the test; its week is awaited there.
-    Screen("/lists/history", "member", (TEST_IDS["screenHistory"],)),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/ingredients", "member", (TEST_IDS["screenIngredients"],)),
     # An ingredient with brand, barcode and package is created in the test: /ingredients/<id>.
     Screen("/ingredients/:id", "member", (TEST_IDS["ingredientNutrition"],)),
     # The ingredient form of "New ingredient", with "More" (the package) opened in the test.
     Screen("/ingredients/new", "member", (TEST_IDS["ingredientForm"],)),
+    # The filter panel, opened in the test, with a category ticked.
+    Screen("/ingredients/filter", "member", (TEST_IDS["filterPanel"],)),
     Screen("/meals/new", "member", (TEST_IDS["mealForm"], TEST_IDS["ingredientPicker"])),
-    # No camera in CI (denied or missing): the scanner shows its manual input (BAR-01).
-    Screen("/scan", "member", (TEST_IDS["screenScan"], TEST_IDS["barcodeInput"])),
-    # A barcode nobody knows is typed in the test: the notice and the form with the barcode.
-    Screen("/scan/new", "member", (TEST_IDS["scanNotice"], TEST_IDS["ingredientForm"])),
+    # The scanner over "New ingredient", opened in the test. No camera in CI (denied or
+    # missing): it shows its manual input (BAR-01).
+    Screen(
+        "/ingredients/scan", "member", (TEST_IDS["barcodeScanDialog"], TEST_IDS["barcodeInput"])
+    ),
+    # A barcode an ingredient has is typed into that scanner in the test: the pop-up names it
+    # below the barcode field, with "open" (BAR-02). Open Food Facts isn't asked, so its few
+    # lookups a minute (BAR-08) stay for test_barcodes.
+    Screen(
+        "/ingredients/scanned",
+        "member",
+        (TEST_IDS["ingredientScanNotice"], TEST_IDS["ingredientForm"]),
+    ),
     # A meal with a photo and ingredient rows is created in the test: /meals/<id>.
     Screen(
         "/meals/:id",
@@ -97,7 +107,7 @@ def test_no_serious_violations(
 ) -> None:
     page.emulate_media(color_scheme=color_scheme)
     path = screen.path
-    history_list = ""  # the name of the done list created for the history screen
+    feed_lists: list[str] = []  # the names of the lists created for "/lists"
     if screen.visitor != "anonymous":
         account: Account = request.getfixturevalue(screen.visitor)
         sign_in(page.context, account)
@@ -108,6 +118,7 @@ def test_no_serious_violations(
         path = f"/join#{code_from_link(link)}"
     if path == "/ingredients/:id":
         api = request.getfixturevalue("api")
+        # From Open Food Facts, so the page also shows the pack size and the attribution (D-38).
         ingredient = api.create_ingredient(
             account,
             unique("A11y"),
@@ -115,12 +126,22 @@ def test_no_serious_violations(
             barcode=new_barcode(),
             quantity_text="1 kg",
             nutrients={"kcal": 52},
+            off={"edited_fields": []},
         )
         path = f"/ingredients/{ingredient['id']}"
-    if path == "/ingredients/new":
+    # The barcode typed into the scanner on "/ingredients/scanned", and its ingredient's name.
+    scanned, scanned_name = "", ""
+    if path == "/ingredients/scanned":
+        api = request.getfixturevalue("api")
+        scanned, scanned_name = new_barcode(), unique("A11y scanned")
+        api.create_ingredient(account, scanned_name, barcode=scanned)
+    if path in (
+        "/ingredients/new",
+        "/ingredients/filter",
+        "/ingredients/scan",
+        "/ingredients/scanned",
+    ):
         path = "/ingredients"
-    if path == "/scan/new":
-        path = "/scan"
     if path == "/meals/:id":
         api = request.getfixturevalue("api")
         ingredient = api.create_ingredient(account, unique("A11y"), nutrients={"kcal": 52})
@@ -140,13 +161,29 @@ def test_no_serious_violations(
 
     if path == "/lists":
         api = request.getfixturevalue("api")
-        api.create_list(account, unique("A11y list"))
-        # The admin's lists are public: one of them shows under Others' lists.
-        api.create_list(request.getfixturevalue("admin"), unique("A11y others"))
+        draft = api.create_list(account, unique("A11y list"))
+        ingredient = api.create_ingredient(account, unique("A11y rice"))
+        meal = api.create_meal(
+            account,
+            unique("A11y meal"),
+            servings=2,
+            ingredients=[{"ingredient_id": ingredient["id"], "amount": 150, "unit": "g"}],
+        )
+        done = api.create_list(account, unique("A11y done"))
+        api.add_list_meal(account, done["id"], meal["id"])
+        api.start_shopping(account, done["id"])
+        api.finish_list(account, done["id"])
+        # The admin's lists are public: one shows as a read-only list, with a lock.
+        read_only = api.create_list(request.getfixturevalue("admin"), unique("A11y read-only"))
+        feed_lists = [draft["name"], done["name"], read_only["name"]]
     if path == "/lists/:id":
         api = request.getfixturevalue("api")
         onions = api.create_ingredient(
-            account, unique("A11y onions"), category_key="fruit_vegetables", piece_weight_g=80
+            account,
+            unique("A11y onions"),
+            category_key="fruit_vegetables",
+            base_unit="piece",
+            piece_weight_g=80,
         )
         flour = api.create_ingredient(account, unique("A11y flour"))
         meal = api.create_meal(
@@ -186,7 +223,7 @@ def test_no_serious_violations(
     offline_line = ""  # the line checked off offline on "/lists/:id/offline"
     if path == "/lists/:id/offline":
         api = request.getfixturevalue("api")
-        onions = api.create_ingredient(account, unique("A11y onions"))
+        onions = api.create_ingredient(account, unique("A11y onions"), base_unit="piece")
         # A second line: checking off the last one would offer to finish.
         flour = api.create_ingredient(account, unique("A11y flour"))
         meal = api.create_meal(
@@ -203,35 +240,36 @@ def test_no_serious_violations(
         api.start_shopping(account, offline["id"])
         offline_line = onions["name"]
         path = f"/lists/{offline['id']}"
-    if path == "/lists/history":
-        api = request.getfixturevalue("api")
-        ingredient = api.create_ingredient(account, unique("A11y rice"))
-        meal = api.create_meal(
-            account,
-            unique("A11y meal"),
-            servings=2,
-            ingredients=[{"ingredient_id": ingredient["id"], "amount": 150, "unit": "g"}],
-        )
-        done = api.create_list(account, unique("A11y done"))
-        api.add_list_meal(account, done["id"], meal["id"])
-        api.start_shopping(account, done["id"])
-        api.finish_list(account, done["id"])
-        history_list = done["name"]
-
     page.goto(path)
     if screen.path == "/join":
         # The form appears once the code has been checked.
         expect(page.get_by_role("button", name=text("auth.join.submit"))).to_be_visible()
     if screen.path == "/ingredients/new":
-        page.get_by_test_id(TEST_IDS["newIngredient"]).or_(
-            page.get_by_role("button", name=text("ingredients.empty.action"))
-        ).click()
+        page.get_by_test_id(TEST_IDS["newIngredient"]).click()
         form = page.get_by_test_id(TEST_IDS["ingredientForm"])
-        form.get_by_text(text("ingredients.form.more"), exact=True).click()
-        expect(form.get_by_label(text("ingredients.field.packUnit"), exact=True)).to_be_visible()
-    if screen.path == "/scan/new":
-        page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(new_barcode())
+        # Stück shows the piece weight, so the check covers every field of the pop-up (D-35).
+        form.get_by_label(text("ingredients.baseUnit.piece"), exact=True).check()
+        piece_weight = form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)
+        expect(piece_weight).to_be_visible()
+        expect(page.get_by_test_id(TEST_IDS["ingredientFormFooter"])).to_be_visible()
+    if screen.path == "/ingredients/filter":
+        page.get_by_test_id(TEST_IDS["filterButton"]).click()
+        panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+        api = request.getfixturevalue("api")
+        other = api.category_name(account, "other")
+        panel.get_by_role("checkbox", name=other, exact=True).check()
+        # Counted on the button, behind the open panel.
+        expect(page.get_by_test_id(TEST_IDS["filterButton"])).to_have_text("1")
+    if screen.path in ("/ingredients/scan", "/ingredients/scanned"):
+        page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+        page.get_by_test_id(TEST_IDS["ingredientFormScan"]).click()
+    if screen.path == "/ingredients/scanned":
+        page.get_by_test_id(TEST_IDS["barcodeInput"]).fill(scanned)
         page.get_by_test_id(TEST_IDS["barcodeLookup"]).click()
+        # Checked once the lookup has answered, not while it runs.
+        expect(page.get_by_test_id(TEST_IDS["ingredientScanNotice"])).to_contain_text(
+            text("ingredients.scan.known", name=scanned_name)
+        )
     if screen.path == "/me/admin/invites":
         # Also check the created link with its share button.
         page.get_by_test_id(TEST_IDS["createInviteButton"]).click()
@@ -251,11 +289,11 @@ def test_no_serious_violations(
         removed = page.get_by_test_id(TEST_IDS["hiddenLines"])
         removed.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
         expect(removed.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
-    if screen.path == "/lists/history":
-        # The member's done lists of all runs are there, maybe in two weeks (the light and the
-        # dark run can straddle Sunday midnight): wait for the week with this run's list.
-        weeks = page.get_by_test_id(TEST_IDS["historyWeek"])
-        expect(weeks.filter(has_text=history_list).get_by_role("heading", level=2)).to_be_visible()
+    if screen.path == "/lists":
+        # The newest lists come first: this run's lists are on the first page.
+        rows = page.get_by_test_id(TEST_IDS["listFeed"]).get_by_test_id(TEST_IDS["listCard"])
+        for name in feed_lists:
+            expect(rows.filter(has_text=name)).to_be_visible()
     if screen.path == "/lists/:id/shopping":
         # The new and the needs-more line, and the checked one in the opened cart.
         lines = page.get_by_test_id(TEST_IDS["shoppingLines"])

@@ -1,29 +1,40 @@
-import { ScanBarcode, Search } from 'lucide-react';
-import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { CircleAlert, RotateCcw, ScanBarcode, Search } from 'lucide-react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
-import { isApiError } from '@/api/errors';
+import { Link, useNavigate } from 'react-router';
+import { fieldErrorCodes, isApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { useCategories, useUnits, type Unit } from '@/features/reference/api';
-import { categoryName, unitLabel } from '@/features/reference/labels';
+import { NativeSelect } from '@/components/ui/native-select';
+import { useCategories } from '@/features/reference/api';
+import { CategoryOptions } from '@/features/reference/CategoryOptions';
+import { OTHER_KEY, pickableCategories } from '@/features/reference/categories';
+import { unitLabel } from '@/features/reference/labels';
+import { isOffSlow, useBarcodeLookup } from '@/features/scanner/api';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import {
+  toSummary,
+  unitMismatch,
   useCreateIngredient,
+  useLinkBarcode,
   useSimilarIngredients,
   useUpdateIngredient,
   type BaseUnit,
@@ -34,36 +45,44 @@ import {
   type IngredientUpdate,
   type NutrientValues,
   type OffProposal,
+  type UnitMismatch,
 } from './api';
+import { BaseUnitConfirmDialog } from './BaseUnitConfirmDialog';
 import {
   BRAND_MAX_LENGTH,
   editedFields,
   emptyValues,
   NAME_MAX_LENGTH,
-  NUMBER_FIELDS,
   proposalValues,
-  QUANTITY_TEXT_MAX_LENGTH,
+  typedValues,
   valuesFromIngredient,
-  valuesFromPrefill,
+  valuesFromProposal,
   type FormValues,
-  type NumberField,
-  type Prefill,
 } from './formValues';
 import { ingredientLabel } from './label';
-import { NUTRIENT_KEYS, nutrientLabel, parseOptionalAmount, type NutrientKey } from './nutrients';
+import {
+  NUTRIENT_KEYS,
+  nutrientLabel,
+  nutritionUnit,
+  parseOptionalAmount,
+  type NutrientKey,
+} from './nutrients';
 import { OffAttribution } from './OffAttribution';
 import { OffSearchDialog } from './OffSearchDialog';
 
-// The scanner and its decoder are a chunk of their own (PERF-03), loaded when the field's "Scan"
-// is tapped.
+// The plain scanner and its decoder are a chunk of their own (PERF-03), loaded when the scan
+// icon is tapped. It only hands the digits back: the lookup and what follows are the form's, so
+// the scanner never embeds the form (plan § 8).
 const BarcodeScanDialog = lazy(() =>
   import('@/features/scanner/BarcodeScanDialog').then((module) => ({
     default: module.BarcodeScanDialog,
   })),
 );
 
-const BASE_UNITS: readonly BaseUnit[] = ['g', 'ml'];
-const PACK_FIELDS = ['quantity_text', 'pack_quantity', 'pack_unit'] as const;
+const BASE_UNITS: readonly BaseUnit[] = ['g', 'ml', 'piece'];
+/** A link inside a hint or notice, as tall as a button. */
+const INLINE_LINK =
+  'inline-flex min-h-(--tap-target) items-center rounded-md px-2 font-medium text-primary underline underline-offset-4';
 /** The paths whose server errors are shown next to an input; others go to the alert. */
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'name',
@@ -71,8 +90,7 @@ const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'category_id',
   'base_unit',
   'barcode',
-  ...NUMBER_FIELDS,
-  ...PACK_FIELDS,
+  'piece_weight_g',
   ...NUTRIENT_KEYS.map((key) => `nutrients.${key}`),
 ]);
 
@@ -83,6 +101,11 @@ interface IngredientFormDialogProps {
   ingredient?: Ingredient;
   /** Prefills the name of a new ingredient (e.g. from a search). */
   initialName?: string;
+  /**
+   * A barcode scanned before the pop-up opened (the meal form's scan, MEAL-03): it is looked up
+   * at once, as a scan with the pop-up's own scan icon is.
+   */
+  initialScan?: string;
   /** Called with the saved ingredient; the dialog closes itself. */
   onSaved?: (ingredient: Ingredient) => void;
   /**
@@ -92,14 +115,31 @@ interface IngredientFormDialogProps {
   onPickExisting?: (ingredient: IngredientSummary) => void;
 }
 
-/** Creates or edits an ingredient (ING-01/02, NUT-02) in a dialog. */
+/**
+ * Creates or edits an ingredient (ING-01/02/04, NUT-02) in the compact pop-up (D-35): the form
+ * scrolls between the headline and its footer with "Save", which stays in the visible area
+ * above the keyboard (UI-01).
+ */
 export function IngredientFormDialog({ open, onOpenChange, ...props }: IngredientFormDialogProps) {
   const { t } = useTranslation();
   const { ingredient } = props;
+  const nameRef = useRef<HTMLInputElement>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        className="gap-0 overflow-hidden"
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => {
+          // The cursor starts in the name only while it is empty (D-35): with a name, the
+          // keyboard would cover the icons and the category, so the pop-up itself takes the focus.
+          // So it does after a scan, as after the scan icon's: the lookup may fill the name in.
+          event.preventDefault();
+          const name = nameRef.current;
+          if (name && name.value === '' && props.initialScan === undefined) name.focus();
+          else if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {ingredient
@@ -108,95 +148,126 @@ export function IngredientFormDialog({ open, onOpenChange, ...props }: Ingredien
                 })
               : t('ingredients.form.createTitle')}
           </DialogTitle>
-          <DialogDescription>{t('ingredients.form.text')}</DialogDescription>
         </DialogHeader>
         {/* Mounted only while open, so every opening starts from the current values. */}
-        {open && <IngredientForm {...props} onClose={() => onOpenChange(false)} />}
+        {open && (
+          <IngredientForm {...props} nameRef={nameRef} onClose={() => onOpenChange(false)} />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-export interface IngredientFormProps {
+interface IngredientFormProps {
   /** Edit this ingredient; without it the form creates a new one. */
   ingredient?: Ingredient;
   /** Prefills the name of a new ingredient (e.g. from a search). */
   initialName?: string;
-  /**
-   * Starts a new ingredient from a looked-up barcode (the scan flow, BAR-03): its barcode and,
-   * if Open Food Facts knows it, the proposed values.
-   */
-  prefill?: Prefill;
+  /** A barcode to look up at once, as if it had just been scanned with the scan icon. */
+  initialScan?: string;
   /** Called with the saved ingredient, after `onClose`. */
   onSaved?: (ingredient: Ingredient) => void;
   onPickExisting?: (ingredient: IngredientSummary) => void;
   /** Called after saving (or when there was nothing to save) and before leaving to a match. */
   onClose: () => void;
-  /** More actions below the save button, e.g. the scan flow's "already in MealMate". */
-  children?: ReactNode;
+  /** The name field, e.g. for the dialog to put the cursor there. */
+  nameRef?: Ref<HTMLInputElement>;
 }
+
+/** A base-unit change the server refused because amounts would stop fitting (D-33). */
+interface Refused {
+  body: IngredientUpdate;
+  mismatch: UnitMismatch;
+}
+
+/** What the scan icon's lookup says, on the barcode's message line (BAR-02, BAR-03). */
+type ScanNoticeState =
+  | { kind: 'lookingUp'; barcode: string }
+  | { kind: 'known'; ingredient: Ingredient }
+  | { kind: 'notFound' }
+  | { kind: 'slow'; barcode: string }
+  | { kind: 'invalid'; barcode: string }
+  | { kind: 'failed'; error: unknown };
 
 /** The Open Food Facts proposal and its own values, to tell which ones the user changed. */
 interface Proposed {
-  prefill: Prefill;
+  proposal: OffProposal;
   /** `proposalValues`: without what the form kept because the proposal lacks it. */
   values: FormValues;
 }
 
 /**
- * One form for every ingredient, new or existing, typed by hand or from Open Food Facts: name,
- * brand, category, base unit, piece weight, density, nutrition per 100 g/ml, barcode (with a
- * scan button) and package details under "More". A new ingredient can be filled from an Open
- * Food Facts search by name; its values are then saved in one request with the fields the user
- * changed named as edited (BAR-04).
+ * One form for every ingredient, new or existing, typed by hand, searched or scanned (ING-04,
+ * D-35, D-36). Top to bottom: the Open Food Facts attribution while its values are shown; the
+ * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
+ * the barcode with the scan's notice; the similar-ingredients hint; brand; category; base unit
+ * (g, ml or pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. "Save"
+ * sits in a footer below the fields, which scroll on their own. A product chosen in the search
+ * or scanned is saved in one request, with its pack size passed on and the fields the user
+ * changed named as edited (BAR-04, D-38).
+ *
+ * The scan looks the barcode up (BAR-02/03): a barcode another ingredient has fills in nothing
+ * and offers that one instead; one Open Food Facts knows fills the form like a chosen product;
+ * any other one only the barcode. When editing, Open Food Facts isn't asked. The meal form's scan
+ * opens the form with a barcode no ingredient has, looked up the same way (MEAL-03).
  */
-export function IngredientForm({
+function IngredientForm({
   ingredient,
   initialName = '',
-  prefill,
+  initialScan,
   onSaved,
   onPickExisting,
   onClose,
-  children,
+  nameRef,
 }: IngredientFormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const categories = useCategories();
-  const units = useUnits();
   const create = useCreateIngredient();
   const update = useUpdateIngredient(ingredient?.id ?? '');
   const mutation = ingredient ? update : create;
-  const baseUnitId = useId();
 
-  const [initial] = useState<FormValues>(() => {
-    if (ingredient) return valuesFromIngredient(ingredient, language);
-    const empty = emptyValues(initialName, language);
-    return prefill ? valuesFromPrefill(prefill, empty, language) : empty;
-  });
-  const [values, setValues] = useState(initial);
-  const [proposed, setProposed] = useState<Proposed | null>(
-    prefill?.proposal ? { prefill, values: proposalValues(prefill, language) } : null,
+  const [initial] = useState<FormValues>(() =>
+    ingredient ? valuesFromIngredient(ingredient, language) : emptyValues(initialName, language),
   );
+  const [values, setValues] = useState(initial);
+  const [proposed, setProposed] = useState<Proposed | null>(null);
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
+  const [refused, setRefused] = useState<Refused | null>(null);
   const [searching, setSearching] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(
-    () => initial.quantity_text !== '' || initial.pack_quantity !== '',
-  );
+  const lookup = useBarcodeLookup();
+  // The last scanned barcode that no ingredient has: while it is in the field, the similar hint
+  // can attach it to a match without one (BAR-03).
+  const [scanned, setScanned] = useState<string | null>(null);
 
-  const defaultCategory =
-    categories.data?.find((category) => category.key === values.categoryKey) ??
-    categories.data?.find((category) => category.key === 'other');
+  // Neither a deleted category nor *Uncategorized* can be picked (ING-02, D-30).
+  const pickable = pickableCategories(categories.data ?? []);
+  // Categories admins added have no key (REF-01), so a missing guess must not match them; a guess
+  // of a deleted category falls back to *Other*, as no guess does.
+  const guessed =
+    values.categoryKey === null
+      ? undefined
+      : pickable.find((category) => category.key === values.categoryKey);
+  const defaultCategory = guessed ?? pickable.find((category) => category.key === OTHER_KEY);
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken =
     isApiError(mutation.error) && mutation.error.code === 'ingredient.barcode_taken';
-  const showAlert = !barcodeTaken && needsErrorAlert(serverFields, SHOWN_FIELDS);
+  // A refused base-unit change asks in its own dialog instead.
+  const showAlert =
+    !barcodeTaken &&
+    unitMismatch(mutation.error) === null &&
+    needsErrorAlert(serverFields, SHOWN_FIELDS);
   // A proposal belongs to its barcode: a scanned or chosen product keeps it.
   const barcodeFixed = proposed !== null;
   const fromOff = proposed !== null || ingredient?.source === 'off';
   const edited = new Set<string>(ingredient?.source === 'off' ? ingredient.user_edited_fields : []);
-  const moreErrors = PACK_FIELDS.some((field) => fieldError(field) !== undefined);
+  const barcode = values.barcode.replace(/\s+/g, '');
+  // A new barcode would bring another product's values, so the server ends the updates.
+  const offBarcodeChanged = ingredient?.source === 'off' && barcode !== (ingredient.barcode ?? '');
+  const scanNotice = scanNoticeState(lookup, ingredient);
+  const attachBarcode = !ingredient && scanned !== null && barcode === scanned ? scanned : null;
 
   function set<K extends keyof FormValues>(field: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -212,14 +283,77 @@ export function IngredientForm({
     return edited.has(field) ? t('ingredients.form.userEdited') : undefined;
   }
 
-  function choose(proposal: OffProposal) {
-    const prefilled: Prefill = { barcode: proposal.barcode, proposal };
-    const next = valuesFromPrefill(prefilled, values, language);
-    setValues(next);
-    setProposed({ prefill: prefilled, values: proposalValues(prefilled, language) });
-    setMoreOpen(next.quantity_text !== '' || next.pack_quantity !== '');
+  /**
+   * Fills the form with a product (BAR-03, BAR-11). Where it has no value, what the user typed
+   * stays, but not the texts and nutrients of a product chosen before.
+   */
+  function fill(proposal: OffProposal) {
+    const earlier = proposed?.values;
+    setValues((current) =>
+      valuesFromProposal(proposal, earlier ? typedValues(current, earlier) : current, language),
+    );
+    setProposed({ proposal, values: proposalValues(proposal, language) });
     setInvalid(new Set());
     create.reset();
+  }
+
+  function choose(proposal: OffProposal) {
+    lookup.reset();
+    fill(proposal);
+  }
+
+  /** Looks a scanned barcode up: our own ingredients first, then (not when editing) OFF. */
+  function lookUp(code: string) {
+    lookup.mutate(
+      { barcode: code, ownOnly: ingredient !== undefined },
+      {
+        onSuccess: (result) => {
+          if (result.found_in === 'db') {
+            // Another ingredient's barcode is only named; the ingredient's own is filled in.
+            if (ingredient && result.ingredient?.id === ingredient.id) {
+              set('barcode', result.barcode);
+            }
+            return;
+          }
+          if (result.proposal && !ingredient) fill(result.proposal);
+          else set('barcode', result.barcode);
+          setScanned(result.barcode);
+        },
+        onError: (error) => {
+          // Open Food Facts couldn't answer: the barcode is filled in, to try again or type the
+          // values.
+          if (ingredient || !isOffSlow(error)) return;
+          set('barcode', code);
+          setScanned(code);
+        },
+      },
+    );
+  }
+
+  const lookUpInitialScan = useEffectEvent(() => {
+    if (initialScan !== undefined) lookUp(initialScan);
+  });
+  // Once, also where development mode runs effects twice: a lookup may ask Open Food Facts.
+  const lookedUpInitialScan = useRef(false);
+  useEffect(() => {
+    if (lookedUpInitialScan.current) return;
+    lookedUpInitialScan.current = true;
+    lookUpInitialScan();
+  }, []);
+
+  function pickExisting(match: IngredientSummary) {
+    onClose();
+    onPickExisting?.(match);
+  }
+
+  function saved(result: Ingredient) {
+    onClose();
+    onSaved?.(result);
+  }
+
+  // The category was deleted meanwhile (REF-01): the categories load again to pick another.
+  function failed(error: Error) {
+    if ('category_id' in fieldErrorMessagesByPath(t, error)) void categories.refetch();
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -228,11 +362,14 @@ export function IngredientForm({
     // input) bubble up through the React tree; only this form's own submit saves.
     if (event.target !== event.currentTarget) return;
     const problems = new Set<string>();
-    const numbers = {} as Record<NumberField | 'pack_quantity', number | null>;
-    for (const field of [...NUMBER_FIELDS, 'pack_quantity'] as const) {
-      const parsed = parseOptionalAmount(values[field]);
-      if (parsed.ok) numbers[field] = parsed.value;
-      else problems.add(field);
+    // Only pieces have a weight (ING-02): its field shows, and is sent, only for Stück. Leaving
+    // Stück clears it on the server.
+    const inPieces = values.baseUnit === 'piece';
+    let pieceWeight: number | null = null;
+    if (inPieces) {
+      const parsed = parseOptionalAmount(values.piece_weight_g);
+      if (parsed.ok) pieceWeight = parsed.value;
+      else problems.add('piece_weight_g');
     }
     const nutrients = {} as Record<NutrientKey, number | null>;
     for (const key of NUTRIENT_KEYS) {
@@ -241,46 +378,38 @@ export function IngredientForm({
       else problems.add(`nutrients.${key}`);
     }
     setInvalid(problems);
-    if (problems.has('pack_quantity')) setMoreOpen(true);
     if (problems.size > 0) return;
 
-    const saved = (result: Ingredient) => {
-      onClose();
-      onSaved?.(result);
-    };
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
-      barcode: values.barcode.replace(/\s+/g, '') || null,
-      quantity_text: values.quantity_text.trim() || null,
+      barcode: barcode || null,
     };
-    const packUnit: Unit | null = values.pack_unit === '' ? null : values.pack_unit;
 
     if (!ingredient) {
       const body: IngredientCreate = { name: texts.name, base_unit: values.baseUnit };
       if (selectedCategory) body.category_id = selectedCategory;
       if (texts.brand !== null) body.brand = texts.brand;
       if (texts.barcode !== null) body.barcode = texts.barcode;
-      if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
-      if (numbers.pack_quantity !== null) body.pack_quantity = numbers.pack_quantity;
-      if (packUnit !== null) body.pack_unit = packUnit;
-      for (const field of NUMBER_FIELDS) {
-        const value = numbers[field];
-        if (value !== null) body[field] = value;
-      }
+      if (pieceWeight !== null) body.piece_weight_g = pieceWeight;
       const given: Partial<NutrientValues> = {};
       for (const key of NUTRIENT_KEYS) {
         if (nutrients[key] !== null) given[key] = nutrients[key];
       }
       if (Object.keys(given).length > 0) body.nutrients = given;
-      if (proposed?.prefill.proposal) {
+      const proposal = proposed?.proposal;
+      if (proposal) {
+        // The pack size is Open Food Facts' alone, passed on as it came (D-38).
+        if (proposal.quantity_text !== null) body.quantity_text = proposal.quantity_text;
+        if (proposal.pack_quantity !== null) body.pack_quantity = proposal.pack_quantity;
+        if (proposal.pack_unit !== null) body.pack_unit = proposal.pack_unit;
         // Saved with its Open Food Facts origin; only the corrected values count as edited.
         body.off = {
-          off_last_modified_at: proposed.prefill.proposal.off_last_modified_at,
+          off_last_modified_at: proposal.off_last_modified_at,
           edited_fields: editedFields(values, proposed.values),
         };
       }
-      create.mutate(body, { onSuccess: saved });
+      create.mutate(body, { onSuccess: saved, onError: failed });
       return;
     }
 
@@ -292,12 +421,10 @@ export function IngredientForm({
     if (selectedCategory !== ingredient.category_id) body.category_id = selectedCategory;
     if (values.baseUnit !== ingredient.base_unit) body.base_unit = values.baseUnit;
     if (texts.barcode !== ingredient.barcode) body.barcode = texts.barcode;
-    if (texts.quantity_text !== ingredient.quantity_text) body.quantity_text = texts.quantity_text;
-    if (packUnit !== ingredient.pack_unit) body.pack_unit = packUnit;
     // A number field counts as changed when its text changed: a stored value with more decimals
     // than shown would otherwise be cut on every save.
-    for (const field of [...NUMBER_FIELDS, 'pack_quantity'] as const) {
-      if (values[field].trim() !== initial[field]) body[field] = numbers[field];
+    if (inPieces && values.piece_weight_g.trim() !== initial.piece_weight_g) {
+      body.piece_weight_g = pieceWeight;
     }
     const changed: Partial<NutrientValues> = {};
     for (const key of NUTRIENT_KEYS) {
@@ -308,7 +435,23 @@ export function IngredientForm({
       saved(ingredient);
       return;
     }
-    update.mutate(body, { onSuccess: saved });
+    // A base-unit change that leaves amounts not fitting asks first, then is sent again (D-33).
+    update.mutate(body, {
+      onSuccess: saved,
+      onError: (error) => {
+        const mismatch = unitMismatch(error);
+        if (mismatch) setRefused({ body, mismatch });
+        else failed(error);
+      },
+    });
+  }
+
+  function changeAnyway() {
+    if (!refused) return;
+    update.mutate(
+      { ...refused.body, accept_unit_mismatch: true },
+      { onSuccess: saved, onError: failed },
+    );
   }
 
   return (
@@ -316,186 +459,61 @@ export function IngredientForm({
       onSubmit={onSubmit}
       noValidate
       data-testid={testIds.ingredientForm}
-      className="flex flex-col gap-4"
+      className="flex min-h-0 flex-col"
     >
-      {fromOff && <OffAttribution />}
-      <FormField label={t('ingredients.field.name')} error={fieldError('name')}>
-        {(control) => (
-          <Input
-            {...control}
-            name="name"
-            autoComplete="off"
-            required
-            maxLength={NAME_MAX_LENGTH}
-            value={values.name}
-            onChange={(event) => set('name', event.target.value)}
-          />
-        )}
-      </FormField>
-      {!ingredient && !prefill && (
-        <Button
-          type="button"
-          variant="outline"
-          className="self-start"
-          data-testid={testIds.offSearchButton}
-          onClick={() => setSearching(true)}
+      {/* The fields scroll above the footer; the side padding keeps their focus rings in view. */}
+      <div className="-mx-2 flex min-h-0 flex-col gap-4 overflow-y-auto px-2 py-4">
+        {fromOff && <OffAttribution />}
+        <FormField
+          label={t('ingredients.field.name')}
+          hint={editedHint('name')}
+          error={fieldError('name')}
         >
-          <Search aria-hidden="true" />
-          {t('ingredients.offSearch.open')}
-        </Button>
-      )}
-      <SimilarHint
-        name={values.name}
-        ingredient={ingredient}
-        onPickExisting={
-          onPickExisting &&
-          ((match) => {
-            onClose();
-            onPickExisting(match);
-          })
-        }
-        onNavigate={onClose}
-      />
-      <FormField
-        label={t('ingredients.field.brand')}
-        hint={editedHint('brand') ?? t('ingredients.field.brandHint')}
-        error={fieldError('brand')}
-      >
-        {(control) => (
-          <Input
-            {...control}
-            name="brand"
-            autoComplete="off"
-            maxLength={BRAND_MAX_LENGTH}
-            value={values.brand}
-            onChange={(event) => set('brand', event.target.value)}
-          />
-        )}
-      </FormField>
-      <FormField label={t('ingredients.field.category')} error={fieldError('category_id')}>
-        {(control) => (
-          <NativeSelect
-            {...control}
-            name="category_id"
-            value={selectedCategory}
-            disabled={!categories.data}
-            onChange={(event) => set('categoryId', event.target.value)}
-          >
-            {categories.data?.map((category) => (
-              <NativeSelectOption key={category.id} value={category.id}>
-                {categoryName(t, category.key)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        )}
-      </FormField>
-      <ErrorAlert error={categories.error} />
-      <fieldset className="flex flex-col gap-2" aria-describedby={`${baseUnitId}-hint`}>
-        <legend className="mb-2 text-sm leading-none font-medium">
-          {t('ingredients.field.baseUnit')}
-        </legend>
-        <div className="flex flex-wrap gap-2">
-          {BASE_UNITS.map((unit) => (
-            <label
-              key={unit}
-              className="flex min-h-(--tap-target) flex-1 items-center gap-3 rounded-md border px-3 has-checked:border-primary has-checked:font-semibold"
-            >
-              <input
-                type="radio"
-                name="base_unit"
-                value={unit}
-                checked={values.baseUnit === unit}
-                onChange={() => set('baseUnit', unit)}
-                className="size-5 accent-primary"
+          {(control) => (
+            // At large text sizes the icons wrap below the name.
+            <div className="flex flex-wrap gap-2">
+              <Input
+                {...control}
+                ref={nameRef}
+                name="name"
+                autoComplete="off"
+                required
+                maxLength={NAME_MAX_LENGTH}
+                value={values.name}
+                onChange={(event) => set('name', event.target.value)}
+                className="flex-[1_1_12rem]"
               />
-              {t(`ingredients.baseUnit.${unit}`)}
-            </label>
-          ))}
-        </div>
-        <p id={`${baseUnitId}-hint`} className="text-sm text-muted-foreground">
-          {ingredient
-            ? t('ingredients.field.baseUnitEditHint')
-            : t('ingredients.field.baseUnitHint')}
-        </p>
-        {serverFields.base_unit && (
-          <p className="text-sm font-medium text-destructive">{serverFields.base_unit}</p>
-        )}
-      </fieldset>
-      <FormField
-        label={t('ingredients.field.pieceWeight')}
-        hint={t('ingredients.field.pieceWeightHint')}
-        error={fieldError('piece_weight_g')}
-      >
-        {(control) => (
-          <Input
-            {...control}
-            name="piece_weight_g"
-            inputMode="decimal"
-            autoComplete="off"
-            value={values.piece_weight_g}
-            onChange={(event) => set('piece_weight_g', event.target.value)}
-          />
-        )}
-      </FormField>
-      <FormField
-        label={t('ingredients.field.density')}
-        hint={t('ingredients.field.densityHint')}
-        error={fieldError('density_g_per_ml')}
-      >
-        {(control) => (
-          <Input
-            {...control}
-            name="density_g_per_ml"
-            inputMode="decimal"
-            autoComplete="off"
-            value={values.density_g_per_ml}
-            onChange={(event) => set('density_g_per_ml', event.target.value)}
-          />
-        )}
-      </FormField>
-      <fieldset className="flex flex-col gap-3">
-        <legend className="mb-1 font-semibold">
-          {t('ingredients.form.nutritionTitle', { unit: unitLabel(t, values.baseUnit) })}
-        </legend>
-        <p className="text-sm text-muted-foreground">{t('ingredients.form.nutritionHint')}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {NUTRIENT_KEYS.map((key) => (
-            <FormField
-              key={key}
-              label={nutrientLabel(t, key)}
-              hint={editedHint(`nutrients.${key}`)}
-              error={fieldError(`nutrients.${key}`)}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  name={`nutrients.${key}`}
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={values.nutrients[key]}
-                  onChange={(event) => {
-                    const text = event.target.value;
-                    setValues((current) => ({
-                      ...current,
-                      nutrients: { ...current.nutrients, [key]: text },
-                    }));
-                  }}
-                />
-              )}
-            </FormField>
-          ))}
-        </div>
-      </fieldset>
-      <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                {!ingredient && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t('ingredients.offSearch.open')}
+                    data-testid={testIds.offSearchButton}
+                    onClick={() => setSearching(true)}
+                  >
+                    <Search aria-hidden="true" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label={t('ingredients.field.barcodeScan')}
+                  data-testid={testIds.ingredientFormScan}
+                  disabled={barcodeFixed}
+                  onClick={() => setScanning(true)}
+                >
+                  <ScanBarcode aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </FormField>
         <FormField
           label={t('ingredients.field.barcode')}
-          hint={t(
-            barcodeFixed
-              ? 'ingredients.field.barcodeFixed'
-              : ingredient?.source === 'off'
-                ? 'ingredients.field.barcodeOffHint'
-                : 'ingredients.field.barcodeHint',
-          )}
+          hint={offBarcodeChanged ? t('ingredients.field.barcodeOffHint') : undefined}
           error={barcodeTaken ? t('error.ingredient.barcode_taken') : fieldError('barcode')}
         >
           {(control) => (
@@ -505,152 +523,361 @@ export function IngredientForm({
               inputMode="numeric"
               autoComplete="off"
               maxLength={20}
+              placeholder={t('ingredients.field.barcodePlaceholder')}
               readOnly={barcodeFixed}
               value={values.barcode}
-              onChange={(event) => set('barcode', event.target.value)}
+              onChange={(event) => {
+                // A barcode typed in is no scan: the scan's notice no longer applies.
+                lookup.reset();
+                set('barcode', event.target.value);
+              }}
             />
           )}
         </FormField>
-        {!barcodeFixed && (
-          <Button
-            type="button"
-            variant="outline"
-            className="self-start"
-            data-testid={testIds.barcodeFieldScan}
-            onClick={() => setScanning(true)}
-          >
-            <ScanBarcode aria-hidden="true" />
-            {t('ingredients.field.barcodeScan')}
-          </Button>
-        )}
-      </div>
-      <details
-        open={moreOpen || moreErrors}
-        onToggle={(event) => setMoreOpen(event.currentTarget.open)}
-        className="rounded-lg border px-3"
-      >
-        <summary className="flex min-h-(--tap-target) cursor-pointer items-center font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring">
-          {t('ingredients.form.more')}
-        </summary>
-        <div className="flex flex-col gap-4 pb-3">
+        {/* The barcode's message line for the scan. Without a notice it takes back the form's
+            gap above it, as the similar hint does. */}
+        <div aria-live="polite" className="empty:-mt-4">
+          {scanNotice && (
+            <ScanNotice
+              state={scanNotice}
+              onRetry={lookUp}
+              onPickExisting={onPickExisting && pickExisting}
+              onNavigate={onClose}
+            />
+          )}
+        </div>
+        <SimilarHint
+          name={values.name}
+          ingredient={ingredient}
+          attachBarcode={attachBarcode}
+          onPickExisting={onPickExisting && pickExisting}
+          onNavigate={onClose}
+        />
+        <FormField
+          label={t('ingredients.field.brand')}
+          hint={editedHint('brand')}
+          error={fieldError('brand')}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              name="brand"
+              autoComplete="off"
+              maxLength={BRAND_MAX_LENGTH}
+              placeholder={t('ingredients.field.brandPlaceholder')}
+              value={values.brand}
+              onChange={(event) => set('brand', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          label={t('ingredients.field.category')}
+          error={fieldError('category_id') && t('ingredients.field.categoryGone')}
+        >
+          {(control) => (
+            <NativeSelect
+              {...control}
+              name="category_id"
+              value={selectedCategory}
+              disabled={!categories.data}
+              onChange={(event) => set('categoryId', event.target.value)}
+            >
+              <CategoryOptions categories={categories.data ?? []} selected={selectedCategory} />
+            </NativeSelect>
+          )}
+        </FormField>
+        <ErrorAlert error={categories.error} />
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm leading-none font-medium">
+            {t('ingredients.field.baseUnit')}
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {BASE_UNITS.map((unit) => (
+              <label
+                key={unit}
+                className="flex min-h-(--tap-target) flex-1 items-center gap-3 rounded-md border px-3 has-checked:border-primary has-checked:font-semibold"
+              >
+                <input
+                  type="radio"
+                  name="base_unit"
+                  value={unit}
+                  checked={values.baseUnit === unit}
+                  onChange={() => set('baseUnit', unit)}
+                  className="size-5 accent-primary"
+                />
+                {t(`ingredients.baseUnit.${unit}`)}
+              </label>
+            ))}
+          </div>
+          {serverFields.base_unit && (
+            <p className="text-sm font-medium text-destructive">{serverFields.base_unit}</p>
+          )}
+        </fieldset>
+        {values.baseUnit === 'piece' && (
           <FormField
-            label={t('ingredients.field.quantityText')}
-            hint={editedHint('quantity_text') ?? t('ingredients.field.quantityTextHint')}
-            error={fieldError('quantity_text')}
+            label={t('ingredients.field.weightPerPiece')}
+            error={fieldError('piece_weight_g')}
           >
             {(control) => (
               <Input
                 {...control}
-                name="quantity_text"
+                name="piece_weight_g"
+                inputMode="decimal"
                 autoComplete="off"
-                maxLength={QUANTITY_TEXT_MAX_LENGTH}
-                value={values.quantity_text}
-                onChange={(event) => set('quantity_text', event.target.value)}
+                value={values.piece_weight_g}
+                onChange={(event) => set('piece_weight_g', event.target.value)}
               />
             )}
           </FormField>
+        )}
+        <fieldset className="flex flex-col gap-3">
+          <legend className="mb-1 font-semibold">
+            {t('ingredients.form.nutritionTitle', {
+              unit: unitLabel(t, nutritionUnit(values.baseUnit)),
+            })}
+          </legend>
           <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label={t('ingredients.field.packQuantity')}
-              hint={editedHint('pack_quantity')}
-              error={fieldError('pack_quantity')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  name="pack_quantity"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={values.pack_quantity}
-                  onChange={(event) => set('pack_quantity', event.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField
-              label={t('ingredients.field.packUnit')}
-              hint={editedHint('pack_unit')}
-              error={fieldError('pack_unit')}
-            >
-              {(control) => (
-                <NativeSelect
-                  {...control}
-                  name="pack_unit"
-                  value={values.pack_unit}
-                  disabled={!units.data}
-                  onChange={(event) => set('pack_unit', event.target.value as Unit | '')}
-                >
-                  <NativeSelectOption value="">
-                    {t('ingredients.field.packUnitNone')}
-                  </NativeSelectOption>
-                  {units.data?.map(({ unit }) => (
-                    <NativeSelectOption key={unit} value={unit}>
-                      {unitLabel(t, unit)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              )}
-            </FormField>
+            {NUTRIENT_KEYS.map((key) => (
+              <FormField
+                key={key}
+                label={nutrientLabel(t, key)}
+                hint={editedHint(`nutrients.${key}`)}
+                error={fieldError(`nutrients.${key}`)}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    name={`nutrients.${key}`}
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={values.nutrients[key]}
+                    onChange={(event) => {
+                      const text = event.target.value;
+                      setValues((current) => ({
+                        ...current,
+                        nutrients: { ...current.nutrients, [key]: text },
+                      }));
+                    }}
+                  />
+                )}
+              </FormField>
+            ))}
           </div>
-          <ErrorAlert error={units.error} />
-        </div>
-      </details>
-      {showAlert && <ErrorAlert error={mutation.error} />}
-      <DialogFooter>
-        <Button type="submit" disabled={mutation.isPending || values.name.trim() === ''}>
+        </fieldset>
+      </div>
+      <div data-testid={testIds.ingredientFormFooter} className="flex flex-col gap-3 border-t pt-4">
+        {showAlert && <ErrorAlert error={mutation.error} />}
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={mutation.isPending || values.name.trim() === ''}
+        >
           {t('common.save')}
         </Button>
-      </DialogFooter>
-      {children}
+      </div>
       {searching && (
         <OffSearchDialog
           open
           onOpenChange={setSearching}
           initialQuery={values.name.trim()}
           onChoose={choose}
-          onPickExisting={
-            onPickExisting &&
-            ((match) => {
-              onClose();
-              onPickExisting(match);
-            })
-          }
+          onPickExisting={onPickExisting && pickExisting}
           onNavigate={onClose}
         />
       )}
       {scanning && (
         <Suspense fallback={null}>
-          <BarcodeScanDialog
-            open
-            onOpenChange={setScanning}
-            onBarcode={(barcode) => set('barcode', barcode)}
-          />
+          <BarcodeScanDialog open onOpenChange={setScanning} onBarcode={lookUp} />
         </Suspense>
       )}
+      {ingredient && (
+        <BaseUnitConfirmDialog
+          mismatch={refused?.mismatch ?? null}
+          name={ingredientLabel(ingredient.name, ingredient.brand)}
+          baseUnit={ingredient.base_unit}
+          onConfirm={changeAnyway}
+          onClose={() => setRefused(null)}
+        />
+      )}
     </form>
+  );
+}
+
+/** The scan's notice, from the lookup's state; none when it filled the form or nothing ran. */
+function scanNoticeState(
+  lookup: ReturnType<typeof useBarcodeLookup>,
+  edited: Ingredient | undefined,
+): ScanNoticeState | null {
+  const barcode = lookup.variables?.barcode ?? '';
+  if (lookup.isPending) return { kind: 'lookingUp', barcode };
+  if (lookup.isError) {
+    if (fieldErrorCodes(lookup.error).barcode !== undefined) return { kind: 'invalid', barcode };
+    if (!edited && isOffSlow(lookup.error)) return { kind: 'slow', barcode };
+    return { kind: 'failed', error: lookup.error };
+  }
+  const result = lookup.data;
+  if (!result) return null;
+  if (result.found_in === 'db') {
+    const owner = result.ingredient;
+    return owner && owner.id !== edited?.id ? { kind: 'known', ingredient: owner } : null;
+  }
+  // When editing, the barcode is only filled in.
+  if (edited) return null;
+  if (result.off_unavailable) return { kind: 'slow', barcode: result.barcode };
+  return result.found_in === 'none' ? { kind: 'notFound' } : null;
+}
+
+interface ScanNoticeProps {
+  state: ScanNoticeState;
+  /** Looks the barcode up again. */
+  onRetry: (barcode: string) => void;
+  /** Given in the picker: "use" takes the ingredient the barcode belongs to. */
+  onPickExisting?: (ingredient: IngredientSummary) => void;
+  /** Called before "open" leaves to the ingredient the barcode belongs to. */
+  onNavigate: () => void;
+}
+
+/**
+ * What a scan found, below the barcode (BAR-02, BAR-03): "Already belongs to Milch" with "open"
+ * (or "use" in the picker), "Not at Open Food Facts", "Open Food Facts is slow" with "Try
+ * again", or an invalid barcode.
+ */
+function ScanNotice({ state, onRetry, onPickExisting, onNavigate }: ScanNoticeProps) {
+  const { t } = useTranslation();
+  const textId = useId();
+  if (state.kind === 'failed') return <ErrorAlert error={state.error} />;
+
+  let text: string;
+  let action: ReactNode = null;
+  switch (state.kind) {
+    case 'lookingUp':
+      text = t('scanner.lookingUp', { barcode: state.barcode });
+      break;
+    case 'invalid':
+      text = t('scanner.invalidBarcode', { barcode: state.barcode });
+      break;
+    case 'notFound':
+      text = t('ingredients.scan.notFound');
+      break;
+    case 'slow':
+      text = t('ingredients.scan.slow');
+      action = (
+        <Button
+          type="button"
+          size="compact"
+          variant="outline"
+          aria-describedby={textId}
+          data-testid={testIds.ingredientScanRetry}
+          onClick={() => onRetry(state.barcode)}
+        >
+          <RotateCcw aria-hidden="true" />
+          {t('ingredients.scan.retry')}
+        </Button>
+      );
+      break;
+    case 'known': {
+      const owner = state.ingredient;
+      text = t('ingredients.scan.known', { name: ingredientLabel(owner.name, owner.brand) });
+      action = onPickExisting ? (
+        <Button
+          type="button"
+          size="compact"
+          variant="outline"
+          aria-describedby={textId}
+          data-testid={testIds.ingredientScanTake}
+          onClick={() => onPickExisting(toSummary(owner))}
+        >
+          {t('ingredients.scan.take')}
+        </Button>
+      ) : (
+        <Link
+          to={`/ingredients/${owner.id}`}
+          aria-describedby={textId}
+          data-testid={testIds.ingredientScanOpen}
+          onClick={onNavigate}
+          className={INLINE_LINK}
+        >
+          {t('ingredients.scan.open')}
+        </Link>
+      );
+      break;
+    }
+  }
+
+  return (
+    <div
+      data-testid={testIds.ingredientScanNotice}
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+    >
+      <p
+        id={textId}
+        className={cn(
+          'flex items-start gap-1.5',
+          state.kind === 'invalid' && 'font-medium text-destructive',
+        )}
+      >
+        {state.kind !== 'lookingUp' && (
+          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+        )}
+        {text}
+      </p>
+      {action}
+    </div>
   );
 }
 
 interface SimilarHintProps {
   name: string;
   ingredient?: Ingredient;
+  /** A scanned barcode no ingredient has, while it is in the field (BAR-03). */
+  attachBarcode: string | null;
   onPickExisting?: (ingredient: IngredientSummary) => void;
   onNavigate: () => void;
 }
 
 /**
  * ING-03: "Similar ingredients already exist", with links to them (or buttons in the picker). A
- * hint only: two brands of the same thing are different ingredients.
+ * hint only: two brands of the same thing are different ingredients. After a scan, a match
+ * without a barcode can get the scanned one (BAR-03): "Use Milch" in the picker gives it the
+ * barcode before taking it, "Add the barcode to Milch" elsewhere before opening it. A match that
+ * has a barcode is another package, so it is offered as it is (D-21).
  */
-function SimilarHint({ name, ingredient, onPickExisting, onNavigate }: SimilarHintProps) {
+function SimilarHint({
+  name,
+  ingredient,
+  attachBarcode,
+  onPickExisting,
+  onNavigate,
+}: SimilarHintProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const link = useLinkBarcode();
   const debounced = useDebouncedValue(name.trim());
   // Editing without renaming needs no hint.
   const query = ingredient && debounced === ingredient.name ? '' : debounced;
   const similar = useSimilarIngredients(query);
   const matches = query ? (similar.data ?? []).filter((match) => match.id !== ingredient?.id) : [];
 
+  function attach(match: IngredientSummary, barcode: string) {
+    link.mutate(
+      { id: match.id, barcode },
+      {
+        onSuccess: (linked) => {
+          if (onPickExisting) {
+            onPickExisting(toSummary(linked));
+            return;
+          }
+          onNavigate();
+          void navigate(`/ingredients/${linked.id}`);
+        },
+      },
+    );
+  }
+
   return (
-    <div aria-live="polite">
+    // Without matches the live region stays for screen readers but takes back the form's gap
+    // above it, so the brand follows the barcode as closely as any field follows another.
+    <div aria-live="polite" className="empty:-mt-4">
       {matches.length > 0 && (
         <div
           data-testid={testIds.ingredientSimilar}
@@ -660,6 +887,8 @@ function SimilarHint({ name, ingredient, onPickExisting, onNavigate }: SimilarHi
           <ul className="flex flex-wrap gap-2">
             {matches.map((match) => {
               const label = ingredientLabel(match.name, match.brand);
+              // A match with a barcode of its own is another package (D-21).
+              const toAttach = match.barcode ? null : attachBarcode;
               return (
                 <li key={match.id}>
                   {onPickExisting ? (
@@ -667,15 +896,28 @@ function SimilarHint({ name, ingredient, onPickExisting, onNavigate }: SimilarHi
                       type="button"
                       size="compact"
                       variant="outline"
-                      onClick={() => onPickExisting(match)}
+                      disabled={link.isPending}
+                      onClick={() =>
+                        toAttach === null ? onPickExisting(match) : attach(match, toAttach)
+                      }
                     >
                       {t('ingredients.similar.use', { name: label })}
+                    </Button>
+                  ) : toAttach !== null ? (
+                    <Button
+                      type="button"
+                      size="compact"
+                      variant="outline"
+                      disabled={link.isPending}
+                      onClick={() => attach(match, toAttach)}
+                    >
+                      {t('ingredients.similar.attach', { name: label })}
                     </Button>
                   ) : (
                     <Link
                       to={`/ingredients/${match.id}`}
                       onClick={onNavigate}
-                      className="inline-flex min-h-(--tap-target) items-center rounded-md px-2 font-medium text-primary underline underline-offset-4"
+                      className={INLINE_LINK}
                     >
                       {label}
                     </Link>
@@ -684,6 +926,7 @@ function SimilarHint({ name, ingredient, onPickExisting, onNavigate }: SimilarHi
               );
             })}
           </ul>
+          <ErrorAlert error={link.error} />
         </div>
       )}
     </div>

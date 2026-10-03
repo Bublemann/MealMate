@@ -55,6 +55,11 @@ class ErrorCode(StrEnum):
     ADMIN_LAST_ADMIN = "admin.last_admin"
     ADMIN_PUBLIC_URL_MISSING = "admin.public_url_missing"
 
+    # 409: *Other* and *Uncategorized* always exist, so neither can be deleted (REF-01).
+    CATEGORY_NOT_DELETABLE = "category.not_deletable"
+    # 409: *Uncategorized* can only be moved, not renamed (REF-01).
+    CATEGORY_NOT_RENAMABLE = "category.not_renamable"
+
     # 409: the ingredient is still referenced; `params` counts the references per kind
     # (`meals`, `lists`).
     INGREDIENT_IN_USE = "ingredient.in_use"
@@ -65,6 +70,11 @@ class ErrorCode(StrEnum):
     INGREDIENT_HAS_BARCODE = "ingredient.has_barcode"
     # 409: apply or ignore, but the ingredient has no newer Open Food Facts values (BAR-06).
     INGREDIENT_NO_PENDING_UPDATE = "ingredient.no_pending_update"
+    # 409: a base-unit change would leave amounts that fit now not fitting (ING-02), or a merge
+    # across base units would leave amounts not fitting the ingredient that stays (ING-05, D-33);
+    # `params` counts them (`amounts`) and the meals and drafts they are on (`meals`, `lists`).
+    # The request goes through when it accepts that.
+    INGREDIENT_UNIT_MISMATCH = "ingredient.unit_mismatch"
     # 503: too many Open Food Facts lookups or searches right now (BAR-08); retry or enter the
     # values by hand.
     OFF_BUSY = "off.busy"
@@ -103,6 +113,8 @@ class FieldErrorCode(StrEnum):
     TAKEN = "taken"
     TOO_COMMON = "too_common"
     SAME_AS_USERNAME = "same_as_username"
+    # An amount whose unit doesn't fit its ingredient's base unit (REF-02).
+    UNIT_MISMATCH = "unit_mismatch"
 
 
 # A plain alias (not a `type` statement) so the OpenAPI schema inlines the union.

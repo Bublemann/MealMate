@@ -5,10 +5,10 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCategories } from '@/features/reference/api';
-import { categoryName, unitLabel } from '@/features/reference/labels';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import { toSummary, useIngredients, type IngredientSummary } from './api';
+import { IngredientCategoryUnit } from './IngredientCategoryUnit';
 import { IngredientFormDialog } from './IngredientFormDialog';
 import { IngredientName } from './IngredientName';
 
@@ -46,7 +46,6 @@ export function IngredientPicker({
   const searching = debounced !== '';
   const results = useIngredients(debounced, { enabled: searching });
   const categories = useCategories();
-  const categoryKeys = new Map(categories.data?.map((category) => [category.id, category.key]));
   const matches = searching
     ? (results.data ?? [])
         .filter((ingredient) => !excludeIds.includes(ingredient.id))
@@ -104,24 +103,21 @@ export function IngredientPicker({
           onKeyDown={onListKeyDown}
           className="flex flex-col divide-y rounded-lg border"
         >
-          {matches.map((ingredient) => {
-            const key = categoryKeys.get(ingredient.category_id);
-            return (
-              <li key={ingredient.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(ingredient)}
-                  className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-                >
-                  <IngredientName ingredient={ingredient} />
-                  <span className="text-sm text-muted-foreground">
-                    {key ? `${categoryName(t, key)} · ` : ''}
-                    {unitLabel(t, ingredient.base_unit)}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+          {matches.map((ingredient) => (
+            <li key={ingredient.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(ingredient)}
+                className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <IngredientName ingredient={ingredient} />
+                <IngredientCategoryUnit
+                  ingredient={ingredient}
+                  categories={categories.data ?? []}
+                />
+              </button>
+            </li>
+          ))}
           {allowCreate && (
             <li>
               <button

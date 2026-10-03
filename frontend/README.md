@@ -20,7 +20,7 @@ the backend. What to build is in [`docs/requirements.md`](../docs/requirements.m
 | Tests        | Vitest, Testing Library, jsdom                                                         |
 | Quality      | ESLint (typescript-eslint, react-hooks, jsx-a11y), Prettier, `tsc`                     |
 
-Node.js ≥ 22.12 (CI and the image use Node 24).
+Node.js ≥ 22.12 (CI and the image use Node 26).
 
 ## Commands
 
@@ -55,21 +55,22 @@ frontend/
     ├── main.tsx            # entry: i18n, styles, service-worker registration, <App />
     ├── api/                # client.ts (openapi-fetch, timeouts, auth middleware), errors.ts
     │   └── generated/      # openapi.json + schema.ts, generated, never edited by hand
-    ├── app/                # App, router, providers, Layout (bottom tab bar), UpdatePrompt
+    ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt, viewport
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
-    │   ├── scanner/        # /scan and the meal form's scan dialog: camera, decoder, lookup flow
-    │   ├── lists/          # Lists tab, draft/shopping/done views, history, polling, export text
-    │   ├── meals/          # Meals tab (filters, user chips), meal form, detail, photo resize
+    │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
+    │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
+    │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
+    │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
-    ├── components/ui/      # shadcn/ui building blocks
-    ├── components/         # shared app components (Screen, FormField, ShareLink, ConfirmDialog, …)
+    ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
+    ├── components/         # shared app components (Screen, PinnedBlock, FilterPanel, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
-    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, user-agent description)
+    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
     ├── sw/sw.ts            # service worker
     ├── test/               # setup, renderApp (signed in by default), mockApi (fetch router)
@@ -95,8 +96,22 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   (`src/i18n/format.ts`: `formatNumber`, `formatDate`, `parseAmount`).
 - **Ingredient names** are shown with their brand: `ingredientLabel(name, brand)` from
   `features/ingredients/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
-  history, export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode
-  icon). Two brands of the same thing are different ingredients and separate list lines.
+  export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode icon), with
+  `IngredientCategoryUnit` ("Milchprodukte & Eier · ml") as the grey line below. Two brands of the
+  same thing are different ingredients and separate list lines.
+- **Units** (REF-02, D-32): a meal row and a linked extra item offer only the units that fit their
+  ingredient's base unit. `/api/units` names the base units each unit fits, and `useUnitChoice`
+  (`features/reference/units.ts`) offers those. An older amount that doesn't fit (D-33) keeps its
+  unit, shown but no longer selectable, with "Einheit passt nicht zu <Zutat>" as the field's
+  error. With an amount, "Keine Einheit" counts as pieces, so a meal row offers it only where
+  pieces fit, or while the row has no amount ("nach Geschmack"). The mark follows the amount and
+  unit as they are typed, by the same table, so it doesn't wait for the server; the server judges what is
+  stored the same way (`unit_fits`), keeps such a row while it is sent back unchanged and refuses
+  a new one. A base-unit change, or a merge across base units, that would leave amounts not
+  fitting is refused with their counts (409 `ingredient.unit_mismatch`, read by `unitMismatch`):
+  the edit pop-up asks in `BaseUnitConfirmDialog` ("Trotzdem ändern" or "Abbrechen"), and the
+  merge confirmation stays open, names the count and merges on "Trotzdem zusammenführen". Either
+  sends the same request again with `accept_unit_mismatch`.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps
@@ -108,8 +123,72 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `text-muted-foreground`, …), never raw colours. Dark mode follows the device setting only (no JS
   theme switch). Sizes are in `rem`, so text follows the iPhone text-size setting; the
   `--tap-target` and `--control-font-size` tokens keep a px floor under touch targets and form
-  text. Colour is never the only signal (e.g. the active tab has a filled pill).
-  `prefers-reduced-motion` turns animations off.
+  text. Colour is never the only signal (e.g. the active tab has a lighter pill and a thicker icon
+  stroke besides its green icon). `prefers-reduced-motion` turns animations off.
+- **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only;
+  the tab names stay as visually hidden text (not `aria-label`s), so screen readers and tests still
+  read them. The tab screens (Lists, Meals, Ingredients, Me) have a level-1 heading only screen
+  readers see (`<Screen variant="tab">`); detail screens keep a visible one. The frosted look is
+  the `frosted` utility (`index.css`) with the `--frosted*` tokens; the bar's size and position
+  are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it leaves room
+  for the content at the largest text sizes), and `--tab-bar-clearance` keeps the content's end
+  and the update prompt above it. While the on-screen keyboard is open, the tab bar and the update
+  prompt hide and pop-ups fit into the space above the keyboard. iOS doesn't resize the page for
+  the keyboard, so `app/viewport.ts` (started in `AppProviders`) watches `visualViewport`
+  (`resize`, `scroll`): `useKeyboardOpen()` hides the two, and `--visible-top` and
+  `--keyboard-inset` on `<html>` give the dialogs their `--visible-height` (`tokens.css`).
+  Pinch-zoom (`scale` ≠ 1) doesn't count as a keyboard (A11Y-02); without the API (as in jsdom)
+  nothing changes. Tests stub `visualViewport` and fire its events (`app/viewport.test.tsx`).
+- **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
+  same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
+  it. It holds the search field (its label only for screen readers), the filter button and the
+  green, row-shaped "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is
+  present and opens the new form with that name. A tab renders it at once and puts its state
+  below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
+  Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
+  clears the search and the filters) when they hide everything. Like the tab bar, the block must
+  not crowd out the content at the largest text sizes: the `pinned` utility (`index.css`) caps its
+  text and its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens
+  (about the first accessibility size, D-29), and its spacing is in `em` of that text.
+- **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
+  it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
+  Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
+  the design tokens whose label is the tap target, MNT-05), each with whether it is at its
+  default, and a reset for all of them. Each tick applies at once; "Zurücksetzen" resets every group and keeps the search;
+  "Fertig" closes the panel. The button shows how many groups are not at their default, also in
+  its accessible name. A group shows the loading placeholder until its options arrive, and its
+  error when they fail to load or a change fails. Ingredients offers the categories (any of them,
+  ING-03), with _Uncategorized_ only while it holds ingredients or is ticked
+  (`filterableCategories`: the category list counts each category's ingredients, and saving,
+  merging or deleting an ingredient loads it again); Meals the user filter (MEAL-10), the
+  cuisines (any of them) and the tags (all of them, MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
+  (`features/savedFilters/`): `useUserFilterGroup`, one checkbox per user whose meals or lists are
+  visible, "Me" first, then the partner, and `useStateFilterGroup`, "Entwurf", "Einkauf" and
+  "Erledigt". They are saved on the server in the profile's `filter_hidden` (`useSaveFilter`,
+  saves one after another): each change is saved at once and loads the narrowed query again, and
+  the screen hides the rows it hides right away. Tests share the panel helpers in
+  `test/filters.ts`. The meal picker ignores the user filter on Meals: `usePickerMeals` asks for
+  the meals of everyone visible, under a query key of its own (MEAL-09). On
+  Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
+  counts nothing then. At the largest text sizes the options and buttons wrap and the panel
+  scrolls, its buttons staying in view.
+- **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
+  `InitialMarker`, a round marker with the owner's initial, one's own rows included; screen readers
+  read it as the owner's full name. Meal rows put it after the name, so the meal is read first.
+  Shopping mode's "checked by" uses the same marker, `decorative`, because its text names the
+  person.
+- **List feed** (UI-02): the Lists tab loads `GET /api/lists` page by page (`useListFeed`, 30 per
+  page, `next_cursor`); the next page loads when the end of the feed comes near the screen
+  (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
+  filter. Until its first page arrives the feed is the local copy (`showsLocalCopy`), which they
+  don't narrow. Icons with an accessible name mark a shared list, a read-only one (lock), one being
+  shopped and a done one.
+- **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in
+  `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
+  survives opening a detail and coming back, and is gone when the app closes or the session ends;
+  never put it in the URL or browser storage. Other screens may set it before opening a tab:
+  "Zeigen" after a category delete leaves the Ingredients tab with only _Uncategorized_ ticked
+  and no search. The user filter and the state filter are server state (`/me`).
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
@@ -214,8 +293,12 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 - **Local copy** (SYNC-02): `GET /api/lists/sync` (with its ETag) replaces the user's copy at
   start, when the app comes to the foreground, when the connection returns and a second after any
   successful change; lists that are no longer returned disappear. Lists opened on screen and the
-  categories are kept too. The copy seeds the query cache (`initialData` of `useList` and of my
-  lists on the Lists home), so they show at once and stay when the server can't be reached.
+  categories are kept too: the category list holds every category's names, deleted ones included
+  (D-30), so stored lists show every heading offline. It is loaded again with the copy once it is
+  stale (`categoriesQuery`, 5 minutes), whichever screen is open; a cached list without names, left
+  by an app version before D-31, is not used. The copy seeds the query cache
+  (`initialData` of `useList` and of the list feed's first page on the Lists tab), so they show at
+  once and stay when the server can't be reached.
 - **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
   queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
   user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush
@@ -245,8 +328,9 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   ops are being sent. `SyncIndicator` shows "Saved", "Saving…", "Offline – N changes waiting" or
   "Can't reach MealMate …"; `SyncBanners` the "waiting for more than an hour" banner and the
   "can't store anything" note. Offline, the list views show a banner and disable (not hide)
-  everything that needs a connection, and the Lists home disables "+ New list"; export still
-  works.
+  everything that needs a connection; export still works. The Lists tab then shows only the local
+  copy, whatever the saved user filter and state filter say, and disables the filter button and
+  the "New list" tile (UI-02); read-only and done lists need a connection.
 - **Lifecycle** (SYNC-05/10), from the session's end events: logging out (after a confirmation
   when changes wait, on Me and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
   and keeps only this user's outbox; an expired one keeps both until the same user is back; a
@@ -257,11 +341,32 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 - **Tests**: `fake-indexeddb/auto` in the sync tests; component tests without it use the memory
   fallback.
 
+## "Neue Zutat"
+
+`IngredientForm` is one compact pop-up for creating an ingredient from the Ingredients tab or the
+meal form's picker and for the meal form's scan; the edit pop-up uses it too (ING-04, D-35). Top to bottom: the
+Open Food Facts attribution (only while Open Food Facts values are shown, BAR-09); the name with
+two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) and a scan icon
+("Barcode scannen"), each at least 44 pt and wrapping below the name at large text sizes; the
+barcode (placeholder "8, 12 oder 13 Ziffern") with a message line for scan notices; the
+similar-ingredients hint, only while there are matches; the brand (placeholder "optional, z. B.
+REWE"); the category; the base unit as three radio options, Gramm, Milliliter and Stück; the piece
+weight, only for Stück; the nutrition values in two columns. "Speichern" sits in a footer pinned
+below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels. Labels
+stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
+empty, so "„Quitten“ anlegen" opens without the keyboard covering the icons. There are no density
+and no pack size fields: the pack size is passed on from a chosen Open Food Facts proposal (D-38).
+
 ## Barcode scanner
 
-`/scan` (from the Ingredients tab) and the scan dialog of the meal form's ingredient picker share
-`features/scanner/ScanFlow.tsx` (BAR-01..03). Both are lazy-loaded chunks with the decoder, so the
-initial JavaScript stays small (PERF-03).
+The scan icon in "Neue Zutat" and in the edit pop-up, and "Barcode scannen" in the meal form's
+ingredient picker, open the scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
+Ingredients tab (D-37), and the barcode field has no scan button of its own. The scanner is a
+lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
+starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up
+and the meal form, so the scanner doesn't import `IngredientForm`. The meal form asks only its own
+ingredients (`own_only`, no waiting for Open Food Facts): a known barcode adds its row, any other
+opens "Neue Zutat" with it, which looks it up as its own scan icon does (MEAL-03).
 
 - **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
   `?url`, so it is part of the build (`dist/assets/zxing_reader-*.wasm`) and served by the app;
@@ -278,31 +383,41 @@ initial JavaScript stays small (PERF-03).
   while in use (unplugged, taken by another app), decoding stops and "No camera available" is
   shown with a "Try again" button. Without a camera, or when access is denied, only the manual
   input is shown; it is always there (`inputMode="numeric"`).
-- **Flow:** `GET /api/ingredients/lookup` (25 s timeout; a timeout or `off.busy` shows "Open Food
-  Facts is slow"). A known barcode goes straight to its ingredient (or into the meal row).
-  Otherwise the ingredient form (`IngredientForm`, the same as for "New ingredient") opens inline,
-  filled with the Open Food Facts proposal (name, brand, category guess, base unit, nutrients,
-  package, barcode) or, when Open Food Facts doesn't know the barcode or can't be asked, with only
-  the barcode (and the notice naming it, "Try again", "Scan again"). One "Save" creates the
-  ingredient in one request, with an `off` block naming only the values the user changed
-  (`edited_fields`, BAR-04). "This is already in MealMate" instead gives the barcode to an existing
-  ingredient that has none (an ingredient with a barcode keeps it).
-- **Barcode field:** the ingredient form's "Scan" opens `BarcodeScanDialog` (lazy, same decoder),
-  which only fills the field.
+- **In "Neue Zutat":** the barcode is looked up with `GET /api/ingredients/lookup` (25 s timeout).
+  - A barcode that belongs to an ingredient fills in nothing; the barcode's message line says
+    "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that ingredient) or, in the
+    meal form's picker, "nehmen" (takes it into the meal).
+  - An Open Food Facts proposal fills the form like a chosen search result (name, brand, category
+    guess, base unit, nutrients, barcode, read-only), keeping what was typed where the proposal
+    has no value. One "Speichern" creates the ingredient in one request, with an `off` block
+    naming only the values the user changed (`edited_fields`, BAR-04) and the pack size passed
+    on from the proposal.
+  - A barcode Open Food Facts doesn't know fills in only the barcode, with a notice. A timeout or
+    `off.busy` does the same, with "Nochmal versuchen".
+  - When editing, a scan only fills in the barcode, or shows "Gehört schon zu …" when another
+    ingredient has it.
+- **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has,
+  the similar-ingredients hint offers it to each match without a barcode: in the meal form's
+  picker "Milch nehmen" links it (`POST /api/ingredients/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
+  Milch hinzufügen" links it, closes the pop-up and opens Milch. A match with a barcode is offered
+  as before, without attaching anything.
+- **Meal form:** "Barcode scannen" adds a known barcode's row at once. An unknown one opens "Neue
+  Zutat" filled as above, and its "Speichern" also adds the row.
 - **Tests:** `decoder.test.ts` decodes the PNGs in `features/scanner/fixtures/` with the real
   decoder (made by `node scripts/generate-barcode-fixtures.mjs`, deterministic); the camera and
-  flow tests mock the decoder.
+  scan tests mock the decoder.
 
 ## Open Food Facts search by name
 
 People who start with no data have nothing to scan yet, so a new ingredient can also be filled
-from a search by name: "Search Open Food Facts" in the ingredient form (also when creating from
-the picker) opens `OffSearchDialog`. The search (`GET /api/ingredients/off-search?q=&page=`, 25 s
-timeout) runs only when the user taps "Search" or presses Enter, never while typing (BAR-08); the
-server rate-limits and caches it. A result shows name, brand, package size and calories per
-100 g/ml; choosing one fills the form like a scanned proposal (with its barcode, read-only). A
-product that is already in MealMate picks that ingredient in the picker and links to it elsewhere.
-"More results" loads the next page.
+from a search by name: the magnifier next to the name in "Neue Zutat" (also when creating from the
+picker, never when editing) opens `OffSearchDialog` with the typed name and searches at once, or
+with an empty search field when no name is typed (BAR-11). Further searches
+(`GET /api/ingredients/off-search?q=&page=`, 25 s timeout) run only when the user taps "Search" or
+presses Enter, never while typing (BAR-08); the server rate-limits and caches them. A result shows
+name, brand, pack size and calories per 100 g/ml; choosing one fills the form like a scanned
+proposal (with its barcode, read-only). A product that is already in MealMate picks that
+ingredient in the picker and links to it elsewhere. "More results" loads the next page.
 
 ## Tests
 
@@ -334,12 +449,20 @@ translation test fails if a key is missing in one file, if a translation is empt
 has no `error.<code>` translation. German texts are written as a German would say them, not
 translated word for word.
 
-**Seeded reference data** is translated by key (I18N-04): `category.<key>`, `cuisine.<key>`,
-`unit.<unit>`, `nutrient.<key>` and `nutrientUnit.<key>`; `features/reference/labels.ts` shows an
-unknown key as it is. **Adding a nutrient** (MNT-06), frontend side: after `make openapi`, `tsc`
-fails until the key is added to `NUTRIENT_KEYS` in `features/ingredients/nutrients.ts`; then add
-`nutrient.<key>` and `nutrientUnit.<key>` to both files. A new category or cuisine only needs its
-translations.
+**Seeded reference data** is translated by key (I18N-04): `cuisine.<key>`, `unit.<unit>`,
+`nutrient.<key>` and `nutrientUnit.<key>`; `features/reference/labels.ts` shows an unknown key as
+it is. **Adding a nutrient** (MNT-06), frontend side: after `make openapi`, `tsc` fails until the
+key is added to `NUTRIENT_KEYS` in `features/ingredients/nutrients.ts`; then add `nutrient.<key>`
+and `nutrientUnit.<key>` to both files. A new cuisine only needs its translations.
+
+**Category names** are data, not translation keys (I18N-04, D-31): they come from the API, one per
+UI language (`names.de`, `names.en` in `GET /api/categories`), and one helper shows a category's
+name in the UI language, else in English. Admins add, rename and delete categories (REF-01), so
+there is nothing to add to the language files. The category list also returns deleted categories,
+for the headings of lists being shopped and done lists; pickers offer only the categories that
+aren't deleted, without _Uncategorized_ (`pickableCategories` in `features/reference/categories.ts`).
+Category selects use `CategoryOptions`, which shows a current category that isn't among them as a
+disabled choice.
 
 **Adding a language** (I18N-01):
 
@@ -347,7 +470,9 @@ translations.
 2. register it in `src/i18n/index.ts`: add the code to `LANGUAGES`, its own name to
    `LANGUAGE_NAMES` and the file to `resources`;
 3. add its `Intl` locale to `LOCALES` in `src/i18n/format.ts`;
-4. add the language to the backend's `language` enum (users store their choice, from M2 on).
+4. add the language to the backend's `language` enum (users store their choice, from M2 on);
+5. add its category name field to the category dialog (`features/admin/AdminCategoriesScreen.tsx`,
+   with its path in `NAME_PATHS`); the backend's side is in `CONTRIBUTING.md`.
 
 ## Icons
 
@@ -406,36 +531,46 @@ order.
 | `hintTailscale`          | `hint-tailscale`           | First-login hint "Keep Tailscale on"        |
 | `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                    |
 | `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                 |
-| `newIngredient`          | `new-ingredient`           | "New ingredient" on Ingredients             |
-| `ingredientList`         | `ingredient-list`          | Ingredients grouped by category             |
+| `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients        |
+| `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                   |
 | `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
+| `filterButton`           | `filter-button`            | Filter button in a tab's pinned block       |
+| `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)    |
+| `filterGroup`            | `filter-group`             | One checkbox group in the filter panel      |
 | `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
+| `ingredientFormScan`     | `ingredient-form-scan`     | Scan icon next to the name in the form      |
+| `ingredientFormFooter`   | `ingredient-form-footer`   | The form's pinned footer with "Save"        |
+| `ingredientScanNotice`   | `ingredient-scan-notice`   | The scan's notice below the barcode         |
+| `ingredientScanOpen`     | `ingredient-scan-open`     | "open" the ingredient a scan belongs to     |
+| `ingredientScanTake`     | `ingredient-scan-take`     | "use" it instead, in the picker             |
+| `ingredientScanRetry`    | `ingredient-scan-retry`    | "Try again" when Open Food Facts is slow    |
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
 | `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
-| `offSearchButton`        | `off-search-button`        | "Search Open Food Facts" in the form        |
+| `baseUnitConfirm`        | `base-unit-confirm`        | "Change anyway?" when amounts won't fit     |
+| `offSearchButton`        | `off-search-button`        | Magnifier next to the name in the form      |
 | `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name              |
 | `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search      |
 | `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts        |
 | `offSearchMore`          | `off-search-more`          | "More results" (next page)                  |
 | `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search               |
-| `barcodeFieldScan`       | `barcode-field-scan`       | "Scan" at the form's barcode field          |
-| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner that fills the barcode field        |
+| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner (scan icon, meal form's scan)       |
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
+| `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
 | `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
-| `saveCategoryOrder`      | `save-category-order`      | Admin: "Save order"                         |
+| `newCategory`            | `new-category`             | Admin: "New category" below the categories  |
+| `categoryDialog`         | `category-dialog`          | Admin: a category's names (new or edit)     |
 | `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                         |
 | `systemVersion`          | `system-version`           | Admin: running version (once loaded)        |
 | `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"      |
 | `backupNow`              | `backup-now`               | Admin: "Back up now"                        |
 | `diskStatus`             | `disk-status`              | Admin: free disk space, or "no check yet"   |
 | `mealSearch`             | `meal-search`              | Search field on Meals                       |
-| `newMeal`                | `new-meal`                 | "New meal" on Meals                         |
-| `mealUserChips`          | `meal-user-chips`          | User filter chips on Meals                  |
+| `newMeal`                | `new-meal`                 | "New meal" tile on Meals                    |
 | `mealList`               | `meal-list`                | List of meals on Meals                      |
 | `mealCard`               | `meal-card`                | One meal in the list (link)                 |
 | `screenMealForm`         | `screen-meal-form`         | Create/edit meal screen                     |
@@ -454,11 +589,9 @@ order.
 | `editMeal`               | `edit-meal`                | "Edit" on the meal detail (owner)           |
 | `deleteMeal`             | `delete-meal`              | "Delete" on the meal detail (owner)         |
 | `copyMeal`               | `copy-meal`                | "Copy to my meals" on the meal detail       |
-| `newList`                | `new-list`                 | "New list" on Lists (also its empty state)  |
-| `listDrafts`             | `list-drafts`              | My lists (drafts) on Lists                  |
-| `listCard`               | `list-card`                | One list on Lists (link)                    |
-| `othersLists`            | `others-lists`             | Others' lists section on Lists              |
-| `listUserChips`          | `list-user-chips`          | User filter chips of Others' lists          |
+| `newList`                | `new-list`                 | "New list" tile on Lists                    |
+| `listFeed`               | `list-feed`                | The list feed on Lists                      |
+| `listCard`               | `list-card`                | One list in the feed (link)                 |
 | `screenList`             | `screen-list`              | List view screen                            |
 | `listReadOnly`           | `list-read-only`           | Read-only note on someone else's list       |
 | `copyList`               | `copy-list`                | "Copy to my lists" on a read-only list      |
@@ -480,10 +613,6 @@ order.
 | `lineSources`            | `line-sources`             | Sources dialog of a line                    |
 | `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
 | `listReminder`           | `list-reminder`            | Reminder in the last row of a list          |
-| `continueShopping`       | `continue-shopping`        | "Continue shopping" card on Lists           |
-| `historyLink`            | `history-link`             | Entry to the history on Lists               |
-| `screenHistory`          | `screen-history`           | History screen (done lists)                 |
-| `historyWeek`            | `history-week`             | One week of done lists in the history       |
 | `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
 | `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
 | `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |
@@ -509,20 +638,13 @@ order.
 | `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)     |
 | `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
 | `reopenList`             | `reopen-list`              | "Reopen" on a done list                     |
-| `scanBarcode`            | `scan-barcode`             | "Scan barcode" (Ingredients tab, meal form) |
-| `screenScan`             | `screen-scan`              | The scanner route `/scan`                   |
-| `scanDialog`             | `scan-dialog`              | The scanner opened from the meal form       |
+| `scanBarcode`            | `scan-barcode`             | "Scan barcode" in the meal form             |
 | `scannerVideo`           | `scanner-video`            | Live camera image of the scanner            |
 | `scannerTorch`           | `scanner-torch`            | Light toggle (when the camera has one)      |
 | `scannerCameraMessage`   | `scanner-camera-message`   | "No camera / access denied" message         |
 | `scannerCameraRetry`     | `scanner-camera-retry`     | "Try again" after the camera went away      |
 | `barcodeInput`           | `barcode-input`            | Manual barcode input                        |
 | `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode             |
-| `scanNotice`             | `scan-notice`              | "Not found" / "Open Food Facts is slow"     |
-| `scanEnterManually`      | `scan-enter-manually`      | "Enter the values yourself"                 |
-| `scanAgain`              | `scan-again`               | "Scan again" next to the notice             |
-| `scanLinkExisting`       | `scan-link-existing`       | "This is already in MealMate" (scan form)   |
-| `scanLink`               | `scan-link`                | Linking a barcode to an existing ingredient |
 | `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"    |
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |

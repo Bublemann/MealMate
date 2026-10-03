@@ -1,5 +1,6 @@
 import {
   replaceEqualDeep,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -8,14 +9,11 @@ import {
 import { api, unwrap } from '@/api/client';
 import { ApiError, isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
-import { useAuthSession, useCurrentUser } from '@/features/auth/context';
-import { FILTER_HIDDEN_KEY } from '@/features/meals/api';
 import { useSyncEngine } from '@/features/sync/context';
 import { uuidv7 } from '@/lib/uuid';
-import { detailKey, HISTORY_KEY, SUMMARIES_KEY, summariesKey, type ListScope } from './keys';
+import { COPY_UPDATED_AT, detailKey, FEED_KEY } from './keys';
 
 export { isUnreachable } from '@/api/errors';
-export type { ListScope } from './keys';
 
 export type ListDetail = components['schemas']['ListDetail'];
 export type ListSummary = components['schemas']['ListSummary'];
@@ -37,23 +35,37 @@ export const POLL_INTERVAL_MS = 5_000;
 
 const changeKey = (id: string) => ['lists', 'change', id] as const;
 const RECENT_MEALS_KEY = ['meals', 'recent'] as const;
-const VISIBLE_USERS_KEY = ['users', 'visible', 'lists'] as const;
 
-function invalidateSummaries(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: SUMMARIES_KEY });
+function invalidateFeed(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: FEED_KEY });
 }
 
-/** Lists in `scope` that are drafts or being shopped, most recently edited first (UI-02). */
-export function useLists(scope: ListScope) {
+/**
+ * The list feed (UI-02): every list I can see, in every state, newest created first, 30 per page
+ * (`fetchNextPage` loads the next). Until the server answers, the first page is the local copy
+ * (SYNC-09); it holds only my editable drafts and lists being shopped, so it is always asked for.
+ */
+export function useListFeed() {
   const engine = useSyncEngine();
-  return useQuery({
-    queryKey: summariesKey(scope),
-    queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/lists', { params: { query: { scope } }, signal })),
-    // My lists are shown from the local copy until the server answers (SYNC-09).
-    initialData: scope === 'mine' ? () => engine.copiedSummaries() : undefined,
-    initialDataUpdatedAt: () => engine.copiedSummariesAt(),
+  return useInfiniteQuery({
+    queryKey: FEED_KEY,
+    queryFn: ({ pageParam, signal }) =>
+      unwrap(
+        api.GET('/api/lists', {
+          params: { query: pageParam === null ? {} : { cursor: pageParam } },
+          signal,
+        }),
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor,
+    initialData: () => engine.copiedFeed(),
+    initialDataUpdatedAt: COPY_UPDATED_AT,
   });
+}
+
+/** Whether the feed still shows the local copy: the server's first page hasn't arrived (SYNC-09). */
+export function showsLocalCopy(feed: { dataUpdatedAt: number }): boolean {
+  return feed.dataUpdatedAt === COPY_UPDATED_AT;
 }
 
 /**
@@ -211,7 +223,7 @@ function useListChange<Variables>(
       changeAnswered(queryClient, listId);
       void queryClient.invalidateQueries({ queryKey: detailKey(listId) });
     },
-    onSettled: () => invalidateSummaries(queryClient),
+    onSettled: () => invalidateFeed(queryClient),
   });
 }
 
@@ -222,7 +234,7 @@ export function useCreateList() {
     mutationFn: () => unwrap(api.POST('/api/lists', { body: {} })),
     onSuccess: (list) => {
       queryClient.setQueryData(detailKey(list.id), list);
-      invalidateSummaries(queryClient);
+      invalidateFeed(queryClient);
     },
   });
 }
@@ -241,7 +253,7 @@ export function useDeleteList(listId: string) {
     mutationFn: () =>
       unwrap(api.DELETE('/api/lists/{list_id}', { params: { path: { list_id: listId } } })),
     onSuccess: () => {
-      invalidateSummaries(queryClient);
+      invalidateFeed(queryClient);
       void queryClient.invalidateQueries({ queryKey: detailKey(listId), refetchType: 'none' });
     },
   });
@@ -255,7 +267,7 @@ export function useCopyList(listId: string) {
       unwrap(api.POST('/api/lists/{list_id}/copy', { params: { path: { list_id: listId } } })),
     onSuccess: ({ list }) => {
       queryClient.setQueryData(detailKey(list.id), list);
-      invalidateSummaries(queryClient);
+      invalidateFeed(queryClient);
     },
   });
 }
@@ -450,16 +462,8 @@ export function useShopAgain(listId: string) {
       ),
     onSuccess: ({ list }) => {
       queryClient.setQueryData(detailKey(list.id), list);
-      invalidateSummaries(queryClient);
+      invalidateFeed(queryClient);
     },
-  });
-}
-
-/** SHOP-05: done lists in my history (mine and my partner's shared ones), newest first. */
-export function useListHistory() {
-  return useQuery({
-    queryKey: HISTORY_KEY,
-    queryFn: ({ signal }) => unwrap(api.GET('/api/lists/history', { signal })),
   });
 }
 
@@ -469,61 +473,5 @@ export function useRecentMeals({ enabled = true }: { enabled?: boolean } = {}) {
     queryKey: RECENT_MEALS_KEY,
     queryFn: ({ signal }) => unwrap(api.GET('/api/meals/recent', { signal })),
     enabled,
-  });
-}
-
-/** Everyone whose lists I can see, me first (UI-02, VIS-02). */
-export function useListUsers() {
-  return useQuery({
-    queryKey: VISIBLE_USERS_KEY,
-    queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/users/visible', { params: { query: { for: 'lists' } }, signal })),
-  });
-}
-
-/**
- * Switches a user's chip on Others' lists (UI-02), like the meal chips (MEAL-10): at once on
- * screen, saved in `filter_hidden.lists`, and the lists load again once it is saved. The saved
- * state only replaces the chips once no other toggle is waiting. When saving fails, the profile
- * and the lists are loaded again instead of going back to a snapshot.
- */
-export function useToggleListChip() {
-  const session = useAuthSession();
-  const user = useCurrentUser();
-  const queryClient = useQueryClient();
-  const reloadOthers = () =>
-    void queryClient.invalidateQueries({ queryKey: summariesKey('others') });
-  return useMutation({
-    // The same key and scope as the meal chips: each save sends both lists of hidden users.
-    mutationKey: FILTER_HIDDEN_KEY,
-    scope: { id: FILTER_HIDDEN_KEY.join('-') },
-    mutationFn: (hidden: string[]) =>
-      unwrap(
-        api.PATCH('/api/me', {
-          body: {
-            filter_hidden: {
-              meals: session.getState().user?.filter_hidden.meals ?? [],
-              lists: hidden,
-            },
-          },
-        }),
-      ),
-    onMutate: (hidden) => {
-      const current = session.getState().user ?? user;
-      session.setUser({ ...current, filter_hidden: { ...current.filter_hidden, lists: hidden } });
-    },
-    onError: async () => {
-      reloadOthers();
-      try {
-        session.setUser(await unwrap(api.GET('/api/me')));
-      } catch {
-        // Offline: the chips stay as they are until the next successful load.
-      }
-    },
-    onSuccess: (me) => {
-      // This save still counts as running here.
-      if (queryClient.isMutating({ mutationKey: FILTER_HIDDEN_KEY }) <= 1) session.setUser(me);
-      reloadOthers();
-    },
   });
 }

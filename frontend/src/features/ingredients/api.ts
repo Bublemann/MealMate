@@ -6,12 +6,15 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { api, unwrap, withLongTimeout } from '@/api/client';
+import { isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
+import { CATEGORIES_KEY } from '@/features/reference/api';
 
 export type Ingredient = components['schemas']['Ingredient'];
 export type IngredientSummary = components['schemas']['IngredientSummary'];
 export type IngredientCreate = components['schemas']['IngredientCreate'];
 export type IngredientUpdate = components['schemas']['IngredientUpdate'];
+export type IngredientMerge = components['schemas']['IngredientMerge'];
 export type BaseUnit = Ingredient['base_unit'];
 export type NutrientValues = components['schemas']['NutrientValues'];
 export type PendingUpdateField = components['schemas']['PendingUpdateField'];
@@ -28,14 +31,23 @@ export type EditedField = Ingredient['user_edited_fields'][number];
  */
 export const OFF_TIMEOUT_MS = 25_000;
 
-const INGREDIENTS_KEY = ['ingredients'] as const;
-const listKey = (query: string) => [...INGREDIENTS_KEY, 'list', query] as const;
+export const INGREDIENTS_KEY = ['ingredients'] as const;
+const listKey = (query: string, categoryIds: readonly string[]) =>
+  [...INGREDIENTS_KEY, 'list', query, categoryIds] as const;
 const detailKey = (id: string) => [...INGREDIENTS_KEY, 'detail', id] as const;
 
 /** Lists and similarity hints show names, categories and counts, which may have changed. */
 function invalidateSearches(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: [...INGREDIENTS_KEY, 'list'] });
   void queryClient.invalidateQueries({ queryKey: [...INGREDIENTS_KEY, 'similar'] });
+}
+
+/**
+ * The categories count their ingredients, which decides whether the filter panel offers
+ * *Uncategorized* (ING-03): a saved, merged or deleted ingredient may have changed the counts.
+ */
+function invalidateCategoryCounts(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
 }
 
 /** A summary as the lists show it, from a full ingredient (e.g. one just created). */
@@ -46,14 +58,29 @@ export function toSummary(ingredient: Ingredient): IngredientSummary {
 
 /**
  * Ingredients matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
- * it is empty, sorted by the server. The previous result stays while the next one loads.
+ * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories.
+ * The previous result stays while the next one loads.
  */
-export function useIngredients(query: string, { enabled = true }: { enabled?: boolean } = {}) {
+export function useIngredients(
+  query: string,
+  { enabled = true, categoryIds = [] }: { enabled?: boolean; categoryIds?: readonly string[] } = {},
+) {
   const q = query.trim();
   return useQuery({
-    queryKey: listKey(q),
+    queryKey: listKey(q, categoryIds),
     queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/ingredients', { params: { query: q ? { q } : {} }, signal })),
+      unwrap(
+        api.GET('/api/ingredients', {
+          // Left out when empty: `category_id=a&category_id=b` for several (ING-03).
+          params: {
+            query: {
+              q: q || undefined,
+              category_id: categoryIds.length > 0 ? [...categoryIds] : undefined,
+            },
+          },
+          signal,
+        }),
+      ),
     placeholderData: keepPreviousData,
     enabled,
   });
@@ -91,6 +118,7 @@ export function useCreateIngredient() {
     onSuccess: (ingredient) => {
       queryClient.setQueryData(detailKey(ingredient.id), ingredient);
       invalidateSearches(queryClient);
+      invalidateCategoryCounts(queryClient);
     },
   });
 }
@@ -112,8 +140,30 @@ export function useUpdateIngredient(id: string) {
     onSuccess: (ingredient) => {
       queryClient.setQueryData(detailKey(id), ingredient);
       invalidateSearches(queryClient);
+      invalidateCategoryCounts(queryClient);
     },
   });
+}
+
+/**
+ * What a base-unit change or a merge would leave not fitting (D-33): the amounts, and the meals
+ * and drafts they are on. The server refuses such a change (409 `ingredient.unit_mismatch`) until
+ * the request accepts it (`accept_unit_mismatch`); nothing is converted then.
+ */
+export interface UnitMismatch {
+  meals: number;
+  lists: number;
+  amounts: number;
+}
+
+/** The counts of a base-unit change or merge refused for amounts that won't fit, else null. */
+export function unitMismatch(error: unknown): UnitMismatch | null {
+  if (!isApiError(error) || error.code !== 'ingredient.unit_mismatch') return null;
+  const count = (key: keyof UnitMismatch) => {
+    const value = error.params[key];
+    return typeof value === 'number' ? value : 0;
+  };
+  return { meals: count('meals'), lists: count('lists'), amounts: count('amounts') };
 }
 
 /**
@@ -184,19 +234,23 @@ export function useOffSearch() {
  */
 function forgetIngredient(queryClient: QueryClient, id: string) {
   invalidateSearches(queryClient);
+  invalidateCategoryCounts(queryClient);
   void queryClient.invalidateQueries({ queryKey: detailKey(id), refetchType: 'none' });
   void queryClient.invalidateQueries({ queryKey: ['admin', 'events'] });
 }
 
-/** ING-05 (admin): moves every reference of `id` to `intoId`, then deletes `id`. */
+/**
+ * ING-05 (admin): moves every reference of `id` to `into_id`, then deletes `id`; refused while
+ * amounts of `id` wouldn't fit `into_id`, unless the body accepts that (`unitMismatch`).
+ */
 export function useMergeIngredient(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (intoId: string) =>
+    mutationFn: (body: IngredientMerge) =>
       unwrap(
         api.POST('/api/admin/ingredients/{ingredient_id}/merge', {
           params: { path: { ingredient_id: id } },
-          body: { into_id: intoId },
+          body,
         }),
       ),
     onSuccess: (target) => {

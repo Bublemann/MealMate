@@ -4,9 +4,18 @@ import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { CATEGORIES } from '@/test/ingredients';
-import { LIST_ID, LIST_ROUTES, listDetail, shoppingList } from '@/test/lists';
+import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
+import {
+  FEED_LISTS,
+  feedPage,
+  line,
+  LIST_ID,
+  LIST_ROUTES,
+  listDetail,
+  shoppingList,
+  SHOPPING_LINES,
+} from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import { DB_NAME, DB_VERSION, openSyncStorage, userMetaKey } from './storage';
@@ -18,11 +27,14 @@ const NEVER = () => new Promise<never>(() => undefined);
 const FAIL = () => Promise.reject(new TypeError('Failed to fetch'));
 
 /** The local copy as a previous visit left it: the list, the categories, a complete sync. */
-async function storeCopy(list: Schemas['ListDetail'], { synced = true } = {}) {
+async function storeCopy(
+  list: Schemas['ListDetail'],
+  { synced = true, categories = CATEGORIES } = {},
+) {
   const storage = await openSyncStorage();
   await storage.putList({ id: list.id, userId: TEST_USER.id, detail: list, storedAt: 1_000 });
   await storage.setMeta(userMetaKey('categories', TEST_USER.id), {
-    categories: CATEGORIES,
+    categories,
     storedAt: 1_000,
   });
   if (synced) await storage.setMeta(userMetaKey('lastSync', TEST_USER.id), 1_000);
@@ -35,6 +47,12 @@ function serverGone(answer: () => Promise<never>) {
   fetchMock.mockImplementation(answer);
   return fetchMock;
 }
+
+/** I am Anna, with saved filters that hide my own lists and those being shopped (UI-02). */
+const HIDING_MY_SHOPPING: Schemas['Me'] = {
+  ...TEST_USER,
+  filter_hidden: { meals: [], lists: [TEST_USER.id], list_states: ['shopping'] },
+};
 
 function goOffline() {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
@@ -101,6 +119,76 @@ describe('lists from the local copy (SYNC-09)', () => {
     );
   });
 
+  it('heads the lines of a stored list with the stored category names (LIST-11)', async () => {
+    await storeCopy(listDetail());
+    serverGone(FAIL);
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    const lines = await screen.findByTestId(testIds.listLines);
+    expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
+  });
+
+  it('heads lines of a deleted category with its stored name (D-30)', async () => {
+    const gouda = line({ key: 'i:ing-gouda', name: 'Gouda', category_id: 'cat-cheese' });
+    await storeCopy(shoppingList({ lines: [...SHOPPING_LINES, gouda] }), {
+      categories: CATEGORIES_AFTER_DELETE,
+    });
+    serverGone(FAIL);
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    const lines = await screen.findByTestId(testIds.shoppingLines);
+    expect(within(lines).getByRole('list', { name: 'Cheese' })).toHaveTextContent('Gouda');
+  });
+
+  it('loads the categories again over ones an older app version stored without names', async () => {
+    const storage = await storeCopy(listDetail());
+    await storage.setMeta(userMetaKey('categories', TEST_USER.id), {
+      categories: CATEGORIES.map(({ id, key, sort_order }) => ({ id, key, sort_order })),
+      storedAt: 1_000,
+    });
+    const categories = heldRoute();
+    mockApi({
+      ...LIST_ROUTES,
+      'GET /api/categories': categories.route,
+      [`GET /api/lists/${LIST_ID}`]: NEVER,
+      'GET /api/lists/sync': NEVER,
+    });
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    // The list comes from the copy, the categories wait for the server.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' }),
+    ).toBeVisible();
+    expect(screen.getByText('Loading…')).toBeVisible();
+    await categories.answer(CATEGORIES);
+    const lines = await screen.findByTestId(testIds.listLines);
+    expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
+  });
+
+  it('keeps the stored categories current with the copy, whichever screen is open', async () => {
+    const storage = await storeCopy(listDetail());
+    const renamed = CATEGORIES.map((category) => ({
+      ...category,
+      names: { ...category.names, en: `${category.names.en} (renamed)` },
+    }));
+    mockApi({
+      ...LIST_ROUTES,
+      'GET /api/categories': renamed,
+      'GET /api/lists/sync': { lists: [listDetail()] },
+    });
+
+    renderApp('/lists');
+
+    await waitFor(async () =>
+      expect(await storage.getMeta(userMetaKey('categories', TEST_USER.id))).toMatchObject({
+        categories: renamed,
+      }),
+    );
+  });
+
   it('says a list that isn’t stored needs a connection', async () => {
     await storeCopy(shoppingList({ id: 'another-list' }));
     serverGone(FAIL);
@@ -113,14 +201,85 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows my lists on the Lists home from the copy', async () => {
-    await storeCopy(listDetail({ name: 'Vorrat' }));
-    serverGone(NEVER);
+  it('shows the copy on the Lists tab, newest created first, until the feed answers', async () => {
+    const storage = await storeCopy(
+      listDetail({ name: 'Vorrat', created_at: '2026-09-20T10:00:00Z' }),
+    );
+    for (const detail of [
+      listDetail({ id: 'list-two', name: 'Grillen', updated_at: '2026-09-20T11:00:00Z' }),
+      // A quarter of a second later than "Grillen": the server writes fractions only if any.
+      listDetail({ id: 'list-three', name: 'Brunch', created_at: '2026-09-26T10:00:00.25Z' }),
+      // Created together with "Brunch": the higher id comes first.
+      listDetail({ id: 'list-tie', name: 'Mittag', created_at: '2026-09-26T10:00:00.250Z' }),
+    ]) {
+      await storage.putList({ id: detail.id, userId: TEST_USER.id, detail, storedAt: 1_000 });
+    }
+    // Online, but the server is slow: the copy shows first (SYNC-09, UI-02).
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
 
     renderApp('/lists');
 
-    const drafts = await screen.findByTestId(testIds.listDrafts);
-    expect(within(drafts).getByText('Vorrat (26/09/2026)')).toBeVisible();
+    const copied = within(await screen.findByTestId(testIds.listFeed)).getAllByTestId(
+      testIds.listCard,
+    );
+    expect(copied).toHaveLength(4);
+    expect(copied[0]).toHaveTextContent('Mittag (26/09/2026)');
+    expect(copied[1]).toHaveTextContent('Brunch (26/09/2026)');
+    expect(copied[2]).toHaveTextContent('Grillen (26/09/2026)');
+    expect(copied[3]).toHaveTextContent('Vorrat (20/09/2026)');
+    await feed.answer(feedPage(FEED_LISTS));
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
+  });
+
+  it('shows the copy whatever the saved filters say until the feed answers (UI-02)', async () => {
+    await storeCopy(shoppingList());
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists', { user: HIDING_MY_SHOPPING });
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.getByTestId(testIds.filterButton)).toBeEnabled();
+    // The server leaves out what the filters hide: here, everything.
+    await feed.answer(feedPage([]));
+
+    expect(await screen.findByText('No matches')).toBeVisible();
+    expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
+  });
+
+  it('says why the feed did not load while it shows the copy', async () => {
+    await storeCopy(listDetail({ name: 'Vorrat' }));
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent('Vorrat (26/09/2026)');
+
+    await feed.answer(errorResponse(503, 'common.service_unavailable'));
+
+    expect(
+      await screen.findByText('MealMate is unavailable right now. Please try again later.'),
+    ).toBeVisible();
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Vorrat (26/09/2026)');
+  });
+
+  it('says why the feed did not load instead of "No lists yet" when the copy is empty', async () => {
+    const storage = await openSyncStorage();
+    await storage.setMeta(userMetaKey('lastSync', TEST_USER.id), 1_000);
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    expect(await screen.findByText('No lists yet')).toBeVisible();
+
+    await feed.answer(errorResponse(503, 'common.service_unavailable'));
+
+    expect(
+      await screen.findByText('MealMate is unavailable right now. Please try again later.'),
+    ).toBeVisible();
+    expect(screen.queryByText('No lists yet')).not.toBeInTheDocument();
   });
 
   it('leaves out a list finished here whose *Finish* waits to be sent', async () => {
@@ -147,7 +306,7 @@ describe('lists from the local copy (SYNC-09)', () => {
     renderApp('/lists');
 
     expect(await screen.findByText('Grillen (26/09/2026)')).toBeVisible();
-    expect(screen.getAllByTestId(testIds.continueShopping)).toHaveLength(1);
+    expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1);
     expect(screen.queryByText('Wochenende (26/09/2026)')).not.toBeInTheDocument();
   });
 
@@ -157,8 +316,7 @@ describe('lists from the local copy (SYNC-09)', () => {
 
     renderApp('/lists');
 
-    await screen.findByTestId(testIds.screenLists);
-    expect(screen.getAllByText('Loading…').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Loading…')).toBeVisible();
     expect(screen.queryByText('Vorrat (26/09/2026)')).not.toBeInTheDocument();
   });
 
@@ -332,8 +490,8 @@ describe('logging out with waiting changes (SYNC-05, SYNC-10)', () => {
   });
 });
 
-describe('the Lists home offline (SYNC-03)', () => {
-  it('disables "+ New list": creating a list needs the server', async () => {
+describe('the Lists tab offline (UI-02, SYNC-03)', () => {
+  it('disables the "New list" tile: creating a list needs the server', async () => {
     await storeCopy(listDetail({ name: 'Vorrat' }));
     serverGone(FAIL);
     renderApp('/lists');
@@ -344,10 +502,66 @@ describe('the Lists home offline (SYNC-03)', () => {
     expect(button).toBeDisabled();
   });
 
-  it('disables it in the empty state too', async () => {
+  it('shows only the copy, without read-only and done lists, and says so below the tile', async () => {
+    await storeCopy(shoppingList());
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
+
+    goOffline();
+
+    await waitFor(() => expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1));
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Wochenende (26/09/2026)');
+    const tile = screen.getByTestId(testIds.newList);
+    expect(tile).toBeDisabled();
+    const notice = screen.getByTestId(testIds.syncStatus);
+    expect(notice).toHaveTextContent('Offline');
+    expect(tile.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows the copy whatever the saved filters say and disables the filter button', async () => {
+    await storeCopy(shoppingList());
+    mockApi({
+      ...LIST_ROUTES,
+      'GET /api/lists': feedPage(FEED_LISTS.filter((list) => list.owner.id !== TEST_USER.id)),
+      'GET /api/lists/sync': NEVER,
+    });
+    renderApp('/lists', { user: HIDING_MY_SHOPPING });
+    await waitFor(() => expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(4));
+    const button = screen.getByTestId(testIds.filterButton);
+    await waitFor(() => expect(button).toHaveAccessibleName('Filters, 2 active'));
+
+    goOffline();
+
+    // My list being shopped is in the copy: in the shop it must never be filtered away.
+    await waitFor(() => expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1));
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Wochenende (26/09/2026)');
+    expect(button).toBeDisabled();
+    // Nothing is filtered, so nothing is counted.
+    expect(button).toHaveAccessibleName('Filters');
+  });
+
+  it('says the lists need a connection before the copy was ever complete', async () => {
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
+
+    goOffline();
+
+    expect(await screen.findByTestId(testIds.offlineNotice)).toHaveTextContent(
+      "You're offline. This page needs a connection.",
+    );
+    expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
+  });
+
+  it('disables it on an empty tab too', async () => {
     mockApi();
     renderApp('/lists');
-    await screen.findByText('No shopping lists yet');
+    await screen.findByText('No lists yet');
     const button = screen.getByTestId(testIds.newList);
     expect(button).toBeEnabled();
 

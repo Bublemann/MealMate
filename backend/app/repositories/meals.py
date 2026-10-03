@@ -31,18 +31,19 @@ async def search(
     *,
     owner_ids: Collection[str],
     query: str,
-    cuisine_id: str | None,
-    tag_id: str | None,
+    cuisine_ids: Collection[str],
+    tag_ids: Collection[str],
 ) -> Sequence[Meal]:
-    """Meals of the given owners, A-Z by normalised name (then id). A normalised `query`
+    """Meals of the given owners in dictionary order (then by id). A normalised `query`
     matches the meal name, a tag name or the cuisine (its key or name), also with umlaut
-    spellings folded."""
+    spellings folded. With `cuisine_ids`, only meals in any of those cuisines; with `tag_ids`,
+    only meals that have every one of those tags."""
     if not owner_ids:
         return []
     statement = select(Meal).where(Meal.owner_id.in_(owner_ids))
-    if cuisine_id is not None:
-        statement = statement.where(Meal.cuisine_id == cuisine_id)
-    if tag_id is not None:
+    if cuisine_ids:
+        statement = statement.where(Meal.cuisine_id.in_(cuisine_ids))
+    for tag_id in dict.fromkeys(tag_ids):
         statement = statement.where(
             exists().where(MealTag.meal_id == Meal.id, MealTag.tag_id == tag_id)
         )
@@ -60,7 +61,7 @@ async def search(
                 exists().where(Cuisine.id == Meal.cuisine_id).where(cuisine_matches),
             )
         )
-    result = await session.execute(statement.order_by(Meal.name_norm, Meal.id))
+    result = await session.execute(statement.order_by(Meal.name_sort, Meal.id))
     return result.scalars().all()
 
 
@@ -125,6 +126,18 @@ async def count_with_ingredient(session: AsyncSession, ingredient_id: str) -> in
         )
     )
     return result.scalar_one()
+
+
+async def amounts_of(
+    session: AsyncSession, ingredient_id: str
+) -> list[tuple[str, float | None, str | None]]:
+    """The meal id, amount and unit of every row of the ingredient."""
+    result = await session.execute(
+        select(MealIngredient.meal_id, MealIngredient.amount, MealIngredient.unit).where(
+            MealIngredient.ingredient_id == ingredient_id
+        )
+    )
+    return [(meal_id, amount, unit) for meal_id, amount, unit in result]
 
 
 async def repoint_ingredient(session: AsyncSession, from_id: str, into_id: str) -> None:

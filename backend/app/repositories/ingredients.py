@@ -3,11 +3,11 @@
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.text import fold_umlauts
-from app.models import Category, Ingredient
+from app.models import Ingredient
 from app.repositories.search import contains, folded
 
 
@@ -45,16 +45,17 @@ def _label_norm() -> ColumnElement[str]:
 
 
 async def search(
-    session: AsyncSession, *, query: str, category_id: str | None, limit: int
+    session: AsyncSession, *, query: str, category_ids: Sequence[str], limit: int
 ) -> Sequence[Ingredient]:
     """With a normalised `query`: the ingredients whose normalised name or brand, or both
     together ("name brand"), contain it (also with umlaut spellings folded, so "apfel" finds
-    "Äpfel"); an exact name first, then names starting with it, then by name and brand. Without
-    one: all of them by category order, name and brand."""
+    "Äpfel"); an exact name first, then names starting with it, each in dictionary order by
+    name and brand. Without one: all of them in that order. With `category_ids`, only those in
+    any of the categories."""
     statement = select(Ingredient)
-    if category_id is not None:
-        statement = statement.where(Ingredient.category_id == category_id)
-    order = (Ingredient.name_norm, func.coalesce(Ingredient.brand_norm, ""), Ingredient.id)
+    if category_ids:
+        statement = statement.where(Ingredient.category_id.in_(category_ids))
+    order = (Ingredient.name_sort, func.coalesce(Ingredient.brand_sort, ""), Ingredient.id)
     if query:
         # The label holds the name and the brand, so it matches either or both.
         matches, _ = contains(_label_norm(), query)
@@ -64,9 +65,7 @@ async def search(
         )
         statement = statement.where(matches).order_by(exact.is_(False), prefix.is_(False), *order)
     else:
-        statement = statement.join(Category, Category.id == Ingredient.category_id).order_by(
-            Category.sort_order, *order
-        )
+        statement = statement.order_by(*order)
     result = await session.execute(statement.limit(limit))
     return result.scalars().all()
 
@@ -75,6 +74,34 @@ async def names(session: AsyncSession) -> list[tuple[str, str]]:
     """`(id, name_norm)` of every ingredient."""
     result = await session.execute(select(Ingredient.id, Ingredient.name_norm))
     return [(row[0], row[1]) for row in result]
+
+
+async def count_in_category(session: AsyncSession, category_id: str) -> int:
+    result = await session.execute(
+        select(func.count()).select_from(Ingredient).where(Ingredient.category_id == category_id)
+    )
+    return result.scalar_one()
+
+
+async def counts_by_category(session: AsyncSession) -> dict[str, int]:
+    """The number of ingredients in each category that holds any, by category id."""
+    result = await session.execute(
+        select(Ingredient.category_id, func.count()).group_by(Ingredient.category_id)
+    )
+    return {category_id: count for category_id, count in result}
+
+
+async def move_category(session: AsyncSession, from_id: str, into_id: str) -> int:
+    """Move every ingredient of a category into another, as no one's edit: who changed it
+    last, and when, stay (plan § 6). Returns how many moved."""
+    moved = await session.scalars(
+        update(Ingredient)
+        .where(Ingredient.category_id == from_id)
+        .values(category_id=into_id, updated_at=Ingredient.updated_at)
+        .returning(Ingredient.id)
+        .execution_options(synchronize_session="fetch")
+    )
+    return len(moved.all())
 
 
 async def by_ids(session: AsyncSession, ingredient_ids: Iterable[str]) -> dict[str, Ingredient]:

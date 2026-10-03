@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { BEN } from '@/test/api';
-import { CATEGORIES } from '@/test/ingredients';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
 import { CANDLES_EXTRA_ID, checkedBy, doneList, listDetail, shoppingList } from '@/test/lists';
 import { ME } from '@/test/meals';
 import { applyPending, extraLineKey, type PendingList } from './applyPending';
@@ -10,10 +10,11 @@ type Op = components['schemas']['Op'];
 
 const OPTIONS = {
   me: ME,
-  categoryIds: new Map(CATEGORIES.map((category) => [category.key, category.id])),
+  categories: CATEGORIES,
 };
 const AT = '2026-09-26T13:45:00Z';
 const NEW_ID = '0190c0de-0000-7000-8000-0000000000e1';
+const OTHER_NEW_ID = '0190c0de-0000-7000-8000-0000000000e2';
 
 let opCount = 0;
 function op<T extends Op['type']>(
@@ -88,7 +89,7 @@ describe('applyPending', () => {
   it('adds a free-text item as a new line in its category, by name', () => {
     const shown = applyPending(
       shoppingList(),
-      [op('extra.add', { extra_id: NEW_ID, text: 'Äpfel', category_key: 'fruit_vegetables' })],
+      [op('extra.add', { extra_id: NEW_ID, text: 'Äpfel', category_id: 'cat-fruit_vegetables' })],
       OPTIONS,
     );
 
@@ -143,6 +144,41 @@ describe('applyPending', () => {
       category_id: 'cat-other',
       amount_text: '1 Packung',
     });
+  });
+
+  it('adds to Other with a category it doesn’t know, as the server does (LIST-06)', () => {
+    const shown = applyPending(
+      shoppingList(),
+      [op('extra.add', { extra_id: NEW_ID, text: 'Zahnseide', category_id: 'cat-gone' })],
+      OPTIONS,
+    );
+    expect(lineOf(shown, 'Zahnseide').category_id).toBe('cat-other');
+  });
+
+  it('adds to Other once the category was deleted, or in Uncategorized, as the server does (LIST-06)', () => {
+    const shown = applyPending(
+      shoppingList(),
+      [
+        op('extra.add', { extra_id: NEW_ID, text: 'Feta', category_id: 'cat-cheese' }),
+        op('extra.add', { extra_id: OTHER_NEW_ID, text: 'Brie', category_id: 'cat-uncategorized' }),
+      ],
+      { ...OPTIONS, categories: CATEGORIES_AFTER_DELETE },
+    );
+    expect(lineOf(shown, 'Feta').category_id).toBe('cat-other');
+    expect(lineOf(shown, 'Brie').category_id).toBe('cat-other');
+  });
+
+  it('takes the category key of an op an older app version queued (D-31)', () => {
+    const shown = applyPending(
+      shoppingList(),
+      [
+        op('extra.add', { extra_id: NEW_ID, text: 'Äpfel', category_key: 'fruit_vegetables' }),
+        op('extra.add', { extra_id: OTHER_NEW_ID, text: 'Zahnseide', category_key: 'nope' }),
+      ],
+      OPTIONS,
+    );
+    expect(lineOf(shown, 'Äpfel').category_id).toBe('cat-fruit_vegetables');
+    expect(lineOf(shown, 'Zahnseide').category_id).toBe('cat-other');
   });
 
   it('adds an item once, and checks it off in the same run', () => {

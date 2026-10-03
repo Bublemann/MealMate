@@ -10,7 +10,14 @@ from app.repositories.search import contains
 
 
 async def categories_in_order(session: AsyncSession) -> Sequence[Category]:
-    result = await session.execute(select(Category).order_by(Category.sort_order, Category.key))
+    """Every category, deleted ones included, by `sort_order`. A deleted category keeps its last
+    one, so it comes after the category that took over its place; ties between deleted ones go
+    by id (AGG-05)."""
+    result = await session.execute(
+        select(Category).order_by(
+            Category.sort_order, Category.deleted_at.is_not(None), Category.id
+        )
+    )
     return result.scalars().all()
 
 

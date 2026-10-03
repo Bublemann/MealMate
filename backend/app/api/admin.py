@@ -16,7 +16,13 @@ from app.schemas.admin import (
 )
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.ingredients import Ingredient, IngredientMerge
-from app.schemas.reference import Category, CategoryOrder
+from app.schemas.reference import (
+    Category,
+    CategoryCreate,
+    CategoryOrder,
+    CategoryRename,
+    CategoryUsage,
+)
 from app.services import admin, codes, ingredients, reference, system
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], responses=ERROR_RESPONSES)
@@ -92,11 +98,54 @@ async def admin_list_events(principal: CurrentAdmin, session: ReadSession) -> li
     return await admin.list_events(session)
 
 
+@router.post("/categories", status_code=status.HTTP_201_CREATED)
+async def admin_create_category(
+    body: CategoryCreate, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> Category:
+    """Add a category with its German and English name; it goes last in the walking order. A
+    name another category has in that language is a `taken` field error."""
+    return await reference.create_category(session, principal, body.names, now=now)
+
+
+@router.patch("/categories/{category_id}")
+async def admin_rename_category(
+    category_id: str, body: CategoryRename, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> Category:
+    """Replace both names of a category, seeded ones included; *Uncategorized* can't be renamed
+    (409 `category.not_renamable`). A name another category has in that language is a `taken`
+    field error. A deleted category is not found."""
+    return await reference.rename_category(session, principal, category_id, body.names, now=now)
+
+
+@router.get("/categories/{category_id}/usage")
+async def admin_category_usage(
+    category_id: str, principal: CurrentAdmin, session: ReadSession
+) -> CategoryUsage:
+    """How many ingredients and free-text items on drafts deleting the category would move, for
+    the confirmation. A deleted category is not found."""
+    return await reference.category_usage(session, category_id)
+
+
+@router.delete(
+    "/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response
+)
+async def admin_delete_category(
+    category_id: str, principal: CurrentAdmin, session: WriteSession, now: Now
+) -> None:
+    """Delete a category: its ingredients move to *Uncategorized* and its free-text items on
+    drafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and
+    *Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not
+    found."""
+    await reference.delete_category(session, principal, category_id, now=now)
+
+
 @router.put("/categories/order")
 async def admin_reorder_categories(
     body: CategoryOrder, principal: CurrentAdmin, session: WriteSession, now: Now
 ) -> list[Category]:
-    """Set the category order to the shop's walking order; every category exactly once."""
+    """Set the category order to the shop's walking order: every category that isn't deleted
+    exactly once, *Uncategorized* included. Returns every category, as `GET /api/categories`
+    does."""
     return await reference.reorder_categories(session, principal, body.category_ids, now=now)
 
 
@@ -109,8 +158,10 @@ async def admin_merge_ingredient(
     now: Now,
 ) -> Ingredient:
     """Merge a duplicate into `into_id`: its references move there and it is deleted
-    (ING-05). Returns the ingredient merged into."""
-    return await ingredients.merge(session, principal, ingredient_id, body.into_id, now=now)
+    (ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the
+    number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
+    is true (D-33)."""
+    return await ingredients.merge(session, principal, ingredient_id, body, now=now)
 
 
 @router.delete(

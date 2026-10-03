@@ -34,9 +34,9 @@ What to build is defined in [`docs/requirements.md`](docs/requirements.md); how 
 |---|---|
 | a translation string | add the key to **both** `frontend/src/i18n/de.json` and `en.json` (the completeness test enforces this) |
 | an error code | add it to `ErrorCode` in `backend/app/core/errors.py`, run `make openapi`, then add `error.<code>` to both language files |
-| a language | add `frontend/src/i18n/<lang>.json`; in `frontend/src/i18n/index.ts` add the code to `LANGUAGES`, its own name to `LANGUAGE_NAMES` and the file to `resources`; add its `Intl` locale to `LOCALES` in `frontend/src/i18n/format.ts`; add it to the backend's `language` enum. The completeness test picks up the new file by itself (details: [`frontend/README.md`](frontend/README.md#translations)) |
+| a language | add `frontend/src/i18n/<lang>.json`; in `frontend/src/i18n/index.ts` add the code to `LANGUAGES`, its own name to `LANGUAGE_NAMES` and the file to `resources`; add its `Intl` locale to `LOCALES` in `frontend/src/i18n/format.ts`; add it to the backend's `language` enum; add its category name columns (`name_<lang>`, `name_<lang>_norm`) to the `Category` model, with a migration that adds them empty, its field to `CategoryNames`, its names to the category functions in `backend/app/services/reference.py` and a name field to the category dialog in `frontend/src/features/admin/AdminCategoriesScreen.tsx` (plan § 6; the English names show until admins fill them in). The completeness test picks up the new file by itself (details: [`frontend/README.md`](frontend/README.md#translations)) |
 | a nutrient | add it to the nutrients registry (`backend/app/domain/nutrients.py`), `alembic revision --autogenerate`, add translation keys and OFF mapping tests |
-| a category / cuisine / unit conversion | add a migration that seeds it, then translation keys `category.<key>` / `cuisine.<key>` / `unit.<unit>` |
+| a cuisine / unit conversion | add a migration that seeds it, then translation keys `cuisine.<key>` / `unit.<unit>`. Categories are data, not code: admins add, rename and delete them on the admin screen (REF-01) |
 | a database change | edit the models, run `alembic revision --autogenerate -m "…"`, review the migration, and make sure the migration tests pass (they also run against a populated database) |
 
 ## Local commands

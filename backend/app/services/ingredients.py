@@ -11,13 +11,23 @@ an admin, which the API checks. Barcode uniqueness is checked inside the write t
 which holds the write lock (`BEGIN IMMEDIATE`).
 
 On an ingredient from Open Food Facts (`source` off), every Open Food Facts field a user sets
-(`OFF_FIELDS`: name, brand, pack, nutrients) is marked user-edited, so that a refresh
+(`OFF_FIELDS`: name, brand, nutrients) is marked user-edited, so that a refresh
 (`services.off_refresh`) never overwrites it; see `services.off_fields` for the pending update.
+The pack size (`PACK_FIELDS`) is Open Food Facts' alone: it is only taken from a proposal on
+create, and an update refuses it (D-38).
 
 References from meals and lists go through `services.hooks`: `ingredient_references` blocks
 deletion (and is shown as the usage), and `on_ingredients_merged` repoints them when merging.
+A base-unit change or a merge that would leave amounts not fitting (`amounts_that_would_not_fit`)
+asks first (`_check_amounts_fit`, D-33).
+
+Since D-32 an ingredient has no density, and a piece weight only when it is counted in pieces:
+migration 0014 dropped the density and cleared the piece weight of g and ml ingredients (D-34).
+A piece weight on a g or ml ingredient would still never be shown, taken or used to calculate
+(`attrs()`).
 """
 
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -32,28 +42,29 @@ from app.core.errors import (
     validation_error,
 )
 from app.domain.barcodes import normalize_barcode
-from app.domain.catalog import OFF_FIELDS, nutrient_field
+from app.domain.catalog import OFF_FIELDS, PACK_FIELDS, nutrient_field
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
 from app.domain.text import normalize
-from app.domain.units import Unit
+from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit, fits, stops_fitting
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction
 from app.schemas.ingredients import (
-    BaseUnitName,
     Ingredient,
     IngredientBarcodeLink,
     IngredientCreate,
+    IngredientMerge,
     IngredientSource,
     IngredientSummary,
     IngredientUpdate,
     IngredientUsage,
+    base_unit_name,
 )
 from app.schemas.nutrition import NutrientValues
-from app.services import events, hooks
+from app.services import events, hooks, reference
 from app.services.off_fields import (
     IGNORED,
     drop_pending,
@@ -70,12 +81,6 @@ from app.services.users import user_refs
 SEARCH_LIMIT = 1000
 # Name-similar candidates looked at before those with the same name and brand are put first.
 _SIMILAR_CANDIDATES = 50
-# The plain fields of an update that are Open Food Facts fields (the others need more care).
-_PLAIN_OFF_FIELDS = ("quantity_text", "pack_quantity")
-
-
-def base_unit_name(value: str) -> BaseUnitName:
-    return "ml" if value == "ml" else "g"
 
 
 def source_name(value: str) -> IngredientSource:
@@ -105,8 +110,7 @@ async def detail(session: AsyncSession, row: IngredientRow) -> Ingredient:
         barcode=row.barcode,
         category_id=row.category_id,
         base_unit=base_unit_name(row.base_unit),
-        piece_weight_g=row.piece_weight_g,
-        density_g_per_ml=row.density_g_per_ml,
+        piece_weight_g=row.attrs().piece_weight_g,
         nutrients=NutrientValues.model_validate(row.nutrients()),
         quantity_text=row.quantity_text,
         pack_quantity=row.pack_quantity,
@@ -144,8 +148,48 @@ async def _check_barcode_free(
         )
 
 
-async def _category_problem(session: AsyncSession, category_id: str) -> FieldProblem | None:
-    if await reference_repo.get_category(session, category_id) is None:
+def _pack_size_problems(sent: set[str], *, from_off: bool) -> list[FieldProblem]:
+    """The pack size comes only with an Open Food Facts proposal on create: nobody types it in
+    or edits it (D-38). Sent otherwise, even as null, it is refused."""
+    if from_off:
+        return []
+    return [
+        FieldProblem(("body", field), FieldErrorCode.INVALID)
+        for field in PACK_FIELDS
+        if field in sent
+    ]
+
+
+async def _check_amounts_fit(
+    session: AsyncSession,
+    ingredient_id: str,
+    would_not_fit: Callable[[float | None, str | None], bool],
+    *,
+    accepted: bool | None,
+) -> None:
+    """409 `ingredient.unit_mismatch`, with the counts of `hooks.amounts_that_would_not_fit`,
+    while amounts of the ingredient `would_not_fit` after the change and the request hasn't
+    `accepted` that (D-33). Nothing is ever converted."""
+    if accepted:
+        return
+    counts = await hooks.amounts_that_would_not_fit(session, ingredient_id, would_not_fit)
+    if counts["amounts"]:
+        raise ApiError(ErrorCode.INGREDIENT_UNIT_MISMATCH, status_code=409, params=counts)
+
+
+def _piece_weight_problem(piece_weight_g: float | None, base_unit: str) -> FieldProblem | None:
+    """Only an ingredient counted in pieces takes a piece weight (ING-02, D-32)."""
+    if piece_weight_g is not None and base_unit != BaseUnit.PIECE:
+        return FieldProblem(("body", "piece_weight_g"), FieldErrorCode.INVALID)
+    return None
+
+
+async def _category_problem(
+    session: AsyncSession, category_id: str, *, current: str | None = None
+) -> FieldProblem | None:
+    """A deleted category and *Uncategorized* can't be picked (ING-02); keeping the category an
+    ingredient has is always fine, so an uncategorized one can be saved as it is."""
+    if not await reference.can_pick(session, category_id, keeping=current):
         return FieldProblem(("body", "category_id"), FieldErrorCode.INVALID)
     return None
 
@@ -158,14 +202,15 @@ async def _other_category_id(session: AsyncSession) -> str:
 
 
 async def search(
-    session: AsyncSession, *, query: str | None, category_id: str | None
+    session: AsyncSession, *, query: str | None, category_ids: Sequence[str]
 ) -> list[IngredientSummary]:
     """Search name and brand ignoring case, umlaut spelling and accents (ING-03): an exact
-    name first, then names starting with the query, then by name and brand. Without a query:
-    every ingredient (at most 1000) by category order, name and brand."""
+    name first, then names starting with the query, then the rest, each in dictionary order by
+    name and brand. Without a query: every ingredient (at most 1000) in that order. With
+    `category_ids`, only ingredients in any of those categories (UI-01, D-23)."""
     async with session.begin():
         rows = await ingredients_repo.search(
-            session, query=normalize(query or ""), category_id=category_id, limit=SEARCH_LIMIT
+            session, query=normalize(query or ""), category_ids=category_ids, limit=SEARCH_LIMIT
         )
     return [summary(row) for row in rows]
 
@@ -200,14 +245,17 @@ async def create_ingredient(
     session: AsyncSession, principal: Principal, body: IngredientCreate, *, now: datetime
 ) -> Ingredient:
     """Add an ingredient (ING-02), by hand or from an Open Food Facts proposal (`off`, BAR-03):
-    then `source` is off, it counts as fetched now, and only the fields the user changed
-    compared with the proposal (`off.edited_fields`) are user-edited (BAR-04)."""
+    then `source` is off, it counts as fetched now, only the fields the user changed compared
+    with the proposal (`off.edited_fields`) are user-edited (BAR-04), and only then is a pack
+    size taken (D-38)."""
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     from_off = body.off is not None
     async with session.begin():
-        problems: list[FieldProblem] = []
+        problems = _pack_size_problems(body.model_fields_set, from_off=from_off)
         if from_off and barcode is None:
             problems.append(FieldProblem(("body", "barcode"), FieldErrorCode.REQUIRED))
+        if problem := _piece_weight_problem(body.piece_weight_g, body.base_unit):
+            problems.append(problem)
         if body.category_id is not None and (
             problem := await _category_problem(session, body.category_id)
         ):
@@ -222,7 +270,6 @@ async def create_ingredient(
             category_id=body.category_id or await _other_category_id(session),
             base_unit=body.base_unit,
             piece_weight_g=body.piece_weight_g,
-            density_g_per_ml=body.density_g_per_ml,
             quantity_text=body.quantity_text,
             pack_quantity=body.pack_quantity,
             pack_unit=None if body.pack_unit is None else body.pack_unit.value,
@@ -273,21 +320,39 @@ async def update_ingredient(
 ) -> Ingredient:
     """Change the fields that were sent and record who changed it last (ING-01). On an
     ingredient from Open Food Facts, the Open Food Facts fields sent become user-edited and
-    their pending values go (BAR-04, BAR-06); a new base unit drops the pending nutrients,
-    which were per the old one. Clearing or changing the barcode makes it a manual ingredient
-    (`_make_manual`)."""
+    their pending values go (BAR-04, BAR-06); a base unit whose values are per 100 of something
+    else (g or ml) drops the pending nutrients, and a change to or from `piece` clears the piece
+    weight unless one is sent along to `piece` (ING-02). A piece weight is refused unless the
+    ingredient is, or becomes, counted in pieces; a null one is ignored then. A base-unit change
+    that would leave amounts that fit now not fitting (`stops_fitting`) changes nothing unless
+    the request accepts that (D-33). Clearing or changing the barcode makes it a manual
+    ingredient (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     async with session.begin():
         row = await ingredients_repo.get(session, ingredient_id)
         if row is None:
             raise not_found()
+        base_unit = body.base_unit or row.base_unit
+        problems = _pack_size_problems(sent, from_off=False)
         if body.category_id is not None and (
-            problem := await _category_problem(session, body.category_id)
+            problem := await _category_problem(session, body.category_id, current=row.category_id)
         ):
-            raise validation_error([problem])
+            problems.append(problem)
+        if problem := _piece_weight_problem(body.piece_weight_g, base_unit):
+            problems.append(problem)
+        if problems:
+            raise validation_error(problems)
         if barcode is not None:
             await _check_barcode_free(session, barcode, except_id=row.id)
+        if base_unit != row.base_unit:
+            before = row.base_unit
+            await _check_amounts_fit(
+                session,
+                row.id,
+                lambda amount, unit: stops_fitting(amount, unit, before, base_unit),
+                accepted=body.accept_unit_mismatch,
+            )
 
         edited: list[str] = []
         if body.name is not None:
@@ -296,13 +361,6 @@ async def update_ingredient(
         if "brand" in sent:
             set_brand(row, body.brand)
             edited.append("brand")
-        for field in _PLAIN_OFF_FIELDS:
-            if field in sent:
-                setattr(row, field, getattr(body, field))
-                edited.append(field)
-        if "pack_unit" in sent:
-            row.pack_unit = None if body.pack_unit is None else body.pack_unit.value
-            edited.append("pack_unit")
         for key in _nutrient_keys(body.nutrients):
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
@@ -310,19 +368,25 @@ async def update_ingredient(
             row.category_id = body.category_id
         decided = list(edited)
         if body.base_unit is not None and body.base_unit != row.base_unit:
+            old, new = BaseUnit(row.base_unit), BaseUnit(body.base_unit)
+            # Leaving pieces drops the piece weight; coming to pieces takes only one sent along,
+            # never a hidden one of a g or ml ingredient (none since migration 0014, D-34).
+            if BaseUnit.PIECE in (old, new):
+                row.piece_weight_g = None
+            if NUTRITION_BASIS[old] != NUTRITION_BASIS[new]:
+                decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
             row.base_unit = body.base_unit
-            decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
-        if "piece_weight_g" in sent:
+        if "piece_weight_g" in sent and base_unit == BaseUnit.PIECE:
             row.piece_weight_g = body.piece_weight_g
-        if "density_g_per_ml" in sent:
-            row.density_g_per_ml = body.density_g_per_ml
         if "barcode" in sent and barcode != row.barcode:
             row.barcode = barcode
             if row.source == "off":
                 _make_manual(row)
         if row.source == "off":
+            # Marks on the pack size from before D-38 stay: they are ignored, not rewritten.
             row.user_edited_fields = [
-                field for field in OFF_FIELDS if field in {*row.user_edited_fields, *edited}
+                *row.user_edited_fields,
+                *(field for field in edited if field not in row.user_edited_fields),
             ]
             drop_pending(row, decided)
         row.updated_by = principal.user_id
@@ -410,16 +474,24 @@ async def ignore_pending_update(
 
 
 async def merge(
-    session: AsyncSession, actor: Principal, ingredient_id: str, into_id: str, *, now: datetime
+    session: AsyncSession,
+    actor: Principal,
+    ingredient_id: str,
+    body: IngredientMerge,
+    *,
+    now: datetime,
 ) -> Ingredient:
     """Merge a duplicate into another ingredient (ING-05, admins): every meal and list reference
     moves to `into_id`, then the duplicate is deleted. The target keeps its own attributes and
-    values and records the admin as the one who changed it last.
+    values and records the admin as the one who changed it last. When their base units differ,
+    amounts of the duplicate that won't fit the target's are kept as they are; while there are
+    any, nothing is merged unless the request accepts that (D-33).
 
     The duplicate's barcode moves to the target if the target has none (only the barcode: the
     target's values, source and Open Food Facts data stay); otherwise it is dropped with the
     duplicate, as one ingredient has one barcode.
     """
+    into_id = body.into_id
     if into_id == ingredient_id:
         raise validation_error([FieldProblem(("body", "into_id"), FieldErrorCode.INVALID)])
     async with session.begin():
@@ -429,6 +501,14 @@ async def merge(
         target = await ingredients_repo.get(session, into_id)
         if target is None:
             raise validation_error([FieldProblem(("body", "into_id"), FieldErrorCode.INVALID)])
+        if source.base_unit != target.base_unit:
+            into_base_unit = target.base_unit
+            await _check_amounts_fit(
+                session,
+                source.id,
+                lambda amount, unit: not fits(amount, unit, into_base_unit),
+                accepted=body.accept_unit_mismatch,
+            )
         if source.barcode is not None and target.barcode is None:
             barcode, source.barcode = source.barcode, None
             await session.flush()  # the barcode is unique: free it before the target takes it

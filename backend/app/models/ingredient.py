@@ -13,6 +13,7 @@ from app.domain.catalog import (
     QUANTITY_TEXT_MAX_LENGTH,
 )
 from app.domain.nutrients import NUTRIENT_KEYS
+from app.domain.units import IngredientAttrs
 
 
 class NutrientColumns:
@@ -44,8 +45,9 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     of ingredient: typed by hand ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and
     taken from Open Food Facts with its barcode.
 
-    The nutrient columns are the ingredient's own values per 100 g or 100 ml of its base unit
-    (NUT-02); null is unknown. Names are not unique: two brands of the same thing are two
+    The nutrient columns are the ingredient's own values per 100 g, or per 100 ml for base unit
+    `ml` (NUT-02); null is unknown. A `piece` ingredient's pieces count through its piece weight
+    (NUT-05). Names are not unique: two brands of the same thing are two
     ingredients with the same name. A barcode belongs to at most one ingredient.
 
     The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
@@ -56,7 +58,7 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
 
     __tablename__ = "ingredients"
     __table_args__ = (
-        CheckConstraint("base_unit IN ('g', 'ml')", name="base_unit"),
+        CheckConstraint("base_unit IN ('g', 'ml', 'piece')", name="base_unit"),
         CheckConstraint("source IN ('off', 'manual')", name="source"),
     )
 
@@ -64,15 +66,21 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     name_norm: Mapped[str] = mapped_column(
         String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
     )
+    # Dictionary order by name, then brand (ING-03, `domain.text.sort_key`).
+    name_sort: Mapped[str] = mapped_column(
+        String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
+    )
     brand: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
     brand_norm: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH * NAME_NORM_FACTOR))
+    brand_sort: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH * NAME_NORM_FACTOR))
     barcode: Mapped[str | None] = mapped_column(String(14), unique=True)
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
-    base_unit: Mapped[str] = mapped_column(String(2), default="g")
+    base_unit: Mapped[str] = mapped_column(String(5), default="g")
+    # Only for `piece` (D-32); migration 0014 cleared it on g and ml ingredients and dropped
+    # the density (D-34). See `attrs()`.
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
-    density_g_per_ml: Mapped[float | None] = mapped_column(Float)
     quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))
     pack_quantity: Mapped[float | None] = mapped_column(Float)
     pack_unit: Mapped[str | None] = mapped_column(String(10))
@@ -88,3 +96,8 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     updated_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
+
+    def attrs(self) -> IngredientAttrs:
+        """What calculations know about the ingredient as it is now (D-32): its base unit, and
+        its piece weight when it is counted in pieces; never a density."""
+        return IngredientAttrs.live(self.base_unit, self.piece_weight_g)

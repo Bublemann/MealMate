@@ -4,6 +4,7 @@ UI-02, MEAL-09)."""
 
 import hashlib
 import uuid
+from base64 import urlsafe_b64encode
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -24,20 +25,25 @@ from tests.accounts import (
     login,
     make_couple,
     make_user,
+    save_filters,
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref
+from tests.catalog import category_ids, create_ingredient, ref, set_stored
 from tests.lists import (
     add_extra,
     add_meal,
     added,
+    applied,
     create_list,
     detail,
     extra_added,
+    feed_page,
     get_list,
     line,
+    op,
     set_status,
+    start_shopping,
     summaries,
 )
 from tests.meals import create_meal, jpeg, upload
@@ -351,10 +357,10 @@ async def test_deactivated_partner_keeps_the_shared_lists(
     assert await probe(api, anna, shopping_list["id"]) == EDITOR
 
 
-# --- the Lists home (UI-02) -----------------------------------------------------------------
+# --- the Lists feed (UI-02) -----------------------------------------------------------------
 
 
-async def test_summaries(
+async def test_the_feed_shows_every_list_one_can_see_in_every_state(
     api: AsyncClient,
     anna: Account,
     ben: Account,
@@ -372,8 +378,11 @@ async def test_summaries(
     clock.advance(minutes=1)
     unshared = await create_list(api, ben, "Ben privat")
     await patch(api, ben, unshared["id"], shared_with_partner=False)
+    await start_shopping(api, ben, unshared["id"])
     clock.advance(minutes=1)
-    await create_list(api, carl, "Carl")
+    carls = await create_list(api, carl, "Carl")
+    await start_shopping(api, carl, carls["id"])
+    await applied(api, carl, carls["id"], op("list.finish", at=clock.now))
     clock.advance(minutes=1)
     await create_list(api, dora, "Dora")
     meal = await create_meal(api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"]}])
@@ -382,9 +391,20 @@ async def test_summaries(
     await extra_added(api, anna, own["id"], text="Servietten")
     await hide(api, anna, own["id"], f"i:{flour['id']}")
 
-    mine = await summaries(api, anna)
-    assert names(mine) == ["Anna", "Ben geteilt"]  # most recently edited first
-    assert mine[0] == {
+    feed = await summaries(api, anna)
+    # Newest created first; Dora's lists are private, Carl's done list is public.
+    assert names(feed) == ["Carl", "Ben privat", "Ben geteilt", "Anna"]
+    assert [
+        (item["status"], item["is_owner"], item["can_edit"], item["shared_with_partner"])
+        for item in feed
+    ] == [
+        ("done", False, False, False),
+        ("shopping", False, False, False),
+        ("draft", False, True, True),
+        ("draft", True, True, True),
+    ]
+    assert feed[0]["finished_at"] == "2026-09-27T12:03:00Z"
+    assert feed[3] == {
         "id": own["id"],
         "name": "Anna",
         "status": "draft",
@@ -398,52 +418,162 @@ async def test_summaries(
         "meal_count": 1,
         "line_count": 2,  # the flour line is hidden
     }
-    assert (mine[1]["is_owner"], mine[1]["can_edit"]) == (False, True)
-    assert names(await summaries(api, anna, scope="mine")) == ["Anna", "Ben geteilt"]
-    others = await summaries(api, anna, scope="others")
-    assert names(others) == ["Carl", "Ben privat"]
-    assert [(item["is_owner"], item["can_edit"]) for item in others] == [(False, False)] * 2
-
-    assert names(await summaries(api, ben)) == ["Anna", "Ben privat", "Ben geteilt"]
-    assert names(await summaries(api, ben, scope="others")) == ["Carl"]
-    assert names(await summaries(api, carl)) == ["Carl"]
-    assert names(await summaries(api, carl, scope="others")) == ["Anna"]
-    assert names(await summaries(api, dora, scope="others")) == ["Anna", "Carl"]
+    assert names(await summaries(api, ben)) == ["Carl", "Ben privat", "Ben geteilt", "Anna"]
+    assert names(await summaries(api, carl)) == ["Carl", "Anna"]
+    assert names(await summaries(api, dora)) == ["Dora", "Carl", "Anna"]
 
 
-async def test_others_follow_the_list_filter_chips(
-    api: AsyncClient, anna: Account, ben: Account, carl: Account
+async def test_a_list_keeps_its_place_in_the_feed(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
     await make_couple(api, anna, ben)
-    await create_list(api, carl, "Carl")
-    unshared = await create_list(api, ben, "Ben")
-    await patch(api, ben, unshared["id"], shared_with_partner=False)
+    first = await create_list(api, anna, "Erste")
+    clock.advance(minutes=1)
+    second = await create_list(api, ben, "Zweite")
+    # Created at the same time: the higher id comes first.
+    third = await create_list(api, anna, "Dritte")
+    order = [third["id"], second["id"], first["id"]]
+    assert [item["id"] for item in await summaries(api, anna)] == order
 
-    hidden = {"filter_hidden": {"meals": [], "lists": [carl.id]}}
-    assert (await api.patch("/api/me", json=hidden, headers=anna.headers)).status_code == 200
-    assert names(await summaries(api, anna, scope="others")) == ["Ben"]
-    hidden = {"filter_hidden": {"meals": [], "lists": [carl.id, ben.id]}}
-    await api.patch("/api/me", json=hidden, headers=anna.headers)
-    assert await summaries(api, anna, scope="others") == []
-    # The chips never hide one's own lists or those the partner shares.
-    shared = await create_list(api, ben, "Geteilt")
-    assert names(await summaries(api, anna)) == [shared["name"]]
+    clock.advance(minutes=1)
+    assert (await patch(api, anna, first["id"], name="Erste!")).status_code == 200
+    await extra_added(api, ben, first["id"], text="Kerzen")
+    assert [item["id"] for item in await summaries(api, anna)] == order
+    await start_shopping(api, anna, first["id"])
+    assert [item["id"] for item in await summaries(api, anna)] == order
+    await applied(api, ben, first["id"], op("list.finish", at=clock.now))
+    feed = await summaries(api, ben)
+    assert [(item["id"], item["status"]) for item in feed] == [
+        (third["id"], "draft"),
+        (second["id"], "draft"),
+        (first["id"], "done"),
+    ]
 
 
-async def test_status_filter(app: FastAPI, api: AsyncClient, anna: Account) -> None:
-    draft = await create_list(api, anna, "Entwurf")
-    shopping = await create_list(api, anna, "Unterwegs")
+async def test_the_feed_comes_in_pages_of_30(
+    api: AsyncClient, anna: Account, clock: FakeClock
+) -> None:
+    created = []
+    for index in range(32):
+        # Two lists per second: the first page ends between two lists created together.
+        if index % 2 == 1:
+            clock.advance(seconds=1)
+        created.append((await create_list(api, anna, f"Liste {index}"))["id"])
+    newest_first = created[::-1]
+
+    first = await feed_page(api, anna)
+    assert [item["id"] for item in first["lists"]] == newest_first[:30]
+    assert first["next_cursor"] is not None
+    # A list created meanwhile shows on the first page, not on the next.
+    await create_list(api, anna, "Neu")
+    second = await feed_page(api, anna, first["next_cursor"])
+    assert [item["id"] for item in second["lists"]] == newest_first[30:]
+    assert second["next_cursor"] is None
+
+    # Not base64, empty, a time without an id, a time without a zone, an empty id, too long.
+    made_up = [
+        urlsafe_b64encode(raw.encode()).decode()
+        for raw in ("2026-09-27", "2026-09-27T12:00:00 x", "2026-09-27T12:00:00+00:00 ")
+    ]
+    for cursor in ["kaputt!", "", *made_up, "x" * 200]:
+        response = await api.get("/api/lists", params={"cursor": cursor}, headers=anna.headers)
+        assert response.status_code == 422, cursor
+        assert set(fields(response)) == {("query", "cursor")}
+
+
+async def test_the_user_filter_hides_every_list_of_an_unticked_user(
+    api: AsyncClient, anna: Account, ben: Account, carl: Account, clock: FakeClock
+) -> None:
+    await make_couple(api, anna, ben)
+    await create_list(api, anna, "Anna geteilt")
+    clock.advance(minutes=1)
+    unshared = await create_list(api, anna, "Anna privat")
+    await patch(api, anna, unshared["id"], shared_with_partner=False)
+    clock.advance(minutes=1)
+    await create_list(api, ben, "Ben geteilt")
+    clock.advance(minutes=1)
+    bens = await create_list(api, ben, "Ben privat")
+    await patch(api, ben, bens["id"], shared_with_partner=False)
+    clock.advance(minutes=1)
+    carls = await create_list(api, carl, "Carl")
+    await start_shopping(api, carl, carls["id"])
+    await applied(api, carl, carls["id"], op("list.finish", at=clock.now))
+    everything = ["Carl", "Ben privat", "Ben geteilt", "Anna privat", "Anna geteilt"]
+    assert names(await summaries(api, anna)) == everything
+
+    # The partner's lists go, the shared one Anna may edit included; so do Carl's done list…
+    await save_filters(api, anna, lists=[ben.id, carl.id])
+    assert names(await summaries(api, anna)) == ["Anna privat", "Anna geteilt"]
+    # … and her own, the one she shares included.
+    await save_filters(api, anna, lists=[anna.id])
+    assert names(await summaries(api, anna)) == ["Carl", "Ben privat", "Ben geteilt"]
+    # Each user has their own filter, and the filter on Meals doesn't touch the lists.
+    await save_filters(api, ben, meals=[anna.id, ben.id, carl.id])
+    assert names(await summaries(api, ben)) == everything
+
+
+async def test_the_state_filter_hides_lists_in_unticked_states(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
+) -> None:
+    await make_couple(api, anna, ben)
     done = await create_list(api, anna, "Erledigt")
-    await set_status(app, shopping["id"], "shopping")
-    await set_status(app, done["id"], "done")
+    await start_shopping(api, anna, done["id"])
+    await applied(api, anna, done["id"], op("list.finish", at=clock.now))
+    clock.advance(minutes=1)
+    shopping = await create_list(api, ben, "Einkauf")
+    await start_shopping(api, ben, shopping["id"])
+    clock.advance(minutes=1)
+    await create_list(api, anna, "Entwurf")
 
-    assert sorted(names(await summaries(api, anna))) == [draft["name"], shopping["name"]]
-    assert names(await summaries(api, anna, status="done")) == [done["name"]]
-    assert names(await summaries(api, anna, status="draft")) == [draft["name"]]
-    response = await api.get("/api/lists", params={"status": "open"}, headers=anna.headers)
-    assert fields(response) == {("query", "status"): "invalid"}
-    response = await api.get("/api/lists", params={"scope": "all"}, headers=anna.headers)
-    assert fields(response) == {("query", "scope"): "invalid"}
+    await save_filters(api, anna, list_states=["done"])
+    assert names(await summaries(api, anna)) == ["Entwurf", "Einkauf"]
+    await save_filters(api, anna, list_states=["draft", "shopping"])
+    assert names(await summaries(api, anna)) == ["Erledigt"]
+    # With the user filter: what either hides is gone.
+    await save_filters(api, anna, lists=[ben.id], list_states=["done"])
+    assert names(await summaries(api, anna)) == ["Entwurf"]
+    await save_filters(api, anna, list_states=["draft", "shopping", "done"])
+    assert names(await summaries(api, anna)) == []
+    await save_filters(api, anna)
+    assert names(await summaries(api, anna)) == ["Entwurf", "Einkauf", "Erledigt"]
+
+
+async def test_the_filters_never_show_what_privacy_hides(
+    api: AsyncClient, anna: Account, ben: Account, carl: Account, dora: Account
+) -> None:
+    await make_couple(api, anna, ben)
+    await create_list(api, ben, "Ben")
+    await create_list(api, carl, "Carl")
+    await create_list(api, dora, "Dora")
+    await set_privacy(api, ben, lists_public=False)
+    await set_privacy(api, dora, lists_public=False)
+
+    # Nothing hidden: Dora's lists stay private, Ben's show for his partner (CPL-04).
+    await save_filters(api, anna)
+    assert names(await summaries(api, anna)) == ["Carl", "Ben"]
+    await save_filters(api, anna, lists=[carl.id])
+    assert names(await summaries(api, anna)) == ["Ben"]
+    # A user hidden while private stays hidden when they make their lists public again.
+    await save_filters(api, anna, lists=[dora.id])
+    await set_privacy(api, dora, lists_public=True)
+    assert names(await summaries(api, anna)) == ["Carl", "Ben"]
+
+
+async def test_hidden_lists_take_no_room_on_a_page(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
+) -> None:
+    created = []
+    for index in range(31):
+        created.append((await create_list(api, anna, f"Liste {index}"))["id"])
+        await create_list(api, ben, f"Bens {index}")
+        clock.advance(seconds=1)
+    await save_filters(api, anna, lists=[ben.id])
+
+    first = await feed_page(api, anna)
+    assert [item["id"] for item in first["lists"]] == created[:0:-1]
+    second = await feed_page(api, anna, first["next_cursor"])
+    assert [item["id"] for item in second["lists"]] == created[:1]
+    assert second["next_cursor"] is None
 
 
 # --- meals on a list (LIST-03, LIST-04, VIS-06) ---------------------------------------------
@@ -638,6 +768,8 @@ async def test_linked_and_free_text_items(
         "text": None,
         "amount": 500,
         "unit": "g",
+        "base_unit": "g",
+        "unit_fits": True,
         "amount_text": None,
         "category_id": None,
         "added_by": ref(anna),
@@ -646,8 +778,15 @@ async def test_linked_and_free_text_items(
     assert uuid.UUID(item["id"]).version == 7
     assert body["version"] == 1
 
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=2)
-    assert body["extra_items"][1]["unit"] == "piece"  # an amount without a unit
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
+    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=2)
+    eggs_item = body["extra_items"][1]
+    # An amount without a unit counts as pieces.
+    assert (eggs_item["unit"], eggs_item["base_unit"], eggs_item["unit_fits"]) == (
+        "piece",
+        "piece",
+        True,
+    )
     body = await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"])
     assert body["extra_items"][2]["amount"] is None
 
@@ -656,6 +795,7 @@ async def test_linked_and_free_text_items(
     )
     text_item = body["extra_items"][3]
     assert (text_item["text"], text_item["amount_text"]) == ("Kerzen", "1 Packung")
+    assert (text_item["base_unit"], text_item["unit_fits"]) == (None, True)
     assert text_item["category_id"] == categories["other"]
     body = await extra_added(
         api,
@@ -683,6 +823,12 @@ async def test_linked_and_free_text_items(
         ({"ingredient_id": "{flour}", "amount": 0}, {("body", "amount"): "out_of_range"}),
         ({"ingredient_id": "{flour}", "amount": 100_001}, {("body", "amount"): "out_of_range"}),
         ({"ingredient_id": "{flour}", "unit": "cup", "amount": 1}, {("body", "unit"): "invalid"}),
+        # Units that don't fit the ingredient's base unit (REF-02, LIST-06).
+        ({"ingredient_id": "{flour}", "amount": 2}, {("body", "unit"): "unit_mismatch"}),
+        ({"ingredient_id": "{flour}", "amount": 2, "unit": "piece"},
+         {("body", "unit"): "unit_mismatch"}),
+        ({"ingredient_id": "{flour}", "amount": 1, "unit": "l"},
+         {("body", "unit"): "unit_mismatch"}),
         ({"text": "x", "amount": 1, "unit": "g"},
          {("body", "amount"): "invalid", ("body", "unit"): "invalid"}),
         ({"text": "x", "category_id": "unknown"}, {("body", "category_id"): "invalid"}),
@@ -757,7 +903,7 @@ async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, 
     assert await update(unit="kg") == (flour["id"], 750, "kg", 3)
     assert await update(amount=750) == (flour["id"], 750, "kg", 3)  # unchanged
     assert await update(amount=None) == (flour["id"], None, None, 4)  # the unit goes too
-    assert await update(amount=3) == (flour["id"], 3, "piece", 5)
+    assert await update(amount=3, unit="tbsp") == (flour["id"], 3, "tbsp", 5)
     assert await update(amount=None, unit=None, ingredient_id=salt["id"]) == (
         salt["id"],
         None,
@@ -773,10 +919,56 @@ async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, 
         ({"ingredient_id": None}, {("body", "ingredient_id"): "invalid"}),
         ({"ingredient_id": "unknown"}, {("body", "ingredient_id"): "invalid"}),
         ({"amount": -1}, {("body", "amount"): "out_of_range"}),
+        ({"amount": 2}, {("body", "unit"): "unit_mismatch"}),
+        ({"amount": 2, "unit": "ml"}, {("body", "unit"): "unit_mismatch"}),
     ):  # fmt: skip
         response = await patch_extra(api, anna, shopping_list["id"], item_id, **changes)
         assert response.status_code == 422, changes
         assert fields(response) == problems
+
+
+async def test_linked_items_that_do_not_fit_are_kept(
+    app: FastAPI, api: AsyncClient, anna: Account, flour: Any
+) -> None:
+    """LIST-06, D-33: an older item whose unit doesn't fit stays, flagged, while its
+    ingredient, amount and unit stay; changing them needs a unit that fits the base unit its
+    line is calculated with, the one it copied once shopping started (LIST-11)."""
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    body = await extra_added(api, anna, list_id, ingredient_id=eggs["id"], amount=2)
+    item_id = body["extra_items"][0]["id"]
+    await set_stored(app, eggs["id"], base_unit="g")
+
+    body = await detail(api, anna, list_id)
+    [item] = body["extra_items"]
+    assert (item["amount"], item["unit"], item["base_unit"], item["unit_fits"]) == (
+        2,
+        "piece",
+        "g",
+        False,
+    )
+    unchanged = await patch_extra(api, anna, list_id, item_id, amount=2, unit="piece")
+    assert unchanged.status_code == 200
+    assert unchanged.json()["version"] == body["version"]
+    response = await patch_extra(api, anna, list_id, item_id, amount=3)
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
+    response = await patch_extra(api, anna, list_id, item_id, ingredient_id=flour["id"])
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
+    response = await patch_extra(api, anna, list_id, item_id, amount=120, unit="g")
+    [item] = response.json()["extra_items"]
+    assert (item["amount"], item["unit"], item["unit_fits"]) == (120, "g", True)
+
+    # While shopping, the base unit it copied decides: eggs counted in pieces again.
+    await set_stored(app, eggs["id"], base_unit="piece")
+    await patch_extra(api, anna, list_id, item_id, amount=2, unit="piece")
+    await start_shopping(api, anna, list_id)
+    await set_stored(app, eggs["id"], base_unit="g")
+    response = await patch_extra(api, anna, list_id, item_id, amount=3)
+    [item] = response.json()["extra_items"]
+    assert (item["amount"], item["base_unit"], item["unit_fits"]) == (3, "piece", True)
+    response = await patch_extra(api, anna, list_id, item_id, amount=300, unit="g")
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
 
 
 async def test_update_free_text_items(api: AsyncClient, anna: Account, flour: Any) -> None:
@@ -836,7 +1028,9 @@ async def test_delete_extra_items(api: AsyncClient, anna: Account, carl: Account
 
 async def test_hide_and_restore_lines(api: AsyncClient, anna: Account, flour: Any) -> None:
     shopping_list = await create_list(api, anna)
-    await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=1)
+    await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=1, unit="kg"
+    )
     key = f"i:{flour['id']}"
 
     hidden = await hide(api, anna, shopping_list["id"], key)
@@ -1126,7 +1320,7 @@ async def fill(
         meal = await create_meal(api, user, f"Meal {index}", ingredients=rows)
         await added(api, user, list_id, meal["id"])
     for item in ingredients:
-        await extra_added(api, user, list_id, ingredient_id=item["id"], amount=1)
+        await extra_added(api, user, list_id, ingredient_id=item["id"], amount=1, unit="kg")
         await extra_added(api, user, list_id, text=f"Extra {item['name']}")
         await hide(api, user, list_id, f"i:{item['id']}")
     gone = await create_meal(api, user, "Weg", ingredients=rows)
@@ -1150,7 +1344,7 @@ async def test_a_list_takes_a_fixed_number_of_queries(
     assert len(body["lines"]) == 40
     assert len(body["meals"]) == 16
     with counted_queries(app) as summary_queries:
-        assert len(await summaries(api, carl, scope="others")) == 2
+        assert len(await summaries(api, carl)) == 2
 
     # Authentication, access (the couple once), the eight content queries, visibility and
     # users (two BEGINs).

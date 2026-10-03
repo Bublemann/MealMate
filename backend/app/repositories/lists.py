@@ -9,10 +9,10 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Subquery, delete, func, or_, select, union, update
+from sqlalchemy import Subquery, and_, delete, func, or_, select, union, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.lists import ListStatus
+from app.domain.lists import FeedPosition, ListStatus
 from app.models import (
     ListExtraItem,
     ListLineState,
@@ -48,45 +48,27 @@ async def mine(
     return result.scalars().all()
 
 
-async def of_others(
+async def feed(
     session: AsyncSession,
     owner_ids: Collection[str],
-    partner_id: str | None,
-    statuses: Collection[ListStatus],
+    statuses: Collection[str],
+    after: FeedPosition | None,
+    limit: int,
 ) -> Sequence[ShoppingList]:
-    """The lists of the given owners, except those the partner shares (they are the viewer's
-    own lists, `mine`), most recently edited first."""
-    if not owner_ids:
-        return []
+    """At most `limit` lists of the given owners in the given states, in the order of the list
+    feed (UI-02): newest created first, ties by id; only those after `after` if given."""
     statement = select(ShoppingList).where(
         ShoppingList.owner_id.in_(owner_ids), ShoppingList.status.in_(statuses)
     )
-    if partner_id is not None:
+    if after is not None:
         statement = statement.where(
-            or_(ShoppingList.owner_id != partner_id, ShoppingList.shared_with_partner.is_(False))
+            or_(
+                ShoppingList.created_at < after.created_at,
+                and_(ShoppingList.created_at == after.created_at, ShoppingList.id < after.list_id),
+            )
         )
     result = await session.execute(
-        statement.order_by(ShoppingList.updated_at.desc(), ShoppingList.id.desc())
-    )
-    return result.scalars().all()
-
-
-async def history(
-    session: AsyncSession, user_id: str, partner_id: str | None, limit: int
-) -> Sequence[ShoppingList]:
-    """The done lists of the user and those their partner shares with them, most recently
-    finished first (SHOP-05)."""
-    condition = ShoppingList.owner_id == user_id
-    if partner_id is not None:
-        condition = or_(
-            condition,
-            (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
-        )
-    result = await session.execute(
-        select(ShoppingList)
-        .where(condition, ShoppingList.status == "done")
-        .order_by(ShoppingList.finished_at.desc(), ShoppingList.id.desc())
-        .limit(limit)
+        statement.order_by(ShoppingList.created_at.desc(), ShoppingList.id.desc()).limit(limit)
     )
     return result.scalars().all()
 
@@ -226,6 +208,22 @@ async def extras_for(
     return extras
 
 
+async def draft_extras_in_category(
+    session: AsyncSession, category_id: str
+) -> Sequence[ListExtraItem]:
+    """The free-text extra items in a category on drafts that are not deleted."""
+    result = await session.execute(
+        select(ListExtraItem)
+        .join(ShoppingList, ShoppingList.id == ListExtraItem.list_id)
+        .where(
+            ListExtraItem.category_id == category_id,
+            ListExtraItem.deleted_at.is_(None),
+            ShoppingList.status == "draft",
+        )
+    )
+    return result.scalars().all()
+
+
 async def get_extra(session: AsyncSession, extra_id: str) -> ListExtraItem | None:
     """An extra item by id, on any list, deleted or not."""
     return await session.get(ListExtraItem, extra_id)
@@ -334,6 +332,24 @@ async def count_with_ingredient(session: AsyncSession, ingredient_id: str) -> in
     lists = _lists_with_ingredient(ingredient_id)
     result = await session.execute(select(func.count()).select_from(lists))
     return result.scalar_one()
+
+
+async def draft_amounts_of(
+    session: AsyncSession, ingredient_id: str
+) -> list[tuple[str, float | None, str | None]]:
+    """The list id, amount and unit of every extra item linked to the ingredient on a draft
+    that is not deleted. Only these follow its base unit; those on lists being shopped and done
+    lists keep the one they copied (LIST-11)."""
+    result = await session.execute(
+        select(ListExtraItem.list_id, ListExtraItem.amount, ListExtraItem.unit)
+        .join(ShoppingList, ShoppingList.id == ListExtraItem.list_id)
+        .where(
+            ListExtraItem.ingredient_id == ingredient_id,
+            ListExtraItem.deleted_at.is_(None),
+            ShoppingList.status == "draft",
+        )
+    )
+    return [(list_id, amount, unit) for list_id, amount, unit in result]
 
 
 async def delete_deleted_extras_of(session: AsyncSession, ingredient_id: str) -> None:

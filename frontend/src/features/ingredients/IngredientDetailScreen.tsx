@@ -19,7 +19,7 @@ import { useIngredient, type Ingredient } from './api';
 import { IngredientAdminActions } from './IngredientAdminActions';
 import { IngredientFormDialog } from './IngredientFormDialog';
 import { ingredientLabel } from './label';
-import { formatNutrient, NUTRIENT_KEYS, nutrientLabel } from './nutrients';
+import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, nutritionUnit } from './nutrients';
 import { OffAttribution } from './OffAttribution';
 import { PendingUpdateHint } from './PendingUpdateHint';
 
@@ -83,36 +83,29 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
     { label: t('ingredients.detail.brand'), value: ingredient.brand ?? notSet },
     {
       label: t('ingredients.detail.category'),
-      value: category ? categoryName(t, category.key) : '…',
+      value: category ? categoryName(category, language) : '…',
     },
     {
       label: t('ingredients.detail.baseUnit'),
       value: t(`ingredients.baseUnit.${ingredient.base_unit}`),
     },
-    {
-      label: t('ingredients.detail.pieceWeight'),
-      value:
-        ingredient.piece_weight_g === null
-          ? notSet
-          : t('common.amount', {
-              value: formatNumber(ingredient.piece_weight_g, language, {
-                maximumFractionDigits: 1,
-              }),
-              unit: unitLabel(t, 'g'),
-            }),
-    },
-    {
-      label: t('ingredients.detail.density'),
-      value:
-        ingredient.density_g_per_ml === null
-          ? notSet
-          : t('common.amount', {
-              value: formatNumber(ingredient.density_g_per_ml, language, {
-                maximumFractionDigits: 3,
-              }),
-              unit: t('ingredients.densityUnit'),
-            }),
-    },
+    // Only pieces have a weight (ING-02): they count towards the nutrition through it.
+    ...(ingredient.base_unit === 'piece'
+      ? [
+          {
+            label: t('ingredients.detail.pieceWeight'),
+            value:
+              ingredient.piece_weight_g === null
+                ? notSet
+                : t('common.amount', {
+                    value: formatNumber(ingredient.piece_weight_g, language, {
+                      maximumFractionDigits: 1,
+                    }),
+                    unit: unitLabel(t, 'g'),
+                  }),
+          },
+        ]
+      : []),
     { label: t('ingredients.detail.barcode'), value: ingredient.barcode ?? notSet },
     { label: t('ingredients.detail.pack'), value: pack ?? notSet },
     {
@@ -172,7 +165,7 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
 }
 
 /**
- * The package as Open Food Facts or the user gave it: the printed text ("6 × 1,5 l"), else the
+ * The pack size as Open Food Facts gave it (D-38): the printed text ("6 × 1,5 l"), else the
  * contents with their unit; null when neither is known. Information only (nothing is computed
  * from it).
  */
@@ -199,7 +192,9 @@ function NutritionCard({ ingredient }: { ingredient: Ingredient }) {
     <Card>
       <CardHeader>
         <CardTitle>
-          {t('ingredients.nutrition.title', { unit: unitLabel(t, ingredient.base_unit) })}
+          {t('ingredients.nutrition.title', {
+            unit: unitLabel(t, nutritionUnit(ingredient.base_unit)),
+          })}
         </CardTitle>
       </CardHeader>
       <CardContent>

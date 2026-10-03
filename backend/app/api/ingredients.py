@@ -34,18 +34,22 @@ OffSearchQuery = Annotated[
     Query(),
 ]
 
+# A category id (a UUID). The list takes up to 100 of them; the seed has 17 categories.
+CategoryId = Annotated[str, StringConstraints(max_length=36)]
+
 
 @router.get("")
 async def list_ingredients(
     principal: CurrentUser,
     session: ReadSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
-    category_id: Annotated[str | None, Query(max_length=36)] = None,
+    category_id: Annotated[list[CategoryId] | None, Query(max_length=100)] = None,
 ) -> list[IngredientSummary]:
     """Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
-    then names starting with `q`, then by name and brand; without `q`, all ingredients by
-    category order, name and brand (at most 1000)."""
-    return await ingredients.search(session, query=q, category_id=category_id)
+    then names starting with `q`, then the rest, each in dictionary order by name and brand
+    (Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`
+    is repeatable: an ingredient matches if it is in any of the given categories."""
+    return await ingredients.search(session, query=q, category_ids=category_id or [])
 
 
 @router.get("/similar")
@@ -69,12 +73,14 @@ async def lookup_barcode(
     background: BackgroundTasks,
     now: Now,
     barcode: Annotated[str, Query(max_length=BARCODE_INPUT_MAX_LENGTH)],
+    own_only: Annotated[bool, Query()] = False,
 ) -> BarcodeLookup:
     """Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a
-    proposal, not saved). 422 `invalid_format` for a barcode with a wrong check digit, 503
-    `off.busy` while too many lookups wait for Open Food Facts. A stale ingredient from Open
-    Food Facts is refreshed after the response."""
-    result = await barcodes.lookup(session, refresh.off, principal, barcode)
+    proposal, not saved). With `own_only`, only our own ingredients: `none` then means that
+    no ingredient has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
+    barcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open
+    Food Facts. A stale ingredient from Open Food Facts is refreshed after the response."""
+    result = await barcodes.lookup(session, refresh.off, principal, barcode, own_only=own_only)
     if result.ingredient is not None:
         off_refresh.schedule_if_stale(background, refresh, database, [result.ingredient], now=now)
     return result
@@ -132,7 +138,9 @@ async def update_ingredient(
     now: Now,
 ) -> Ingredient:
     """Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.
-    Clearing or changing the barcode of one from Open Food Facts makes it manual."""
+    Clearing or changing the barcode of one from Open Food Facts makes it manual. 409
+    `ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit
+    change would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33)."""
     return await ingredients.update_ingredient(session, principal, ingredient_id, body, now=now)
 
 

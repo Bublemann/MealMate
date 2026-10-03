@@ -9,15 +9,17 @@ Merging rules (AGG-03), deliberately simple:
 2. if all parts with an amount are of one kind, they add up in that kind's segment: pieces stay
    pieces and spoons stay a volume, nothing is converted;
 3. otherwise every part is converted strictly (no 1 g/ml estimate) to the ingredient's base
-   unit where its attributes allow it; the others stay in their own kind's segment, so
-   "500 g + 2 Stk." appears only while the ingredient has no piece weight.
+   unit where its attributes allow it; the others stay in their own kind's segment. Only parts
+   frozen before D-32 cross kinds (a piece weight or density with g or ml); live ingredients
+   have neither (`IngredientAttrs.live`), so their spoons of a g ingredient and amounts that
+   don't fit sit beside the rest: "500 g + 2 Stk." (`units.convert`).
 
 Sums use `math.fsum`, so they do not depend on the order of the parts (AGG-05).
 
 "Needs more" (LIST-12) compares in the ingredient's base unit whenever every part with an
 amount converts to it strictly, so rule 2 cannot make a line look different in kind: a checked
-"2 Stk. + 100 g" (460 g of apples) stays checked when only "2 Stk." (360 g) remain. Otherwise it
-compares segment by segment.
+"2 Stk. + 100 g" (460 g of apples frozen before D-32) stays checked when only "2 Stk." (360 g)
+remain. Otherwise it compares segment by segment.
 """
 
 import math
@@ -124,7 +126,8 @@ class CheckSnapshot:
 
     def to_json(self) -> dict[str, Any]:
         """`{"mass_g": …, "volume_ml": …, "count": …, "has_unspecified": …, "base_total": …,
-        "base_unit": "g"|"ml"}`; absent segments and a missing base total are left out."""
+        "base_unit": "g"|"ml"|"piece"}`; absent segments and a missing base total are left
+        out."""
         data: dict[str, Any] = {SEGMENT_NAMES[kind]: value for kind, value in self.segments.items()}
         data["has_unspecified"] = self.has_unspecified
         if self.base_total is not None and self.base_unit is not None:

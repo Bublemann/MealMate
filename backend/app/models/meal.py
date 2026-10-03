@@ -27,6 +27,10 @@ class Meal(IdMixin, TimestampMixin, Base):
     name_norm: Mapped[str] = mapped_column(
         String(MEAL_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
     )
+    # Dictionary order (MEAL-09, `domain.text.sort_key`).
+    name_sort: Mapped[str] = mapped_column(
+        String(MEAL_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
+    )
     instructions: Mapped[str | None] = mapped_column(Text)
     source_url: Mapped[str | None] = mapped_column(String(SOURCE_URL_MAX_LENGTH))
     servings: Mapped[int] = mapped_column(Integer, default=1)

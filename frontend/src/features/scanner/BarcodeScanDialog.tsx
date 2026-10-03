@@ -14,14 +14,21 @@ interface BarcodeScanDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Called with the scanned or typed digits; the dialog closes itself. */
   onBarcode: (barcode: string) => void;
+  /** What happens with the barcode (default: none, only what to scan). */
+  description?: string;
 }
 
 /**
- * The scanner for the ingredient form's barcode field: it only reads the digits into the field
- * and looks nothing up, because the form already holds the ingredient's values. A lazy-loaded
- * chunk with the decoder, like `/scan` (PERF-03).
+ * The plain scanner over the ingredient pop-up or the meal form (BAR-01): it hands the scanned or
+ * typed digits back and looks nothing up; the pop-up and the meal form do that (BAR-02/03), so
+ * the scanner never imports the form. A lazy-loaded chunk with the decoder (PERF-03).
  */
-export function BarcodeScanDialog({ open, onOpenChange, onBarcode }: BarcodeScanDialogProps) {
+export function BarcodeScanDialog({
+  open,
+  onOpenChange,
+  onBarcode,
+  description,
+}: BarcodeScanDialogProps) {
   const { t } = useTranslation();
 
   return (
@@ -29,7 +36,7 @@ export function BarcodeScanDialog({ open, onOpenChange, onBarcode }: BarcodeScan
       <DialogContent data-testid={testIds.barcodeScanDialog}>
         <DialogHeader>
           <DialogTitle>{t('scanner.title')}</DialogTitle>
-          <DialogDescription>{t('scanner.fieldText')}</DialogDescription>
+          <DialogDescription>{description ?? t('scanner.fieldText')}</DialogDescription>
         </DialogHeader>
         {open && (
           <BarcodeScanner

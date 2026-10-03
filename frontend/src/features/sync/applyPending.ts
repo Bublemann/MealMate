@@ -1,5 +1,10 @@
 import { ingredientLabel } from '@/features/ingredients/label';
-import type { ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
+import { otherCategoryId } from '@/features/lists/format';
+import { pickableCategories } from '@/features/reference/categories';
+import type { Category, ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
+
+/** What a free-text item's category is found by, and whether it can still take one. */
+type CategoryRef = Pick<Category, 'id' | 'key' | 'deleted'>;
 
 /** A line as the view shows it; `pending`: changed by an op that wasn't sent yet (SYNC-07). */
 export type PendingLine = ListLine & { pending?: boolean };
@@ -16,8 +21,8 @@ export interface PendingList extends Omit<ListDetail, 'lines' | 'extra_items'> {
 export interface PendingOptions {
   /** Who made the ops: a waiting check-off shows my initial (SHOP-01). */
   me: UserRef;
-  /** Category ids by key, for a free-text item added with its category's key. */
-  categoryIds: ReadonlyMap<string, string>;
+  /** The categories a free-text item can be added to. */
+  categories: readonly CategoryRef[];
   /** The time now (ms since the epoch), for the clamp of taps from the future; default: now. */
   now?: number;
 }
@@ -57,7 +62,7 @@ function tapTime(at: string, now: number): { at: string; ms: number } {
 export function applyPending(
   detail: ListDetail,
   ops: readonly Op[],
-  { me, categoryIds, now = Date.now() }: PendingOptions,
+  { me, categories, now = Date.now() }: PendingOptions,
 ): PendingList {
   const list: PendingList = { ...detail, pendingFinish: false };
   /** The op id of the waiting check-off each line shows, for the tie-break. */
@@ -68,7 +73,7 @@ export function applyPending(
         checkLine(list, op, tapTime(op.at, now), me, shownOps);
         break;
       case 'extra.add':
-        addExtra(list, op.payload, op.at, me, categoryIds);
+        addExtra(list, op.payload, op.at, me, categories);
         break;
       case 'extra.update':
         updateExtra(list, op.payload);
@@ -128,15 +133,32 @@ function checkLine(
 type ExtraAdd = Extract<Op, { type: 'extra.add' }>['payload'];
 type ExtraUpdate = Extract<Op, { type: 'extra.update' }>['payload'];
 
+/**
+ * The category of a free-text item as the server picks it (LIST-06): by id, or by key in an op an
+ * app version before D-31 queued; *Other* for none, an unknown or a deleted one, or
+ * *Uncategorized*.
+ */
+function extraCategoryId(
+  { category_id, category_key }: ExtraAdd,
+  categories: readonly CategoryRef[],
+): string {
+  const pickable = pickableCategories(categories);
+  let named: CategoryRef | undefined;
+  if (category_id) named = pickable.find((category) => category.id === category_id);
+  else if (category_key) named = pickable.find((category) => category.key === category_key);
+  return named?.id ?? otherCategoryId(categories);
+}
+
 function addExtra(
   list: PendingList,
-  { extra_id: id, text, amount_text, category_key }: ExtraAdd,
+  payload: ExtraAdd,
   at: string,
   me: UserRef,
-  categoryIds: ReadonlyMap<string, string>,
+  categories: readonly CategoryRef[],
 ) {
+  const { extra_id: id, text, amount_text } = payload;
   if (list.status === 'done' || list.extra_items.some((item) => item.id === id)) return;
-  const categoryId = categoryIds.get(category_key ?? 'other') ?? categoryIds.get('other') ?? '';
+  const categoryId = extraCategoryId(payload, categories);
   const amountText = amount_text ?? null;
   list.extra_items = [
     ...list.extra_items,
@@ -146,6 +168,8 @@ function addExtra(
       text,
       amount: null,
       unit: null,
+      base_unit: null,
+      unit_fits: true,
       amount_text: amountText,
       category_id: categoryId,
       added_by: me,

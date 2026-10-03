@@ -4,6 +4,8 @@ used" meals of the list builder (MEAL-01..10, VIS-01/02/04/05, NUT-03..05, CPL-0
 Who may see or change a meal is decided by `services.access` (`require_meal_view`,
 `require_meal_owner`); signed photo URLs are only put into responses after that check (VIS-05).
 Nutrition is computed on every read from the live ingredient attributes and values (NUT-06).
+A row's unit must fit its ingredient's base unit (REF-02, MEAL-02); rows from before that rule,
+or left by a base-unit change or a merge, are kept and flagged (`unit_fits`, D-33).
 Related rows are loaded in batches, so a list or detail takes a fixed number of queries.
 
 Photo files are written before the transaction that refers to them, and old files are deleted
@@ -11,7 +13,7 @@ after the transaction that dropped the reference has committed; anything left ov
 `mealmate jobs cleanup`. Image processing runs in a worker thread, one image at a time.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,10 +22,9 @@ from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
 from app.domain.nutrition import meal_nutrition
-from app.domain.text import normalize
-from app.domain.units import BaseUnit, IngredientAttrs, Unit
+from app.domain.text import normalize, sort_key
+from app.domain.units import Unit, counted_unit, fits
 from app.media.store import MediaStore
-from app.models import Ingredient as IngredientRow
 from app.models import Meal as MealRow
 from app.models import MealIngredient
 from app.models import Tag as TagRow
@@ -31,7 +32,6 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.repositories import users as users_repo
 from app.schemas.meals import (
     Meal,
     MealBasedOn,
@@ -50,7 +50,7 @@ from app.services import access, hooks
 from app.services.ingredients import summary as ingredient_summary
 from app.services.principal import Principal
 from app.services.reference import cuisine
-from app.services.users import user_refs
+from app.services.users import hidden_by, user_refs
 
 
 def _nutrient_values(values: dict[str, float | None]) -> NutrientValues:
@@ -68,14 +68,6 @@ async def _nutrition_and_rows(
     rows = (await meals_repo.rows_for(session, [meal.id]))[meal.id]
     ingredient_ids = {row.ingredient_id for row in rows}
     ingredients = await ingredients_repo.by_ids(session, ingredient_ids)
-
-    def attrs(ingredient: IngredientRow) -> IngredientAttrs:
-        return IngredientAttrs(
-            base_unit=BaseUnit(ingredient.base_unit),
-            piece_weight_g=ingredient.piece_weight_g,
-            density_g_per_ml=ingredient.density_g_per_ml,
-        )
-
     nutrition = meal_nutrition(
         [
             NutritionRow(
@@ -83,7 +75,7 @@ async def _nutrition_and_rows(
                 ingredient_name=ingredients[row.ingredient_id].name,
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
-                attrs=attrs(ingredients[row.ingredient_id]),
+                attrs=ingredients[row.ingredient_id].attrs(),
                 values=ingredients[row.ingredient_id].nutrients(),
             )
             for row in rows
@@ -114,6 +106,7 @@ async def _nutrition_and_rows(
                 ingredient=ingredient_summary(ingredients[row.ingredient_id]),
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
+                unit_fits=fits(row.amount, row.unit, ingredients[row.ingredient_id].base_unit),
                 note=row.note,
             )
             for row in rows
@@ -173,10 +166,23 @@ async def _meal(
     )
 
 
+# A row as it is stored: ingredient id, amount, unit (an amount without a unit is in pieces).
+type RowKey = tuple[str, float | None, str | None]
+
+
+def _input_key(row: MealIngredientInput) -> RowKey:
+    unit = counted_unit(row.amount, row.unit)
+    return row.ingredient_id, row.amount, None if unit is None else unit.value
+
+
+def _row_field(index: int, name: str, code: FieldErrorCode) -> FieldProblem:
+    return FieldProblem(("body", "ingredients", index, name), code)
+
+
 def _row_problems(rows: Sequence[MealIngredientInput]) -> list[FieldProblem]:
     """A unit needs an amount."""
     return [
-        FieldProblem(("body", "ingredients", index, "amount"), FieldErrorCode.REQUIRED)
+        _row_field(index, "amount", FieldErrorCode.REQUIRED)
         for index, row in enumerate(rows)
         if row.unit is not None and row.amount is None
     ]
@@ -188,18 +194,25 @@ async def _check_references(
     cuisine_id: str | None,
     rows: Sequence[MealIngredientInput] | None,
     problems: list[FieldProblem],
+    kept: Collection[RowKey] = (),
 ) -> None:
-    """Refuse (422) unknown cuisines and ingredients, together with the other `problems`."""
+    """Refuse (422) unknown cuisines and ingredients, and rows whose unit doesn't fit their
+    ingredient's base unit (REF-02, MEAL-02), together with the other `problems`. A row that
+    doesn't fit is kept when the meal already has it with the same ingredient, amount and unit
+    (`kept`): it was entered before the rule, or left by a base-unit change or a merge (D-33)."""
     found: list[FieldProblem] = []
     if cuisine_id is not None and await reference_repo.get_cuisine(session, cuisine_id) is None:
         found.append(FieldProblem(("body", "cuisine_id"), FieldErrorCode.INVALID))
     if rows:
         known = await ingredients_repo.by_ids(session, (row.ingredient_id for row in rows))
-        found.extend(
-            FieldProblem(("body", "ingredients", index, "ingredient_id"), FieldErrorCode.INVALID)
-            for index, row in enumerate(rows)
-            if row.ingredient_id not in known
-        )
+        for index, row in enumerate(rows):
+            ingredient = known.get(row.ingredient_id)
+            if ingredient is None:
+                found.append(_row_field(index, "ingredient_id", FieldErrorCode.INVALID))
+            elif (
+                not fits(row.amount, row.unit, ingredient.base_unit) and _input_key(row) not in kept
+            ):
+                found.append(_row_field(index, "unit", FieldErrorCode.UNIT_MISMATCH))
     if found or problems:
         raise validation_error([*found, *problems])
 
@@ -232,7 +245,7 @@ async def _set_rows(
     """Replace the meal's rows, reusing the existing ones by position (their ids stay). An
     amount without a unit counts as pieces."""
     for position, item in enumerate(rows):
-        unit = Unit.PIECE if item.unit is None and item.amount is not None else item.unit
+        unit = counted_unit(item.amount, item.unit)
         values = {
             "ingredient_id": item.ingredient_id,
             "amount": item.amount,
@@ -282,31 +295,31 @@ async def list_meals(
     principal: Principal,
     *,
     query: str | None,
-    cuisine_id: str | None,
-    tag_id: str | None,
+    cuisine_ids: Sequence[str],
+    tag_ids: Sequence[str],
     owner_ids: Sequence[str] | None,
     now: datetime,
 ) -> list[MealSummary]:
     """The meals the principal may see (VIS-01/02, CPL-04), A-Z (MEAL-09).
 
-    Without `owner_ids`, the owners the principal switched off in their filter chips are left
-    out (MEAL-10); with them, only those owners' meals are listed (as far as visible). `query`
-    matches the name, a tag or the cuisine, ignoring case, umlauts and accents.
+    Without `owner_ids`, the owners the principal unticked in their user filter on Meals are
+    left out (MEAL-10); with them, only those owners' meals are listed (as far as visible).
+    `query` matches the name, a tag or the cuisine, ignoring case, umlauts and accents. With
+    `cuisine_ids`, a meal's cuisine must be any of them; with `tag_ids`, it must have all of
+    them (MEAL-09).
     """
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         if owner_ids is not None:
             owners = visible & set(owner_ids)
         else:
-            viewer = await users_repo.get(session, principal.user_id)
-            hidden = set() if viewer is None else set(viewer.filter_hidden.get("meals", []))
-            owners = visible - hidden
+            owners = visible - await hidden_by(session, principal.user_id, "meals")
         rows = await meals_repo.search(
             session,
             owner_ids=owners,
             query=normalize(query or ""),
-            cuisine_id=cuisine_id,
-            tag_id=tag_id,
+            cuisine_ids=cuisine_ids,
+            tag_ids=tag_ids,
         )
         return await _summaries(session, media, rows, now=now)
 
@@ -316,7 +329,7 @@ async def recent_meals(
 ) -> list[MealSummary]:
     """The meals the principal added to lists, most recently added first and each once, as
     far as they still exist and are visible to them (MEAL-09: "recently used" in the meal
-    picker); at most 10. Filter chips do not apply."""
+    picker); at most 10. The user filter on Meals does not apply."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         meal_ids = await lists_repo.recent_meal_ids(
@@ -328,8 +341,8 @@ async def recent_meals(
 
 async def list_meal_tags(session: AsyncSession, principal: Principal) -> list[Tag]:
     """The tags on the meals the principal may see (VIS-01/02, CPL-04), by name: the choices of
-    the Meals tab's tag filter (MEAL-09). Filter chips (MEAL-10) do not narrow them, and tags
-    only used on meals the principal cannot see are left out."""
+    the Meals tab's tag filter (MEAL-09). The user filter on Meals (MEAL-10) does not narrow
+    them, and tags only used on meals the principal cannot see are left out."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         tags = await meals_repo.tags_of_owners(session, visible)
@@ -363,6 +376,7 @@ async def create_meal(
             owner_id=principal.user_id,
             name=body.name,
             name_norm=normalize(body.name),
+            name_sort=sort_key(body.name),
             instructions=body.instructions,
             source_url=body.source_url,
             servings=body.servings,
@@ -393,11 +407,21 @@ async def update_meal(
     problems = _row_problems(body.ingredients or [])
     async with session.begin():
         meal = await access.require_meal_owner(session, principal, meal_id)
+        existing = (
+            []
+            if body.ingredients is None
+            else (await meals_repo.rows_for(session, [meal.id]))[meal.id]
+        )
         await _check_references(
-            session, cuisine_id=body.cuisine_id, rows=body.ingredients, problems=problems
+            session,
+            cuisine_id=body.cuisine_id,
+            rows=body.ingredients,
+            problems=problems,
+            kept={(row.ingredient_id, row.amount, row.unit) for row in existing},
         )
         if body.name is not None:
             meal.name, meal.name_norm = body.name, normalize(body.name)
+            meal.name_sort = sort_key(body.name)
         if "instructions" in sent:
             meal.instructions = body.instructions
         if "source_url" in sent:
@@ -409,7 +433,6 @@ async def update_meal(
         if body.tags is not None:
             await _set_tags(session, meal.id, body.tags, now=now)
         if body.ingredients is not None:
-            existing = (await meals_repo.rows_for(session, [meal.id]))[meal.id]
             await _set_rows(session, meal.id, existing, body.ingredients, now=now)
         meal.updated_at = now
         await session.flush()
@@ -448,6 +471,7 @@ async def copy_meal(
             owner_id=principal.user_id,
             name=original.name,
             name_norm=original.name_norm,
+            name_sort=original.name_sort,
             instructions=original.instructions,
             source_url=original.source_url,
             servings=original.servings,

@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
@@ -28,7 +29,7 @@ from app.db.migrations import (
     upgrade_database,
 )
 from app.db.session import Database
-from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS
+from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.main import create_app
 from app.models import Base
 from app.services import demo
@@ -36,7 +37,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0007"
+HEAD = "0014"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -59,7 +60,9 @@ LIST_TABLES = {
     "list_line_states",
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
-# 0007 merges the products into the ingredients.
+# 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
+# one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
+# one.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -128,6 +131,34 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     assert tables(database_path) == TABLES_0006
     command.upgrade(config, "0007")
     assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0008")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0009")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0010")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0011")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0012")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0013")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0014")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0013")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0012")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0011")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0010")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0009")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0008")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0007")
+    assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0006")
     assert tables(database_path) == TABLES_0006
     command.downgrade(config, "0005")
@@ -153,8 +184,12 @@ def test_reference_data_is_seeded(config: Config, database_path: Path) -> None:
     downgrade and upgrade seeds them again."""
     for _ in range(2):
         command.upgrade(config, "head")
-        categories = query(database_path, "SELECT key, sort_order FROM categories ORDER BY 2")
-        assert categories == [(key, position) for position, key in enumerate(CATEGORY_KEYS)]
+        categories = query(
+            database_path, "SELECT key, name_de, name_en, sort_order FROM categories ORDER BY 4"
+        )
+        assert categories == [
+            (*category, position) for position, category in enumerate(SEEDED_CATEGORIES)
+        ]
         cuisines = query(database_path, "SELECT key, name, name_norm FROM cuisines ORDER BY id")
         assert cuisines == [(key, None, key) for key in CUISINE_KEYS]
         ids = query(database_path, "SELECT id FROM categories UNION ALL SELECT id FROM cuisines")
@@ -316,12 +351,16 @@ def test_demo_data_at_0006_survives_the_earlier_migrations(tmp_path: Path) -> No
     assert_clean(path)
 
 
-def ingredients_by_name(path: Path) -> dict[str, list[dict[str, object]]]:
+def rows_of(path: Path, table: str) -> list[dict[str, object]]:
     with closing(sqlite3.connect(path)) as connection:
         connection.row_factory = sqlite3.Row
-        rows = [dict(row) for row in connection.execute("SELECT * FROM ingredients ORDER BY id")]
+        statement = f'SELECT * FROM "{table}" ORDER BY id'  # noqa: S608
+        return [dict(row) for row in connection.execute(statement)]
+
+
+def ingredients_by_name(path: Path) -> dict[str, list[dict[str, object]]]:
     by_name: dict[str, list[dict[str, object]]] = {}
-    for row in rows:
+    for row in rows_of(path, "ingredients"):
         by_name.setdefault(str(row["name"]), []).append(row)
     return by_name
 
@@ -410,7 +449,9 @@ async def _visit_everything(settings: Settings) -> int:
             for kind in ("meals", "lists"):
                 response = await client.get(f"/api/{kind}", headers=user.headers)
                 assert response.status_code == 200, response.text
-                for item in response.json():
+                # The list feed's first page holds every demo list one sees.
+                items = response.json()["lists"] if kind == "lists" else response.json()
+                for item in items:
                     item_response = await client.get(
                         f"/api/{kind}/{item['id']}", headers=user.headers
                     )
@@ -430,6 +471,793 @@ def test_meals_and_lists_keep_working_after_0007(tmp_path: Path) -> None:
     upgrade_database(data_dir)
 
     assert asyncio.run(_visit_everything(demo_settings(data_dir))) > 10
+
+
+# --- 0008 -----------------------------------------------------------------------------------
+
+
+def meals_and_ingredients(path: Path) -> dict[str, list[dict[str, object]]]:
+    return {table: rows_of(path, table) for table in ("meals", "ingredients")}
+
+
+def test_0008_adds_the_sort_keys_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0007 → 0008 (D-27): every meal and ingredient gets the sort key of its
+    name, and an ingredient with a brand that of its brand; no row and no other value changes,
+    and the downgrade drops the keys again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0007")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = meals_and_ingredients(path)
+
+    command.upgrade(config, "0008")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    after = meals_and_ingredients(path)
+    for table, rows in after.items():
+        without_keys = [
+            {column: value for column, value in row.items() if not column.endswith("_sort")}
+            for row in rows
+        ]
+        assert without_keys == before[table]
+    assert {row["name"]: row["name_sort"] for row in after["meals"]} == {
+        "Hähnchen-Reis-Pfanne": "hahnchen-reis-pfanne",
+        "Käsebrot": "kasebrot",
+        "Ofenkartoffeln mit Kräuterjoghurt": "ofenkartoffeln mit krauterjoghurt",
+        "Pfannkuchen": "pfannkuchen",
+        "Spaghetti Bolognese": "spaghetti bolognese",
+        "Tofu-Gemüse-Curry": "tofu-gemuse-curry",
+        "Tomatensalat": "tomatensalat",
+    }
+    ingredients = {
+        (row["name"], row["brand"]): (row["name_sort"], row["brand_sort"])
+        for row in after["ingredients"]
+    }
+    assert ingredients[("Äpfel", None)] == ("apfel", None)
+    assert ingredients[("Hähnchenbrust", None)] == ("hahnchenbrust", None)
+    assert ingredients[("Erbsen (TK)", None)] == ("erbsen (tk)", None)
+    assert ingredients[("Olivenöl", "Bertolli")] == ("olivenol", "bertolli")
+    assert ingredients[("Spaghetti n.12", "De Cecco")] == ("spaghetti n.12", "de cecco")
+    assert all(name_sort for name_sort, _ in ingredients.values())
+    assert all((brand is None) == (keys[1] is None) for (_, brand), keys in ingredients.items())
+
+    command.downgrade(config, "0007")
+    assert meals_and_ingredients(path) == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+# --- 0009 -----------------------------------------------------------------------------------
+
+# Requirements appendix A, as the translations `category.<key>` had them.
+SEEDED_CATEGORY_NAMES = {
+    "fruit_vegetables": ("Obst & Gemüse", "Fruit & vegetables"),
+    "bread_bakery": ("Brot & Backwaren", "Bread & bakery"),
+    "dairy_eggs": ("Milchprodukte & Eier", "Dairy & eggs"),
+    "cheese": ("Käse", "Cheese"),
+    "meat_fish": ("Fleisch & Fisch", "Meat & fish"),
+    "sausage_deli": ("Wurst & Aufschnitt", "Sausage & deli"),
+    "plant_based": ("Tofu & pflanzliche Alternativen", "Tofu & plant-based"),
+    "pasta_rice_grains": ("Nudeln, Reis & Getreide", "Pasta, rice & grains"),
+    "canned_jars": ("Konserven & Gläser", "Canned & jarred"),
+    "sauces_spices_oils": ("Soßen, Gewürze & Öle", "Sauces, spices & oils"),
+    "baking": ("Backzutaten", "Baking"),
+    "breakfast_spreads": ("Frühstück & Aufstriche", "Breakfast & spreads"),
+    "snacks_sweets": ("Süßes & Snacks", "Snacks & sweets"),
+    "frozen": ("Tiefkühl", "Frozen"),
+    "drinks": ("Getränke", "Drinks"),
+    "household_hygiene": ("Drogerie & Haushalt", "Household & toiletries"),
+    "other": ("Sonstiges", "Other"),
+}
+
+
+def test_0009_names_every_category_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0008 → 0009 (D-31): every seeded category gets its German and English
+    name of appendix A, each with its normalised form; the key stays, no row and no other value
+    changes, and the downgrade drops the names again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0008")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = rows_of(path, "categories")
+
+    command.upgrade(config, "0009")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    after = rows_of(path, "categories")
+    without_names = [
+        {column: value for column, value in row.items() if not column.startswith("name_")}
+        for row in after
+    ]
+    assert without_names == before
+    assert {row["key"]: (row["name_de"], row["name_en"]) for row in after} == (
+        SEEDED_CATEGORY_NAMES
+    )
+    norms = {row["key"]: (row["name_de_norm"], row["name_en_norm"]) for row in after}
+    assert norms["fruit_vegetables"] == ("obst & gemuese", "fruit & vegetables")
+    assert norms["sauces_spices_oils"] == ("sossen, gewuerze & oele", "sauces, spices & oils")
+    assert norms["frozen"] == ("tiefkuehl", "frozen")
+
+    command.downgrade(config, "0008")
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+@pytest.mark.parametrize("language", ["de", "en"])
+def test_category_names_are_unique_per_language(
+    config: Config, database_path: Path, language: str
+) -> None:
+    """REF-01: no two categories share a name in one language (compared normalised)."""
+    command.upgrade(config, "0009")
+    column = f"name_{language}_norm"
+    with (
+        closing(sqlite3.connect(database_path)) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
+    ):
+        connection.execute(
+            f"UPDATE categories SET {column} = "  # noqa: S608
+            f"(SELECT {column} FROM categories WHERE key = 'other') WHERE key = 'cheese'"
+        )
+
+
+# --- 0010 -----------------------------------------------------------------------------------
+
+# Counting the demo's onions in pieces, as an ingredient and in the frozen rows (LIST-11).
+COUNTED_IN_PIECES = (
+    "UPDATE ingredients SET base_unit = 'piece', piece_weight_g = 150 WHERE name = 'Zwiebeln'",
+    "UPDATE list_meal_ingredients SET base_unit_snapshot = 'piece' "
+    "WHERE ingredient_name_snapshot = 'Zwiebeln'",
+)
+
+
+def execute(path: Path, statement: str) -> None:
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(statement)
+
+
+def base_unit_tables(path: Path) -> dict[str, list[dict[str, object]]]:
+    return {table: rows_of(path, table) for table in ("ingredients", "list_meal_ingredients")}
+
+
+def test_0010_widens_the_base_unit_and_changes_no_data(tmp_path: Path) -> None:
+    """seed-demo data at 0009 → 0010 (D-32): only the allowed base units widen, every row and
+    reference stays as it is, also after the downgrade."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = base_unit_tables(path)
+
+    command.upgrade(config, "0010")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert base_unit_tables(path) == before
+    assert_clean(path)
+    command.downgrade(config, "0009")
+    assert row_counts(path) == counts
+    assert base_unit_tables(path) == before
+    assert_clean(path)
+
+
+def test_0010_lets_ingredients_and_frozen_rows_be_counted_in_pieces(tmp_path: Path) -> None:
+    """Up to 0009 the base unit is g or ml; from 0010 on also piece, for an ingredient and for
+    the copy in frozen rows. The downgrade refuses while anything is counted in pieces, and
+    changes nothing."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0009")
+    for statement in COUNTED_IN_PIECES:
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+            execute(path, statement)
+
+    command.upgrade(config, "0010")
+    for statement in COUNTED_IN_PIECES:
+        execute(path, statement)
+    assert query(path, "SELECT count(*) FROM ingredients WHERE base_unit = 'piece'") == [(1,)]
+    assert_clean(path)
+
+    counted = base_unit_tables(path)
+    with pytest.raises(RuntimeError, match=r"1 ingredient and 5 frozen rows are counted in"):
+        command.downgrade(config, "0009")
+    assert current_revision(path) == "0010"
+    assert base_unit_tables(path) == counted
+    execute(path, "UPDATE ingredients SET base_unit = 'g' WHERE base_unit = 'piece'")
+    with pytest.raises(RuntimeError, match=r"0 ingredients and 5 frozen rows"):
+        command.downgrade(config, "0009")
+    execute(path, "UPDATE list_meal_ingredients SET base_unit_snapshot = 'g'")
+    command.downgrade(config, "0009")
+    assert current_revision(path) == "0009"
+    assert_clean(path)
+
+
+# --- 0011 -----------------------------------------------------------------------------------
+
+
+def saved_filters(path: Path) -> dict[str, dict[str, list[str]]]:
+    return {
+        str(row["username"]): json.loads(str(row["filter_hidden"]))
+        for row in rows_of(path, "users")
+    }
+
+
+def users_but_filters(path: Path) -> list[dict[str, object]]:
+    return [
+        {column: value for column, value in row.items() if column != "filter_hidden"}
+        for row in rows_of(path, "users")
+    ]
+
+
+def dump_without(path: Path, *tables: str) -> list[str]:
+    """The database as SQL, without the rows of `tables`."""
+    skipped = tuple(f'INSERT INTO "{table}"' for table in tables)
+    with closing(sqlite3.connect(path)) as connection:
+        return [line for line in connection.iterdump() if not line.startswith(skipped)]
+
+
+def test_0011_gives_every_user_an_empty_state_filter_and_changes_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """seed-demo data at 0010 → 0011 (D-26): every user's saved filters gain the state filter on
+    Lists, empty, so every state shows; what the user filters hide stays, and no row and no other
+    value changes. The downgrade drops the state filter again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0010")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        [(ben_id,)] = connection.execute("SELECT id FROM users WHERE username = 'ben'")
+        [(carl_id,)] = connection.execute("SELECT id FROM users WHERE username = 'carl'")
+        connection.execute(
+            "UPDATE users SET filter_hidden = ? WHERE username = 'anna'",
+            (json.dumps({"meals": [ben_id], "lists": [carl_id, ben_id]}),),
+        )
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = saved_filters(path)
+    rest = dump_without(path, "users", "alembic_version")
+    users = users_but_filters(path)
+
+    command.upgrade(config, "0011")
+
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+    assert saved_filters(path) == {
+        username: {**hidden, "list_states": []} for username, hidden in before.items()
+    }
+    assert saved_filters(path)["anna"] == {
+        "meals": [ben_id],
+        "lists": [carl_id, ben_id],
+        "list_states": [],
+    }
+    assert dump_without(path, "users", "alembic_version") == rest
+    assert users_but_filters(path) == users
+
+    command.downgrade(config, "0010")
+    assert saved_filters(path) == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+# --- 0012 -----------------------------------------------------------------------------------
+
+
+def key_column_nullable(path: Path) -> bool:
+    [(notnull,)] = query(path, "SELECT \"notnull\" FROM pragma_table_info('categories') "
+                               "WHERE name = 'key'")  # fmt: skip
+    return notnull == 0
+
+
+def test_0012_makes_the_key_optional_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0011 → 0012 (REF-01): the key becomes optional, for the categories
+    admins add; no row and no value changes, and the downgrade makes it required again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0011")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = rows_of(path, "categories")
+    assert not key_column_nullable(path)
+
+    command.upgrade(config, "0012")
+
+    assert key_column_nullable(path)
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert_clean(path)
+
+    command.downgrade(config, "0011")
+    assert not key_column_nullable(path)
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+def test_the_downgrade_refuses_categories_without_a_key(
+    config: Config, database_path: Path
+) -> None:
+    """An admin-added category has no key, which a category needs below 0012: the downgrade
+    fails with a clear message and changes nothing."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        insert(
+            connection,
+            "categories",
+            key=None,
+            name_de="Käsetheke",
+            name_de_norm="kaesetheke",
+            name_en="Cheese counter",
+            name_en_norm="cheese counter",
+            sort_order=len(CATEGORY_KEYS),
+        )
+    before = rows_of(database_path, "categories")
+
+    with pytest.raises(
+        RuntimeError, match=r"admins added categories, which have no key \('Cheese counter'\)"
+    ):
+        command.downgrade(config, "0011")
+
+    assert current_revision(database_path) == HEAD
+    assert key_column_nullable(database_path)
+    assert rows_of(database_path, "categories") == before
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        connection.execute("DELETE FROM categories WHERE key IS NULL")
+    command.downgrade(config, "0011")
+    assert not key_column_nullable(database_path)
+
+
+def test_keys_stay_unique(config: Config, database_path: Path) -> None:
+    """Categories without a key may be many; a key still names one category only."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        for position, name in enumerate(("Käsetheke", "Backstube"), start=len(CATEGORY_KEYS)):
+            insert(
+                connection,
+                "categories",
+                key=None,
+                name_de=name,
+                name_de_norm=name.lower(),
+                name_en=name,
+                name_en_norm=name.lower(),
+                sort_order=position,
+            )
+    with (
+        closing(sqlite3.connect(database_path)) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
+    ):
+        connection.execute("UPDATE categories SET key = 'other' WHERE key = 'cheese'")
+
+
+# --- 0013 -----------------------------------------------------------------------------------
+
+UNCATEGORIZED = {
+    "key": "uncategorized",
+    "name_de": "Ohne Kategorie",
+    "name_de_norm": "ohne kategorie",
+    "name_en": "Uncategorized",
+    "name_en_norm": "uncategorized",
+    "deleted_at": None,
+}
+
+
+def dump_without_categories(path: Path) -> list[str]:
+    """The database as SQL, without the categories' table, indexes and rows."""
+    schema = ('CREATE TABLE "categories"', "CREATE UNIQUE INDEX ix_categories_")
+    return [
+        line
+        for line in dump_without(path, "categories", "alembic_version")
+        if not line.startswith(schema)
+    ]
+
+
+def test_0013_adds_uncategorized_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0012 → 0013 (REF-01, D-30): categories gain an empty deletion time, and
+    *Uncategorized* is added last in the walking order; no row is lost and no other value
+    changes. The downgrade removes both again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0012")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = rows_of(path, "categories")
+    rest = dump_without_categories(path)
+
+    command.upgrade(config, "0013")
+
+    assert row_counts(path) == counts | {"categories": counts["categories"] + 1}
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_categories(path) == rest
+    assert_clean(path)
+    after = {row["id"]: row for row in rows_of(path, "categories")}
+    assert [after[row["id"]] for row in before] == [row | {"deleted_at": None} for row in before]
+    [added] = [row for row in after.values() if row["id"] not in {r["id"] for r in before}]
+    assert {column: added[column] for column in UNCATEGORIZED} == UNCATEGORIZED
+    assert added["sort_order"] == len(before)
+    assert uuid.UUID(str(added["id"])).version == 7
+
+    command.downgrade(config, "0012")
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+def test_the_0013_downgrade_closes_the_gap_of_uncategorized(
+    config: Config, database_path: Path
+) -> None:
+    """An admin may have moved *Uncategorized*; the categories after it move up again."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        connection.execute("UPDATE categories SET sort_order = sort_order + 1")
+        connection.execute("UPDATE categories SET sort_order = 0 WHERE key = 'uncategorized'")
+
+    command.downgrade(config, "0012")
+
+    assert query(database_path, "SELECT key, sort_order FROM categories ORDER BY 2") == [
+        (key, position) for position, key in enumerate(CATEGORY_KEYS[:-1])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name_de", "name_en"),
+    [("ohne KATEGORIE", "Without category"), ("Unsortiert", "Uncategorized")],
+)
+def test_0013_refuses_names_an_added_category_took(
+    config: Config, database_path: Path, name_de: str, name_en: str
+) -> None:
+    """An admin may have added a category with one of *Uncategorized*'s names before 0013; the
+    upgrade then fails with a clear message and changes nothing, so it can be renamed first."""
+    command.upgrade(config, "0012")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        insert(
+            connection,
+            "categories",
+            name_de=name_de,
+            name_de_norm=name_de.lower(),
+            name_en=name_en,
+            name_en_norm=name_en.lower(),
+            sort_order=len(CATEGORY_KEYS) - 1,
+        )
+    before = dump_without(database_path)
+
+    with pytest.raises(RuntimeError, match=rf"\({name_en!r}\) already uses .* rename it first"):
+        command.upgrade(config, "0013")
+
+    assert current_revision(database_path) == "0012"
+    assert dump_without(database_path) == before
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            "UPDATE categories SET deleted_at = '2026-10-03 10:00:00' WHERE key = 'cheese'",
+            r"admins deleted categories \('Cheese'\)",
+        ),
+        (
+            "UPDATE ingredients SET category_id = "
+            "(SELECT id FROM categories WHERE key = 'uncategorized') WHERE name = 'Zwiebeln'",
+            r"ingredients in 'Uncategorized' \(1\)",
+        ),
+    ],
+)
+def test_the_0013_downgrade_refuses_to_undo_a_delete(
+    tmp_path: Path, change: str, message: str
+) -> None:
+    """Below 0013 there are neither deleted categories nor *Uncategorized*: the downgrade fails
+    with a clear message and changes nothing, rather than rewriting lists or ingredients."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    execute(path, change)
+    before = dump_without(path)
+
+    with pytest.raises(RuntimeError, match=message):
+        command.downgrade(config, "0012")
+
+    assert current_revision(path) == "0013"
+    assert dump_without(path) == before
+
+
+def test_names_are_unique_among_categories_that_arent_deleted(
+    config: Config, database_path: Path
+) -> None:
+    """REF-01: a deleted category's names can be used again, by one category at a time."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        connection.execute("UPDATE categories SET deleted_at = ? WHERE key = 'cheese'", (NOW,))
+        names = {"name_de": "Käse", "name_de_norm": "kaese", "name_en": "Cheese"}
+        insert(connection, "categories", **names, name_en_norm="cheese", sort_order=99)
+    with (
+        closing(sqlite3.connect(database_path)) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
+    ):
+        insert(connection, "categories", **names, name_en_norm="cheese 2", sort_order=100)
+
+
+# --- 0014 -----------------------------------------------------------------------------------
+
+# What the demo at 0013 counts in pieces after 0014 (D-34), with its piece weight: meal rows and
+# linked extra items on drafts use them with an amount only in pieces (Stk. or no unit).
+COUNTED_IN_PIECES_0014 = {
+    "Brot": None,  # 2 Stk. in a meal, without a piece weight
+    "Brötchen": 60,  # counted in pieces since D-32 already
+    "Eier": 60,  # 2 Stk. and 2 without a unit (6 Stk. on the list being shopped don't count)
+    "Karotten": 80,
+    "Kokosmilch": None,  # ml, 1 without a unit, and 2 Stk. on a draft
+    "Sojadrink": None,  # ml, 1 Stk. on a draft only
+    "Zitronen": 100,  # without a unit only
+    "Zwiebeln": 150,  # pieces, and an extra item without an amount
+    "Äpfel": 180,  # 6 Stk. on a draft only
+}
+
+
+def load_demo_0013(path: Path) -> None:
+    """The 0006 demo migrated to 0013 (`fixtures/demo-0013.sql`), with what 0014 sorts out:
+    ingredients with piece weights and densities, meal rows and linked extra items in pieces,
+    without a unit, in other units and without an amount, on drafts (one deleted), on the list
+    being shopped and in a detached meal's frozen rows, and done lists."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path)) as connection:
+        connection.executescript((FIXTURES / "demo-0013.sql").read_text(encoding="utf-8"))
+    assert current_revision(path) == "0013"
+
+
+def ingredients_by_unique_name(path: Path) -> dict[str, dict[str, object]]:
+    return {name: row for name, [row] in ingredients_by_name(path).items()}
+
+
+def base_units(path: Path) -> dict[str, tuple[object, object]]:
+    """Per ingredient: its base unit and piece weight."""
+    return {
+        name: (row["base_unit"], row["piece_weight_g"])
+        for name, row in ingredients_by_unique_name(path).items()
+    }
+
+
+def frozen_tables(path: Path) -> dict[str, list[dict[str, object]]]:
+    """Everything lists being shopped and done lists are made of, and the drafts' frozen
+    rows and extra items."""
+    return {
+        table: rows_of(path, table)
+        for table in ("shopping_lists", "list_meals", "list_meal_ingredients", "list_extra_items")
+    } | {"list_line_states": query(path, "SELECT * FROM list_line_states ORDER BY 1, 2")}
+
+
+def test_0014_counts_in_pieces_what_is_used_only_in_pieces(tmp_path: Path) -> None:
+    """D-34: a g or ml ingredient that meal rows and linked extra items on drafts use with an
+    amount, only in pieces (Stk. or no unit), becomes Stück and keeps its piece weight. Mixed
+    use, use without an amount, pieces only on a list being shopped, in a deleted extra item or
+    in frozen rows keep the base unit, and lose the piece weight; so do unused ingredients."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    before = base_units(path)
+
+    command.upgrade(config, "0014")
+
+    after = base_units(path)
+    assert {name: weight for name, (unit, weight) in after.items() if unit == "piece"} == (
+        COUNTED_IN_PIECES_0014
+    )
+    kept = {name: unit for name, (unit, _) in before.items() if name not in COUNTED_IN_PIECES_0014}
+    assert {name: after[name] for name in kept} == {
+        name: (unit, None) for name, unit in kept.items()
+    }
+    # Pieces and spoons; pieces and grams on a draft; pieces only on the list being shopped, in
+    # a deleted extra item, or in a detached meal's frozen rows; no amount.
+    for name in ("Knoblauch", "Tomaten", "Bananen", "Avocado", "Lauch", "Kartoffeln", "Salz"):
+        assert (before[name][0], after[name]) == ("g", ("g", None))
+    assert [after[name] for name in ("Milch", "Olivenöl")] == [("ml", None), ("ml", None)]
+
+
+NUTRIENT_COLUMNS = ("kcal", "protein", "carbs", "sugar", "fat")
+
+
+def what_0014_keeps(path: Path) -> dict[str, dict[str, object]]:
+    """Per ingredient, every column but the base unit, piece weight and density, and but the
+    values and pending update of Kokosmilch, the one ml ingredient with a density that becomes
+    Stück."""
+    kept: dict[str, dict[str, object]] = {}
+    for name, row in ingredients_by_unique_name(path).items():
+        changed = {"base_unit", "piece_weight_g", "density_g_per_ml"}
+        if name == "Kokosmilch":
+            changed |= {*NUTRIENT_COLUMNS, "pending_update"}
+        kept[name] = {column: value for column, value in row.items() if column not in changed}
+    return kept
+
+
+def test_0014_converts_the_values_of_an_ml_ingredient_with_a_density(tmp_path: Path) -> None:
+    """A former ml ingredient becomes per 100 g: with a density, its values are divided by it
+    (one above the plausible maximum becomes unknown, BAR-10); without one, they are kept.
+    Either way its pending Open Food Facts nutrients go, as with a base-unit change (ING-02),
+    and an ignored one stays remembered. A former g ingredient keeps its values, even with a
+    density."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    execute(path, "UPDATE ingredients SET carbs = 99 WHERE name = 'Kokosmilch'")
+    execute(path, "UPDATE ingredients SET density_g_per_ml = 1.03 WHERE name = 'Eier'")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(
+            "UPDATE ingredients SET pending_update = ? WHERE name = 'Sojadrink'",
+            (json.dumps({"nutrients.kcal": {"current": 39, "proposed": 41}}),),
+        )
+    before = ingredients_by_unique_name(path)
+
+    command.upgrade(config, "0014")
+
+    after = ingredients_by_unique_name(path)
+    coconut = after["Kokosmilch"]
+    # 194 kcal, 1.94 g protein, ... per 100 ml at 0.97 g/ml; 99 g carbs would be 102 g.
+    assert [coconut[key] for key in NUTRIENT_COLUMNS] == pytest.approx([200, 2, None, 2, 20])
+    assert json.loads(str(coconut["pending_update"])) == {
+        "name": {"current": "Kokosmilch", "proposed": "Kokosmilch cremig"},
+        "nutrients.fat": {"current": 19.4, "proposed": 18, "ignored": True},
+    }
+    assert coconut["user_edited_fields"] == before["Kokosmilch"]["user_edited_fields"]
+    soy = after["Sojadrink"]
+    assert (soy["base_unit"], soy["kcal"], soy["protein"], soy["pending_update"]) == (
+        "piece",
+        39,
+        3.3,
+        None,
+    )
+    eggs = after["Eier"]
+    assert eggs["base_unit"] == "piece"
+    assert [eggs[key] for key in NUTRIENT_COLUMNS] == [
+        before["Eier"][key] for key in NUTRIENT_COLUMNS
+    ]
+
+
+def test_0014_reads_an_empty_pending_update(tmp_path: Path) -> None:
+    """The app stores an empty pending update as SQL NULL or as JSON `null` (a refresh without
+    news); either is no pending update."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    execute(path, "UPDATE ingredients SET pending_update = 'null' WHERE name = 'Sojadrink'")
+
+    command.upgrade(config, "0014")
+
+    assert ingredients_by_unique_name(path)["Sojadrink"]["pending_update"] is None
+
+
+def test_0014_drops_the_density_and_changes_nothing_else(tmp_path: Path) -> None:
+    """The density column goes; apart from base units, piece weights and the converted values
+    nothing changes (`updated_at` and `updated_by` included: this is nobody's edit), no row and
+    no reference, and nothing of what lists being shopped and done lists are made of, frozen
+    rows and the attributes extra items copied included (D-08)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    lists = frozen_tables(path)
+    before = what_0014_keeps(path)
+    assert query(path, "SELECT count(*) FROM ingredients WHERE density_g_per_ml > 0") == [(4,)]
+
+    command.upgrade(config, "0014")
+
+    columns = {name for (name,) in query(path, "SELECT name FROM pragma_table_info('ingredients')")}
+    assert "density_g_per_ml" not in columns
+    assert {"piece_weight_g", "base_unit"} <= columns
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert frozen_tables(path) == lists
+    assert what_0014_keeps(path) == before
+    assert_clean(path)
+
+
+async def _what_the_demo_users_see(settings: Settings) -> dict[str, dict[str, Any]]:
+    """Every meal's rows and nutrition and every list's lines and extra items, as the demo
+    users see them, by id."""
+    app = create_app(settings)
+    seen: dict[str, dict[str, Any]] = {}
+    async with serve(app, base_url="https://testserver.local") as client:
+        for username in ("admin", "anna", "ben", "carl"):
+            user = Account(id="", username=username, display_name=username)
+            await login(client, user)
+            for meal in (await client.get("/api/meals", headers=user.headers)).json():
+                body = (await client.get(f"/api/meals/{meal['id']}", headers=user.headers)).json()
+                seen[body["id"]] = {key: body[key] for key in ("name", "ingredients", "nutrition")}
+            feed = (await client.get("/api/lists", headers=user.headers)).json()["lists"]
+            for item in feed:
+                body = (await client.get(f"/api/lists/{item['id']}", headers=user.headers)).json()
+                seen[body["id"]] = {key: body[key] for key in ("status", "lines", "extra_items")}
+    return seen
+
+
+def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
+    return sorted(
+        (meal["name"], row["ingredient"]["name"], row["amount"], row["unit"])
+        for meal in seen.values()
+        for row in meal.get("ingredients", [])
+        if not row["unit_fits"]
+    )
+
+
+def _nutrition_missing(seen: dict[str, dict[str, Any]], name: str) -> list[tuple[object, ...]]:
+    [meal] = [meal for meal in seen.values() if meal.get("name") == name]
+    return [(item["ingredient_name"], item["reason"]) for item in meal["nutrition"]["missing"]]
+
+
+def test_0014_through_the_api(tmp_path: Path) -> None:
+    """Lists being shopped and done lists show the same lines and extra items (D-08). Rows in
+    pieces of what became Stück fit, and count towards the nutrition again; those of ingredients
+    also used otherwise stay as they are, flagged (D-33)."""
+    data_dir = tmp_path / "data"
+    path = data_dir / "mealmate.db"
+    load_demo_0013(path)
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
+    settings = demo_settings(data_dir)
+    before = asyncio.run(_what_the_demo_users_see(settings))
+
+    upgrade_database(data_dir)
+
+    after = asyncio.run(_what_the_demo_users_see(settings))
+    assert after.keys() == before.keys()
+    frozen = [key for key, seen in before.items() if seen.get("status") in {"shopping", "done"}]
+    assert len(frozen) == 3
+    assert [after[key] for key in frozen] == [before[key] for key in frozen]
+
+    assert _flagged_rows(after) == [
+        ("Ofenkartoffeln mit Kräuterjoghurt", "Knoblauch", 1, "piece"),
+        ("Spaghetti Bolognese", "Knoblauch", 2, "piece"),
+        ("Spaghetti Bolognese", "Knoblauch", 2, "piece"),
+        ("Tomatensalat", "Tomaten", 4, "piece"),
+    ]
+    assert ("Pfannkuchen", "Eier", 2, "piece") in _flagged_rows(before)
+    assert ("Eier", "unit_mismatch") in _nutrition_missing(before, "Pfannkuchen")
+    assert [item for item in _nutrition_missing(after, "Pfannkuchen") if item[0] == "Eier"] == []
+    drafts = [seen for seen in after.values() if seen.get("status") == "draft"]
+    extras = [item for seen in drafts for item in seen["extra_items"] if item["amount"]]
+    assert len(extras) == 5
+    assert all(item["unit_fits"] for item in extras)
+
+
+def test_a_failing_0014_changes_nothing(tmp_path: Path) -> None:
+    """The upgrade runs in one transaction: when an ingredient cannot be moved half-way through
+    (here pending Open Food Facts values that are not JSON, after other ingredients became
+    Stück), the database stays at 0013 as it was."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    execute(path, "UPDATE ingredients SET pending_update = '{broken' WHERE name = 'Kokosmilch'")
+    before = dump_without(path)
+
+    with pytest.raises(json.JSONDecodeError):
+        command.upgrade(config, "0014")
+
+    assert current_revision(path) == "0013"
+    assert dump_without(path) == before
+    assert_clean(path)
+
+
+def test_the_0014_downgrade_is_refused(tmp_path: Path) -> None:
+    """D-34: what 0014 took (densities, piece weights, base units and values per 100 ml) can't
+    be given back, so the downgrade refuses while there are ingredients, and changes nothing;
+    the backup taken before the update is the way back. An empty database steps down (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0014")
+    before = dump_without(path)
+
+    with pytest.raises(RuntimeError, match=r"cannot downgrade below 0014: .*\(ingredients: 39\)"):
+        command.downgrade(config, "0013")
+
+    assert current_revision(path) == "0014"
+    assert dump_without(path) == before
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
@@ -814,8 +1642,9 @@ def test_a_failing_0007_changes_nothing(
 
 def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -> None:
     """Names may repeat from 0007 on; going back to unique names fails with a clear message
-    and changes nothing, until the duplicates are merged or renamed."""
-    command.upgrade(config, "head")
+    and changes nothing, until the duplicates are merged or renamed. (From 0013: 0014 refuses
+    any downgrade while there are ingredients.)"""
+    command.upgrade(config, "0013")
     with closing(sqlite3.connect(database_path)) as connection, connection:
         [(category_id,)] = connection.execute("SELECT id FROM categories WHERE key = 'other'")
         for brand in ("Weihenstephan", "Landliebe"):
@@ -824,6 +1653,7 @@ def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -
                 "ingredients",
                 name="Milch",
                 name_norm="milch",
+                name_sort="milch",
                 brand=brand,
                 category_id=category_id,
                 base_unit="ml",
@@ -834,7 +1664,7 @@ def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -
     with pytest.raises(RuntimeError, match=r"several ingredients share a name \('milch'\)"):
         command.downgrade(config, "0006")
 
-    assert current_revision(database_path) == HEAD
+    assert current_revision(database_path) == "0013"
     assert "products" not in tables(database_path)
     with closing(sqlite3.connect(database_path)) as connection, connection:
         connection.execute("UPDATE ingredients SET name_norm = 'milch landliebe' "
@@ -844,8 +1674,8 @@ def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -
 
 
 def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`seed-demo` at head, then down to the base (once the two spaghetti brands have names of
-    their own) and up again leaves a clean database."""
+    """`seed-demo` at head leaves a clean database with every kind of reference; going down is
+    refused at 0014 (D-34) and changes nothing. (Below 0014, see the next test.)"""
     data_dir = tmp_path / "data"
     path = data_dir / "mealmate.db"
     upgrade_database(data_dir)
@@ -860,13 +1690,26 @@ def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     command.upgrade(alembic_config(path), "head")
     assert non_null_foreign_keys(path) == references
-    with pytest.raises(RuntimeError, match="share a name"):
+    before = dump_without(path)
+    with pytest.raises(RuntimeError, match="cannot downgrade below 0014"):
         command.downgrade(alembic_config(path), "base")
-    with closing(sqlite3.connect(path)) as connection, connection:
-        connection.execute("UPDATE ingredients SET name_norm = name_norm || ' ' || brand_norm "
-                           "WHERE brand_norm IS NOT NULL")  # fmt: skip
-    command.downgrade(alembic_config(path), "base")
-    command.upgrade(alembic_config(path), "head")
+    assert current_revision(path) == HEAD
+    assert dump_without(path) == before
+
+
+def test_demo_data_at_0013_down_to_the_base_and_up(tmp_path: Path) -> None:
+    """The demo data at 0013 down to the base (once nothing is counted in pieces) and up again
+    leaves a clean database."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    with pytest.raises(RuntimeError, match="counted in pieces"):
+        command.downgrade(config, "base")
+    assert current_revision(path) == "0013"
+    execute(path, "UPDATE ingredients SET base_unit = 'g' WHERE base_unit = 'piece'")
+    command.downgrade(config, "base")
+    assert current_revision(path) is None
+    command.upgrade(config, "head")
     assert_clean(path)
     assert row_counts(path)["categories"] == len(CATEGORY_KEYS)
 

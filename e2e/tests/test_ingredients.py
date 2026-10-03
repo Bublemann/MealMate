@@ -1,4 +1,6 @@
-"""Ingredients: create with brand and barcode, search, similar hint, own values, admin order, merge.
+"""Ingredients: create with brand and barcode, search, similar hint, own values, admin categories
+(order seen on a shopping list, adding, renaming, deleting and finding the uncategorized
+ingredients), merge.
 
 ING-01..05, NUT-02, REF-01 (plan § 12, M3; one kind of ingredient since 2026-09-28). All tests of
 a run share one database, so names get a unique tag; the tag is the same in both spellings of a
@@ -21,7 +23,7 @@ def nutrient_row(page: Page, key: str) -> Locator:
     )
 
 
-def test_member_builds_up_an_ingredient(member_page: Page) -> None:
+def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Account) -> None:
     """Create with brand and barcode, find by brand and by another spelling, similar hint, a
     second brand of the same thing, own nutrition values (ING-01..03, NUT-02)."""
     page = member_page
@@ -32,34 +34,31 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
 
     page.goto("/ingredients")
     expect(page.get_by_test_id(TEST_IDS["screenIngredients"])).to_be_visible()
-    # "New ingredient", or the empty state's action while there are no ingredients yet.
-    create = re.compile(
-        f"^({re.escape(text('ingredients.new'))}|{re.escape(text('ingredients.empty.action'))})$"
-    )
-    page.get_by_role("button", name=create).click()
+    # The "New ingredient" tile, also while there are no ingredients yet (UI-03).
+    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
     dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
     form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
     form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
     form.get_by_label(text("ingredients.field.brand"), exact=True).fill(brand)
     form.get_by_label(text("ingredients.field.category"), exact=True).select_option(
-        label=text("category.fruit_vegetables")
+        label=api.category_name(member, "fruit_vegetables")
     )
-    form.get_by_label(text("ingredients.field.pieceWeight"), exact=True).fill("180")
+    # Counted in grams: no weight per piece (D-32).
+    expect(form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)).to_have_count(0)
     form.get_by_label(text("nutrient.kcal"), exact=True).fill("52")
     form.get_by_label(text("ingredients.field.barcode"), exact=True).fill(barcode)
-    # The package is optional, under "More".
-    form.get_by_text(text("ingredients.form.more"), exact=True).click()
-    form.get_by_label(text("ingredients.field.quantityText"), exact=True).fill("1 kg")
-    form.get_by_role("button", name=text("common.save")).click()
+    # "Save" is in the footer below the fields (D-35).
+    page.get_by_test_id(TEST_IDS["ingredientFormFooter"]).get_by_role(
+        "button", name=text("common.save")
+    ).click()
 
     # The new ingredient opens, named with its brand.
     expect(page).to_have_url(re.compile(r"/ingredients/[\w-]+$"))
     detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
     label = ingredient_label(name, brand)
     expect(detail.get_by_role("heading", level=1)).to_have_text(label)
-    expect(detail).to_contain_text(text("category.fruit_vegetables"))
+    expect(detail).to_contain_text(api.category_name(member, "fruit_vegetables"))
     expect(detail).to_contain_text(barcode)
-    expect(detail).to_contain_text("1 kg")
     expect(detail).to_contain_text(text("ingredients.detail.source.manual"))
     expect(nutrient_row(page, "kcal")).to_contain_text("52 kcal")
     ingredient_url = page.url
@@ -75,21 +74,29 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
     search.fill(f"aepfel {tag}")
     expect(row).to_be_visible()
 
+    # While a search text is present, the tile offers to create it, with that name (ING-03).
+    tile = page.get_by_test_id(TEST_IDS["newIngredient"])
+    expect(tile).to_have_text(text("ingredients.createNamed", name=f"aepfel {tag}"))
+    tile.click()
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    name_field = dialog.get_by_label(text("ingredients.field.name"), exact=True)
+    expect(name_field).to_have_value(f"aepfel {tag}")
+
     # Creating "Apfel …" points to the existing "Äpfel …", a hint only: another brand of the
     # same thing is another ingredient, with the same name.
-    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
-    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
-    dialog.get_by_label(text("ingredients.field.name"), exact=True).fill(f"Apfel {tag}")
+    name_field.fill(f"Apfel {tag}")
     hint = dialog.get_by_test_id(TEST_IDS["ingredientSimilar"])
     expect(hint).to_contain_text(text("ingredients.similar.title"))
     expect(hint.get_by_role("link", name=label)).to_be_visible()
-    dialog.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
+    name_field.fill(name)
     dialog.get_by_label(text("ingredients.field.brand"), exact=True).fill(f"Bio {tag}")
     dialog.get_by_role("button", name=text("common.save")).click()
     other = ingredient_label(name, f"Bio {tag}")
     expect(page.get_by_role("heading", level=1)).to_have_text(other)
+    # Back on the tab, the search is still there (UI-01).
     page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
-    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
+    expect(search).to_have_value(f"aepfel {tag}")
+    search.fill(tag)
     expect(
         page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role(
             "link", name=re.compile(f"^{re.escape(name)} ")
@@ -107,32 +114,362 @@ def test_member_builds_up_an_ingredient(member_page: Page) -> None:
     expect(nutrient_row(page, "fat")).to_contain_text(text("ingredients.nutrition.noValue"))
 
 
-def test_admin_reorders_categories(page: Page, api: Api, admin: Account) -> None:
-    """REF-01: the new order shows on the Ingredients tab."""
-    original = [category["id"] for category in api.categories(admin)]
-    first, second = api.categories(admin)[:2]
+def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
+    """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
+    wraps a long "Create …" tile instead of clipping it or widening the page, and leaves room for
+    the content below it, because its text stops growing at about the first accessibility size
+    (D-29)."""
+    page = member_page
+    page.goto("/ingredients")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+    name = f"Quittengelee mit Zimt {unique('aus dem Garten')}"
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(name)
+
+    tile = page.get_by_test_id(TEST_IDS["newIngredient"])
+    expect(tile).to_have_text(text("ingredients.createNamed", name=name))
+    reset = page.get_by_role("button", name=text("common.resetFilters"))
+    expect(reset).to_be_visible()
+    viewport = page.viewport_size
+    assert viewport is not None
+    assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
+    assert tile.evaluate("tile => tile.scrollWidth <= tile.clientWidth")
+    box = tile.bounding_box()
+    assert box is not None
+    assert box["x"] + box["width"] <= viewport["width"]
+    # The tile is the pinned block's last row: at least a quarter of the screen stays for the
+    # content, which a name this long at full text size would cover.
+    assert box["y"] + box["height"] < viewport["height"] * 0.75
+
+
+def test_member_filters_by_categories(member_page: Page, api: Api, member: Account) -> None:
+    """UI-01, UI-03, ING-03, D-23: the filter panel lists every category that can be picked,
+    and *Uncategorized* while it holds ingredients; ticked ones apply at once and show the
+    ingredients of any of them; the button counts the group; "Reset" and "Reset filters" clear
+    them; the choice stays while the app is open."""
+    page = member_page
     tag = unique("e2e")
-    api.create_ingredient(admin, f"Order A {tag}", category_key=first["key"])
-    api.create_ingredient(admin, f"Order B {tag}", category_key=second["key"])
-    first_name = text(f"category.{first['key']}")
-    second_name = text(f"category.{second['key']}")
+    for name, category in (
+        (f"Kirschen {tag}", "fruit_vegetables"),
+        (f"Quark {tag}", "dairy_eggs"),
+        (f"Senf {tag}", "sauces_spices_oils"),
+    ):
+        api.create_ingredient(member, name, category_key=category)
+    fruit = api.category_name(member, "fruit_vegetables")
+    dairy = api.category_name(member, "dairy_eggs")
+    sauces = api.category_name(member, "sauces_spices_oils")
+
+    page.goto("/ingredients")
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
+    rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
+    expect(rows).to_have_count(3)
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    expect(button).to_have_accessible_name(text("filter.button"))
+
+    button.click()
+    panel = page.get_by_role("dialog", name=text("filter.title"))
+    expect(panel).to_have_attribute("data-testid", TEST_IDS["filterPanel"])
+    group = panel.get_by_test_id(TEST_IDS["filterGroup"])
+    expect(group).to_have_accessible_name(text("ingredients.filter.categories"))
+    expect(group.get_by_role("checkbox")).to_have_count(len(api.filterable_categories(member)))
+
+    # Each tick applies at once, behind the open panel; several show any of them. The button
+    # counts the group (its name is read once the panel, which hides the page from screen
+    # readers, is closed).
+    group.get_by_role("checkbox", name=fruit, exact=True).check()
+    expect(rows).to_have_count(1)
+    expect(rows).to_contain_text([f"Kirschen {tag}"])
+    expect(button).to_have_text("1")
+    group.get_by_role("checkbox", name=dairy, exact=True).check()
+    expect(rows).to_contain_text([f"Kirschen {tag}", f"Quark {tag}"])
+    expect(button).to_have_text("1")
+
+    # "Reset" unticks every group and keeps the search.
+    panel.get_by_role("button", name=text("filter.reset"), exact=True).click()
+    expect(group.get_by_role("checkbox", checked=True)).to_have_count(0)
+    expect(rows).to_have_count(3)
+    expect(button).to_have_text("")
+
+    group.get_by_role("checkbox", name=sauces, exact=True).check()
+    panel.get_by_role("button", name=text("filter.done"), exact=True).click()
+    expect(panel).to_be_hidden()
+    expect(button).to_be_focused()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    expect(rows).to_contain_text([f"Senf {tag}"])
+
+    # Kept while the app is open: open the ingredient and come back.
+    rows.first.click()
+    expect(page.get_by_test_id(TEST_IDS["screenIngredient"])).to_be_visible()
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    expect(rows).to_contain_text([f"Senf {tag}"])
+
+    # Nothing in that category matches: "Reset filters" clears the search and the categories.
+    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(f"Kirschen {tag}")
+    expect(page.get_by_text(text("common.noMatches"), exact=True)).to_be_visible()
+    page.get_by_role("button", name=text("common.resetFilters")).click()
+    expect(page.get_by_test_id(TEST_IDS["ingredientSearch"])).to_have_value("")
+    expect(button).to_have_accessible_name(text("filter.button"))
+    expect(page.get_by_test_id(TEST_IDS["ingredientList"])).to_be_visible()
+
+
+def test_filter_panel_fits_the_largest_text_size(
+    member_page: Page, api: Api, member: Account
+) -> None:
+    """UI-01: at the largest iPhone text size (53 px body text, simulated here) the filter
+    panel's groups, "Reset" and "Done" wrap instead of being clipped or widening the page, and
+    the panel scrolls; its buttons stay in view."""
+    page = member_page
+    page.goto("/ingredients")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
+    viewport = page.viewport_size
+    assert viewport is not None
+    # The button sits beside the search field, not below it.
+    button_box, search_box = button.bounding_box(), search.bounding_box()
+    assert button_box is not None
+    assert search_box is not None
+    assert button_box["y"] < search_box["y"] + search_box["height"]
+    assert button_box["x"] + button_box["width"] <= viewport["width"]
+
+    button.click()
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+    expect(panel).to_be_visible()
+    # Measured once it has slid in.
+    panel.evaluate("panel => Promise.all(panel.getAnimations().map((a) => a.finished))")
+
+    assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
+    assert panel.evaluate("panel => panel.scrollWidth <= panel.clientWidth")
+    assert panel.evaluate("panel => panel.scrollHeight > panel.clientHeight")
+    box = panel.bounding_box()
+    assert box is not None
+    assert box["y"] >= 0
+    assert box["y"] + box["height"] <= viewport["height"]
+    for name in ("filter.reset", "filter.done"):
+        action = panel.get_by_role("button", name=text(name), exact=True)
+        expect(action).to_be_in_viewport()
+        assert action.evaluate("action => action.scrollWidth <= action.clientWidth")
+    # The last category can be scrolled to and ticked; every name wraps within the panel.
+    boxes = panel.get_by_role("checkbox")
+    boxes.last.check()
+    expect(boxes.last).to_be_checked()
+    for category in api.pickable_categories(member):
+        name = panel.get_by_text(category["names"]["en"], exact=True)
+        assert name.evaluate("name => name.scrollWidth <= name.clientWidth")
+
+
+def test_filter_panel_does_not_slide_under_reduce_motion(member_page: Page) -> None:
+    """UI-01, A11Y-02: the panel slides up, but not under Reduce Motion."""
+    page = member_page
+    page.goto("/ingredients")
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    panel = page.get_by_test_id(TEST_IDS["filterPanel"])
+
+    button.click()
+    expect(panel).to_be_visible()
+    assert panel.evaluate("panel => getComputedStyle(panel).animationName") != "none"
+    page.keyboard.press("Escape")
+    expect(panel).to_be_hidden()
+
+    page.emulate_media(reduced_motion="reduce")
+    button.click()
+    expect(panel).to_be_visible()
+    assert panel.evaluate("panel => getComputedStyle(panel).animationName") == "none"
+
+
+def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> None:
+    """REF-01, ADM-01: each arrow tap saves the order, and a shopping list's lines follow it; a
+    new category goes last, is renamed from its name and is offered in the ingredient form at
+    once."""
+    original = [category["id"] for category in api.ordered_categories(admin)]
+    first, second = api.ordered_categories(admin)[:2]
+    tag = unique("e2e")
+    ingredient_a = api.create_ingredient(admin, f"Order A {tag}", category_key=first["key"])
+    ingredient_b = api.create_ingredient(admin, f"Order B {tag}", category_key=second["key"])
+    draft = api.create_list(admin, f"Order {tag}")
+    for ingredient in (ingredient_a, ingredient_b):
+        api.add_extra_item(admin, draft["id"], ingredient_id=ingredient["id"], amount=100, unit="g")
+    first_name, second_name = first["names"]["en"], second["names"]["en"]
+    added, renamed = f"Counter {tag}", f"Cheese counter {tag}"
 
     try:
         sign_in(page.context, admin)
         page.goto("/me/admin/categories")
         order = page.get_by_test_id(TEST_IDS["adminCategoryList"])
         expect(order.get_by_role("listitem").first).to_contain_text(first_name)
-        page.get_by_role("button", name=text("admin.categories.moveUp", name=second_name)).click()
+        move_up = page.get_by_role("button", name=text("admin.categories.moveUp", name=second_name))
+        with page.expect_response(
+            lambda response: response.url.endswith("/api/admin/categories/order")
+        ) as saved:
+            move_up.click()
+        assert saved.value.ok
         expect(order.get_by_role("listitem").first).to_contain_text(second_name)
-        page.get_by_test_id(TEST_IDS["saveCategoryOrder"]).click()
-        expect(page.get_by_role("status")).to_have_text(text("admin.categories.saved"))
 
-        page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
-        page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
-        headings = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role("heading", level=2)
-        expect(headings).to_have_text([second_name, first_name])
+        page.get_by_test_id(TEST_IDS["newCategory"]).click()
+        dialog = page.get_by_role("dialog", name=text("admin.categories.new"))
+        dialog.get_by_label(text("admin.categories.nameDe"), exact=True).fill(f"Theke {tag}")
+        dialog.get_by_label(text("admin.categories.nameEn"), exact=True).fill(added)
+        dialog.get_by_role("button", name=text("common.save")).click()
+        expect(dialog).to_be_hidden()
+        expect(order.get_by_role("listitem").last).to_contain_text(added)
+
+        order.get_by_role("button", name=added, exact=True).click()
+        dialog = page.get_by_role("dialog", name=text("admin.categories.editTitle"))
+        english = dialog.get_by_label(text("admin.categories.nameEn"), exact=True)
+        expect(english).to_have_value(added)
+        english.fill(renamed)
+        dialog.get_by_role("button", name=text("common.save")).click()
+        expect(dialog).to_be_hidden()
+        expect(order.get_by_role("listitem").last).to_contain_text(renamed)
+
+        page.goto(f"/lists/{draft['id']}")
+        lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
+        expect(lines).to_contain_text([ingredient_b["name"], ingredient_a["name"]])
+
+        # The new category is the last choice in the ingredient form, and takes an ingredient.
+        page.goto("/ingredients")
+        page.get_by_test_id(TEST_IDS["newIngredient"]).click()
+        form = page.get_by_role("dialog", name=text("ingredients.form.createTitle")).get_by_test_id(
+            TEST_IDS["ingredientForm"]
+        )
+        category = form.get_by_label(text("ingredients.field.category"), exact=True)
+        expect(category.get_by_role("option").last).to_have_text(renamed)
+        form.get_by_label(text("ingredients.field.name"), exact=True).fill(f"Feta {tag}")
+        category.select_option(label=renamed)
+        form.get_by_role("button", name=text("common.save")).click()
+        detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+        expect(detail).to_contain_text(renamed)
     finally:
-        api.order_categories(admin, original)
+        current = [category["id"] for category in api.ordered_categories(admin)]
+        api.order_categories(admin, [*original, *(id_ for id_ in current if id_ not in original)])
+
+
+def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
+    """REF-01, D-30, ING-03: an admin adds a category and gives it to an ingredient, then deletes
+    it after a confirmation naming what moves. "Show" opens the Ingredients tab filtered to
+    *Uncategorized*, where the ingredient waits for a new category and gets one, while a done
+    list keeps the deleted category's heading."""
+    tag = unique("e2e")
+    name = f"Cheese bar {tag}"
+    gouda = api.create_ingredient(admin, f"Gouda {tag}")
+    [built_in] = [c for c in api.categories(admin) if c["key"] == "uncategorized"]
+    uncategorized = built_in["names"]["en"]
+    other = api.category_name(admin, "other")
+
+    # The admin adds a category and gives it to Gouda.
+    sign_in(page.context, admin)
+    page.goto("/me/admin/categories")
+    order = page.get_by_test_id(TEST_IDS["adminCategoryList"])
+    page.get_by_test_id(TEST_IDS["newCategory"]).click()
+    dialog = page.get_by_role("dialog", name=text("admin.categories.new"))
+    dialog.get_by_label(text("admin.categories.nameDe"), exact=True).fill(f"Käsebar {tag}")
+    dialog.get_by_label(text("admin.categories.nameEn"), exact=True).fill(name)
+    dialog.get_by_role("button", name=text("common.save")).click()
+    expect(dialog).to_be_hidden()
+    expect(order.get_by_role("button", name=name, exact=True)).to_be_visible()
+    # Within the app: a reload right away could still show the categories as stored before.
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    search = page.get_by_test_id(TEST_IDS["ingredientSearch"])
+    search.fill(gouda["name"])
+    rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
+    rows.filter(has_text=gouda["name"]).click()
+    detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    form = page.get_by_test_id(TEST_IDS["ingredientForm"])
+    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=name)
+    form.get_by_role("button", name=text("common.save")).click()
+    expect(detail).to_contain_text(name)
+    # A done list keeps Gouda under that category.
+    done = api.create_list(admin, f"Delete {tag}")
+    api.add_extra_item(admin, done["id"], ingredient_id=gouda["id"], amount=200, unit="g")
+    api.start_shopping(admin, done["id"])
+    api.finish_list(admin, done["id"])
+
+    page.goto("/me/admin/categories")
+    # *Uncategorized* is in the order, but has no dialog.
+    expect(order.get_by_role("listitem").filter(has_text=uncategorized)).to_have_count(1)
+    expect(order.get_by_role("button", name=uncategorized, exact=True)).to_have_count(0)
+    order.get_by_role("button", name=name, exact=True).click()
+    dialog = page.get_by_role("dialog", name=text("admin.categories.editTitle"))
+    dialog.get_by_role("button", name=text("admin.categories.delete"), exact=True).click()
+    confirm = page.get_by_role("alertdialog", name=text("admin.categories.deleteTitle", name=name))
+    expect(confirm).to_contain_text(
+        text("admin.categories.deleteIngredients_one", count="1", uncategorized=uncategorized)
+    )
+    expect(confirm).to_contain_text(
+        text("admin.categories.deleteItems_other", count="0", other=other)
+    )
+    confirm.get_by_role("button", name=text("admin.categories.deleteConfirm"), exact=True).click()
+    screen = page.get_by_test_id(TEST_IDS["screenAdminCategories"])
+    expect(screen.get_by_role("status")).to_have_text(text("admin.categories.deleted", name=name))
+    expect(order.get_by_role("button", name=name, exact=True)).to_have_count(0)
+
+    # "Show": the Ingredients tab with *Uncategorized* as its only category and no search.
+    show = text("admin.categories.showUncategorized")
+    screen.get_by_role("button", name=show, exact=True).click()
+    expect(page.get_by_test_id(TEST_IDS["screenIngredients"])).to_be_visible()
+    expect(search).to_have_value("")
+    button = page.get_by_test_id(TEST_IDS["filterButton"])
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    row = rows.filter(has_text=gouda["name"])
+    expect(row).to_contain_text(uncategorized)
+    button.click()
+    panel = page.get_by_role("dialog", name=text("filter.title"))
+    expect(panel.get_by_role("checkbox", checked=True)).to_have_count(1)
+    expect(panel.get_by_role("checkbox", name=uncategorized, exact=True)).to_be_checked()
+    panel.get_by_role("button", name=text("filter.done"), exact=True).click()
+
+    # Anyone can give it a new category; until then its detail and form show "Uncategorized".
+    row.click()
+    expect(detail).to_contain_text(uncategorized)
+    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    field = form.get_by_label(text("ingredients.field.category"), exact=True)
+    expect(field).to_have_value(built_in["id"])
+    expect(field.get_by_role("option", name=uncategorized, exact=True)).to_be_disabled()
+    fruit = api.category_name(admin, "fruit_vegetables")
+    field.select_option(label=fruit)
+    form.get_by_role("button", name=text("common.save")).click()
+    expect(detail).to_contain_text(fruit)
+
+    # Back on the tab, still filtered to *Uncategorized*, it is no longer there.
+    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
+    expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
+    search.fill(gouda["name"])
+    expect(page.get_by_text(text("common.noMatches"), exact=True)).to_be_visible()
+
+    page.goto(f"/lists/{done['id']}")
+    lines = page.get_by_test_id(TEST_IDS["doneLines"])
+    expect(lines.get_by_role("list", name=name, exact=True)).to_contain_text(gouda["name"])
+
+
+def test_categories_fit_the_largest_text_size(page: Page, admin: Account) -> None:
+    """UI-01: at the largest iPhone text size (53 px body text, simulated here) the categories,
+    "New category" and the category dialog wrap instead of being clipped or widening the screen;
+    the dialog scrolls within it."""
+    sign_in(page.context, admin)
+    page.goto("/me/admin/categories")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+    viewport = page.viewport_size
+    assert viewport is not None
+    order = page.get_by_test_id(TEST_IDS["adminCategoryList"])
+    expect(order).to_be_visible()
+    assert order.evaluate("order => order.scrollWidth <= order.clientWidth")
+    new_category = page.get_by_test_id(TEST_IDS["newCategory"])
+    box = new_category.bounding_box()
+    assert box is not None
+    assert box["x"] + box["width"] <= viewport["width"]
+
+    new_category.click()
+    dialog = page.get_by_role("dialog", name=text("admin.categories.new"))
+    expect(dialog).to_be_visible()
+    assert dialog.evaluate("dialog => dialog.scrollWidth <= dialog.clientWidth")
+    box = dialog.bounding_box()
+    assert box is not None
+    assert box["y"] >= 0
+    assert box["y"] + box["height"] <= viewport["height"]
+    save = dialog.get_by_role("button", name=text("common.save"))
+    save.scroll_into_view_if_needed()
+    expect(save).to_be_in_viewport()
 
 
 def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:

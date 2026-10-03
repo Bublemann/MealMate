@@ -20,12 +20,14 @@ write transaction (plan § 5.1). Unavailable, removed or busy: the values and `f
 so the next refresh tries again (BAR-07). Found, field by field (BAR-06):
 
 - a value Open Food Facts does not know (any more) never replaces a known one;
-- not user-edited: updated silently;
+- not user-edited, and the pack size always (D-38): updated silently. "User-edited" marks on the
+  pack size from before D-38 are ignored and stay as they are;
 - user-edited and different: collected into `pending_update`, unless the user ignored this very
   Open Food Facts version (`ignored_off_modified_at`) or, for an ingredient without a version, this
   very value (the ignored entries kept in `pending_update`, see `services.off_fields`);
-- nutrients only while Open Food Facts gives them per the ingredient's base unit;
-- the category, base unit, piece weight, density and barcode are never touched.
+- nutrients only while Open Food Facts gives them per what the ingredient's are per: 100 g,
+  or 100 ml for an ml ingredient (`NUTRITION_BASIS`);
+- the category, base unit, piece weight and barcode are never touched.
 """
 
 import logging
@@ -42,7 +44,8 @@ from app.core.config import Settings
 from app.core.ratelimit import Clock
 from app.db.base import utcnow
 from app.db.session import Database
-from app.domain.catalog import OFF_DATA_FIELDS
+from app.domain.catalog import OFF_DATA_FIELDS, PACK_FIELDS
+from app.domain.units import NUTRITION_BASIS, BaseUnit
 from app.integrations.off import OffClient, OffProduct
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
@@ -105,9 +108,10 @@ def apply_refresh(
     """Merge a product's current Open Food Facts values into the ingredient `row` (BAR-06), see
     the module docstring; runs inside the caller's write transaction."""
     proposed = found.fields(language)
-    if found.nutrition_basis != row.base_unit:
-        proposed = {field: value for field, value in proposed.items() if field in OFF_DATA_FIELDS}
-    edited = set(row.user_edited_fields)
+    if found.nutrition_basis != NUTRITION_BASIS[BaseUnit(row.base_unit)]:
+        kept = {*OFF_DATA_FIELDS, *PACK_FIELDS}
+        proposed = {field: value for field, value in proposed.items() if field in kept}
+    edited = set(row.user_edited_fields).difference(PACK_FIELDS)
     ignored = (
         found.last_modified_at is not None and found.last_modified_at == row.ignored_off_modified_at
     )

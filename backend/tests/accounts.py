@@ -1,5 +1,6 @@
 """Helpers for tests that need users, sessions and a controllable clock."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import cache
@@ -111,6 +112,20 @@ async def make_couple(api: AsyncClient, a: Account, b: Account) -> None:
 
 async def set_privacy(api: AsyncClient, user: Account, **switches: bool) -> None:
     assert (await api.patch("/api/me", json=switches, headers=user.headers)).status_code == 200
+
+
+async def save_filters(
+    api: AsyncClient,
+    user: Account,
+    *,
+    meals: Sequence[str] = (),
+    lists: Sequence[str] = (),
+    list_states: Sequence[str] = (),
+) -> None:
+    """Save what the user's filters hide: users on Meals and on Lists, and list states."""
+    body = {"meals": [*meals], "lists": [*lists], "list_states": [*list_states]}
+    response = await api.patch("/api/me", json={"filter_hidden": body}, headers=user.headers)
+    assert response.status_code == 200, response.text
 
 
 def error(response: Response) -> str:

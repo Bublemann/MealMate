@@ -26,6 +26,7 @@ from app.repositories import lists as lists_repo
 from app.repositories import reference as reference_repo
 from app.schemas.lists import (
     ExtraAddOp,
+    ExtraAddPayload,
     ExtraDeleteOp,
     ExtraUpdateOp,
     LineCheckOp,
@@ -115,31 +116,32 @@ async def _check(batch: _Batch, op: LineCheckOp) -> Outcome:
     return "changed" if changed else "unchanged"
 
 
+async def _extra_category_id(session: AsyncSession, payload: ExtraAddPayload) -> str:
+    """The category of a free-text item added by op: by id, or by key from app versions before
+    D-31; *Other* if it names none, an unknown or a deleted one, or *Uncategorized*, so that the
+    op never fails (LIST-06)."""
+    category_id = payload.category_id
+    if category_id is None and payload.category_key is not None:
+        named = await reference_repo.category_by_key(session, payload.category_key)
+        category_id = None if named is None else named.id
+    return await lists.free_text_category_id(session, category_id)
+
+
 async def _add_extra(batch: _Batch, op: ExtraAddOp) -> Outcome:
-    """Add a free-text extra item with the client's id (SHOP-02); its category by key, *Other*
-    if unknown."""
+    """Add a free-text extra item with the client's id (SHOP-02) in its category."""
     _require_not_done(batch.shopping_list)
     payload = op.payload
     if (existing := await lists_repo.get_extra(batch.session, payload.extra_id)) is not None:
         if existing.list_id != batch.shopping_list.id:
             raise OpRejectedError(ErrorCode.EXTRA_ID_TAKEN)
         return "duplicate"
-    category = (
-        None
-        if payload.category_key is None
-        else await reference_repo.category_by_key(batch.session, payload.category_key)
-    )
     batch.session.add(
         ListExtraItem(
             id=payload.extra_id,
             list_id=batch.shopping_list.id,
             text=payload.text,
             amount_text=payload.amount_text,
-            category_id=(
-                category.id
-                if category is not None
-                else await lists.other_category_id(batch.session)
-            ),
+            category_id=await _extra_category_id(batch.session, payload),
             added_by=batch.user_id,
             created_at=batch.now,
             updated_at=batch.now,

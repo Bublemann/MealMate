@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from pydantic import StringConstraints
 
 from app.api.deps import CurrentUser, Media, Now, limit_uploads
 from app.db.session import ReadSession, WriteSession
@@ -14,6 +15,9 @@ from app.services import meals
 
 router = APIRouter(prefix="/api/meals", tags=["meals"], responses=ERROR_RESPONSES)
 
+# A cuisine or tag id (a UUID). The list takes up to 100 of them, more than anyone ticks.
+FilterId = Annotated[str, StringConstraints(max_length=36)]
+
 
 @router.get("")
 async def list_meals(
@@ -22,21 +26,22 @@ async def list_meals(
     media: Media,
     now: Now,
     q: Annotated[str | None, Query(max_length=100)] = None,
-    cuisine_id: Annotated[str | None, Query(max_length=36)] = None,
-    tag_id: Annotated[str | None, Query(max_length=36)] = None,
+    cuisine_id: Annotated[list[FilterId] | None, Query(max_length=100)] = None,
+    tag_id: Annotated[list[FilterId] | None, Query(max_length=100)] = None,
     owner_ids: Annotated[list[str] | None, Query(max_length=500)] = None,
 ) -> list[MealSummary]:
-    """The meals you can see, A-Z. `q` searches names, tags and cuisines ignoring case and
-    umlauts. Without `owner_ids`, owners you switched off in your filter chips
-    (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only those owners'
-    meals are listed."""
+    """The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
+    and cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal
+    matches if its cuisine is any of the given ones and it has every given tag. Without
+    `owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are
+    left out; with `owner_ids` (repeatable), only those owners' meals are listed."""
     return await meals.list_meals(
         session,
         media,
         principal,
         query=q,
-        cuisine_id=cuisine_id,
-        tag_id=tag_id,
+        cuisine_ids=cuisine_id or [],
+        tag_ids=tag_id or [],
         owner_ids=owner_ids,
         now=now,
     )
@@ -45,7 +50,7 @@ async def list_meals(
 @router.get("/tags")
 async def list_meal_tags(principal: CurrentUser, session: ReadSession) -> list[Tag]:
     """The tags on the meals you can see, A-Z, for the tag filter. Unlike `/api/tags` it has no
-    limit and ignores your filter chips."""
+    limit; your user filter on Meals doesn't narrow it."""
     return await meals.list_meal_tags(session, principal)
 
 

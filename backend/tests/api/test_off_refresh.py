@@ -24,7 +24,7 @@ from app.schemas.ingredients import Ingredient
 from app.services import off_refresh
 from app.services.off_refresh import OffRefresher, Outcome
 from tests.accounts import Account, FakeClock, error, login, make_user
-from tests.catalog import EAN_13, create_from_off, create_ingredient
+from tests.catalog import EAN_13, create_from_off, create_ingredient, set_stored
 from tests.off import (
     MILK,
     OATS,
@@ -209,6 +209,39 @@ async def test_unknown_values_never_replace_known_ones(
     assert body["fetched_at"] == "2026-09-27T12:00:00Z"
 
 
+async def test_the_pack_size_is_always_refreshed(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """Nobody edits the pack size (D-38), so a refresh updates it silently. "User-edited" marks
+    on it from before are ignored, not rewritten, and a pending update from before no longer
+    lists it (BAR-06)."""
+    product = await saved_oats(api, anna, edited=[])
+    pack_fields = ["quantity_text", "pack_quantity", "pack_unit"]
+    old_pending = {
+        "quantity_text": {"current": "500 g", "proposed": "0,5 kg"},
+        "pack_unit": {"current": "g", "proposed": "kg"},
+    }
+    await set_stored(app, product["id"], user_edited_fields=pack_fields, pending_update=old_pending)
+    assert (await get(api, anna, product["id"]))["user_edited_fields"] == []
+    assert (await get(api, anna, product["id"]))["pending_update"] is None
+    bigger = oats(quantity="1 kg", product_quantity=1000, last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=bigger)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("1 kg", 1000, "g")
+    assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
+    async with database(app).read_sessions() as session:
+        row = await session.get(IngredientRow, product["id"])
+        assert row is not None
+        assert row.user_edited_fields == pack_fields
+
+
 async def test_only_pending_changes(
     app: FastAPI,
     api: AsyncClient,
@@ -246,6 +279,36 @@ async def test_nutrients_on_another_basis_are_left_alone(
     body = await get(api, anna, product["id"])
     assert body["nutrients"] == OATS_NUTRIENTS
     assert (body["quantity_text"], body["pack_unit"]) == ("0,5 l", "ml")
+
+
+async def test_a_piece_ingredient_refreshes_its_values_per_100_g(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """Switched to Stück before saving, the proposal's values stay per 100 g (ING-02), so Open
+    Food Facts' values per 100 g go on updating them; values per 100 ml don't."""
+    product = await saved_oats(api, anna, edited=[], base_unit="piece", piece_weight_g=40)
+    assert (product["base_unit"], product["nutrients"]) == ("piece", OATS_NUTRIENTS)
+    newer = oats(nutriments={"energy-kcal_100g": 368}, last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=newer)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert body["nutrients"] == OATS_NUTRIENTS | {"kcal": 368}
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 40)
+
+    per_ml = oats(
+        product_quantity_unit="ml",
+        nutriments={"energy-kcal_100g": 50},
+        last_modified_t=modified(60),
+    )
+    route(off_api, OATS).respond(json=per_ml)
+    await refresh(app, clock, product["id"])
+    assert (await get(api, anna, product["id"]))["nutrients"]["kcal"] == 368
 
 
 async def test_lone_surrogates_are_not_stored(
@@ -540,7 +603,12 @@ async def test_editing_a_field_settles_its_pending_value(
     assert changed.json()["pending_update"]["fields"] == [
         {"field": "nutrients.kcal", "current": 372, "proposed": 158}
     ]
-    # Another base unit settles every pending nutrient (they were per the old one).
+    # Counted in pieces, the values are still per 100 g: the pending ones stay (ING-02).
+    in_pieces = await api.patch(
+        f"/api/ingredients/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
+    )
+    assert in_pieces.json()["pending_update"] == changed.json()["pending_update"]
+    # Another basis settles every pending nutrient (they were per 100 g).
     rebased = await api.patch(
         f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )

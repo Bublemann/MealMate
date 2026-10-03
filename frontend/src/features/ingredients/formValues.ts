@@ -1,4 +1,3 @@
-import type { Unit } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import type { BaseUnit, EditedField, Ingredient, OffProposal } from './api';
 import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
@@ -6,18 +5,15 @@ import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
 /** The longest ingredient name the server accepts; a name from Open Food Facts may be longer. */
 export const NAME_MAX_LENGTH = 60;
 export const BRAND_MAX_LENGTH = 80;
-export const QUANTITY_TEXT_MAX_LENGTH = 40;
 
 /** The text fields of the form. */
-export const TEXT_FIELDS = ['name', 'brand', 'quantity_text'] as const;
+export const TEXT_FIELDS = ['name', 'brand'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];
-/** The optional number fields of the ingredient itself (never from Open Food Facts). */
-export const NUMBER_FIELDS = ['piece_weight_g', 'density_g_per_ml'] as const;
-export type NumberField = (typeof NUMBER_FIELDS)[number];
 
 /**
  * What the form shows, as typed: numbers stay text until saving, so a half-typed "0," isn't
- * turned into something else, and a field counts as changed only when its text changed.
+ * turned into something else, and a field counts as changed only when its text changed. The
+ * pack size isn't typed in: it comes with an Open Food Facts proposal (D-38).
  */
 export interface FormValues {
   name: string;
@@ -27,20 +23,10 @@ export interface FormValues {
   /** A category guessed from Open Food Facts, by key (the ids are only known once loaded). */
   categoryKey: string | null;
   baseUnit: BaseUnit;
+  /** Only for base unit Stück (ING-02). */
   piece_weight_g: string;
-  density_g_per_ml: string;
   barcode: string;
-  quantity_text: string;
-  pack_quantity: string;
-  pack_unit: Unit | '';
   nutrients: Record<NutrientKey, string>;
-}
-
-/** A barcode looked up or a result of the Open Food Facts search, to start a new ingredient. */
-export interface Prefill {
-  barcode: string;
-  /** The values from Open Food Facts; null for a barcode it doesn't know (or couldn't answer). */
-  proposal: OffProposal | null;
 }
 
 function nutrientTexts(
@@ -61,11 +47,7 @@ export function emptyValues(name = '', language: Language): FormValues {
     categoryKey: null,
     baseUnit: 'g',
     piece_weight_g: '',
-    density_g_per_ml: '',
     barcode: '',
-    quantity_text: '',
-    pack_quantity: '',
-    pack_unit: '',
     nutrients: nutrientTexts(undefined, language),
   };
 }
@@ -79,11 +61,7 @@ export function valuesFromIngredient(ingredient: Ingredient, language: Language)
     categoryKey: null,
     baseUnit: ingredient.base_unit,
     piece_weight_g: numberInputValue(ingredient.piece_weight_g, language),
-    density_g_per_ml: numberInputValue(ingredient.density_g_per_ml, language),
     barcode: ingredient.barcode ?? '',
-    quantity_text: ingredient.quantity_text ?? '',
-    pack_quantity: numberInputValue(ingredient.pack_quantity, language),
-    pack_unit: ingredient.pack_unit ?? '',
     nutrients: nutrientTexts(ingredient.nutrients, language),
   };
 }
@@ -101,29 +79,47 @@ export function fitName(name: string): string {
 }
 
 /**
- * The form with a barcode and, if Open Food Facts knows it, its proposal (BAR-03). What the
- * proposal doesn't have (piece weight, density, a name and a category guess when it has none)
- * stays as it was: a category the user chose is kept unless the proposal guesses one.
+ * The form filled with an Open Food Facts proposal, its barcode included (BAR-03, BAR-11). What
+ * the proposal has no value for (the piece weight, and a name, brand, category guess, base unit
+ * or nutrient when it has none) stays as it was: a category the user chose is kept unless the
+ * proposal guesses one.
  */
-export function valuesFromPrefill(
-  { barcode, proposal }: Prefill,
+export function valuesFromProposal(
+  proposal: OffProposal,
   current: FormValues,
   language: Language,
 ): FormValues {
-  if (!proposal) return { ...current, barcode };
+  const nutrients = { ...current.nutrients };
+  for (const key of NUTRIENT_KEYS) {
+    const value = proposal.nutrients[key];
+    if (value !== null && value !== undefined) nutrients[key] = numberInputValue(value, language);
+  }
   return {
     ...current,
     name: proposal.name ? fitName(proposal.name) : current.name,
-    brand: proposal.brand?.slice(0, BRAND_MAX_LENGTH) ?? '',
+    brand: proposal.brand ? proposal.brand.slice(0, BRAND_MAX_LENGTH) : current.brand,
     categoryId: proposal.category_key ? null : current.categoryId,
     categoryKey: proposal.category_key ?? current.categoryKey,
     baseUnit: proposal.nutrition_basis ?? current.baseUnit,
-    barcode,
-    quantity_text: proposal.quantity_text?.slice(0, QUANTITY_TEXT_MAX_LENGTH) ?? '',
-    pack_quantity: numberInputValue(proposal.pack_quantity, language),
-    pack_unit: proposal.pack_unit ?? '',
-    nutrients: nutrientTexts(proposal.nutrients, language),
+    barcode: proposal.barcode,
+    nutrients,
   };
+}
+
+/**
+ * The form without the texts and nutrients an earlier proposal filled in (`proposed` is its
+ * `proposalValues`) and the user left as they were: a product chosen instead keeps only the ones
+ * the user typed, so another product's values are never saved as user-edited (BAR-03, BAR-04).
+ */
+export function typedValues(values: FormValues, proposed: FormValues): FormValues {
+  const typed: FormValues = { ...values, nutrients: { ...values.nutrients } };
+  for (const field of TEXT_FIELDS) {
+    if (values[field].trim() === proposed[field].trim()) typed[field] = '';
+  }
+  for (const key of NUTRIENT_KEYS) {
+    if (values.nutrients[key].trim() === proposed.nutrients[key]) typed.nutrients[key] = '';
+  }
+  return typed;
 }
 
 /**
@@ -131,8 +127,8 @@ export function valuesFromPrefill(
  * keeps what the proposal lacks (a name typed before choosing a product without one is the
  * user's, not Open Food Facts').
  */
-export function proposalValues(prefill: Prefill, language: Language): FormValues {
-  return valuesFromPrefill(prefill, emptyValues('', language), language);
+export function proposalValues(proposal: OffProposal, language: Language): FormValues {
+  return valuesFromProposal(proposal, emptyValues('', language), language);
 }
 
 /**
@@ -145,8 +141,6 @@ export function editedFields(values: FormValues, proposed: FormValues): EditedFi
   for (const field of TEXT_FIELDS) {
     if (values[field].trim() !== proposed[field].trim()) edited.push(field);
   }
-  if (values.pack_quantity.trim() !== proposed.pack_quantity) edited.push('pack_quantity');
-  if (values.pack_unit !== proposed.pack_unit) edited.push('pack_unit');
   for (const key of NUTRIENT_KEYS) {
     if (values.nutrients[key].trim() !== proposed.nutrients[key]) edited.push(`nutrients.${key}`);
   }

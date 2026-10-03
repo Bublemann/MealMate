@@ -10,22 +10,30 @@ ingredient form prefilled with it, and the user may correct values before saving
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode
-from app.domain.units import Unit
+from app.domain.units import BaseUnit, Unit
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, OffClient, OffProduct
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import users as users_repo
-from app.schemas.ingredients import BarcodeLookup, ProductProposal
+from app.schemas.ingredients import BarcodeLookup, NutritionBasisName, ProductProposal
 from app.schemas.nutrition import NutrientValues
 from app.services import ingredients
-from app.services.ingredients import base_unit_name
 from app.services.off_refresh import DEFAULT_LANGUAGE
 from app.services.principal import Principal
+
+
+def _nutrition_basis_name(basis: BaseUnit | None) -> NutritionBasisName | None:
+    match basis:
+        case None:
+            return None
+        case BaseUnit.ML:
+            return "ml"
+        case _:
+            return "g"
 
 
 def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
     """The API view of a product from Open Food Facts, named in `language` if possible."""
     pack_quantity, pack_unit = found.pack
-    basis = found.nutrition_basis
     return ProductProposal(
         barcode=barcode,
         name=found.name(language),
@@ -33,10 +41,20 @@ def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
         quantity_text=found.quantity,
         pack_quantity=pack_quantity,
         pack_unit=None if pack_unit is None else Unit(pack_unit.value),
-        nutrition_basis=None if basis is None else base_unit_name(basis.value),
+        nutrition_basis=_nutrition_basis_name(found.nutrition_basis),
         nutrients=NutrientValues.model_validate(found.nutrients),
         category_key=found.category_key,
         off_last_modified_at=found.last_modified_at,
+    )
+
+
+def _not_found(barcode: str, *, off_unavailable: bool) -> BarcodeLookup:
+    return BarcodeLookup(
+        barcode=barcode,
+        found_in="none",
+        ingredient=None,
+        proposal=None,
+        off_unavailable=off_unavailable,
     )
 
 
@@ -46,12 +64,19 @@ async def user_language(session: AsyncSession, principal: Principal) -> str:
 
 
 async def lookup(
-    session: AsyncSession, off: OffClient, principal: Principal, text: str
+    session: AsyncSession,
+    off: OffClient,
+    principal: Principal,
+    text: str,
+    *,
+    own_only: bool = False,
 ) -> BarcodeLookup:
     """Look a barcode up (422 `invalid_format` if it is not a valid EAN/UPC code): an
     ingredient of ours, else Open Food Facts' proposal, else nothing (after a transient
     failure, Open Food Facts gets a second try before that, see `OffClient.fetch`). While too
-    many lookups wait for Open Food Facts: 503 `off.busy`."""
+    many lookups wait for Open Food Facts: 503 `off.busy`. With `own_only`, Open Food Facts
+    isn't asked: the edit pop-up's scan (BAR-03) and the meal form's (BAR-02) only need to
+    know whether an ingredient has the barcode."""
     barcode = ingredients.canonical_barcode(text, ("query", "barcode"))
     async with session.begin():
         row = await ingredients_repo.by_barcode(session, barcode)
@@ -63,6 +88,8 @@ async def lookup(
                 proposal=None,
                 off_unavailable=False,
             )
+        if own_only:
+            return _not_found(barcode, off_unavailable=False)
         language = await user_language(session, principal)
 
     # The user waits for this answer: a transient failure gets a second try, "not found" none.
@@ -70,13 +97,7 @@ async def lookup(
     if response.status == "busy":
         raise ApiError(ErrorCode.OFF_BUSY, status_code=503)
     if response.product is None:
-        return BarcodeLookup(
-            barcode=barcode,
-            found_in="none",
-            ingredient=None,
-            proposal=None,
-            off_unavailable=response.status == "unavailable",
-        )
+        return _not_found(barcode, off_unavailable=response.status == "unavailable")
     return BarcodeLookup(
         barcode=barcode,
         found_in="off",

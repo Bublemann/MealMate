@@ -1,9 +1,10 @@
 """The Open Food Facts fields of an ingredient and its pending update (BAR-04, BAR-06).
 
 An ingredient from Open Food Facts (`source` off) has the fields of `OFF_FIELDS`: `name`,
-`brand`, `quantity_text`, `pack_quantity`, `pack_unit` and `nutrients.<key>`. Those a user
-changed are listed in `user_edited_fields`; a refresh (`services.off_refresh`) updates the others
-silently and collects newer values for the user-edited ones into `pending_update`.
+`brand` and `nutrients.<key>`. Those a user changed are listed in `user_edited_fields`; a refresh
+(`services.off_refresh`) updates the others silently and collects newer values for the
+user-edited ones into `pending_update`. The pack size (`PACK_FIELDS`) is never user-edited and
+always updated, so it never goes there: marks and entries for it from before D-38 are ignored.
 
 `pending_update` is stored as `{field: {"current": ..., "proposed": ...}}`; the API shows the
 entries whose proposed value still differs from the ingredient's value, as of its
@@ -17,7 +18,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.domain.catalog import OFF_FIELDS, nutrient_field
-from app.domain.text import normalize
+from app.domain.text import normalize, sort_key
 from app.models import Ingredient as IngredientRow
 from app.schemas.ingredients import PendingUpdate, PendingUpdateField
 
@@ -49,14 +50,16 @@ def set_field_value(row: IngredientRow, field: str, value: Any) -> None:
 
 
 def set_name(row: IngredientRow, name: str) -> None:
-    """Set the name together with its normalised form (search, similarity hints)."""
-    row.name, row.name_norm = name, normalize(name)
+    """Set the name together with its normalised form (search, similarity hints) and its sort
+    key (dictionary order)."""
+    row.name, row.name_norm, row.name_sort = name, normalize(name), sort_key(name)
 
 
 def set_brand(row: IngredientRow, brand: str | None) -> None:
-    """Set the brand together with its normalised form (search)."""
+    """Set the brand together with its normalised form (search) and its sort key."""
     row.brand = brand
     row.brand_norm = None if brand is None else normalize(brand) or None
+    row.brand_sort = None if brand is None else sort_key(brand) or None
 
 
 def ignored_entries(row: IngredientRow) -> dict[str, Any]:
