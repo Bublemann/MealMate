@@ -183,7 +183,7 @@ async def test_the_order_names_every_category_that_isnt_deleted(
 async def test_a_deleted_categorys_names_can_be_used_again(
     api: AsyncClient, admin: Account, categories: dict[str, str]
 ) -> None:
-    """REF-01: names are unique among the categories that aren't deleted, so a section removed by
+    """REF-01: names are unique among the categories that aren't deleted, so a category deleted by
     mistake can be added again; a new category still goes last."""
     await deleted(api, admin, categories["cheese"])
     shown = [item for item in await listed(api, admin) if not item["deleted"]]
@@ -303,26 +303,23 @@ async def test_lists_being_shopped_and_done_keep_the_deleted_category(
     admin: Account,
     anna: Account,
     categories: dict[str, str],
-    ingredients: dict[str, Any],
     lasagne: Any,
 ) -> None:
-    """LIST-11, D-30: frozen lines and linked extra items keep a deleted category, with its name
-    and near its old place: right after the category that took over its place. Nothing else on
-    those lists changes. A draft follows the ingredients into *Uncategorized*, last in the order.
-    """
+    """LIST-11, D-30: frozen meal lines and linked extra items keep a deleted category, with its
+    name and near its old place: right after the category that took over its place. Nothing else
+    on lists being shopped and done lists changes. A draft follows the ingredients into
+    *Uncategorized*, last in the order."""
     fruit, meat = categories["fruit_vegetables"], categories["meat_fish"]
     cheese, uncategorized = categories["cheese"], categories["uncategorized"]
-    gouda, onions = ingredients["Gouda"], ingredients["Zwiebeln"]
+    feta = await create_ingredient(api, anna, "Feta", category_id=cheese)
     draft = await create_list(api, anna, "Entwurf")
     await added(api, anna, draft["id"], lasagne["id"])
     shopping = await create_list(api, anna, "Einkauf")
-    await added(api, anna, shopping["id"], lasagne["id"])
-    await start_shopping(api, anna, shopping["id"])
     done = await create_list(api, anna, "Erledigt")
-    for ingredient in (gouda, onions):
-        await extra_added(
-            api, anna, done["id"], ingredient_id=ingredient["id"], amount=100, unit="g"
-        )
+    for kept in (shopping, done):
+        await added(api, anna, kept["id"], lasagne["id"])
+        await extra_added(api, anna, kept["id"], ingredient_id=feta["id"], amount=100, unit="g")
+    await start_shopping(api, anna, shopping["id"])
     await finished(api, anna, done["id"])
     before = {list_id: await detail(api, anna, list_id) for list_id in (shopping["id"], done["id"])}
 
@@ -333,12 +330,14 @@ async def test_lists_being_shopped_and_done_keep_the_deleted_category(
         ("Hackfleisch", meat),
         ("Gouda", uncategorized),
     ]
-    after = await detail(api, anna, shopping["id"])
-    assert headings(after) == [("Zwiebeln", fruit), ("Hackfleisch", meat), ("Gouda", cheese)]
-    after_done = await detail(api, anna, done["id"])
-    assert headings(after_done) == [("Zwiebeln", fruit), ("Gouda", cheese)]
-    for body in (after, after_done):
-        old = before[body["id"]]
+    for list_id, old in before.items():
+        body = await detail(api, anna, list_id)
+        assert headings(body) == [
+            ("Zwiebeln", fruit),
+            ("Hackfleisch", meat),
+            ("Feta", cheese),
+            ("Gouda", cheese),
+        ]
         assert {line["key"]: line for line in body["lines"]} == {
             line["key"]: line for line in old["lines"]
         }
@@ -366,6 +365,36 @@ async def test_draft_lines_come_at_the_place_of_uncategorized(
         ("Zwiebeln", categories["fruit_vegetables"]),
         ("Hackfleisch", categories["meat_fish"]),
     ]
+
+
+async def test_a_draft_line_only_detached_meals_make_keeps_the_deleted_category(
+    api: AsyncClient,
+    admin: Account,
+    anna: Account,
+    categories: dict[str, str],
+    ingredients: dict[str, Any],
+    lasagne: Any,
+) -> None:
+    """REF-01, LIST-15: a detached meal is frozen, so a draft line that only detached meals make
+    keeps the category it was frozen with, a deleted one included. Once a live meal shares the
+    line, it follows the ingredient into *Uncategorized*."""
+    gouda = ingredients["Gouda"]["id"]
+    platter = await create_meal(
+        api,
+        anna,
+        "Käseplatte",
+        ingredients=[{"ingredient_id": gouda, "amount": 300, "unit": "g"}],
+    )
+    draft = await create_list(api, anna)
+    await added(api, anna, draft["id"], platter["id"])
+    response = await api.delete(f"/api/meals/{platter['id']}", headers=anna.headers)
+    assert response.status_code == 204
+
+    await deleted(api, admin, categories["cheese"])
+
+    assert headings(await detail(api, anna, draft["id"])) == [("Gouda", categories["cheese"])]
+    body = await added(api, anna, draft["id"], lasagne["id"])
+    assert ("Gouda", categories["uncategorized"]) in headings(body)
 
 
 async def test_ties_between_categories_are_broken_the_same_way_every_time(

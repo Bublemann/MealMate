@@ -446,7 +446,11 @@ async def _copy(
                 amount=extra.amount,
                 unit=extra.unit,
                 amount_text=extra.amount_text,
-                category_id=await _copied_category_id(session, extra),
+                category_id=(
+                    None
+                    if extra.category_id is None
+                    else await free_text_category_id(session, extra.category_id)
+                ),
                 added_by=principal.user_id,
                 created_at=now,
                 updated_at=now,
@@ -455,16 +459,6 @@ async def _copy(
     await session.flush()
     detail = await list_detail(session, media, principal.user_id, copy, rights, now=now)
     return ListCopyResult(list=detail, left_out=len(list_meals) - len(kept))
-
-
-async def _copied_category_id(session: AsyncSession, extra: ListExtraItem) -> str | None:
-    """The category of a copied free-text item: its own, unless that was deleted (LIST-06).
-    A linked item has none."""
-    if extra.category_id is None:
-        return None
-    if await reference.pickable_category(session, extra.category_id) is None:
-        return await other_category_id(session)
-    return extra.category_id
 
 
 async def copy_list(
@@ -675,10 +669,8 @@ async def _reference_problems(
     problems = []
     if ingredient_id is not None and await ingredients_repo.get(session, ingredient_id) is None:
         problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
-    if (
-        category_id is not None
-        and category_id != current_category_id
-        and await reference.pickable_category(session, category_id) is None
+    if category_id is not None and not await reference.can_pick(
+        session, category_id, keeping=current_category_id
     ):
         problems.append(_field("category_id", FieldErrorCode.INVALID))
     return problems
@@ -689,6 +681,15 @@ async def other_category_id(session: AsyncSession) -> str:
     if other is None:  # pragma: no cover -- seeded by migration 0003, never deleted (REF-01)
         raise RuntimeError("the 'other' category is missing")
     return other.id
+
+
+async def free_text_category_id(session: AsyncSession, category_id: str | None) -> str:
+    """Where a free-text item that names `category_id` goes when it must not fail (copies,
+    ops): there, unless it names none or one it can't be put into (a deleted one, LIST-06),
+    then into *Other*."""
+    if category_id is not None and await reference.can_pick(session, category_id):
+        return category_id
+    return await other_category_id(session)
 
 
 def _stored_unit(amount: float | None, unit: Unit | str | None) -> str | None:

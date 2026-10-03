@@ -4,7 +4,7 @@ import type { components } from '@/api/generated/schema';
 import { INGREDIENTS_KEY } from '@/features/ingredients/api';
 import { LISTS_KEY } from '@/features/lists/keys';
 import { CATEGORIES_KEY, type Category } from '@/features/reference/api';
-import { orderedCategories } from '@/features/reference/categories';
+import { notDeletedCategories } from '@/features/reference/categories';
 
 export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
@@ -129,7 +129,7 @@ export function useReorderCategories() {
     mutationFn: (categoryIds: string[]) => {
       // A category added after the tap was saved before this order (the scope): it stays last.
       // Deleted categories are no longer in the order (D-30).
-      const added = orderedCategories(queryClient.getQueryData<Category[]>(CATEGORIES_KEY) ?? [])
+      const added = notDeletedCategories(queryClient.getQueryData<Category[]>(CATEGORIES_KEY) ?? [])
         .map(({ id }) => id)
         .filter((id) => !categoryIds.includes(id));
       return unwrap(

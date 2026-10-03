@@ -17,8 +17,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
+import { CategoryOptions } from '@/features/reference/CategoryOptions';
 import { OTHER_KEY, pickableCategories } from '@/features/reference/categories';
-import { categoryName, unitLabel } from '@/features/reference/labels';
+import { unitLabel } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -201,11 +202,6 @@ export function IngredientForm({
       : pickable.find((category) => category.key === values.categoryKey);
   const defaultCategory = guessed ?? pickable.find((category) => category.key === OTHER_KEY);
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
-  // An uncategorized ingredient shows *Uncategorized* as its category without offering it, so it
-  // can be saved as it is; so does a category deleted while the form is open.
-  const unpickable = categories.data?.find(
-    (category) => category.id === selectedCategory && !pickable.includes(category),
-  );
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken =
     isApiError(mutation.error) && mutation.error.code === 'ingredient.barcode_taken';
@@ -445,16 +441,7 @@ export function IngredientForm({
             disabled={!categories.data}
             onChange={(event) => set('categoryId', event.target.value)}
           >
-            {unpickable && (
-              <NativeSelectOption value={unpickable.id} disabled>
-                {categoryName(unpickable, language)}
-              </NativeSelectOption>
-            )}
-            {pickable.map((category) => (
-              <NativeSelectOption key={category.id} value={category.id}>
-                {categoryName(category, language)}
-              </NativeSelectOption>
-            ))}
+            <CategoryOptions categories={categories.data ?? []} selected={selectedCategory} />
           </NativeSelect>
         )}
       </FormField>

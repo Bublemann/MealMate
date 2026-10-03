@@ -421,7 +421,7 @@ describe('AdminEventsScreen', () => {
     await i18n.changeLanguage('de');
     await waitFor(() =>
       expect(descriptions()).toEqual([
-        'Admin hat die Kategorie Käsetheke gelöscht (verschoben: 3 Zutaten, 1 Freitext-Eintrag)',
+        'Admin hat die Kategorie Käsetheke gelöscht (verschoben: 3 Zutaten, 1 Freitext-Artikel)',
         'Admin hat die Kategorie Käse in Käsetheke umbenannt',
         // The German name stayed.
         'Admin hat den Namen der Kategorie Getränke in einer anderen Sprache geändert',

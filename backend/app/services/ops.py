@@ -35,7 +35,7 @@ from app.schemas.lists import (
     OpsRequest,
     OpsResponse,
 )
-from app.services import access, aggregation, lists, reference, shopping
+from app.services import access, aggregation, lists, shopping
 from app.services.principal import Principal
 
 # What an op did: changed the list, took effect without a change, or had been done before.
@@ -124,10 +124,7 @@ async def _extra_category_id(session: AsyncSession, payload: ExtraAddPayload) ->
     if category_id is None and payload.category_key is not None:
         named = await reference_repo.category_by_key(session, payload.category_key)
         category_id = None if named is None else named.id
-    category = (
-        None if category_id is None else await reference.pickable_category(session, category_id)
-    )
-    return category.id if category is not None else await lists.other_category_id(session)
+    return await lists.free_text_category_id(session, category_id)
 
 
 async def _add_extra(batch: _Batch, op: ExtraAddOp) -> Outcome:

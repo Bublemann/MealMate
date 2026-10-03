@@ -65,23 +65,24 @@ async def list_categories(session: AsyncSession) -> list[Category]:
         return [category(row) for row in await reference_repo.categories_in_order(session)]
 
 
-async def pickable_category(session: AsyncSession, category_id: str) -> CategoryRow | None:
-    """The category, if new ingredients and free-text items may go into it (ING-02, LIST-06):
-    not a deleted one (D-30), nor *Uncategorized*, where nothing is put on purpose."""
+async def can_pick(session: AsyncSession, category_id: str, *, keeping: str | None = None) -> bool:
+    """Whether an ingredient or a free-text item may be put into this category (ING-02,
+    LIST-06): not a deleted one (D-30), nor *Uncategorized*, where nothing is put on purpose.
+    Keeping the category it has (`keeping`) is always fine, so it can be saved as it is."""
+    if category_id == keeping:
+        return True
     row = await reference_repo.get_category(session, category_id)
-    if row is None or row.deleted_at is not None or row.key == UNCATEGORIZED_CATEGORY:
-        return None
-    return row
+    return row is not None and row.deleted_at is None and row.key != UNCATEGORIZED_CATEGORY
 
 
-def _shown(rows: Sequence[CategoryRow]) -> list[CategoryRow]:
+def _not_deleted(rows: Sequence[CategoryRow]) -> list[CategoryRow]:
     """The categories that aren't deleted: the walking order admins see and change."""
     return [row for row in rows if row.deleted_at is None]
 
 
-def _find(rows: Sequence[CategoryRow], category_id: str) -> CategoryRow:
+def _get_not_deleted(rows: Sequence[CategoryRow], category_id: str) -> CategoryRow:
     """A category that isn't deleted; a deleted one can't be changed any more (404, D-30)."""
-    row = next((row for row in _shown(rows) if row.id == category_id), None)
+    row = next((row for row in _not_deleted(rows) if row.id == category_id), None)
     if row is None:
         raise not_found()
     return row
@@ -142,7 +143,7 @@ async def reorder_categories(
     in that order. Returns every category, as `list_categories` does."""
     async with session.begin():
         rows = await reference_repo.categories_in_order(session)
-        by_id = {row.id: row for row in _shown(rows)}
+        by_id = {row.id: row for row in _not_deleted(rows)}
         if len(category_ids) != len(by_id) or set(category_ids) != set(by_id):
             raise validation_error([FieldProblem(("body", "category_ids"), FieldErrorCode.INVALID)])
         for position, category_id in enumerate(category_ids):
@@ -167,7 +168,7 @@ def _taken_names(
     """A field error for each name another category that isn't deleted has in the same
     language, ignoring case, umlauts and accents (REF-01). A category's own names are never
     taken, and a deleted one's can be used again."""
-    others = [row for row in _shown(categories) if row.id != own_id]
+    others = [row for row in _not_deleted(categories) if row.id != own_id]
     taken = []
     if normalize(names.de) in {row.name_de_norm for row in others}:
         taken.append(FieldProblem(("body", "names", "de"), FieldErrorCode.TAKEN))
@@ -196,7 +197,9 @@ async def create_category(
         taken = _taken_names(rows, names)
         if taken:
             raise validation_error(taken)
-        row = CategoryRow(key=None, sort_order=len(_shown(rows)), created_at=now, updated_at=now)
+        row = CategoryRow(
+            key=None, sort_order=len(_not_deleted(rows)), created_at=now, updated_at=now
+        )
         _set_names(row, names)
         session.add(row)
         events.record(
@@ -224,7 +227,7 @@ async def rename_category(
     because lists refer to the category. A rename that changes nothing logs nothing."""
     async with session.begin():
         rows = await reference_repo.categories_in_order(session)
-        row = _find(rows, category_id)
+        row = _get_not_deleted(rows, category_id)
         if row.key == UNCATEGORIZED_CATEGORY:
             raise ApiError(ErrorCode.CATEGORY_NOT_RENAMABLE, status_code=409)
         taken = _taken_names(rows, names, own_id=row.id)
@@ -249,7 +252,7 @@ async def rename_category(
 async def category_usage(session: AsyncSession, category_id: str) -> CategoryUsage:
     """What deleting a category would move, for the confirmation (ADM-01)."""
     async with session.begin():
-        row = _find(await reference_repo.categories_in_order(session), category_id)
+        row = _get_not_deleted(await reference_repo.categories_in_order(session), category_id)
         return CategoryUsage(
             ingredients=await ingredients_repo.count_in_category(session, row.id),
             extra_items=len(await lists_repo.draft_extras_in_category(session, row.id)),
@@ -270,23 +273,23 @@ async def delete_category(
     """
     async with session.begin():
         rows = await reference_repo.categories_in_order(session)
-        row = _find(rows, category_id)
+        row = _get_not_deleted(rows, category_id)
         if row.key in (OTHER_CATEGORY, UNCATEGORIZED_CATEGORY):
             raise ApiError(ErrorCode.CATEGORY_NOT_DELETABLE, status_code=409)
-        built_in = {other.key: other for other in _shown(rows) if other.key is not None}
+        by_key = {each.key: each.id for each in _not_deleted(rows) if each.key is not None}
         moved = await ingredients_repo.move_category(
-            session, row.id, built_in[UNCATEGORIZED_CATEGORY].id
+            session, row.id, by_key[UNCATEGORIZED_CATEGORY]
         )
         extras = await lists_repo.draft_extras_in_category(session, row.id)
         for extra in extras:
-            extra.category_id = built_in[OTHER_CATEGORY].id
+            extra.category_id = by_key[OTHER_CATEGORY]
             extra.updated_at = now
         await lists_repo.bump(session, {extra.list_id for extra in extras}, now)
         row.deleted_at = row.updated_at = now
-        for position, other in enumerate(_shown(rows)):
-            if other.sort_order != position:
-                other.sort_order = position
-                other.updated_at = now
+        for position, kept in enumerate(_not_deleted(rows)):
+            if kept.sort_order != position:
+                kept.sort_order = position
+                kept.updated_at = now
         events.record(
             session,
             actor_id=actor.user_id,

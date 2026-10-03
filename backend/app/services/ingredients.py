@@ -156,7 +156,7 @@ async def _category_problem(
 ) -> FieldProblem | None:
     """A deleted category and *Uncategorized* can't be picked (ING-02); keeping the category an
     ingredient has is always fine, so an uncategorized one can be saved as it is."""
-    if category_id != current and await reference.pickable_category(session, category_id) is None:
+    if not await reference.can_pick(session, category_id, keeping=current):
         return FieldProblem(("body", "category_id"), FieldErrorCode.INVALID)
     return None
 

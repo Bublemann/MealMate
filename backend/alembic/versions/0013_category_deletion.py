@@ -5,7 +5,8 @@ Admins delete categories (REF-01, ADM-01). A deleted category stays in the table
 be used again, so each name stays unique only among the categories that aren't deleted: the
 unique name indexes become partial. The built-in category *Uncategorized* (key
 `uncategorized`, "Ohne Kategorie" / "Uncategorized") takes a deleted category's ingredients; it
-is added last in the walking order. No existing value changes.
+is added last in the walking order. No existing value changes; a category admins added with one
+of its names makes the upgrade refuse with a clear error, so that it can be renamed first.
 
 The downgrade refuses with a clear error while deleted categories exist or ingredients are in
 *Uncategorized*, rather than rewriting data (plan § 6). Otherwise it removes *Uncategorized*,
@@ -44,7 +45,30 @@ def _name_index(language: str) -> str:
     return f"ix_categories_name_{language}_norm"
 
 
+class UncategorizedNameTakenError(RuntimeError):
+    """A category admins added already has one of *Uncategorized*'s names."""
+
+
+def _check_the_names_are_free(connection: sa.Connection) -> None:
+    names = list(
+        connection.execute(
+            sa.text(
+                "SELECT name_en FROM categories "
+                "WHERE name_de_norm = :name_de_norm OR name_en_norm = :name_en_norm"
+            ),
+            UNCATEGORIZED,
+        ).scalars()
+    )
+    if names:
+        raise UncategorizedNameTakenError(
+            "cannot upgrade to 0013: the built-in category 'Uncategorized' (\"Ohne Kategorie\") "
+            f"needs its names, but a category ({', '.join(repr(name) for name in names)}) already "
+            "uses one; rename it first"
+        )
+
+
 def upgrade() -> None:
+    _check_the_names_are_free(op.get_bind())
     op.add_column("categories", sa.Column("deleted_at", sa.DateTime(), nullable=True))
     for language in LANGUAGES:
         op.drop_index(_name_index(language), table_name="categories")

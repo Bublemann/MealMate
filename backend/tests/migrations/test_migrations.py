@@ -902,6 +902,35 @@ def test_the_0013_downgrade_closes_the_gap_of_uncategorized(
 
 
 @pytest.mark.parametrize(
+    ("name_de", "name_en"),
+    [("ohne KATEGORIE", "Without category"), ("Unsortiert", "Uncategorized")],
+)
+def test_0013_refuses_names_an_added_category_took(
+    config: Config, database_path: Path, name_de: str, name_en: str
+) -> None:
+    """An admin may have added a category with one of *Uncategorized*'s names before 0013; the
+    upgrade then fails with a clear message and changes nothing, so it can be renamed first."""
+    command.upgrade(config, "0012")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        insert(
+            connection,
+            "categories",
+            name_de=name_de,
+            name_de_norm=name_de.lower(),
+            name_en=name_en,
+            name_en_norm=name_en.lower(),
+            sort_order=len(CATEGORY_KEYS) - 1,
+        )
+    before = dump_without(database_path)
+
+    with pytest.raises(RuntimeError, match=rf"\({name_en!r}\) already uses .* rename it first"):
+        command.upgrade(config, "0013")
+
+    assert current_revision(database_path) == "0012"
+    assert dump_without(database_path) == before
+
+
+@pytest.mark.parametrize(
     ("change", "message"),
     [
         (

@@ -33,7 +33,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useCategories, type Category } from '@/features/reference/api';
-import { orderedCategories, OTHER_KEY, UNCATEGORIZED_KEY } from '@/features/reference/categories';
+import {
+  notDeletedCategories,
+  OTHER_KEY,
+  UNCATEGORIZED_KEY,
+} from '@/features/reference/categories';
 import { categoryName } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
@@ -82,7 +86,7 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
   // The order on screen while moves wait for the server; null shows the saved one.
   const [moved, setMoved] = useState<string[] | null>(null);
   const order = useMemo(
-    () => moved ?? orderedCategories(categories).map(({ id }) => id),
+    () => moved ?? notDeletedCategories(categories).map(({ id }) => id),
     [moved, categories],
   );
   // After a move the focus follows the moved category (its button may have become disabled).
@@ -372,8 +376,9 @@ function DeleteCategory({
   const usage = useCategoryUsage(category.id, { enabled: confirming });
   const remove = useDeleteCategory(category.id);
   const name = categoryName(category, language);
-  const builtIn = (key: string) => {
-    const found = categories.data?.find((other) => other.key === key);
+  // *Uncategorized* and *Other*, named as the lists show them.
+  const nameOf = (key: string) => {
+    const found = categories.data?.find((each) => each.key === key);
     return found ? categoryName(found, language) : '';
   };
 
@@ -400,11 +405,11 @@ function DeleteCategory({
                 ? [
                     t('admin.categories.deleteIngredients', {
                       count: usage.data.ingredients,
-                      uncategorized: builtIn(UNCATEGORIZED_KEY),
+                      uncategorized: nameOf(UNCATEGORIZED_KEY),
                     }),
                     t('admin.categories.deleteItems', {
                       count: usage.data.extra_items,
-                      other: builtIn(OTHER_KEY),
+                      other: nameOf(OTHER_KEY),
                     }),
                     t('admin.categories.deleteKeeps'),
                   ].join(' ')

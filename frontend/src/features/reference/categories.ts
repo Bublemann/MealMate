@@ -14,7 +14,7 @@ type CategoryState = Pick<Category, 'key' | 'deleted'>;
  * The walking order admins see and change: the categories that aren't deleted (D-30),
  * *Uncategorized* included.
  */
-export function orderedCategories<C extends CategoryState>(categories: readonly C[]): C[] {
+export function notDeletedCategories<C extends CategoryState>(categories: readonly C[]): C[] {
   return categories.filter((category) => !category.deleted);
 }
 
@@ -23,5 +23,5 @@ export function orderedCategories<C extends CategoryState>(categories: readonly 
  * neither a deleted category (D-30) nor *Uncategorized*, where nothing is put on purpose.
  */
 export function pickableCategories<C extends CategoryState>(categories: readonly C[]): C[] {
-  return orderedCategories(categories).filter((category) => category.key !== UNCATEGORIZED_KEY);
+  return notDeletedCategories(categories).filter((category) => category.key !== UNCATEGORIZED_KEY);
 }

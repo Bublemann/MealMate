@@ -3,9 +3,8 @@ import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
-import { pickableCategories } from '@/features/reference/categories';
-import { categoryName, unitLabel } from '@/features/reference/labels';
-import { useLanguage } from '@/i18n';
+import { CategoryOptions } from '@/features/reference/CategoryOptions';
+import { unitLabel } from '@/features/reference/labels';
 
 /** The longest free-text amount the server takes (LIST-06). */
 export const MAX_AMOUNT_TEXT_LENGTH = 30;
@@ -96,12 +95,7 @@ export function FreeTextFields({
   withoutCategory = false,
 }: FreeTextFieldsProps) {
   const { t } = useTranslation();
-  const language = useLanguage();
   const categories = useCategories();
-  const pickable = pickableCategories(categories.data ?? []);
-  const unpickable = categories.data?.find(
-    (category) => category.id === categoryId && !pickable.includes(category),
-  );
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -130,16 +124,9 @@ export function FreeTextFields({
               {!categories.data && (
                 <NativeSelectOption value="">{t('common.loading')}</NativeSelectOption>
               )}
-              {unpickable && (
-                <NativeSelectOption value={unpickable.id} disabled>
-                  {categoryName(unpickable, language)}
-                </NativeSelectOption>
+              {categories.data && (
+                <CategoryOptions categories={categories.data} selected={categoryId} />
               )}
-              {pickable.map((category) => (
-                <NativeSelectOption key={category.id} value={category.id}>
-                  {categoryName(category, language)}
-                </NativeSelectOption>
-              ))}
             </NativeSelect>
           )}
         </FormField>
