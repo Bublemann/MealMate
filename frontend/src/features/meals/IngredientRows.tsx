@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, CircleAlert, ScanBarcode, X } from 'lucide-react';
-import { lazy, Suspense, useState } from 'react';
+import { ArrowDown, ArrowUp, CircleAlert, X } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
@@ -13,11 +13,7 @@ import { unitLabel } from '@/features/reference/labels';
 import { useUnitChoice } from '@/features/reference/units';
 import { testIds } from '@/testIds';
 import { moved, newRow, withAmountText, type RowState } from './form';
-
-// The scanner and its decoder are a separate chunk, loaded on the first tap (PERF-03).
-const ScanDialog = lazy(async () => ({
-  default: (await import('@/features/scanner/ScanDialog')).ScanDialog,
-}));
+import { MealScan } from './MealScan';
 
 interface IngredientRowsProps {
   rows: RowState[];
@@ -30,13 +26,12 @@ interface IngredientRowsProps {
  * The meal's ingredient rows (MEAL-02): amount, unit and note per row, in an order the user
  * sets. A row offers only the units that fit its ingredient's base unit (REF-02); an older amount
  * that doesn't fit stays as it is, marked, until the user picks one that fits. New rows come from
- * the ingredient picker, which can also create an ingredient (MEAL-03).
+ * the ingredient picker, which can also create an ingredient, and from the scan (MEAL-03).
  */
 export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsProps) {
   const { t } = useTranslation();
   // A new picker after each pick starts with an empty search.
   const [pickerKey, setPickerKey] = useState(0);
-  const [scanning, setScanning] = useState(false);
 
   function update(index: number, row: RowState) {
     onChange(rows.map((current, i) => (i === index ? row : current)));
@@ -71,8 +66,9 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
         </ol>
       )}
       {/* Enter in the search field picks nothing and must not save the whole meal. Dialogs
-          opened from the picker (the ingredient form, the Open Food Facts search) are portals:
-          their key events bubble through here in React, but their Enter must still submit. */}
+          opened from the picker and the scan (the ingredient form, the Open Food Facts search,
+          the scanner) are portals: their key events bubble through here in React, but their
+          Enter must still submit. */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         className="rounded-xl border border-dashed p-3"
@@ -91,22 +87,8 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
           label={t('meals.field.addIngredient')}
           onSelect={onPick}
         />
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-3"
-          data-testid={testIds.scanBarcode}
-          onClick={() => setScanning(true)}
-        >
-          <ScanBarcode aria-hidden="true" />
-          {t('scanner.open')}
-        </Button>
+        <MealScan onIngredient={onPick} />
       </div>
-      {scanning && (
-        <Suspense fallback={null}>
-          <ScanDialog open onOpenChange={setScanning} onIngredient={onPick} />
-        </Suspense>
-      )}
     </fieldset>
   );
 }

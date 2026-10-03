@@ -75,8 +75,8 @@ async def lookup(
     ingredient of ours, else Open Food Facts' proposal, else nothing (after a transient
     failure, Open Food Facts gets a second try before that, see `OffClient.fetch`). While too
     many lookups wait for Open Food Facts: 503 `off.busy`. With `own_only`, Open Food Facts
-    isn't asked: the edit pop-up's scan only needs to know whether another ingredient has
-    the barcode (BAR-03)."""
+    isn't asked: the edit pop-up's scan (BAR-03) and the meal form's (BAR-02) only need to
+    know whether an ingredient has the barcode."""
     barcode = ingredients.canonical_barcode(text, ("query", "barcode"))
     async with session.begin():
         row = await ingredients_repo.by_barcode(session, barcode)

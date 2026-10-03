@@ -9,8 +9,8 @@ export type BarcodeLookup = components['schemas']['BarcodeLookup'];
 export interface LookupRequest {
   barcode: string;
   /**
-   * Only our own ingredients, without asking Open Food Facts: the edit pop-up's scan only needs
-   * to know whether another ingredient has the barcode (BAR-03).
+   * Only our own ingredients, without asking Open Food Facts: the edit pop-up's scan (BAR-03) and
+   * the meal form's (BAR-02) only need to know whether an ingredient has the barcode.
    */
   ownOnly?: boolean;
 }

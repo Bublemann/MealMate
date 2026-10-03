@@ -242,6 +242,11 @@ export function lookupResult(
  */
 export async function scanInForm(user: UserEvent, dialog: HTMLElement, digits: string) {
   await user.click(within(dialog).getByTestId(testIds.ingredientFormScan));
+  await typeInScanner(user, digits);
+}
+
+/** Types `digits` into the open scanner's manual input; returns once the scanner has closed. */
+export async function typeInScanner(user: UserEvent, digits: string) {
   const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
   await user.type(within(scanner).getByTestId(testIds.barcodeInput), `${digits}{Enter}`);
   await waitFor(() => expect(scanner).not.toBeInTheDocument());
