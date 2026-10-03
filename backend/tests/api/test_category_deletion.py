@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.models import AdminEvent, ListExtraItem
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import category_ids, create_ingredient
+from tests.catalog import category_ids, create_ingredient, ingredient_counts, set_category
 from tests.lists import (
     add_extra,
     added,
@@ -264,6 +264,35 @@ async def test_a_delete_moves_the_ingredients_to_uncategorized(
         )
     ]
     assert events[0]["actor"]["id"] == admin.id
+
+
+async def test_uncategorized_counts_its_ingredients_until_each_has_a_new_category(
+    api: AsyncClient,
+    admin: Account,
+    anna: Account,
+    categories: dict[str, str],
+    ingredients: dict[str, Any],
+) -> None:
+    """ING-03, REF-01: the category list counts the ingredients that moved to *Uncategorized*,
+    so that the Ingredients tab offers it until each of them has a new category. A deleted
+    category holds none."""
+    feta = await create_ingredient(api, anna, "Feta", category_id=categories["cheese"])
+    assert await ingredient_counts(api, anna) == {
+        **dict.fromkeys(categories, 0),
+        "fruit_vegetables": 1,
+        "meat_fish": 1,
+        "cheese": 2,
+        "sausage_deli": 1,
+    }
+
+    await deleted(api, admin, categories["cheese"])
+
+    counts = await ingredient_counts(api, anna)
+    assert (counts["cheese"], counts["uncategorized"]) == (0, 2)
+    for ingredient, left in ((feta, 1), (ingredients["Gouda"], 0)):
+        await set_category(api, anna, ingredient["id"], categories["dairy_eggs"])
+        counts = await ingredient_counts(api, anna)
+        assert (counts["uncategorized"], counts["dairy_eggs"]) == (left, 2 - left)
 
 
 async def test_free_text_items_on_drafts_move_to_other(

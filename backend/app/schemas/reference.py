@@ -31,13 +31,17 @@ class Category(BaseModel):
 
     A `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and
     done lists still show it. It keeps its last `sort_order`, which the next category in the
-    walking order took over: its lines come right after that one's."""
+    walking order took over: its lines come right after that one's.
+
+    `ingredient_count`: how many ingredients it holds, so that the Ingredients tab offers
+    *Uncategorized* in its filter only while it holds some (ING-03)."""
 
     id: str
     key: str | None
     names: CategoryNames
     sort_order: int
     deleted: bool
+    ingredient_count: int
 
 
 class CategoryCreate(BaseModel):

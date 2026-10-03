@@ -31,9 +31,27 @@ async def category_ids(api: AsyncClient, user: Account) -> dict[str, str]:
     return {item["key"]: item["id"] for item in response.json()}
 
 
+async def ingredient_counts(api: AsyncClient, user: Account) -> dict[str, int]:
+    """Each category's number of ingredients, by key."""
+    response = await api.get("/api/categories", headers=user.headers)
+    assert response.status_code == 200, response.text
+    return {item["key"]: item["ingredient_count"] for item in response.json()}
+
+
 async def create_ingredient(api: AsyncClient, user: Account, name: str, **body: Any) -> Any:
     response = await api.post("/api/ingredients", json={"name": name, **body}, headers=user.headers)
     assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def set_category(
+    api: AsyncClient, user: Account, ingredient_id: str, category_id: str
+) -> Any:
+    """Give an ingredient another category."""
+    response = await api.patch(
+        f"/api/ingredients/{ingredient_id}", json={"category_id": category_id}, headers=user.headers
+    )
+    assert response.status_code == 200, response.text
     return response.json()
 
 

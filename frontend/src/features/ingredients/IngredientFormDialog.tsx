@@ -18,6 +18,7 @@ import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
 import {
+  unitMismatch,
   useCreateIngredient,
   useSimilarIngredients,
   useUpdateIngredient,
@@ -29,7 +30,9 @@ import {
   type IngredientUpdate,
   type NutrientValues,
   type OffProposal,
+  type UnitMismatch,
 } from './api';
+import { BaseUnitConfirmDialog } from './BaseUnitConfirmDialog';
 import {
   BRAND_MAX_LENGTH,
   editedFields,
@@ -151,6 +154,12 @@ export interface IngredientFormProps {
   children?: ReactNode;
 }
 
+/** A base-unit change the server refused because amounts would stop fitting (D-33). */
+interface Refused {
+  body: IngredientUpdate;
+  mismatch: UnitMismatch;
+}
+
 /** The Open Food Facts proposal and its own values, to tell which ones the user changed. */
 interface Proposed {
   prefill: Prefill;
@@ -195,6 +204,7 @@ export function IngredientForm({
     prefill?.proposal ? { prefill, values: proposalValues(prefill, language) } : null,
   );
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
+  const [refused, setRefused] = useState<Refused | null>(null);
   const [searching, setSearching] = useState(false);
   const [scanning, setScanning] = useState(false);
 
@@ -211,7 +221,11 @@ export function IngredientForm({
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken =
     isApiError(mutation.error) && mutation.error.code === 'ingredient.barcode_taken';
-  const showAlert = !barcodeTaken && needsErrorAlert(serverFields, SHOWN_FIELDS);
+  // A refused base-unit change asks in its own dialog instead.
+  const showAlert =
+    !barcodeTaken &&
+    unitMismatch(mutation.error) === null &&
+    needsErrorAlert(serverFields, SHOWN_FIELDS);
   // A proposal belongs to its barcode: a scanned or chosen product keeps it.
   const barcodeFixed = proposed !== null;
   const fromOff = proposed !== null || ingredient?.source === 'off';
@@ -247,6 +261,16 @@ export function IngredientForm({
     onPickExisting?.(match);
   }
 
+  function saved(result: Ingredient) {
+    onClose();
+    onSaved?.(result);
+  }
+
+  // The category was deleted meanwhile (REF-01): the categories load again to pick another.
+  function failed(error: Error) {
+    if ('category_id' in fieldErrorMessagesByPath(t, error)) void categories.refetch();
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     // Submit events of the dialogs opened from here (the Open Food Facts search, the barcode
@@ -271,14 +295,6 @@ export function IngredientForm({
     setInvalid(problems);
     if (problems.size > 0) return;
 
-    const saved = (result: Ingredient) => {
-      onClose();
-      onSaved?.(result);
-    };
-    // The category was deleted meanwhile (REF-01): the categories load again to pick another.
-    const failed = (error: Error) => {
-      if ('category_id' in fieldErrorMessagesByPath(t, error)) void categories.refetch();
-    };
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
@@ -334,7 +350,23 @@ export function IngredientForm({
       saved(ingredient);
       return;
     }
-    update.mutate(body, { onSuccess: saved, onError: failed });
+    // A base-unit change that leaves amounts not fitting asks first, then is sent again (D-33).
+    update.mutate(body, {
+      onSuccess: saved,
+      onError: (error) => {
+        const mismatch = unitMismatch(error);
+        if (mismatch) setRefused({ body, mismatch });
+        else failed(error);
+      },
+    });
+  }
+
+  function changeAnyway() {
+    if (!refused) return;
+    update.mutate(
+      { ...refused.body, accept_unit_mismatch: true },
+      { onSuccess: saved, onError: failed },
+    );
   }
 
   return (
@@ -560,6 +592,15 @@ export function IngredientForm({
             onBarcode={(scanned) => set('barcode', scanned)}
           />
         </Suspense>
+      )}
+      {ingredient && (
+        <BaseUnitConfirmDialog
+          mismatch={refused?.mismatch ?? null}
+          name={ingredientLabel(ingredient.name, ingredient.brand)}
+          baseUnit={ingredient.base_unit}
+          onConfirm={changeAnyway}
+          onClose={() => setRefused(null)}
+        />
       )}
     </form>
   );

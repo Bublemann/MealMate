@@ -107,7 +107,11 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   pieces fit, or while the row has no amount ("nach Geschmack"). The mark follows the amount and
   unit as they are typed, by the same table, so it doesn't wait for the server; the server judges what is
   stored the same way (`unit_fits`), keeps such a row while it is sent back unchanged and refuses
-  a new one.
+  a new one. A base-unit change, or a merge across base units, that would leave amounts not
+  fitting is refused with their counts (409 `ingredient.unit_mismatch`, read by `unitMismatch`):
+  the edit pop-up asks in `BaseUnitConfirmDialog` ("Trotzdem ändern" or "Abbrechen"), and the
+  merge confirmation stays open, names the count and merges on "Trotzdem zusammenführen". Either
+  sends the same request again with `accept_unit_mismatch`.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps
@@ -154,8 +158,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   "Fertig" closes the panel. The button shows how many groups are not at their default, also in
   its accessible name. A group shows the loading placeholder until its options arrive, and its
   error when they fail to load or a change fails. Ingredients offers the categories (any of them,
-  ING-03); Meals the user filter (MEAL-10), the cuisines (any of them) and the tags (all of them,
-  MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
+  ING-03), with _Uncategorized_ only while it holds ingredients or is ticked
+  (`filterableCategories`: the category list counts each category's ingredients, and saving,
+  merging or deleting an ingredient loads it again); Meals the user filter (MEAL-10), the
+  cuisines (any of them) and the tags (all of them, MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
   (`features/savedFilters/`): `useUserFilterGroup`, one checkbox per user whose meals or lists are
   visible, "Me" first, then the partner, and `useStateFilterGroup`, "Entwurf", "Einkauf" and
   "Erledigt". They are saved on the server in the profile's `filter_hidden` (`useSaveFilter`,
@@ -180,8 +186,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in
   `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
   survives opening a detail and coming back, and is gone when the app closes or the session ends;
-  never put it in the URL or browser storage. The user filter and the state filter are server
-  state (`/me`).
+  never put it in the URL or browser storage. Other screens may set it before opening a tab:
+  "Zeigen" after a category delete leaves the Ingredients tab with only _Uncategorized_ ticked
+  and no search. The user filter and the state filter are server state (`/me`).
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
   asset is bundled and served by the app (SEC-08). `dangerouslySetInnerHTML` is banned by ESLint
@@ -534,6 +541,7 @@ order.
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
 | `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
+| `baseUnitConfirm`        | `base-unit-confirm`        | "Change anyway?" when amounts won't fit     |
 | `offSearchButton`        | `off-search-button`        | Magnifier next to the name in the form      |
 | `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name              |
 | `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search      |
@@ -542,6 +550,7 @@ order.
 | `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search               |
 | `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner of the form's scan icon             |
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
+| `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |

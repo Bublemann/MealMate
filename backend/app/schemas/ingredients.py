@@ -227,7 +227,10 @@ class IngredientUpdate(BaseModel):
     another product's. The base unit may change freely; the values are not converted.
     Changing it to or from `piece` clears the piece weight, unless the change to `piece` sends
     one. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces
-    (422 `invalid` otherwise, D-32).
+    (422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on
+    drafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless
+    `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
+    they are and flagged.
     """
 
     name: IngredientNameInput | None = None
@@ -237,6 +240,7 @@ class IngredientUpdate(BaseModel):
     base_unit: BaseUnitName | None = None
     piece_weight_g: PieceWeightInput | None = None
     nutrients: NutrientValues | None = None
+    accept_unit_mismatch: bool | None = None
     # Not part of the API: sent anyway (e.g. by an app from before D-38), the pack size is
     # refused by the service rather than ignored, so nobody believes it was saved.
     quantity_text: SkipJsonSchema[object] = None
@@ -255,9 +259,13 @@ class IngredientBarcodeLink(BaseModel):
 
 
 class IngredientMerge(BaseModel):
-    """Merge the ingredient into `into_id` (ING-05)."""
+    """Merge the ingredient into `into_id` (ING-05). A merge across base units that would leave
+    amounts of the ingredient not fitting the base unit of `into_id` is refused (409
+    `ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
+    isn't)."""
 
     into_id: IdInput
+    accept_unit_mismatch: bool | None = None
 
 
 class ProductProposal(BaseModel):

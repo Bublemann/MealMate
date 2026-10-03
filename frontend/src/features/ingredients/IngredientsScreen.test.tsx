@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
+import { checkboxNames, openPanel } from '@/test/filters';
 import {
   CATEGORIES,
   CATEGORIES_AFTER_DELETE,
@@ -10,10 +11,12 @@ import {
   ingredient,
   REFERENCE_ROUTES,
   summary,
+  UNCATEGORIZED,
 } from '@/test/ingredients';
 import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
+import { toSummary } from './api';
 
 const ALL = [
   // The server's dictionary order (ING-03), which the screen keeps, although "Other" comes last
@@ -404,6 +407,106 @@ describe('IngredientsScreen', () => {
     expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
   });
 
+  it('offers Uncategorized at its place in the order while it holds ingredients, never a deleted category (ING-03, REF-01)', async () => {
+    // Cheese was deleted and its ingredient moved to Uncategorized, which an admin then moved
+    // before Other.
+    const [fruit, dairy, other, cheese, uncategorized] = CATEGORIES_AFTER_DELETE;
+    const { fetchMock, user } = renderIngredients({
+      'GET /api/categories': [
+        fruit,
+        dairy,
+        { ...uncategorized, sort_order: 2, ingredient_count: 1 },
+        cheese,
+        { ...other, sort_order: 3 },
+      ],
+      'GET /api/ingredients': [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })],
+    });
+
+    await waitFor(() => expect(rowTexts()).toEqual(['GoudaUncategorized · g']));
+    const panel = await openPanel(user);
+    expect(checkboxNames(panel)).toEqual([
+      'Fruit & vegetables',
+      'Dairy & eggs',
+      'Uncategorized',
+      'Other',
+    ]);
+
+    await user.click(within(panel).getByRole('checkbox', { name: 'Uncategorized' }));
+
+    await waitFor(() =>
+      expect(categoriesAskedFor(fetchMock).at(-1)).toEqual(['cat-uncategorized']),
+    );
+    expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
+  });
+
+  it('leaves Uncategorized out of the filter panel while it is empty (ING-03)', async () => {
+    const { user } = renderIngredients({ 'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED });
+    await screen.findByTestId(testIds.ingredientList);
+
+    const panel = await openPanel(user);
+
+    expect(checkboxNames(panel)).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other']);
+  });
+
+  it('keeps Uncategorized ticked after its last ingredient got a new category, until it is unticked (ING-03)', async () => {
+    let gouda = ingredient({ id: 'ing-gouda', name: 'Gouda', category_id: 'cat-uncategorized' });
+    const { fetchMock, user } = renderIngredients({
+      'GET /api/categories': () => [
+        ...CATEGORIES,
+        {
+          ...UNCATEGORIZED,
+          ingredient_count: gouda.category_id === 'cat-uncategorized' ? 1 : 0,
+        },
+      ],
+      'GET /api/ingredients': (request: Request) => {
+        const categories = new URL(request.url).searchParams.getAll('category_id');
+        return categories.length === 0 || categories.includes(gouda.category_id)
+          ? [toSummary(gouda)]
+          : [];
+      },
+      'GET /api/ingredients/ing-gouda': () => gouda,
+      'PATCH /api/ingredients/ing-gouda': async (request: Request) => {
+        gouda = { ...gouda, ...((await request.json()) as Partial<typeof gouda>) };
+        return gouda;
+      },
+    });
+    await screen.findByTestId(testIds.ingredientList);
+    let panel = await openPanel(user);
+    await user.click(within(panel).getByRole('checkbox', { name: 'Uncategorized' }));
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+    await waitFor(() =>
+      expect(categoriesAskedFor(fetchMock).at(-1)).toEqual(['cat-uncategorized']),
+    );
+
+    // Give Gouda a new category.
+    await user.click(await screen.findByRole('link', { name: /^Gouda/ }));
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Gouda' });
+    const category = within(dialog).getByLabelText('Category');
+    await waitFor(() => expect(category).toHaveDisplayValue('Uncategorized'));
+    const loaded = requestsTo(fetchMock, 'GET /api/categories').length;
+    await user.selectOptions(category, 'cat-dairy_eggs');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    // Saving loads the categories again, with their new counts.
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'GET /api/categories').length).toBeGreaterThan(loaded),
+    );
+
+    await user.click(screen.getByTestId(testIds.tabIngredients));
+
+    // Still ticked, so still offered, although it is empty now.
+    expect(await screen.findByText('No matches')).toBeVisible();
+    expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
+    panel = await openPanel(user);
+    expect(within(panel).getByRole('checkbox', { name: 'Uncategorized' })).toBeChecked();
+
+    await user.click(within(panel).getByRole('checkbox', { name: 'Uncategorized' }));
+
+    expect(checkboxNames(panel)).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other']);
+    expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
+  });
+
   it('shows one line under the pinned block when there are no ingredients yet (UI-03)', async () => {
     const { user } = renderIngredients({ 'GET /api/ingredients': [] });
 
@@ -698,22 +801,6 @@ describe('IngredientFormDialog (create)', () => {
         .filter((option) => !(option as HTMLOptionElement).disabled)
         .map((option) => option.textContent),
     ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Other']);
-  });
-
-  it('names Uncategorized in the rows, but leaves it and deleted ones out of the filter panel (REF-01)', async () => {
-    const { user } = renderIngredients({
-      'GET /api/categories': CATEGORIES_AFTER_DELETE,
-      'GET /api/ingredients': [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })],
-    });
-
-    await waitFor(() => expect(rowTexts()).toEqual(['GoudaUncategorized · g']));
-    await user.click(screen.getByTestId(testIds.filterButton));
-    const panel = await screen.findByRole('dialog', { name: 'Filters' });
-    const boxes = within(panel).getAllByRole('checkbox');
-    ['Fruit & vegetables', 'Dairy & eggs', 'Other'].forEach((name, index) =>
-      expect(boxes[index]).toHaveAccessibleName(name),
-    );
-    expect(boxes).toHaveLength(3);
   });
 
   it('fills in the barcode from the scan icon next to the name, through the typed digits (BAR-01)', async () => {

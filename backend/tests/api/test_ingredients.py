@@ -25,7 +25,7 @@ from tests.catalog import (
     ref,
     set_stored,
 )
-from tests.lists import create_list, detail, extra_added
+from tests.lists import create_list, detail, extra_added, set_status, start_shopping
 from tests.meals import create_meal
 
 
@@ -984,6 +984,128 @@ async def test_leaving_pieces_clears_the_piece_weight(
     assert (await get(api, anna, again["id"]))["piece_weight_g"] == 60
 
 
+# --- a base-unit change that leaves amounts not fitting (ING-02, D-33) ------------------------
+
+
+def amount(ingredient: Any, value: float | None = None, unit: str | None = None) -> Any:
+    """A meal row of the ingredient."""
+    return {"ingredient_id": ingredient["id"], "amount": value, "unit": unit}
+
+
+async def meal_amounts(api: AsyncClient, user: Account, meal_id: str) -> list[Any]:
+    """A meal's rows as `(amount, unit, unit_fits)`."""
+    response = await api.get(f"/api/meals/{meal_id}", headers=user.headers)
+    assert response.status_code == 200, response.text
+    return [
+        (row["amount"], row["unit"], row["unit_fits"]) for row in response.json()["ingredients"]
+    ]
+
+
+async def extra_amounts(api: AsyncClient, user: Account, list_id: str) -> list[Any]:
+    """A list's extra items as `(amount, unit, unit_fits)`."""
+    body = await detail(api, user, list_id)
+    return [(item["amount"], item["unit"], item["unit_fits"]) for item in body["extra_items"]]
+
+
+async def test_a_base_unit_change_that_leaves_amounts_not_fitting_asks_first(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
+) -> None:
+    """Counted are the meals with rows, and the drafts with linked extra items, whose amounts fit
+    now and wouldn't fit the new base unit. Nothing is saved until the request accepts that, and
+    then nothing is converted: those amounts are kept and flagged."""
+    eggs = await create_ingredient(api, anna, "Eier")
+    flour = await create_ingredient(api, anna, "Mehl")
+    omelette = await create_meal(
+        api, anna, "Omelett", ingredients=[amount(eggs, 120, "g"), amount(eggs, 1, "tbsp")]
+    )
+    cake = await create_meal(
+        api, ben, "Kuchen", ingredients=[amount(flour, 500, "g"), amount(eggs, 0.2, "kg")]
+    )
+    # A row without an amount fits every base unit.
+    await create_meal(api, ben, "Pfannkuchen", ingredients=[amount(eggs), amount(flour, 250, "g")])
+    draft = await create_list(api, anna)
+    await extra_added(api, anna, draft["id"], ingredient_id=eggs["id"], amount=500, unit="g")
+    await extra_added(api, anna, draft["id"], ingredient_id=eggs["id"])
+    other_draft = await create_list(api, ben)
+    await extra_added(api, ben, other_draft["id"], ingredient_id=eggs["id"])
+    before = await get(api, anna, eggs["id"])
+    clock.advance(minutes=1)
+
+    response = await patch(api, ben, eggs["id"], base_unit="piece", name="Eier (M)")
+
+    assert response.status_code == 409
+    assert error(response) == "ingredient.unit_mismatch"
+    assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
+    assert await get(api, anna, eggs["id"]) == before
+
+    response = await patch(
+        api, ben, eggs["id"], base_unit="piece", name="Eier (M)", accept_unit_mismatch=True
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["name"], body["base_unit"], body["updated_by"]) == ("Eier (M)", "piece", ref(ben))
+    assert await meal_amounts(api, anna, omelette["id"]) == [(120, "g", False), (1, "tbsp", False)]
+    assert await meal_amounts(api, ben, cake["id"]) == [(500, "g", True), (0.2, "kg", False)]
+    assert await extra_amounts(api, anna, draft["id"]) == [(500, "g", False), (None, None, True)]
+
+
+async def test_a_base_unit_change_no_amount_depends_on_asks_nothing(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """Spoons fit g and ml alike, a row without an amount fits every base unit, and an amount
+    that doesn't fit already (D-33) can't stop fitting; accepting is fine when nothing would."""
+    flour = await create_ingredient(api, anna, "Mehl")
+    rolls = await create_ingredient(api, anna, "Brötchen", base_unit="piece")
+    meal = await create_meal(
+        api, anna, "Brot", ingredients=[amount(flour, 2, "tbsp"), amount(flour), amount(rolls, 2)]
+    )
+    # Counted in grams since before D-33, so its pieces don't fit.
+    await set_stored(app, rolls["id"], base_unit="g")
+
+    for ingredient, base_unit, accept in (
+        (flour, "ml", False),
+        (rolls, "ml", False),
+        (rolls, "piece", False),
+        (rolls, "g", True),
+    ):
+        body: dict[str, Any] = {"base_unit": base_unit}
+        if accept:
+            body["accept_unit_mismatch"] = True
+        response = await patch(api, anna, ingredient["id"], **body)
+        assert response.status_code == 200, (base_unit, response.text)
+        assert response.json()["base_unit"] == base_unit
+    assert await meal_amounts(api, anna, meal["id"]) == [
+        (2, "tbsp", True),
+        (None, None, True),
+        (2, "piece", False),
+    ]
+
+
+async def test_lists_being_shopped_and_done_lists_do_not_count(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """LIST-11, D-08: their linked extra items keep the base unit they copied when shopping
+    started, so a base-unit change neither asks about them nor changes them."""
+    eggs = await create_ingredient(api, anna, "Eier")
+    shopping, done = await create_list(api, anna, "Einkauf"), await create_list(api, anna, "Fertig")
+    for shopping_list, grams in ((shopping, 500), (done, 250)):
+        await extra_added(
+            api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=grams, unit="g"
+        )
+        await start_shopping(api, anna, shopping_list["id"])
+    await set_status(app, done["id"], "done")
+    lists = [await detail(api, anna, item["id"]) for item in (shopping, done)]
+
+    response = await patch(api, anna, eggs["id"], base_unit="piece")
+
+    assert response.status_code == 200, response.text
+    after = [await detail(api, anna, item["id"]) for item in (shopping, done)]
+    for old, new in zip(lists, after, strict=True):
+        assert (new["lines"], new["extra_items"]) == (old["lines"], old["extra_items"])
+        assert [item["unit_fits"] for item in new["extra_items"]] == [True]
+
+
 async def test_invalid_updates(api: AsyncClient, anna: Account) -> None:
     apples = await create_ingredient(api, anna, "Äpfel")
     response = await patch(api, anna, apples["id"], name="", nutrients={"fat": 101})
@@ -1053,10 +1175,12 @@ async def test_usage(api: AsyncClient, anna: Account, ben: Account) -> None:
 # --- merge and delete (ING-05, admins) ---------------------------------------------------------
 
 
-async def merge(api: AsyncClient, user: Account, ingredient_id: str, into_id: str) -> Any:
+async def merge(
+    api: AsyncClient, user: Account, ingredient_id: str, into_id: str, **body: Any
+) -> Any:
     return await api.post(
         f"/api/admin/ingredients/{ingredient_id}/merge",
-        json={"into_id": into_id},
+        json={"into_id": into_id, **body},
         headers=user.headers,
     )
 
@@ -1195,7 +1319,8 @@ async def test_merging_moves_meal_rows_and_list_lines(
     shopping_list = await create_list(api, anna)
     await extra_added(api, anna, shopping_list["id"], ingredient_id=duplicate["id"])
 
-    assert (await merge(api, admin, duplicate["id"], tomatoes["id"])).status_code == 200
+    response = await merge(api, admin, duplicate["id"], tomatoes["id"], accept_unit_mismatch=True)
+    assert response.status_code == 200, response.text
 
     response = await api.get(f"/api/meals/{meal['id']}", headers=anna.headers)
     rows = [
@@ -1210,6 +1335,74 @@ async def test_merging_moves_meal_rows_and_list_lines(
     ]
     lines = (await detail(api, anna, shopping_list["id"]))["lines"]
     assert [line["key"] for line in lines] == [f"i:{tomatoes['id']}"]
+
+
+async def test_a_merge_across_base_units_names_the_amounts_that_wont_fit(
+    app: FastAPI, api: AsyncClient, anna: Account, admin: Account
+) -> None:
+    """ING-05, D-33: counted are the duplicate's amounts (meal rows, and linked extra items on
+    drafts) that won't fit the ingredient that stays, those that didn't fit the duplicate
+    either included. Nothing is merged until the request accepts that, and then nothing is
+    converted."""
+    duplicate = await create_ingredient(api, anna, "Ei", base_unit="ml")
+    old = await create_meal(api, anna, "Eierlikör", ingredients=[amount(duplicate, 100, "ml")])
+    # Counted in grams since, so its millilitres don't fit (D-33).
+    await set_stored(app, duplicate["id"], base_unit="g")
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    omelette = await create_meal(
+        api,
+        anna,
+        "Omelett",
+        ingredients=[
+            amount(duplicate, 120, "g"),
+            amount(duplicate, 1, "tbsp"),
+            amount(duplicate),
+            amount(eggs, 2),
+        ],
+    )
+    draft = await create_list(api, anna)
+    await extra_added(api, anna, draft["id"], ingredient_id=duplicate["id"], amount=0.5, unit="kg")
+
+    response = await merge(api, admin, duplicate["id"], eggs["id"])
+
+    assert response.status_code == 409
+    assert error(response) == "ingredient.unit_mismatch"
+    assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
+    assert sorted(await scalars(app, select(Ingredient.name))) == ["Ei", "Eier"]
+    assert await events(api, admin) == []
+
+    response = await merge(api, admin, duplicate["id"], eggs["id"], accept_unit_mismatch=True)
+
+    assert response.status_code == 200, response.text
+    assert await scalars(app, select(Ingredient.name)) == ["Eier"]
+    assert await meal_amounts(api, anna, old["id"]) == [(100, "ml", False)]
+    assert await meal_amounts(api, anna, omelette["id"]) == [
+        (120, "g", False),
+        (1, "tbsp", False),
+        (None, None, True),
+        (2, "piece", True),
+    ]
+    assert await extra_amounts(api, anna, draft["id"]) == [(0.5, "kg", False)]
+
+
+async def test_a_merge_with_nothing_that_wont_fit_asks_nothing(
+    app: FastAPI, api: AsyncClient, anna: Account, admin: Account
+) -> None:
+    """Spoons fit g and ml alike and a row without an amount fits every base unit; within one
+    base unit, amounts that don't fit already (D-33) only stay flagged."""
+    sugar = await create_ingredient(api, anna, "Zucker")
+    syrup = await create_ingredient(api, anna, "Zuckersirup", base_unit="ml")
+    duplicate = await create_ingredient(api, anna, "Paradeiser", base_unit="piece")
+    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    tea = await create_meal(api, anna, "Tee", ingredients=[amount(sugar, 2, "tbsp"), amount(sugar)])
+    salad = await create_meal(api, anna, "Salat", ingredients=[amount(duplicate, 2)])
+    await set_stored(app, duplicate["id"], base_unit="g")
+
+    for source, target in ((sugar, syrup), (duplicate, tomatoes)):
+        response = await merge(api, admin, source["id"], target["id"])
+        assert response.status_code == 200, response.text
+    assert await meal_amounts(api, anna, tea["id"]) == [(2, "tbsp", True), (None, None, True)]
+    assert await meal_amounts(api, anna, salad["id"]) == [(2, "piece", False)]
 
 
 @pytest.mark.parametrize(
