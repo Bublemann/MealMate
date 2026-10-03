@@ -31,6 +31,7 @@ import {
   type Ingredient,
   type IngredientMerge,
   type IngredientSummary,
+  type UnitMismatch,
 } from './api';
 import { IngredientPicker } from './IngredientPicker';
 import { ingredientLabel } from './label';
@@ -46,14 +47,16 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
   const remove = useDeleteIngredient(ingredient.id);
   const [picking, setPicking] = useState(false);
   const [target, setTarget] = useState<IngredientSummary | null>(null);
+  // What the merge into `target` would leave not fitting, once the server said so; kept while
+  // the accepting request runs.
+  const [mismatch, setMismatch] = useState<UnitMismatch | null>(null);
   const name = ingredientLabel(ingredient.name, ingredient.brand);
   const into = target ? ingredientLabel(target.name, target.brand) : '';
   const busy = merge.isPending || remove.isPending;
-  // Shown in the confirmation, which stays open for it.
-  const mismatch = unitMismatch(merge.error);
 
   function onPick(picked: IngredientSummary) {
     setPicking(false);
+    setMismatch(null);
     setTarget(picked);
   }
 
@@ -66,8 +69,11 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
         setTarget(null);
         void navigate(`/ingredients/${kept.id}`, { replace: true });
       },
+      // The confirmation stays open to name what won't fit; other errors show in the card.
       onError: (error) => {
-        if (!unitMismatch(error)) setTarget(null);
+        const counts = unitMismatch(error);
+        if (counts) setMismatch(counts);
+        else setTarget(null);
       },
     });
   }
@@ -117,7 +123,7 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
             destructive
           />
         </div>
-        <ErrorAlert error={(mismatch ? null : merge.error) ?? remove.error} />
+        <ErrorAlert error={(unitMismatch(merge.error) ? null : merge.error) ?? remove.error} />
       </CardContent>
 
       <Dialog open={picking} onOpenChange={setPicking}>

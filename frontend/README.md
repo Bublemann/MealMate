@@ -107,7 +107,11 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   pieces fit, or while the row has no amount ("nach Geschmack"). The mark follows the amount and
   unit as they are typed, by the same table, so it doesn't wait for the server; the server judges what is
   stored the same way (`unit_fits`), keeps such a row while it is sent back unchanged and refuses
-  a new one.
+  a new one. A base-unit change, or a merge across base units, that would leave amounts not
+  fitting is refused with their counts (409 `ingredient.unit_mismatch`, read by `unitMismatch`):
+  the edit pop-up asks in `BaseUnitConfirmDialog` ("Trotzdem ändern" or "Abbrechen"), and the
+  merge confirmation stays open, names the count and merges on "Trotzdem zusammenführen". Either
+  sends the same request again with `accept_unit_mismatch`.
 - **Test IDs only from `src/testIds.ts`.** E2E tests select by role, accessible name or test ID,
   never by CSS class or DOM structure (QA-05). Every interactive element needs an accessible name.
 - **UI building blocks live in `src/components/ui/`** (shadcn/ui source, adapted: every size keeps

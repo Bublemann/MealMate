@@ -27,8 +27,8 @@ interface BaseUnitConfirmDialogProps {
 
 /**
  * ING-02, D-33: before a base-unit change leaves amounts in meals or on drafts not fitting, names
- * how many ("Eier wird in 3 Gerichten in g verwendet. Diese Mengen passen dann nicht mehr.") and
- * asks "Trotzdem ändern" or "Abbrechen". Nothing is converted either way.
+ * where ("Eier wird in 3 Gerichten und auf 1 Entwurf in g verwendet. Diese Mengen passen dann
+ * nicht mehr.") and asks "Trotzdem ändern" or "Abbrechen". Nothing is converted either way.
  */
 export function BaseUnitConfirmDialog({
   mismatch,
@@ -41,11 +41,13 @@ export function BaseUnitConfirmDialog({
   const meals = mismatch?.meals
     ? t('ingredients.unitMismatch.meals', { count: mismatch.meals })
     : null;
-  const lists = mismatch?.lists
-    ? t('ingredients.unitMismatch.lists', { count: mismatch.lists })
+  const drafts = mismatch?.lists
+    ? t('ingredients.unitMismatch.drafts', { count: mismatch.lists })
     : null;
   const places =
-    meals && lists ? t('ingredients.unitMismatch.mealsAndLists', { meals, lists }) : meals || lists;
+    meals && drafts
+      ? t('ingredients.unitMismatch.mealsAndDrafts', { meals, drafts })
+      : meals || drafts;
 
   return (
     <AlertDialog open={mismatch !== null} onOpenChange={(open) => !open && onClose()}>

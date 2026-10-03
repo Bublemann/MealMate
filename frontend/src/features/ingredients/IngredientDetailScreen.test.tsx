@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
-import { errorResponse, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
+import { errorResponse, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
 import {
   APPLES,
   CATEGORIES_WITH_UNCATEGORIZED,
@@ -340,7 +340,7 @@ describe('IngredientDetailScreen', () => {
     const confirm = await screen.findByRole('alertdialog', { name: 'Change the base unit?' });
     expect(confirm).toHaveAttribute('data-testid', testIds.baseUnitConfirm);
     expect(confirm).toHaveTextContent(
-      "Äpfel is used in g in 3 meals and 1 list. Those amounts won't fit any more.",
+      "Äpfel is used in g in 3 meals and on 1 draft. Those amounts won't fit any more.",
     );
     // Cancel goes back to the form as it was; nothing is saved, and nothing is an error.
     await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
@@ -365,7 +365,7 @@ describe('IngredientDetailScreen', () => {
     expect(screen.getByTestId(testIds.screenIngredient)).toHaveTextContent('Base unitPieces (pcs)');
   });
 
-  it('names a single meal or list in German when a base-unit change asks', async () => {
+  it('names a single draft in German when a base-unit change asks', async () => {
     await i18n.changeLanguage('de');
     const eggs = { ...APPLES, id: 'ing-eier', name: 'Eier', base_unit: 'piece' as const };
     const { user } = renderDetail(
@@ -384,7 +384,7 @@ describe('IngredientDetailScreen', () => {
 
     const confirm = await screen.findByRole('alertdialog', { name: 'Basiseinheit ändern?' });
     expect(confirm).toHaveTextContent(
-      'Eier wird in 1 Liste in Stk. verwendet. Diese Mengen passen dann nicht mehr.',
+      'Eier wird auf 1 Entwurf in Stk. verwendet. Diese Mengen passen dann nicht mehr.',
     );
     expect(within(confirm).getByRole('button', { name: 'Abbrechen' })).toBeVisible();
     expect(within(confirm).getByRole('button', { name: 'Trotzdem ändern' })).toBeVisible();
@@ -534,14 +534,14 @@ describe('IngredientAdminActions', () => {
   it('names the amounts that won’t fit the ingredient that stays, and merges when told to (ING-05)', async () => {
     const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
     const path = 'POST /api/admin/ingredients/ing-aepfel/merge';
+    const accepted = heldRoute();
     const { fetchMock, user, router } = renderDetail(
       {
         'GET /api/ingredients': (request: Request) =>
           new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
-        [path]: unlessAccepted(
-          { ...APPLES, id: eggs.id, name: 'Eier', base_unit: 'piece' },
-          { meals: 2, lists: 1, amounts: 4 },
-        ),
+        [path]: async (request: Request) =>
+          (await unlessAccepted(null, { meals: 2, lists: 1, amounts: 4 })(request)) ??
+          accepted.route(),
       },
       true,
     );
@@ -561,6 +561,10 @@ describe('IngredientAdminActions', () => {
     expect(router.state.location.pathname).toBe('/ingredients/ing-aepfel');
     await user.click(within(confirm).getByRole('button', { name: 'Merge anyway' }));
 
+    // While it merges, the count stays and the button waits.
+    expect(within(confirm).getByTestId(testIds.mergeUnitMismatch)).toBeVisible();
+    expect(within(confirm).getByRole('button', { name: 'Merge anyway' })).toBeDisabled();
+    await accepted.answer({ ...APPLES, id: eggs.id, name: 'Eier', base_unit: 'piece' });
     await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${eggs.id}`));
     const bodies = await Promise.all(
       requestsTo(fetchMock, path).map((request) => request.json() as Promise<unknown>),

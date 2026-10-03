@@ -70,9 +70,10 @@ class ErrorCode(StrEnum):
     INGREDIENT_HAS_BARCODE = "ingredient.has_barcode"
     # 409: apply or ignore, but the ingredient has no newer Open Food Facts values (BAR-06).
     INGREDIENT_NO_PENDING_UPDATE = "ingredient.no_pending_update"
-    # 409: a base-unit change (ING-02) or a merge (ING-05) would leave amounts that fit now not
-    # fitting (D-33); `params` counts them (`amounts`) and the meals and drafts they are on
-    # (`meals`, `lists`). The request goes through when it accepts that.
+    # 409: a base-unit change would leave amounts that fit now not fitting (ING-02), or a merge
+    # across base units would leave amounts not fitting the ingredient that stays (ING-05, D-33);
+    # `params` counts them (`amounts`) and the meals and drafts they are on (`meals`, `lists`).
+    # The request goes through when it accepts that.
     INGREDIENT_UNIT_MISMATCH = "ingredient.unit_mismatch"
     # 503: too many Open Food Facts lookups or searches right now (BAR-08); retry or enter the
     # values by hand.

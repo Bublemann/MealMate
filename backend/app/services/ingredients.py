@@ -16,15 +16,15 @@ On an ingredient from Open Food Facts (`source` off), every Open Food Facts fiel
 
 References from meals and lists go through `services.hooks`: `ingredient_references` blocks
 deletion (and is shown as the usage), and `on_ingredients_merged` repoints them when merging.
-A base-unit change or a merge that would leave amounts not fitting (`amounts_that_stop_fitting`)
-asks first (`_check_amounts_still_fit`, D-33).
+A base-unit change or a merge that would leave amounts not fitting (`amounts_that_would_not_fit`)
+asks first (`_check_amounts_fit`, D-33).
 
 Since D-32 an ingredient has no density, and a piece weight only when it is counted in pieces.
 A g or ml ingredient may still have both stored from before; they stay in their columns for the
 base-unit migration (D-34), but are never shown, taken or used to calculate (`attrs()`).
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -44,7 +44,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
 from app.domain.text import normalize
-from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit
+from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit, fits, stops_fitting
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import reference as reference_repo
@@ -147,17 +147,19 @@ async def _check_barcode_free(
         )
 
 
-async def _check_amounts_still_fit(
-    session: AsyncSession, ingredient_id: str, before: str, after: str
+async def _check_amounts_fit(
+    session: AsyncSession,
+    ingredient_id: str,
+    would_not_fit: Callable[[float | None, str | None], bool],
+    *,
+    accepted: bool | None,
 ) -> None:
-    """409 `ingredient.unit_mismatch`, with the counts of `hooks.amounts_that_stop_fitting`, if
-    amounts of the ingredient that fit `before` wouldn't fit `after` (D-33). The caller skips
-    this once the request accepts that; nothing is ever converted."""
-    if before == after:
+    """409 `ingredient.unit_mismatch`, with the counts of `hooks.amounts_that_would_not_fit`,
+    while amounts of the ingredient `would_not_fit` after the change and the request hasn't
+    `accepted` that (D-33). Nothing is ever converted."""
+    if accepted:
         return
-    counts = await hooks.amounts_that_stop_fitting(
-        session, ingredient_id, BaseUnit(before), BaseUnit(after)
-    )
+    counts = await hooks.amounts_that_would_not_fit(session, ingredient_id, would_not_fit)
     if counts["amounts"]:
         raise ApiError(ErrorCode.INGREDIENT_UNIT_MISMATCH, status_code=409, params=counts)
 
@@ -309,8 +311,9 @@ async def update_ingredient(
     weight unless one is sent along to `piece` (ING-02). A piece weight is refused unless the
     ingredient is, or becomes, counted in pieces; a null one is ignored then, so the one a g or
     ml ingredient has from before D-32 stays for the migration. A base-unit change that would
-    leave amounts not fitting changes nothing unless the request accepts that (D-33). Clearing
-    or changing the barcode makes it a manual ingredient (`_make_manual`)."""
+    leave amounts that fit now not fitting (`stops_fitting`) changes nothing unless the request
+    accepts that (D-33). Clearing or changing the barcode makes it a manual ingredient
+    (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     async with session.begin():
@@ -329,8 +332,14 @@ async def update_ingredient(
             raise validation_error(problems)
         if barcode is not None:
             await _check_barcode_free(session, barcode, except_id=row.id)
-        if not body.accept_unit_mismatch:
-            await _check_amounts_still_fit(session, row.id, row.base_unit, base_unit)
+        if base_unit != row.base_unit:
+            before = row.base_unit
+            await _check_amounts_fit(
+                session,
+                row.id,
+                lambda amount, unit: stops_fitting(amount, unit, before, base_unit),
+                accepted=body.accept_unit_mismatch,
+            )
 
         edited: list[str] = []
         if body.name is not None:
@@ -466,9 +475,9 @@ async def merge(
 ) -> Ingredient:
     """Merge a duplicate into another ingredient (ING-05, admins): every meal and list reference
     moves to `into_id`, then the duplicate is deleted. The target keeps its own attributes and
-    values and records the admin as the one who changed it last. Amounts of the duplicate that
-    won't fit the target's base unit are kept as they are; while there are any, nothing is
-    merged unless the request accepts that (D-33).
+    values and records the admin as the one who changed it last. When their base units differ,
+    amounts of the duplicate that won't fit the target's are kept as they are; while there are
+    any, nothing is merged unless the request accepts that (D-33).
 
     The duplicate's barcode moves to the target if the target has none (only the barcode: the
     target's values, source and Open Food Facts data stay); otherwise it is dropped with the
@@ -484,8 +493,14 @@ async def merge(
         target = await ingredients_repo.get(session, into_id)
         if target is None:
             raise validation_error([FieldProblem(("body", "into_id"), FieldErrorCode.INVALID)])
-        if not body.accept_unit_mismatch:
-            await _check_amounts_still_fit(session, source.id, source.base_unit, target.base_unit)
+        if source.base_unit != target.base_unit:
+            into_base_unit = target.base_unit
+            await _check_amounts_fit(
+                session,
+                source.id,
+                lambda amount, unit: not fits(amount, unit, into_base_unit),
+                accepted=body.accept_unit_mismatch,
+            )
         if source.barcode is not None and target.barcode is None:
             barcode, source.barcode = source.barcode, None
             await session.flush()  # the barcode is unique: free it before the target takes it

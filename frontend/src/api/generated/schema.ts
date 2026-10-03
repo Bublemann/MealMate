@@ -2230,8 +2230,8 @@ export interface components {
         };
         /**
          * IngredientMerge
-         * @description Merge the ingredient into `into_id` (ING-05). A merge that would leave amounts of the
-         *     ingredient not fitting the base unit of `into_id` is refused (409
+         * @description Merge the ingredient into `into_id` (ING-05). A merge across base units that would leave
+         *     amounts of the ingredient not fitting the base unit of `into_id` is refused (409
          *     `ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
          *     isn't).
          */

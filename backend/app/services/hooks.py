@@ -7,12 +7,12 @@ follow ingredient merges. Each hook runs inside the caller's transaction and mus
 `now` is the time of the triggering request.
 """
 
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import ingredient_key
-from app.domain.units import BaseUnit, stops_fitting
 from app.models import ListLineState
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
@@ -96,27 +96,25 @@ async def ingredient_references(session: AsyncSession, ingredient_id: str) -> di
     }
 
 
-async def amounts_that_stop_fitting(
-    session: AsyncSession, ingredient_id: str, before: BaseUnit, after: BaseUnit
+async def amounts_that_would_not_fit(
+    session: AsyncSession,
+    ingredient_id: str,
+    would_not_fit: Callable[[float | None, str | None], bool],
 ) -> dict[str, int]:
-    """The ingredient's amounts that fit `before` and won't fit `after` (`stops_fitting`, D-33),
-    counted for a base-unit change (ING-02) or a merge (ING-05):
+    """The ingredient's amounts that `would_not_fit(amount, unit)` after a base-unit change
+    (ING-02) or a merge (ING-05), counted (D-33):
 
     - `meals`: the meals with such rows;
     - `lists`: the drafts with such linked extra items (lists being shopped and done lists keep
       the base unit they copied, LIST-11);
     - `amounts`: those rows and extra items.
     """
-    meals = [
-        meal_id
-        for meal_id, amount, unit in await meals_repo.amounts_of(session, ingredient_id)
-        if stops_fitting(amount, unit, before, after)
-    ]
-    lists = [
-        list_id
-        for list_id, amount, unit in await lists_repo.draft_amounts_of(session, ingredient_id)
-        if stops_fitting(amount, unit, before, after)
-    ]
+
+    def owners(amounts: list[tuple[str, float | None, str | None]]) -> list[str]:
+        return [owner for owner, amount, unit in amounts if would_not_fit(amount, unit)]
+
+    meals = owners(await meals_repo.amounts_of(session, ingredient_id))
+    lists = owners(await lists_repo.draft_amounts_of(session, ingredient_id))
     return {"meals": len(set(meals)), "lists": len(set(lists)), "amounts": len(meals) + len(lists)}
 
 
