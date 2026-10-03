@@ -109,8 +109,8 @@ class IngredientAttrs:
     @classmethod
     def live(cls, base_unit: BaseUnit | str, piece_weight_g: float | None) -> IngredientAttrs:
         """A live ingredient's attributes (D-32): no density, and its piece weight only when it
-        is counted in pieces, so nothing converts across kinds. A g or ml ingredient may still
-        have both stored from before; they are left out."""
+        is counted in pieces, so nothing converts across kinds. A piece weight of a g or ml
+        ingredient (only data from before migration 0014 had one, D-34) is left out."""
         base = BaseUnit(base_unit)
         return cls(base, piece_weight_g if base == BaseUnit.PIECE else None, None)
 

@@ -155,8 +155,8 @@ async def test_start_shopping(
     categories: dict[str, str],
 ) -> None:
     salt = await create_ingredient(api, anna, "Salz")
-    # A piece weight and density from before D-32 are not copied (LIST-11).
-    await set_stored(app, flour["id"], piece_weight_g=1000, density_g_per_ml=0.6)
+    # A g ingredient's piece weight from before D-32 is not copied (LIST-11).
+    await set_stored(app, flour["id"], piece_weight_g=1000)
     meal = await create_meal(
         api, anna, "Brot", servings=2, ingredients=[row(flour, 400, "g"), row(onions, 1, "piece")]
     )
