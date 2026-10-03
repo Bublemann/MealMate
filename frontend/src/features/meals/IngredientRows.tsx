@@ -206,7 +206,7 @@ function IngredientRow({
                 onChange({ ...row, unit: event.target.value as Unit | '', unitChosen: true })
               }
             >
-              <NativeSelectOption value="" disabled={!unitChoice.noUnitFits}>
+              <NativeSelectOption value="" disabled={!unitChoice.withoutUnitFits}>
                 {t('meals.row.unitNone')}
               </NativeSelectOption>
               {unitChoice.options.map(({ unit, disabled }) => (

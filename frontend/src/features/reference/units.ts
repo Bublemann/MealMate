@@ -16,7 +16,7 @@ export function fittingUnits(units: readonly UnitInfo[], baseUnit: BaseUnit): Un
 export function unitFits(
   units: readonly UnitInfo[],
   baseUnit: BaseUnit,
-  unit: Unit | '' | null,
+  unit: Unit | '',
   hasAmount: boolean,
 ): boolean {
   return !hasAmount || fittingUnits(units, baseUnit).includes(unit || 'piece');
@@ -24,7 +24,7 @@ export function unitFits(
 
 /**
  * The unit an amount keeps when another ingredient is chosen for it: the same one while it fits
- * the new ingredient, none once it no longer does (MEAL-02).
+ * the new ingredient, none once it no longer does (MEAL-02, LIST-06).
  */
 export function keptUnit(
   units: readonly UnitInfo[],
@@ -45,19 +45,19 @@ export interface UnitOption {
  * fit, then an older unit that doesn't (D-33), disabled, so it stays shown until the user picks one
  * that fits. `fits` follows the amount and unit as entered, so the mark of a unit that doesn't fit
  * comes and goes with the user's edits; the server judges what is stored the same way (`unit_fits`)
- * and refuses a new amount that doesn't fit. `noUnitFits` tells whether "no unit" would fit: an
- * amount without a unit counts as pieces, a row without an amount fits anything. Until the units
- * have loaded, the chosen unit is the only choice and counts as fitting; without a known base
- * unit, every unit is offered.
+ * and refuses a new amount that doesn't fit. `withoutUnitFits` tells whether choosing no unit
+ * would fit: an amount without a unit counts as pieces, a row without an amount fits anything.
+ * Until the units have loaded, the chosen unit is the only choice and counts as fitting; without
+ * a known base unit, every unit is offered.
  */
 export function useUnitChoice(
   baseUnit: BaseUnit | null,
   unit: Unit | '',
   hasAmount: boolean,
-): { options: UnitOption[]; fits: boolean; noUnitFits: boolean } {
+): { options: UnitOption[]; fits: boolean; withoutUnitFits: boolean } {
   const units = useUnits();
   if (!units.data) {
-    return { options: unit ? [{ unit, disabled: false }] : [], fits: true, noUnitFits: true };
+    return { options: unit ? [{ unit, disabled: false }] : [], fits: true, withoutUnitFits: true };
   }
   const fitting = baseUnit
     ? fittingUnits(units.data, baseUnit)
@@ -67,6 +67,6 @@ export function useUnitChoice(
   return {
     options,
     fits: !baseUnit || unitFits(units.data, baseUnit, unit, hasAmount),
-    noUnitFits: !baseUnit || unitFits(units.data, baseUnit, '', hasAmount),
+    withoutUnitFits: !baseUnit || unitFits(units.data, baseUnit, '', hasAmount),
   };
 }

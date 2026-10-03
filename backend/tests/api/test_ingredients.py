@@ -277,8 +277,11 @@ async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
     assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
     assert await scalars(app, select(Ingredient.density_g_per_ml)) == [0.8]
 
-    # Counted in pieces, it has the piece weight sent along, or none: the hidden one would
-    # surprise (ING-02).
+    # Counted in millilitres, it still has it; counted in pieces, it has the piece weight sent
+    # along, or none: the hidden one would surprise (ING-02).
+    await patch(api, anna, apples["id"], base_unit="ml")
+    await patch(api, anna, apples["id"], base_unit="g")
+    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
     body = (await patch(api, anna, apples["id"], base_unit="piece")).json()
     assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
     await patch(api, anna, apples["id"], base_unit="g")

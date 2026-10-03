@@ -30,7 +30,6 @@ describe('unitFits', () => {
   it('counts an amount without a unit as pieces', () => {
     expect(unitFits(UNITS, 'piece', '', true)).toBe(true);
     expect(unitFits(UNITS, 'g', '', true)).toBe(false);
-    expect(unitFits(UNITS, 'ml', null, true)).toBe(false);
   });
 
   it('lets a row without an amount fit every base unit', () => {

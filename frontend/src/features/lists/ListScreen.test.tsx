@@ -717,6 +717,30 @@ describe('ListScreen', () => {
       ).resolves.toEqual({ amount: 120, unit: 'g' });
     });
 
+    it('sends an older item back unchanged, with the amount it has', async () => {
+      const [flour, ...others] = EXTRA_ITEMS;
+      if (!flour) throw new Error('the flour item is missing');
+      const third = { ...flour, amount: 1 / 3, unit: 'piece' as const, unit_fits: false };
+      const { fetchMock, user } = renderList({
+        [`GET ${BASE}`]: listDetail({ extra_items: [third, ...others] }),
+        [`PATCH ${BASE}/extra-items/${FLOUR_EXTRA_ID}`]: listDetail(),
+      });
+
+      const lines = await screen.findByTestId(testIds.listLines);
+      await user.click(within(lines).getByRole('button', { name: /^Mehl/ }));
+      const dialog = await screen.findByRole('dialog', { name: 'Mehl' });
+      await user.click(within(dialog).getByRole('button', { name: 'Edit the item Mehl' }));
+      const edit = await screen.findByRole('dialog', { name: 'Edit item' });
+      expect(within(edit).getByLabelText('Amount (optional)')).toHaveValue('0.333');
+      await user.click(within(edit).getByRole('button', { name: 'Save' }));
+
+      // Not rounded to what the field shows: the server keeps the item as it is (D-33).
+      await waitFor(() => expect(edit).not.toBeInTheDocument());
+      await expect(
+        bodyOf(fetchMock, `PATCH ${BASE}/extra-items/${FLOUR_EXTRA_ID}`),
+      ).resolves.toEqual({ amount: 1 / 3, unit: 'piece' });
+    });
+
     it('starts a linked item without an amount on its base unit', async () => {
       const [flour, ...others] = EXTRA_ITEMS;
       if (!flour) throw new Error('the flour item is missing');

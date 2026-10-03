@@ -293,11 +293,11 @@ async def update_ingredient(
     """Change the fields that were sent and record who changed it last (ING-01). On an
     ingredient from Open Food Facts, the Open Food Facts fields sent become user-edited and
     their pending values go (BAR-04, BAR-06); a base unit whose values are per 100 of something
-    else (g or ml) drops the pending nutrients, and a new base unit clears the piece weight unless
-    one is sent along to `piece` (ING-02). A piece weight is refused unless the ingredient is, or
-    becomes, counted in pieces; a null one is ignored then, so the one a g or ml ingredient has
-    from before D-32 stays for the migration. Clearing or changing the barcode makes it a manual
-    ingredient (`_make_manual`)."""
+    else (g or ml) drops the pending nutrients, and a change to or from `piece` clears the piece
+    weight unless one is sent along to `piece` (ING-02). A piece weight is refused unless the
+    ingredient is, or becomes, counted in pieces; a null one is ignored then, so the one a g or
+    ml ingredient has from before D-32 stays for the migration. Clearing or changing the barcode
+    makes it a manual ingredient (`_make_manual`)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     async with session.begin():
@@ -341,7 +341,8 @@ async def update_ingredient(
             old, new = BaseUnit(row.base_unit), BaseUnit(body.base_unit)
             # Leaving pieces drops the piece weight; coming to pieces takes only one sent along,
             # not the hidden one a g or ml ingredient may have from before D-32.
-            row.piece_weight_g = None
+            if BaseUnit.PIECE in (old, new):
+                row.piece_weight_g = None
             if NUTRITION_BASIS[old] != NUTRITION_BASIS[new]:
                 decided += [nutrient_field(key) for key in NUTRIENT_KEYS]
             row.base_unit = body.base_unit

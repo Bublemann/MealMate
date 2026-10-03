@@ -407,7 +407,11 @@ async def update_meal(
     problems = _row_problems(body.ingredients or [])
     async with session.begin():
         meal = await access.require_meal_owner(session, principal, meal_id)
-        existing = (await meals_repo.rows_for(session, [meal.id]))[meal.id]
+        existing = (
+            []
+            if body.ingredients is None
+            else (await meals_repo.rows_for(session, [meal.id]))[meal.id]
+        )
         await _check_references(
             session,
             cuisine_id=body.cuisine_id,
