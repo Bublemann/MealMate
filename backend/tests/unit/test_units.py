@@ -18,6 +18,7 @@ from app.domain.units import (
     counted_unit,
     fits,
     in_kind_base,
+    stops_fitting,
 )
 
 G = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
@@ -113,6 +114,34 @@ def test_fits_takes_plain_strings() -> None:
     assert fits(1, "tbsp", "g")
     assert not fits(1, "piece", "ml")
     assert fits(3, None, "piece")
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "amount", "unit", "expected"),
+    [
+        # Grams to pieces: g, kg and spoons stop fitting.
+        (BaseUnit.G, BaseUnit.PIECE, 120, Unit.G, True),
+        (BaseUnit.G, BaseUnit.PIECE, 1, Unit.KG, True),
+        (BaseUnit.G, BaseUnit.PIECE, 1, Unit.TBSP, True),
+        # Grams to millilitres: spoons fit both.
+        (BaseUnit.G, BaseUnit.ML, 500, Unit.G, True),
+        (BaseUnit.G, BaseUnit.ML, 1, Unit.TSP, False),
+        # Pieces to grams: pieces, with or without the unit, stop fitting.
+        (BaseUnit.PIECE, BaseUnit.G, 2, Unit.PIECE, True),
+        (BaseUnit.PIECE, BaseUnit.G, 2, None, True),
+        # An amount that doesn't fit already can't stop fitting, nor can one without an amount.
+        (BaseUnit.G, BaseUnit.ML, 2, Unit.PIECE, False),
+        (BaseUnit.G, BaseUnit.PIECE, 2, None, False),
+        (BaseUnit.G, BaseUnit.PIECE, None, None, False),
+        # The same base unit changes nothing.
+        (BaseUnit.ML, BaseUnit.ML, 250, Unit.ML, False),
+    ],
+)
+def test_stops_fitting(
+    before: BaseUnit, after: BaseUnit, amount: float | None, unit: Unit | None, expected: bool
+) -> None:
+    """What a base-unit change or a merge asks about first (D-33)."""
+    assert stops_fitting(amount, unit, before, after) is expected
 
 
 def test_fitting_units_in_display_order() -> None:

@@ -29,6 +29,15 @@ function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 
   };
 }
 
+/** 409 `ingredient.unit_mismatch` (D-33) unless the request accepts it, then `accepted`. */
+function unlessAccepted(accepted: unknown, params: Record<string, number>) {
+  return async (request: Request) => {
+    const body = (await request.json()) as { accept_unit_mismatch?: boolean };
+    if (body.accept_unit_mismatch) return accepted;
+    return Response.json({ code: 'ingredient.unit_mismatch', params, fields: [] }, { status: 409 });
+  };
+}
+
 function nutrientRow(name: RegExp | string): HTMLElement {
   const table = screen.getByTestId(testIds.ingredientNutrition);
   return within(table).getByRole('rowheader', { name }).closest('tr') as HTMLElement;
@@ -317,6 +326,70 @@ describe('IngredientDetailScreen', () => {
     ).resolves.toEqual({ base_unit: 'g' });
   });
 
+  it('asks before a base-unit change leaves amounts not fitting, and saves only when told to (ING-02)', async () => {
+    const path = 'PATCH /api/ingredients/ing-aepfel';
+    const { fetchMock, user } = renderDetail({
+      [path]: unlessAccepted({ ...APPLES, base_unit: 'piece' }, { meals: 3, lists: 1, amounts: 5 }),
+    });
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    const confirm = await screen.findByRole('alertdialog', { name: 'Change the base unit?' });
+    expect(confirm).toHaveAttribute('data-testid', testIds.baseUnitConfirm);
+    expect(confirm).toHaveTextContent(
+      "Äpfel is used in g in 3 meals and 1 list. Those amounts won't fit any more.",
+    );
+    // Cancel goes back to the form as it was; nothing is saved, and nothing is an error.
+    await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(confirm).not.toBeInTheDocument());
+    expect(within(dialog).getByLabelText('Pieces (pcs)')).toBeChecked();
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, path)).toHaveLength(1);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    const again = await screen.findByRole('alertdialog', { name: 'Change the base unit?' });
+    await user.click(within(again).getByRole('button', { name: 'Change anyway' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    const bodies = await Promise.all(
+      requestsTo(fetchMock, path).map((request) => request.json() as Promise<unknown>),
+    );
+    expect(bodies).toEqual([
+      { base_unit: 'piece' },
+      { base_unit: 'piece' },
+      { base_unit: 'piece', accept_unit_mismatch: true },
+    ]);
+    expect(screen.getByTestId(testIds.screenIngredient)).toHaveTextContent('Base unitPieces (pcs)');
+  });
+
+  it('names a single meal or list in German when a base-unit change asks', async () => {
+    await i18n.changeLanguage('de');
+    const eggs = { ...APPLES, id: 'ing-eier', name: 'Eier', base_unit: 'piece' as const };
+    const { user } = renderDetail(
+      {
+        'GET /api/ingredients/ing-eier': eggs,
+        'PATCH /api/ingredients/ing-eier': unlessAccepted(eggs, { meals: 0, lists: 1, amounts: 1 }),
+      },
+      false,
+      'ing-eier',
+    );
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Eier bearbeiten' });
+    await user.click(within(dialog).getByLabelText('Gramm (g)'));
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+
+    const confirm = await screen.findByRole('alertdialog', { name: 'Basiseinheit ändern?' });
+    expect(confirm).toHaveTextContent(
+      'Eier wird in 1 Liste in Stk. verwendet. Diese Mengen passen dann nicht mehr.',
+    );
+    expect(within(confirm).getByRole('button', { name: 'Abbrechen' })).toBeVisible();
+    expect(within(confirm).getByRole('button', { name: 'Trotzdem ändern' })).toBeVisible();
+  });
+
   it('clears a barcode and marks the fields a user changed on an Open Food Facts ingredient', async () => {
     const { fetchMock, user } = renderDetail(
       { [`PATCH ${MILK_PATH}`]: { ...WEIDEHOF_MILK, barcode: null, source: 'manual' } },
@@ -456,6 +529,77 @@ describe('IngredientAdminActions', () => {
       requestsTo(fetchMock, 'POST /api/admin/ingredients/ing-aepfel/merge')[0]?.json(),
     ).resolves.toEqual({ into_id: apfel.id });
     expect(await screen.findByRole('heading', { level: 1, name: 'Apfel' })).toBeVisible();
+  });
+
+  it('names the amounts that won’t fit the ingredient that stays, and merges when told to (ING-05)', async () => {
+    const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
+    const path = 'POST /api/admin/ingredients/ing-aepfel/merge';
+    const { fetchMock, user, router } = renderDetail(
+      {
+        'GET /api/ingredients': (request: Request) =>
+          new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
+        [path]: unlessAccepted(
+          { ...APPLES, id: eggs.id, name: 'Eier', base_unit: 'piece' },
+          { meals: 2, lists: 1, amounts: 4 },
+        ),
+      },
+      true,
+    );
+
+    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
+    await user.type(within(dialog).getByLabelText('Ingredient that stays'), 'Eie');
+    await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Merge Äpfel into Eier?' });
+    expect(within(confirm).queryByTestId(testIds.mergeUnitMismatch)).not.toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Merge' }));
+
+    // The same confirmation now names the count; nothing is merged yet.
+    const count = await within(confirm).findByTestId(testIds.mergeUnitMismatch);
+    expect(count).toHaveTextContent("4 amounts won't fit Eier afterwards.");
+    expect(count).toHaveAttribute('role', 'alert');
+    expect(router.state.location.pathname).toBe('/ingredients/ing-aepfel');
+    await user.click(within(confirm).getByRole('button', { name: 'Merge anyway' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${eggs.id}`));
+    const bodies = await Promise.all(
+      requestsTo(fetchMock, path).map((request) => request.json() as Promise<unknown>),
+    );
+    expect(bodies).toEqual([
+      { into_id: eggs.id },
+      { into_id: eggs.id, accept_unit_mismatch: true },
+    ]);
+  });
+
+  it('names a single amount that won’t fit in German', async () => {
+    await i18n.changeLanguage('de');
+    const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
+    const { user } = renderDetail(
+      {
+        'GET /api/ingredients': (request: Request) =>
+          new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
+        'POST /api/admin/ingredients/ing-aepfel/merge': unlessAccepted(APPLES, {
+          meals: 1,
+          lists: 0,
+          amounts: 1,
+        }),
+      },
+      true,
+    );
+
+    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Äpfel zusammenführen mit …' });
+    await user.type(within(dialog).getByLabelText('Zutat, die bleibt'), 'Eie');
+    await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
+    const confirm = await screen.findByRole('alertdialog', {
+      name: 'Äpfel mit Eier zusammenführen?',
+    });
+    await user.click(within(confirm).getByRole('button', { name: 'Zusammenführen' }));
+
+    expect(await within(confirm).findByTestId(testIds.mergeUnitMismatch)).toHaveTextContent(
+      '1 Menge passt danach nicht zu Eier.',
+    );
+    expect(within(confirm).getByRole('button', { name: 'Trotzdem zusammenführen' })).toBeVisible();
   });
 
   it('explains why an ingredient in use cannot be deleted', async () => {

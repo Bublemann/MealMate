@@ -778,6 +778,7 @@
           "ingredient.barcode_taken",
           "ingredient.has_barcode",
           "ingredient.no_pending_update",
+          "ingredient.unit_mismatch",
           "off.busy",
           "off.unavailable",
           "list.not_draft",
@@ -1796,8 +1797,19 @@
         "type": "object"
       },
       "IngredientMerge": {
-        "description": "Merge the ingredient into `into_id` (ING-05).",
+        "description": "Merge the ingredient into `into_id` (ING-05). A merge that would leave amounts of the\ningredient not fitting the base unit of `into_id` is refused (409\n`ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it\nisn't).",
         "properties": {
+          "accept_unit_mismatch": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accept Unit Mismatch"
+          },
           "into_id": {
             "maxLength": 36,
             "minLength": 1,
@@ -1918,8 +1930,19 @@
         "type": "object"
       },
       "IngredientUpdate": {
-        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32).",
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.",
         "properties": {
+          "accept_unit_mismatch": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accept Unit Mismatch"
+          },
           "barcode": {
             "anyOf": [
               {
@@ -5000,7 +5023,7 @@
     },
     "/api/admin/ingredients/{ingredient_id}/merge": {
       "post": {
-        "description": "Merge a duplicate into `into_id`: its references move there and it is deleted\n(ING-05). Returns the ingredient merged into.",
+        "description": "Merge a duplicate into `into_id`: its references move there and it is deleted\n(ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the\nnumber of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`\nis true (D-33).",
         "operationId": "admin_merge_ingredient",
         "parameters": [
           {
@@ -6627,7 +6650,7 @@
         ]
       },
       "patch": {
-        "description": "Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.\nClearing or changing the barcode of one from Open Food Facts makes it manual.",
+        "description": "Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.\nClearing or changing the barcode of one from Open Food Facts makes it manual. 409\n`ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit\nchange would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33).",
         "operationId": "update_ingredient",
         "parameters": [
           {

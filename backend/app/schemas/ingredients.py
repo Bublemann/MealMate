@@ -222,7 +222,10 @@ class IngredientUpdate(BaseModel):
     another product's. The base unit may change freely; the values are not converted.
     Changing it to or from `piece` clears the piece weight, unless the change to `piece` sends
     one. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces
-    (422 `invalid` otherwise, D-32).
+    (422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on
+    drafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless
+    `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
+    they are and flagged.
     """
 
     name: IngredientNameInput | None = None
@@ -235,6 +238,7 @@ class IngredientUpdate(BaseModel):
     quantity_text: QuantityTextInput | None = None
     pack_quantity: PackQuantityInput | None = None
     pack_unit: Unit | None = None
+    accept_unit_mismatch: bool | None = None
 
     check_not_null = field_validator("name", "category_id", "base_unit")(not_null)
 
@@ -248,9 +252,13 @@ class IngredientBarcodeLink(BaseModel):
 
 
 class IngredientMerge(BaseModel):
-    """Merge the ingredient into `into_id` (ING-05)."""
+    """Merge the ingredient into `into_id` (ING-05). A merge that would leave amounts of the
+    ingredient not fitting the base unit of `into_id` is refused (409
+    `ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
+    isn't)."""
 
     into_id: IdInput
+    accept_unit_mismatch: bool | None = None
 
 
 class ProductProposal(BaseModel):

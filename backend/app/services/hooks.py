@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import ingredient_key
+from app.domain.units import BaseUnit, stops_fitting
 from app.models import ListLineState
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
@@ -93,6 +94,30 @@ async def ingredient_references(session: AsyncSession, ingredient_id: str) -> di
         "meals": await meals_repo.count_with_ingredient(session, ingredient_id),
         "lists": await lists_repo.count_with_ingredient(session, ingredient_id),
     }
+
+
+async def amounts_that_stop_fitting(
+    session: AsyncSession, ingredient_id: str, before: BaseUnit, after: BaseUnit
+) -> dict[str, int]:
+    """The ingredient's amounts that fit `before` and won't fit `after` (`stops_fitting`, D-33),
+    counted for a base-unit change (ING-02) or a merge (ING-05):
+
+    - `meals`: the meals with such rows;
+    - `lists`: the drafts with such linked extra items (lists being shopped and done lists keep
+      the base unit they copied, LIST-11);
+    - `amounts`: those rows and extra items.
+    """
+    meals = [
+        meal_id
+        for meal_id, amount, unit in await meals_repo.amounts_of(session, ingredient_id)
+        if stops_fitting(amount, unit, before, after)
+    ]
+    lists = [
+        list_id
+        for list_id, amount, unit in await lists_repo.draft_amounts_of(session, ingredient_id)
+        if stops_fitting(amount, unit, before, after)
+    ]
+    return {"meals": len(set(meals)), "lists": len(set(lists)), "amounts": len(meals) + len(lists)}
 
 
 async def before_ingredient_deleted(session: AsyncSession, ingredient_id: str) -> None:

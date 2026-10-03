@@ -144,6 +144,18 @@ def fits(amount: float | None, unit: Unit | str | None, base_unit: BaseUnit | st
     return counted_unit(amount, unit) in FITTING_UNITS[BaseUnit(base_unit)]
 
 
+def stops_fitting(
+    amount: float | None,
+    unit: Unit | str | None,
+    before: BaseUnit | str,
+    after: BaseUnit | str,
+) -> bool:
+    """Whether an amount that fits an ingredient counted in `before` won't fit it counted in
+    `after`: what a base-unit change or a merge asks about first (D-33). An amount that doesn't
+    fit already can't stop fitting."""
+    return fits(amount, unit, before) and not fits(amount, unit, after)
+
+
 def in_kind_base(amount: float, unit: Unit) -> float:
     """The amount in the base unit of its own kind (g, ml or pieces)."""
     return amount * UNIT_FACTOR[unit]

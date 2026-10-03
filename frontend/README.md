@@ -532,6 +532,7 @@ order.
 | `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
 | `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
 | `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
+| `baseUnitConfirm`        | `base-unit-confirm`        | "Change anyway?" when amounts won't fit     |
 | `offSearchButton`        | `off-search-button`        | "Search Open Food Facts" in the form        |
 | `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name              |
 | `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search      |
@@ -541,6 +542,7 @@ order.
 | `barcodeFieldScan`       | `barcode-field-scan`       | "Scan" at the form's barcode field          |
 | `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner that fills the barcode field        |
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
+| `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |

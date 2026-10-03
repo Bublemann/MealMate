@@ -1,12 +1,12 @@
-import { Merge, Trash2 } from 'lucide-react';
+import { CircleAlert, Merge, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -25,15 +25,20 @@ import {
 } from '@/components/ui/dialog';
 import { testIds } from '@/testIds';
 import {
+  unitMismatch,
   useDeleteIngredient,
   useMergeIngredient,
   type Ingredient,
+  type IngredientMerge,
   type IngredientSummary,
 } from './api';
 import { IngredientPicker } from './IngredientPicker';
 import { ingredientLabel } from './label';
 
-/** ING-05 (admins): merge a duplicate into another ingredient, or delete an unused one. */
+/**
+ * ING-05 (admins): merge a duplicate into another ingredient, or delete an unused one. A merge that
+ * would leave amounts not fitting the ingredient that stays asks once more, naming how many (D-33).
+ */
 export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -44,6 +49,8 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
   const name = ingredientLabel(ingredient.name, ingredient.brand);
   const into = target ? ingredientLabel(target.name, target.brand) : '';
   const busy = merge.isPending || remove.isPending;
+  // Shown in the confirmation, which stays open for it.
+  const mismatch = unitMismatch(merge.error);
 
   function onPick(picked: IngredientSummary) {
     setPicking(false);
@@ -52,10 +59,17 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
 
   function onMerge() {
     if (!target) return;
-    merge.mutate(target.id, {
-      onSuccess: (kept) => void navigate(`/ingredients/${kept.id}`, { replace: true }),
+    const body: IngredientMerge = { into_id: target.id };
+    if (mismatch) body.accept_unit_mismatch = true;
+    merge.mutate(body, {
+      onSuccess: (kept) => {
+        setTarget(null);
+        void navigate(`/ingredients/${kept.id}`, { replace: true });
+      },
+      onError: (error) => {
+        if (!unitMismatch(error)) setTarget(null);
+      },
     });
-    setTarget(null);
   }
 
   return (
@@ -103,7 +117,7 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
             destructive
           />
         </div>
-        <ErrorAlert error={merge.error ?? remove.error} />
+        <ErrorAlert error={(mismatch ? null : merge.error) ?? remove.error} />
       </CardContent>
 
       <Dialog open={picking} onOpenChange={setPicking}>
@@ -131,11 +145,19 @@ export function IngredientAdminActions({ ingredient }: { ingredient: Ingredient 
               {t('ingredients.admin.mergeConfirmText', { from: name, into })}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {mismatch && (
+            <Alert variant="destructive" data-testid={testIds.mergeUnitMismatch}>
+              <CircleAlert aria-hidden="true" />
+              <AlertDescription>
+                {t('ingredients.admin.mergeUnitMismatch', { count: mismatch.amounts, into })}
+              </AlertDescription>
+            </Alert>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction destructive onClick={onMerge}>
-              {t('ingredients.admin.mergeConfirm')}
-            </AlertDialogAction>
+            <Button variant="destructive" disabled={merge.isPending} onClick={onMerge}>
+              {mismatch ? t('ingredients.admin.mergeAnyway') : t('ingredients.admin.mergeConfirm')}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

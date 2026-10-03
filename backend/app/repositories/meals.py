@@ -128,6 +128,18 @@ async def count_with_ingredient(session: AsyncSession, ingredient_id: str) -> in
     return result.scalar_one()
 
 
+async def amounts_of(
+    session: AsyncSession, ingredient_id: str
+) -> list[tuple[str, float | None, str | None]]:
+    """The meal id, amount and unit of every row of the ingredient."""
+    result = await session.execute(
+        select(MealIngredient.meal_id, MealIngredient.amount, MealIngredient.unit).where(
+            MealIngredient.ingredient_id == ingredient_id
+        )
+    )
+    return [(meal_id, amount, unit) for meal_id, amount, unit in result]
+
+
 async def repoint_ingredient(session: AsyncSession, from_id: str, into_id: str) -> None:
     """Rows of one ingredient now refer to another (merge, ING-05); positions stay."""
     await session.execute(

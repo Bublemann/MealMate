@@ -334,6 +334,24 @@ async def count_with_ingredient(session: AsyncSession, ingredient_id: str) -> in
     return result.scalar_one()
 
 
+async def draft_amounts_of(
+    session: AsyncSession, ingredient_id: str
+) -> list[tuple[str, float | None, str | None]]:
+    """The list id, amount and unit of every extra item linked to the ingredient on a draft
+    that is not deleted. Only these follow its base unit; those on lists being shopped and done
+    lists keep the one they copied (LIST-11)."""
+    result = await session.execute(
+        select(ListExtraItem.list_id, ListExtraItem.amount, ListExtraItem.unit)
+        .join(ShoppingList, ShoppingList.id == ListExtraItem.list_id)
+        .where(
+            ListExtraItem.ingredient_id == ingredient_id,
+            ListExtraItem.deleted_at.is_(None),
+            ShoppingList.status == "draft",
+        )
+    )
+    return [(list_id, amount, unit) for list_id, amount, unit in result]
+
+
 async def delete_deleted_extras_of(session: AsyncSession, ingredient_id: str) -> None:
     """Drop the tombstones of deleted extra items linked to the ingredient, so it can be
     deleted (they no longer count as references)."""

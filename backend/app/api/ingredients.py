@@ -136,7 +136,9 @@ async def update_ingredient(
     now: Now,
 ) -> Ingredient:
     """Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.
-    Clearing or changing the barcode of one from Open Food Facts makes it manual."""
+    Clearing or changing the barcode of one from Open Food Facts makes it manual. 409
+    `ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit
+    change would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33)."""
     return await ingredients.update_ingredient(session, principal, ingredient_id, body, now=now)
 
 
