@@ -91,16 +91,17 @@ async def test_categories_have_a_name_per_language(api: AsyncClient, anna: Accou
 
 
 async def test_units(api: AsyncClient, anna: Account) -> None:
+    """In display order, each with the base units it fits (REF-02)."""
     response = await api.get("/api/units", headers=anna.headers)
     assert response.status_code == 200
     assert response.json() == [
-        {"unit": "g", "kind": "mass"},
-        {"unit": "kg", "kind": "mass"},
-        {"unit": "ml", "kind": "volume"},
-        {"unit": "l", "kind": "volume"},
-        {"unit": "piece", "kind": "count"},
-        {"unit": "tbsp", "kind": "volume"},
-        {"unit": "tsp", "kind": "volume"},
+        {"unit": "g", "kind": "mass", "base_units": ["g"]},
+        {"unit": "kg", "kind": "mass", "base_units": ["g"]},
+        {"unit": "ml", "kind": "volume", "base_units": ["ml"]},
+        {"unit": "l", "kind": "volume", "base_units": ["ml"]},
+        {"unit": "piece", "kind": "count", "base_units": ["piece"]},
+        {"unit": "tbsp", "kind": "volume", "base_units": ["g", "ml"]},
+        {"unit": "tsp", "kind": "volume", "base_units": ["g", "ml"]},
     ]
 
 

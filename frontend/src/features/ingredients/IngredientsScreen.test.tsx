@@ -456,12 +456,7 @@ describe('IngredientFormDialog (create)', () => {
     );
     await user.selectOptions(within(form).getByLabelText('Category'), 'cat-fruit_vegetables');
     expect(within(form).getByLabelText('Grams (g)')).toBeChecked();
-    await user.type(within(form).getByLabelText('Weight of one piece (g)'), '180,5');
-    expect(within(form).getByLabelText('Weight of one piece (g)')).toHaveAttribute(
-      'inputmode',
-      'decimal',
-    );
-    await user.type(within(form).getByLabelText('Calories'), '57');
+    await user.type(within(form).getByLabelText('Calories'), '57,5');
     await user.type(within(form).getByLabelText('Fat'), '0.4');
     await user.type(within(form).getByLabelText('Barcode'), '4006381 333931');
     // The package is optional and folded away under "More".
@@ -481,8 +476,7 @@ describe('IngredientFormDialog (create)', () => {
       barcode: '4006381333931',
       pack_quantity: 1.5,
       pack_unit: 'kg',
-      piece_weight_g: 180.5,
-      nutrients: { kcal: 57, fat: 0.4 },
+      nutrients: { kcal: 57.5, fat: 0.4 },
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Birnen (Hofgut)' })).toBeVisible();
   });
@@ -503,17 +497,16 @@ describe('IngredientFormDialog (create)', () => {
         .getAllByRole('radio')
         .map((radio) => radio.closest('label')?.textContent),
     ).toEqual(['Grams (g)', 'Millilitres (ml)', 'Pieces (pcs)']);
+    // Grams and millilitres have neither a piece weight nor a density (D-32).
     expect(within(form).queryByLabelText('Weight per piece (g)')).not.toBeInTheDocument();
-    // Grams and millilitres keep their fields as they were.
-    expect(within(form).getByLabelText('Weight of one piece (g)')).toBeVisible();
-    expect(within(form).getByLabelText('Density (g/ml)')).toBeVisible();
+    expect(within(form).queryByLabelText(/density/i)).not.toBeInTheDocument();
+    await user.click(within(baseUnit).getByLabelText('Millilitres (ml)'));
+    expect(within(form).queryByLabelText('Weight per piece (g)')).not.toBeInTheDocument();
 
     await user.click(within(baseUnit).getByLabelText('Pieces (pcs)'));
 
     const pieceWeight = within(form).getByLabelText('Weight per piece (g)');
     expect(pieceWeight).toHaveAttribute('inputmode', 'decimal');
-    expect(within(form).queryByLabelText('Weight of one piece (g)')).not.toBeInTheDocument();
-    expect(within(form).queryByLabelText('Density (g/ml)')).not.toBeInTheDocument();
     expect(
       within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
     ).toBeVisible();
@@ -531,23 +524,35 @@ describe('IngredientFormDialog (create)', () => {
     });
   });
 
-  it('clears the weight per piece when leaving “Pieces”, keeps one of grams (ING-02)', async () => {
-    const { user } = renderIngredients();
+  it('sends the weight per piece only for “Pieces” (ING-02)', async () => {
+    const created = ingredient({ id: 'ing-mehl', name: 'Mehl' });
+    const { fetchMock, user } = renderIngredients({
+      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    });
 
     await user.click(await screen.findByTestId(testIds.newIngredient));
-    const form = within(await screen.findByRole('dialog')).getByTestId(testIds.ingredientForm);
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    await user.type(within(form).getByLabelText('Name'), 'Mehl');
     await user.click(within(form).getByLabelText('Pieces (pcs)'));
     await user.type(within(form).getByLabelText('Weight per piece (g)'), '60');
     await user.click(within(form).getByLabelText('Grams (g)'));
-
-    expect(within(form).getByLabelText('Weight of one piece (g)')).toHaveValue('');
-    await user.type(within(form).getByLabelText('Weight of one piece (g)'), '55');
+    expect(within(form).queryByLabelText('Weight per piece (g)')).not.toBeInTheDocument();
+    // Coming back, it is still there.
     await user.click(within(form).getByLabelText('Pieces (pcs)'));
-    expect(within(form).getByLabelText('Weight per piece (g)')).toHaveValue('55');
+    expect(within(form).getByLabelText('Weight per piece (g)')).toHaveValue('60');
     await user.click(within(form).getByLabelText('Grams (g)'));
     expect(
       within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
     ).toBeVisible();
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+      name: 'Mehl',
+      base_unit: 'g',
+      category_id: 'cat-other',
+    });
   });
 
   it('offers a category an admin added in walking order, and still starts with Other (REF-01)', async () => {
@@ -726,10 +731,11 @@ describe('IngredientFormDialog (create)', () => {
     await user.click(await screen.findByTestId(testIds.newIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Birnen');
-    await user.type(within(dialog).getByLabelText('Density (g/ml)'), '1,2,3');
+    await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
+    await user.type(within(dialog).getByLabelText('Weight per piece (g)'), '1,2,3');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    expect(within(dialog).getByLabelText('Density (g/ml)')).toHaveAccessibleDescription(
+    expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveAccessibleDescription(
       /^Invalid format/,
     );
     expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);

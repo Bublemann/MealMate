@@ -43,8 +43,9 @@ describe('IngredientDetailScreen', () => {
     expect(await within(screenEl).findByText('Fruit & vegetables')).toBeVisible();
     expect(screenEl).toHaveTextContent('Brandnot set');
     expect(screenEl).toHaveTextContent('Base unitGrams (g)');
-    expect(screenEl).toHaveTextContent('Weight of one piece180 g');
-    expect(screenEl).toHaveTextContent('Densitynot set');
+    // Only pieces have a weight, and nothing has a density (D-32).
+    expect(screenEl).not.toHaveTextContent('Weight of one piece');
+    expect(screenEl).not.toHaveTextContent('Density');
     expect(screenEl).toHaveTextContent('Barcodenot set');
     expect(screenEl).toHaveTextContent('Packagenot set');
     expect(screenEl).toHaveTextContent('SourceEntered by hand');
@@ -113,7 +114,6 @@ describe('IngredientDetailScreen', () => {
       name: 'Eier',
       base_unit: 'piece' as const,
       piece_weight_g: 60,
-      density_g_per_ml: 1.03,
     };
     renderDetail({ 'GET /api/ingredients/ing-eier': eggs }, false, 'ing-eier');
 
@@ -121,8 +121,6 @@ describe('IngredientDetailScreen', () => {
     const screenEl = screen.getByTestId(testIds.screenIngredient);
     expect(screenEl).toHaveTextContent('Base unitPieces (pcs)');
     expect(screenEl).toHaveTextContent('Weight of one piece60 g');
-    // A density means nothing for pieces.
-    expect(screenEl).not.toHaveTextContent('Density');
     expect(screen.getByRole('heading', { name: 'Nutrition per 100 g' })).toBeVisible();
   });
 
@@ -305,17 +303,18 @@ describe('IngredientDetailScreen', () => {
     expect(within(dialog).getByLabelText('Pieces (pcs)')).toBeChecked();
     expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
     await user.click(within(dialog).getByLabelText('Grams (g)'));
-    expect(within(dialog).getByLabelText('Weight of one piece (g)')).toHaveValue('');
+    expect(within(dialog).queryByLabelText('Weight per piece (g)')).not.toBeInTheDocument();
     // Back to pieces by mistake: its own piece weight is back.
     await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
     expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
     await user.click(within(dialog).getByLabelText('Grams (g)'));
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
+    // The server clears the piece weight (ING-02).
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await expect(
       requestsTo(fetchMock, 'PATCH /api/ingredients/ing-eier')[0]?.json(),
-    ).resolves.toEqual({ base_unit: 'g', piece_weight_g: null });
+    ).resolves.toEqual({ base_unit: 'g' });
   });
 
   it('clears a barcode and marks the fields a user changed on an Open Food Facts ingredient', async () => {
@@ -346,8 +345,8 @@ describe('IngredientDetailScreen', () => {
   it('does not send stored numbers with more decimals than shown unless they were edited', async () => {
     const precise = {
       ...APPLES,
+      base_unit: 'piece' as const,
       piece_weight_g: 180.55555555,
-      density_g_per_ml: 1.03333333,
       pack_quantity: 0.33333333,
       nutrients: { ...APPLES.nutrients, kcal: 52.66666667, protein: 0.33333333 },
     };

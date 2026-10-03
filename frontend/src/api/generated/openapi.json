@@ -970,7 +970,7 @@
         "type": "object"
       },
       "ExtraItem": {
-        "description": "An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).",
+        "description": "An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).\n\nA linked item's `base_unit` is the one its line is calculated with: its ingredient's, or\nthe one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false\nfor an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,\nor left by a base-unit change or a merge, and is kept as it is (D-33). Free text always\nfits.",
         "properties": {
           "added_by": {
             "anyOf": [
@@ -1003,6 +1003,22 @@
               }
             ],
             "title": "Amount Text"
+          },
+          "base_unit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "g",
+                  "ml",
+                  "piece"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Unit"
           },
           "category_id": {
             "anyOf": [
@@ -1055,6 +1071,10 @@
                 "type": "null"
               }
             ]
+          },
+          "unit_fits": {
+            "title": "Unit Fits",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1063,6 +1083,8 @@
           "text",
           "amount",
           "unit",
+          "base_unit",
+          "unit_fits",
           "amount_text",
           "category_id",
           "added_by",
@@ -1072,7 +1094,7 @@
         "type": "object"
       },
       "ExtraItemCreate": {
-        "description": "Exactly one of `ingredient_id` and `text` (LIST-06).\n\n- linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount\n  without a unit counts as pieces, a unit without an amount is refused; no `amount_text`\n  or `category_id`;\n- free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)\n  and `category_id` (default: *Other*); no `amount` or `unit`.\n\n`id` may be any UUID chosen by the client; sending the same id again changes nothing.",
+        "description": "Exactly one of `ingredient_id` and `text` (LIST-06).\n\n- linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount\n  without a unit counts as pieces, a unit without an amount is refused, and the unit must\n  fit the ingredient's base unit (REF-02; `unit` `unit_mismatch` otherwise); no\n  `amount_text` or `category_id`;\n- free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)\n  and `category_id` (default: *Other*); no `amount` or `unit`.\n\n`id` may be any UUID chosen by the client; sending the same id again changes nothing.",
         "properties": {
           "amount": {
             "anyOf": [
@@ -1165,7 +1187,7 @@
         "type": "object"
       },
       "ExtraItemUpdate": {
-        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nitem cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `ingredient_id`, `text` and `category_id`.",
+        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nitem cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `ingredient_id`, `text` and `category_id`. A linked\nitem whose amount doesn't fit stays as it is while its ingredient, amount and unit stay the\nsame; changing any of them needs a unit that fits (D-33).",
         "properties": {
           "amount": {
             "anyOf": [
@@ -1349,7 +1371,8 @@
           "invalid_format",
           "taken",
           "too_common",
-          "same_as_username"
+          "same_as_username",
+          "unit_mismatch"
         ],
         "title": "FieldErrorCode",
         "type": "string"
@@ -1412,7 +1435,7 @@
         "type": "object"
       },
       "Ingredient": {
-        "description": "An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count\nwith `piece_weight_g` (NUT-05).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe\nthe pack (information only). `created_by` / `updated_by` are null for a deleted user\n(ING-06).",
+        "description": "An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` describe\nthe pack (information only). `created_by` / `updated_by` are null for a deleted user\n(ING-06).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1463,17 +1486,6 @@
                 "type": "null"
               }
             ]
-          },
-          "density_g_per_ml": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Density G Per Ml"
           },
           "fetched_at": {
             "anyOf": [
@@ -1617,7 +1629,6 @@
           "category_id",
           "base_unit",
           "piece_weight_g",
-          "density_g_per_ml",
           "nutrients",
           "quantity_text",
           "pack_quantity",
@@ -1653,7 +1664,7 @@
         "type": "object"
       },
       "IngredientCreate": {
-        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g, or per 100 ml for\nbase unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are\nignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E\nexpanded first), an EAN-8 as it is; a barcode another ingredient has is 409\n`ingredient.barcode_taken`.\n\nWith `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs\nits `barcode` (422 `required` without). Names need not be unique: the \"similar ingredient\nexists\" hint (`GET /api/ingredients/similar`) is only a hint.",
+        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per\n100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\ningredient has is 409 `ingredient.barcode_taken`.\n\nWith `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs\nits `barcode` (422 `required` without). Names need not be unique: the \"similar ingredient\nexists\" hint (`GET /api/ingredients/similar`) is only a hint.",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1702,19 +1713,6 @@
               }
             ],
             "title": "Category Id"
-          },
-          "density_g_per_ml": {
-            "anyOf": [
-              {
-                "maximum": 5.0,
-                "minimum": 0.1,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Density G Per Ml"
           },
           "name": {
             "maxLength": 60,
@@ -1920,7 +1918,7 @@
         "type": "object"
       },
       "IngredientUpdate": {
-        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it away from `piece` clears the piece weight, unless the request sets one.",
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`,\nthe pack and the nutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1975,19 +1973,6 @@
               }
             ],
             "title": "Category Id"
-          },
-          "density_g_per_ml": {
-            "anyOf": [
-              {
-                "maximum": 5.0,
-                "minimum": 0.1,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Density G Per Ml"
           },
           "name": {
             "anyOf": [
@@ -3489,7 +3474,7 @@
         "type": "object"
       },
       "MealIngredientInput": {
-        "description": "`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an\namount is refused (`ingredients.<i>.amount` `required`). An empty note is stored as null.",
+        "description": "`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an\namount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's\nbase unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already\nhas the very same row (ingredient, amount and unit), which is kept as it is (MEAL-02). An\nempty note is stored as null.",
         "properties": {
           "amount": {
             "anyOf": [
@@ -3540,7 +3525,7 @@
         "type": "object"
       },
       "MealIngredientRow": {
-        "description": "An ingredient row; `amount` and `unit` are both null for e.g. \"salt, to taste\".",
+        "description": "An ingredient row; `amount` and `unit` are both null for e.g. \"salt, to taste\".\n`unit_fits` is false for an amount whose unit doesn't fit the ingredient's base unit\n(REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is\nkept as it is (MEAL-02, D-33).",
         "properties": {
           "amount": {
             "anyOf": [
@@ -3584,6 +3569,10 @@
                 "type": "null"
               }
             ]
+          },
+          "unit_fits": {
+            "title": "Unit Fits",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3592,13 +3581,14 @@
           "ingredient",
           "amount",
           "unit",
+          "unit_fits",
           "note"
         ],
         "title": "MealIngredientRow",
         "type": "object"
       },
       "MealNutrition": {
-        "description": "Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing\ncontributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of\na g-based ingredient without density were counted as 1 g/ml (NUT-05). The totals are not\nbounded by the per-100 maximums of `NutrientValues`.",
+        "description": "Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing\ncontributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of\na g ingredient were counted as 1 g/ml (NUT-05). The totals are not\nbounded by the per-100 maximums of `NutrientValues`.",
         "properties": {
           "estimate": {
             "title": "Estimate",
@@ -3633,7 +3623,7 @@
         "type": "object"
       },
       "MealNutritionMissing": {
-        "description": "Why a row does not (fully) count: no amount, an amount that cannot be converted to the\ningredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown\nvalue for `nutrient` (NUT-04).",
+        "description": "Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the\ningredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown\nvalue for `nutrient` (NUT-04).",
         "properties": {
           "ingredient_brand": {
             "anyOf": [
@@ -3668,7 +3658,7 @@
           "reason": {
             "enum": [
               "no_amount",
-              "not_convertible",
+              "unit_mismatch",
               "no_piece_weight",
               "unknown_value"
             ],
@@ -4548,8 +4538,20 @@
         "type": "string"
       },
       "UnitInfo": {
-        "description": "A unit (translation `unit.<unit>`) and its kind.",
+        "description": "A unit (translation `unit.<unit>`), its kind, and the base units of the ingredients it\nfits (REF-02): an amount of an ingredient takes only the units whose `base_units` hold the\ningredient's base unit. An amount without a unit counts as pieces.",
         "properties": {
+          "base_units": {
+            "items": {
+              "enum": [
+                "g",
+                "ml",
+                "piece"
+              ],
+              "type": "string"
+            },
+            "title": "Base Units",
+            "type": "array"
+          },
           "kind": {
             "$ref": "#/components/schemas/UnitKind"
           },
@@ -4559,7 +4561,8 @@
         },
         "required": [
           "unit",
-          "kind"
+          "kind",
+          "base_units"
         ],
         "title": "UnitInfo",
         "type": "object"
@@ -8826,7 +8829,7 @@
     },
     "/api/units": {
       "get": {
-        "description": "All units in display order, with their kind.",
+        "description": "All units in display order, with their kind and the base units they fit.",
         "operationId": "list_units",
         "responses": {
           "200": {

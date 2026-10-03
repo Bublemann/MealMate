@@ -39,7 +39,11 @@ def test_export_list_as_text(
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"), language=language)
     onions = api.create_ingredient(
-        anna, f"Zwiebeln {tag}", category_key="fruit_vegetables", piece_weight_g=80
+        anna,
+        f"Zwiebeln {tag}",
+        category_key="fruit_vegetables",
+        base_unit="piece",
+        piece_weight_g=80,
     )
     flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
     salt = api.create_ingredient(anna, f"Salz {tag}", category_key="sauces_spices_oils")

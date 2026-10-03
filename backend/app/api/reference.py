@@ -23,7 +23,7 @@ async def list_categories(principal: CurrentUser, session: ReadSession) -> list[
 
 @router.get("/units")
 async def list_units(principal: CurrentUser) -> list[UnitInfo]:
-    """All units in display order, with their kind."""
+    """All units in display order, with their kind and the base units they fit."""
     return reference.list_units()
 
 

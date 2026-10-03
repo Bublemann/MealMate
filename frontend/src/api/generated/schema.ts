@@ -1500,7 +1500,7 @@ export interface paths {
         };
         /**
          * List Units
-         * @description All units in display order, with their kind.
+         * @description All units in display order, with their kind and the base units they fit.
          */
         get: operations["list_units"];
         put?: never;
@@ -1960,6 +1960,12 @@ export interface components {
          * ExtraItem
          * @description An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`
          *     and `unit`) or free text (`text`, optional `amount_text`, `category_id`).
+         *
+         *     A linked item's `base_unit` is the one its line is calculated with: its ingredient's, or
+         *     the one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false
+         *     for an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,
+         *     or left by a base-unit change or a merge, and is kept as it is (D-33). Free text always
+         *     fits.
          */
         ExtraItem: {
             added_by: components["schemas"]["UserRef"] | null;
@@ -1967,6 +1973,8 @@ export interface components {
             amount: number | null;
             /** Amount Text */
             amount_text: string | null;
+            /** Base Unit */
+            base_unit: ("g" | "ml" | "piece") | null;
             /** Category Id */
             category_id: string | null;
             /**
@@ -1981,14 +1989,17 @@ export interface components {
             /** Text */
             text: string | null;
             unit: components["schemas"]["Unit"] | null;
+            /** Unit Fits */
+            unit_fits: boolean;
         };
         /**
          * ExtraItemCreate
          * @description Exactly one of `ingredient_id` and `text` (LIST-06).
          *
          *     - linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
-         *       without a unit counts as pieces, a unit without an amount is refused; no `amount_text`
-         *       or `category_id`;
+         *       without a unit counts as pieces, a unit without an amount is refused, and the unit must
+         *       fit the ingredient's base unit (REF-02; `unit` `unit_mismatch` otherwise); no
+         *       `amount_text` or `category_id`;
          *     - free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)
          *       and `category_id` (default: *Other*); no `amount` or `unit`.
          *
@@ -2013,7 +2024,9 @@ export interface components {
          * ExtraItemUpdate
          * @description Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of
          *     item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
-         *     unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`.
+         *     unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`. A linked
+         *     item whose amount doesn't fit stays as it is while its ingredient, amount and unit stay the
+         *     same; changing any of them needs a unit that fits (D-33).
          */
         ExtraItemUpdate: {
             /** Amount */
@@ -2075,7 +2088,7 @@ export interface components {
          * @description Why a single request field was rejected (`fields[].code` in the envelope).
          * @enum {string}
          */
-        FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username";
+        FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username" | "unit_mismatch";
         /**
          * FilterHidden
          * @description What this user's saved filters hide; empty shows everything. `meals` and `lists` are the
@@ -2102,7 +2115,7 @@ export interface components {
          * Ingredient
          * @description An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
          *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count
-         *     with `piece_weight_g` (NUT-05).
+         *     with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
          *
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
@@ -2129,8 +2142,6 @@ export interface components {
              */
             created_at: string;
             created_by: components["schemas"]["UserRef"] | null;
-            /** Density G Per Ml */
-            density_g_per_ml: number | null;
             /** Fetched At */
             fetched_at: string | null;
             /** Id */
@@ -2178,11 +2189,11 @@ export interface components {
          * @description A new ingredient (ING-02), in one request also when it was scanned.
          *
          *     `category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:
-         *     0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g, or per 100 ml for
-         *     base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are
-         *     ignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E
-         *     expanded first), an EAN-8 as it is; a barcode another ingredient has is 409
-         *     `ingredient.barcode_taken`.
+         *     0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per
+         *     100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
+         *     valid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13
+         *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
+         *     ingredient has is 409 `ingredient.barcode_taken`.
          *
          *     With `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs
          *     its `barcode` (422 `required` without). Names need not be unique: the "similar ingredient
@@ -2201,8 +2212,6 @@ export interface components {
             brand?: string | null;
             /** Category Id */
             category_id?: string | null;
-            /** Density G Per Ml */
-            density_g_per_ml?: number | null;
             /** Name */
             name: string;
             nutrients?: components["schemas"]["NutrientValues"] | null;
@@ -2275,7 +2284,9 @@ export interface components {
          *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
-         *     Changing it away from `piece` clears the piece weight, unless the request sets one.
+         *     Changing it to or from `piece` clears the piece weight, unless the change to `piece` sends
+         *     one. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces
+         *     (422 `invalid` otherwise, D-32).
          */
         IngredientUpdate: {
             /** Barcode */
@@ -2286,8 +2297,6 @@ export interface components {
             brand?: string | null;
             /** Category Id */
             category_id?: string | null;
-            /** Density G Per Ml */
-            density_g_per_ml?: number | null;
             /** Name */
             name?: string | null;
             nutrients?: components["schemas"]["NutrientValues"] | null;
@@ -2879,7 +2888,10 @@ export interface components {
         /**
          * MealIngredientInput
          * @description `amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an
-         *     amount is refused (`ingredients.<i>.amount` `required`). An empty note is stored as null.
+         *     amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's
+         *     base unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already
+         *     has the very same row (ingredient, amount and unit), which is kept as it is (MEAL-02). An
+         *     empty note is stored as null.
          */
         MealIngredientInput: {
             /** Amount */
@@ -2893,6 +2905,9 @@ export interface components {
         /**
          * MealIngredientRow
          * @description An ingredient row; `amount` and `unit` are both null for e.g. "salt, to taste".
+         *     `unit_fits` is false for an amount whose unit doesn't fit the ingredient's base unit
+         *     (REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is
+         *     kept as it is (MEAL-02, D-33).
          */
         MealIngredientRow: {
             /** Amount */
@@ -2905,12 +2920,14 @@ export interface components {
             /** Position */
             position: number;
             unit: components["schemas"]["Unit"] | null;
+            /** Unit Fits */
+            unit_fits: boolean;
         };
         /**
          * MealNutrition
          * @description Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing
          *     contributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of
-         *     a g-based ingredient without density were counted as 1 g/ml (NUT-05). The totals are not
+         *     a g ingredient were counted as 1 g/ml (NUT-05). The totals are not
          *     bounded by the per-100 maximums of `NutrientValues`.
          */
         MealNutrition: {
@@ -2925,7 +2942,7 @@ export interface components {
         };
         /**
          * MealNutritionMissing
-         * @description Why a row does not (fully) count: no amount, an amount that cannot be converted to the
+         * @description Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the
          *     ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown
          *     value for `nutrient` (NUT-04).
          */
@@ -2942,7 +2959,7 @@ export interface components {
              * Reason
              * @enum {string}
              */
-            reason: "no_amount" | "not_convertible" | "no_piece_weight" | "unknown_value";
+            reason: "no_amount" | "unit_mismatch" | "no_piece_weight" | "unknown_value";
         };
         /**
          * MealPhoto
@@ -3232,9 +3249,13 @@ export interface components {
         Unit: "g" | "kg" | "ml" | "l" | "piece" | "tbsp" | "tsp";
         /**
          * UnitInfo
-         * @description A unit (translation `unit.<unit>`) and its kind.
+         * @description A unit (translation `unit.<unit>`), its kind, and the base units of the ingredients it
+         *     fits (REF-02): an amount of an ingredient takes only the units whose `base_units` hold the
+         *     ingredient's base unit. An amount without a unit counts as pieces.
          */
         UnitInfo: {
+            /** Base Units */
+            base_units: ("g" | "ml" | "piece")[];
             kind: components["schemas"]["UnitKind"];
             unit: components["schemas"]["Unit"];
         };

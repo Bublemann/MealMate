@@ -29,7 +29,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref
+from tests.catalog import category_ids, create_ingredient, ref, set_stored
 from tests.lists import (
     add_extra,
     add_meal,
@@ -768,6 +768,8 @@ async def test_linked_and_free_text_items(
         "text": None,
         "amount": 500,
         "unit": "g",
+        "base_unit": "g",
+        "unit_fits": True,
         "amount_text": None,
         "category_id": None,
         "added_by": ref(anna),
@@ -776,8 +778,15 @@ async def test_linked_and_free_text_items(
     assert uuid.UUID(item["id"]).version == 7
     assert body["version"] == 1
 
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=2)
-    assert body["extra_items"][1]["unit"] == "piece"  # an amount without a unit
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
+    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=2)
+    eggs_item = body["extra_items"][1]
+    # An amount without a unit counts as pieces.
+    assert (eggs_item["unit"], eggs_item["base_unit"], eggs_item["unit_fits"]) == (
+        "piece",
+        "piece",
+        True,
+    )
     body = await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"])
     assert body["extra_items"][2]["amount"] is None
 
@@ -786,6 +795,7 @@ async def test_linked_and_free_text_items(
     )
     text_item = body["extra_items"][3]
     assert (text_item["text"], text_item["amount_text"]) == ("Kerzen", "1 Packung")
+    assert (text_item["base_unit"], text_item["unit_fits"]) == (None, True)
     assert text_item["category_id"] == categories["other"]
     body = await extra_added(
         api,
@@ -813,6 +823,12 @@ async def test_linked_and_free_text_items(
         ({"ingredient_id": "{flour}", "amount": 0}, {("body", "amount"): "out_of_range"}),
         ({"ingredient_id": "{flour}", "amount": 100_001}, {("body", "amount"): "out_of_range"}),
         ({"ingredient_id": "{flour}", "unit": "cup", "amount": 1}, {("body", "unit"): "invalid"}),
+        # Units that don't fit the ingredient's base unit (REF-02, LIST-06).
+        ({"ingredient_id": "{flour}", "amount": 2}, {("body", "unit"): "unit_mismatch"}),
+        ({"ingredient_id": "{flour}", "amount": 2, "unit": "piece"},
+         {("body", "unit"): "unit_mismatch"}),
+        ({"ingredient_id": "{flour}", "amount": 1, "unit": "l"},
+         {("body", "unit"): "unit_mismatch"}),
         ({"text": "x", "amount": 1, "unit": "g"},
          {("body", "amount"): "invalid", ("body", "unit"): "invalid"}),
         ({"text": "x", "category_id": "unknown"}, {("body", "category_id"): "invalid"}),
@@ -887,7 +903,7 @@ async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, 
     assert await update(unit="kg") == (flour["id"], 750, "kg", 3)
     assert await update(amount=750) == (flour["id"], 750, "kg", 3)  # unchanged
     assert await update(amount=None) == (flour["id"], None, None, 4)  # the unit goes too
-    assert await update(amount=3) == (flour["id"], 3, "piece", 5)
+    assert await update(amount=3, unit="tbsp") == (flour["id"], 3, "tbsp", 5)
     assert await update(amount=None, unit=None, ingredient_id=salt["id"]) == (
         salt["id"],
         None,
@@ -903,10 +919,56 @@ async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, 
         ({"ingredient_id": None}, {("body", "ingredient_id"): "invalid"}),
         ({"ingredient_id": "unknown"}, {("body", "ingredient_id"): "invalid"}),
         ({"amount": -1}, {("body", "amount"): "out_of_range"}),
+        ({"amount": 2}, {("body", "unit"): "unit_mismatch"}),
+        ({"amount": 2, "unit": "ml"}, {("body", "unit"): "unit_mismatch"}),
     ):  # fmt: skip
         response = await patch_extra(api, anna, shopping_list["id"], item_id, **changes)
         assert response.status_code == 422, changes
         assert fields(response) == problems
+
+
+async def test_linked_items_that_do_not_fit_are_kept(
+    app: FastAPI, api: AsyncClient, anna: Account, flour: Any
+) -> None:
+    """LIST-06, D-33: an older item whose unit doesn't fit stays, flagged, while its
+    ingredient, amount and unit stay; changing them needs a unit that fits the base unit its
+    line is calculated with, the one it copied once shopping started (LIST-11)."""
+    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
+    shopping_list = await create_list(api, anna)
+    list_id = shopping_list["id"]
+    body = await extra_added(api, anna, list_id, ingredient_id=eggs["id"], amount=2)
+    item_id = body["extra_items"][0]["id"]
+    await set_stored(app, eggs["id"], base_unit="g")
+
+    body = await detail(api, anna, list_id)
+    [item] = body["extra_items"]
+    assert (item["amount"], item["unit"], item["base_unit"], item["unit_fits"]) == (
+        2,
+        "piece",
+        "g",
+        False,
+    )
+    unchanged = await patch_extra(api, anna, list_id, item_id, amount=2, unit="piece")
+    assert unchanged.status_code == 200
+    assert unchanged.json()["version"] == body["version"]
+    response = await patch_extra(api, anna, list_id, item_id, amount=3)
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
+    response = await patch_extra(api, anna, list_id, item_id, ingredient_id=flour["id"])
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
+    response = await patch_extra(api, anna, list_id, item_id, amount=120, unit="g")
+    [item] = response.json()["extra_items"]
+    assert (item["amount"], item["unit"], item["unit_fits"]) == (120, "g", True)
+
+    # While shopping, the base unit it copied decides: eggs counted in pieces again.
+    await set_stored(app, eggs["id"], base_unit="piece")
+    await patch_extra(api, anna, list_id, item_id, amount=2, unit="piece")
+    await start_shopping(api, anna, list_id)
+    await set_stored(app, eggs["id"], base_unit="g")
+    response = await patch_extra(api, anna, list_id, item_id, amount=3)
+    [item] = response.json()["extra_items"]
+    assert (item["amount"], item["base_unit"], item["unit_fits"]) == (3, "piece", True)
+    response = await patch_extra(api, anna, list_id, item_id, amount=300, unit="g")
+    assert fields(response) == {("body", "unit"): "unit_mismatch"}
 
 
 async def test_update_free_text_items(api: AsyncClient, anna: Account, flour: Any) -> None:
@@ -966,7 +1028,9 @@ async def test_delete_extra_items(api: AsyncClient, anna: Account, carl: Account
 
 async def test_hide_and_restore_lines(api: AsyncClient, anna: Account, flour: Any) -> None:
     shopping_list = await create_list(api, anna)
-    await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=1)
+    await extra_added(
+        api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=1, unit="kg"
+    )
     key = f"i:{flour['id']}"
 
     hidden = await hide(api, anna, shopping_list["id"], key)
@@ -1256,7 +1320,7 @@ async def fill(
         meal = await create_meal(api, user, f"Meal {index}", ingredients=rows)
         await added(api, user, list_id, meal["id"])
     for item in ingredients:
-        await extra_added(api, user, list_id, ingredient_id=item["id"], amount=1)
+        await extra_added(api, user, list_id, ingredient_id=item["id"], amount=1, unit="kg")
         await extra_added(api, user, list_id, text=f"Extra {item['name']}")
         await hide(api, user, list_id, f"i:{item['id']}")
     gone = await create_meal(api, user, "Weg", ingredients=rows)

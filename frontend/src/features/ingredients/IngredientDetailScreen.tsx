@@ -89,35 +89,23 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
       label: t('ingredients.detail.baseUnit'),
       value: t(`ingredients.baseUnit.${ingredient.base_unit}`),
     },
-    {
-      label: t('ingredients.detail.pieceWeight'),
-      value:
-        ingredient.piece_weight_g === null
-          ? notSet
-          : t('common.amount', {
-              value: formatNumber(ingredient.piece_weight_g, language, {
-                maximumFractionDigits: 1,
-              }),
-              unit: unitLabel(t, 'g'),
-            }),
-    },
-    // A density means nothing for pieces: they only count through the piece weight.
+    // Only pieces have a weight (ING-02): they count towards the nutrition through it.
     ...(ingredient.base_unit === 'piece'
-      ? []
-      : [
+      ? [
           {
-            label: t('ingredients.detail.density'),
+            label: t('ingredients.detail.pieceWeight'),
             value:
-              ingredient.density_g_per_ml === null
+              ingredient.piece_weight_g === null
                 ? notSet
                 : t('common.amount', {
-                    value: formatNumber(ingredient.density_g_per_ml, language, {
-                      maximumFractionDigits: 3,
+                    value: formatNumber(ingredient.piece_weight_g, language, {
+                      maximumFractionDigits: 1,
                     }),
-                    unit: t('ingredients.densityUnit'),
+                    unit: unitLabel(t, 'g'),
                   }),
           },
-        ]),
+        ]
+      : []),
     { label: t('ingredients.detail.barcode'), value: ingredient.barcode ?? notSet },
     { label: t('ingredients.detail.pack'), value: pack ?? notSet },
     {

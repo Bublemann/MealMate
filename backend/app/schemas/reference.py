@@ -6,6 +6,7 @@ from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from app.domain.catalog import CATEGORY_NAME_MAX_LENGTH, CUISINE_NAME_MAX_LENGTH, check_name
 from app.domain.units import Unit, UnitKind
+from app.schemas.ingredients import BaseUnitName
 
 CategoryName = Annotated[
     str,
@@ -60,10 +61,13 @@ class CategoryUsage(BaseModel):
 
 
 class UnitInfo(BaseModel):
-    """A unit (translation `unit.<unit>`) and its kind."""
+    """A unit (translation `unit.<unit>`), its kind, and the base units of the ingredients it
+    fits (REF-02): an amount of an ingredient takes only the units whose `base_units` hold the
+    ingredient's base unit. An amount without a unit counts as pieces."""
 
     unit: Unit
     kind: UnitKind
+    base_units: list[BaseUnitName]
 
 
 class Cuisine(BaseModel):

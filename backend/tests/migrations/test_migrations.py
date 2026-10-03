@@ -1392,8 +1392,8 @@ def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -
 
 
 def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`seed-demo` at head, then down to the base (once the two spaghetti brands have names of
-    their own) and up again leaves a clean database."""
+    """`seed-demo` at head, then down to the base (once nothing is counted in pieces and the
+    two spaghetti brands have names of their own) and up again leaves a clean database."""
     data_dir = tmp_path / "data"
     path = data_dir / "mealmate.db"
     upgrade_database(data_dir)
@@ -1408,6 +1408,12 @@ def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     command.upgrade(alembic_config(path), "head")
     assert non_null_foreign_keys(path) == references
+    with pytest.raises(RuntimeError, match="counted in pieces"):
+        command.downgrade(alembic_config(path), "base")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("UPDATE ingredients SET base_unit = 'g' WHERE base_unit = 'piece'")
+        connection.execute("UPDATE list_meal_ingredients SET base_unit_snapshot = 'g' "
+                           "WHERE base_unit_snapshot = 'piece'")  # fmt: skip
     with pytest.raises(RuntimeError, match="share a name"):
         command.downgrade(alembic_config(path), "base")
     with closing(sqlite3.connect(path)) as connection, connection:

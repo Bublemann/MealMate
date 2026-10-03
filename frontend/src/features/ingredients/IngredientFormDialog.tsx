@@ -42,13 +42,11 @@ import {
   editedFields,
   emptyValues,
   NAME_MAX_LENGTH,
-  NUMBER_FIELDS,
   proposalValues,
   QUANTITY_TEXT_MAX_LENGTH,
   valuesFromIngredient,
   valuesFromPrefill,
   type FormValues,
-  type NumberField,
   type Prefill,
 } from './formValues';
 import { ingredientLabel } from './label';
@@ -71,6 +69,8 @@ const BarcodeScanDialog = lazy(() =>
 );
 
 const BASE_UNITS: readonly BaseUnit[] = ['g', 'ml', 'piece'];
+/** The number fields of the form, as typed. */
+type NumberField = 'piece_weight_g' | 'pack_quantity';
 const PACK_FIELDS = ['quantity_text', 'pack_quantity', 'pack_unit'] as const;
 /** The paths whose server errors are shown next to an input; others go to the alert. */
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
@@ -79,7 +79,7 @@ const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'category_id',
   'base_unit',
   'barcode',
-  ...NUMBER_FIELDS,
+  'piece_weight_g',
   ...PACK_FIELDS,
   ...NUTRIENT_KEYS.map((key) => `nutrients.${key}`),
 ]);
@@ -153,7 +153,7 @@ interface Proposed {
 
 /**
  * One form for every ingredient, new or existing, typed by hand or from Open Food Facts: name,
- * brand, category, base unit (g, ml or pieces), piece weight, density (not for pieces),
+ * brand, category, base unit (g, ml or pieces), piece weight (pieces only),
  * nutrition per 100 g/ml, barcode (with a scan button) and package details under "More". A new
  * ingredient can be filled from an Open Food Facts search by name; its values are then saved in
  * one request with the fields the user changed named as edited (BAR-04).
@@ -216,24 +216,6 @@ export function IngredientForm({
     setValues((current) => ({ ...current, [field]: value }));
   }
 
-  /**
-   * Leaving Stück clears its piece weight, as the server does (ING-02), and grams or millilitres
-   * get back the one the ingredient had with them. Coming back to Stück brings back the
-   * ingredient's own piece weight; one of grams or millilitres comes along.
-   */
-  function chooseBaseUnit(unit: BaseUnit) {
-    setValues((current) => {
-      const ownUnitWasPiece = initial.baseUnit === 'piece';
-      let pieceWeight = current.piece_weight_g;
-      if (current.baseUnit === 'piece' && unit !== 'piece') {
-        pieceWeight = ownUnitWasPiece ? '' : initial.piece_weight_g;
-      } else if (current.baseUnit !== 'piece' && unit === 'piece' && ownUnitWasPiece) {
-        pieceWeight = initial.piece_weight_g;
-      }
-      return { ...current, baseUnit: unit, piece_weight_g: pieceWeight };
-    });
-  }
-
   function fieldError(path: string): string | undefined {
     if (invalid.has(path)) return t('error.field.invalid_format');
     return serverFields[path];
@@ -242,24 +224,6 @@ export function IngredientForm({
   /** A mark for an Open Food Facts field a user changed: updates from there keep it (BAR-05). */
   function editedHint(field: EditedField): string | undefined {
     return edited.has(field) ? t('ingredients.form.userEdited') : undefined;
-  }
-
-  /** The piece weight's field: for pieces with a label of its own and no hint (ING-02). */
-  function pieceWeightField(label: string, hint?: string) {
-    return (
-      <FormField label={label} hint={hint} error={fieldError('piece_weight_g')}>
-        {(control) => (
-          <Input
-            {...control}
-            name="piece_weight_g"
-            inputMode="decimal"
-            autoComplete="off"
-            value={values.piece_weight_g}
-            onChange={(event) => set('piece_weight_g', event.target.value)}
-          />
-        )}
-      </FormField>
-    );
   }
 
   function choose(proposal: OffProposal) {
@@ -278,11 +242,12 @@ export function IngredientForm({
     // input) bubble up through the React tree; only this form's own submit saves.
     if (event.target !== event.currentTarget) return;
     const problems = new Set<string>();
-    // A density means nothing for pieces: its field is hidden then, and left as it is.
+    // Only pieces have a weight (ING-02): its field shows, and is sent, only for Stück. Leaving
+    // Stück clears it on the server.
     const numberFields: readonly NumberField[] =
-      values.baseUnit === 'piece' ? ['piece_weight_g'] : NUMBER_FIELDS;
-    const numbers = {} as Record<NumberField | 'pack_quantity', number | null>;
-    for (const field of [...numberFields, 'pack_quantity'] as const) {
+      values.baseUnit === 'piece' ? ['piece_weight_g', 'pack_quantity'] : ['pack_quantity'];
+    const numbers = {} as Record<NumberField, number | null>;
+    for (const field of numberFields) {
       const parsed = parseOptionalAmount(values[field]);
       if (parsed.ok) numbers[field] = parsed.value;
       else problems.add(field);
@@ -319,7 +284,6 @@ export function IngredientForm({
       if (texts.brand !== null) body.brand = texts.brand;
       if (texts.barcode !== null) body.barcode = texts.barcode;
       if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
-      if (numbers.pack_quantity !== null) body.pack_quantity = numbers.pack_quantity;
       if (packUnit !== null) body.pack_unit = packUnit;
       for (const field of numberFields) {
         const value = numbers[field];
@@ -353,7 +317,7 @@ export function IngredientForm({
     if (packUnit !== ingredient.pack_unit) body.pack_unit = packUnit;
     // A number field counts as changed when its text changed: a stored value with more decimals
     // than shown would otherwise be cut on every save.
-    for (const field of [...numberFields, 'pack_quantity'] as const) {
+    for (const field of numberFields) {
       if (values[field].trim() !== initial[field]) body[field] = numbers[field];
     }
     const changed: Partial<NutrientValues> = {};
@@ -461,7 +425,7 @@ export function IngredientForm({
                 name="base_unit"
                 value={unit}
                 checked={values.baseUnit === unit}
-                onChange={() => chooseBaseUnit(unit)}
+                onChange={() => set('baseUnit', unit)}
                 className="size-5 accent-primary"
               />
               {t(`ingredients.baseUnit.${unit}`)}
@@ -477,31 +441,22 @@ export function IngredientForm({
           <p className="text-sm font-medium text-destructive">{serverFields.base_unit}</p>
         )}
       </fieldset>
-      {values.baseUnit === 'piece' ? (
-        pieceWeightField(t('ingredients.field.weightPerPiece'))
-      ) : (
-        <>
-          {pieceWeightField(
-            t('ingredients.field.pieceWeight'),
-            t('ingredients.field.pieceWeightHint'),
+      {values.baseUnit === 'piece' && (
+        <FormField
+          label={t('ingredients.field.weightPerPiece')}
+          error={fieldError('piece_weight_g')}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              name="piece_weight_g"
+              inputMode="decimal"
+              autoComplete="off"
+              value={values.piece_weight_g}
+              onChange={(event) => set('piece_weight_g', event.target.value)}
+            />
           )}
-          <FormField
-            label={t('ingredients.field.density')}
-            hint={t('ingredients.field.densityHint')}
-            error={fieldError('density_g_per_ml')}
-          >
-            {(control) => (
-              <Input
-                {...control}
-                name="density_g_per_ml"
-                inputMode="decimal"
-                autoComplete="off"
-                value={values.density_g_per_ml}
-                onChange={(event) => set('density_g_per_ml', event.target.value)}
-              />
-            )}
-          </FormField>
-        </>
+        </FormField>
       )}
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-1 font-semibold">

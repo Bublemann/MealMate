@@ -2,8 +2,12 @@
 
 from typing import Any
 
+from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy import update
 
+from app.db.session import Database
+from app.models import Ingredient
 from tests.accounts import Account
 
 # Valid barcodes (GS1 check digits): EAN-13, EAN-13, UPC-A, EAN-8, UPC-E.
@@ -46,3 +50,14 @@ async def create_from_off(
     """An ingredient saved from an Open Food Facts proposal (`source` off)."""
     off = {"edited_fields": edited_fields or [], "off_last_modified_at": off_last_modified_at}
     return await create_ingredient(api, user, name, barcode=barcode, off=off, **body)
+
+
+async def set_stored(app: FastAPI, ingredient_id: str, **values: Any) -> None:
+    """Change an ingredient's columns directly, as the API no longer would: a base unit changed
+    before D-32 left its amounts as they were, and a g or ml ingredient may still have the piece
+    weight and density it had then."""
+    database: Database = app.state.database
+    async with database.write_sessions() as session, session.begin():
+        await session.execute(
+            update(Ingredient).where(Ingredient.id == ingredient_id).values(**values)
+        )

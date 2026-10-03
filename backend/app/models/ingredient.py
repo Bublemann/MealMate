@@ -13,6 +13,7 @@ from app.domain.catalog import (
     QUANTITY_TEXT_MAX_LENGTH,
 )
 from app.domain.nutrients import NUTRIENT_KEYS
+from app.domain.units import IngredientAttrs
 
 
 class NutrientColumns:
@@ -77,6 +78,8 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
     base_unit: Mapped[str] = mapped_column(String(5), default="g")
+    # Only used for `piece` (D-32); a g or ml ingredient may still have one from before, and a
+    # density, until the base-unit migration (D-34). See `attrs()`.
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
     density_g_per_ml: Mapped[float | None] = mapped_column(Float)
     quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))
@@ -94,3 +97,8 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     updated_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
+
+    def attrs(self) -> IngredientAttrs:
+        """What calculations know about the ingredient as it is now (D-32): its base unit, and
+        its piece weight when it is counted in pieces; never a density."""
+        return IngredientAttrs.live(self.base_unit, self.piece_weight_g)

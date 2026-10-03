@@ -6,8 +6,10 @@ and sort them and tell whether a checked line needs more; no amounts are calcula
 the frontend (AGG-01).
 
 1. A live list meal (`frozen_at` null) contributes the meal's current rows with the live
-   ingredient attributes; a frozen or detached one its `list_meal_ingredients` with the
-   attributes captured then. Each row is scaled by `servings ÷ meal servings` (LIST-04).
+   ingredient attributes (`Ingredient.attrs()`: no density, a piece weight only for pieces,
+   D-32); a frozen or detached one its `list_meal_ingredients` with the attributes captured
+   then, which before D-32 included a density and a g or ml ingredient's piece weight (LIST-11).
+   Each row is scaled by `servings ÷ meal servings` (LIST-04).
 2. A linked extra item contributes to its ingredient's line with its `attrs_snapshot` once it
    has one (taken when shopping starts or when it is added while shopping), else with the live
    attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
@@ -161,14 +163,6 @@ async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListCont
     )
 
 
-def live_attrs(ingredient: Ingredient) -> IngredientAttrs:
-    return IngredientAttrs(
-        base_unit=BaseUnit(ingredient.base_unit),
-        piece_weight_g=ingredient.piece_weight_g,
-        density_g_per_ml=ingredient.density_g_per_ml,
-    )
-
-
 def _snapshot_attrs(row: ListMealIngredient) -> IngredientAttrs:
     return IngredientAttrs(
         base_unit=BaseUnit(row.base_unit_snapshot),
@@ -179,26 +173,27 @@ def _snapshot_attrs(row: ListMealIngredient) -> IngredientAttrs:
 
 def attrs_snapshot(ingredient: Ingredient) -> dict[str, Any]:
     """What a linked extra item keeps of its ingredient once shopping started (LIST-11):
-    `{name, brand, base_unit, piece_weight_g, density_g_per_ml, category_id}`."""
+    `{name, brand, base_unit, piece_weight_g, category_id}`, with the live attributes (D-32).
+    Snapshots taken before D-32 also hold a `density_g_per_ml`."""
+    attrs = ingredient.attrs()
     return {
         "name": ingredient.name,
         "brand": ingredient.brand,
-        "base_unit": ingredient.base_unit,
-        "piece_weight_g": ingredient.piece_weight_g,
-        "density_g_per_ml": ingredient.density_g_per_ml,
+        "base_unit": attrs.base_unit.value,
+        "piece_weight_g": attrs.piece_weight_g,
         "category_id": ingredient.category_id,
     }
 
 
-def _extra_attrs(content: ListContent, extra: ListExtraItem) -> IngredientAttrs:
+def extra_attrs(content: ListContent, extra: ListExtraItem) -> IngredientAttrs:
     """A linked extra item's attributes: its snapshot once it has one, else the live ones."""
     if (snapshot := extra.attrs_snapshot) is not None:
         return IngredientAttrs(
             base_unit=BaseUnit(snapshot["base_unit"]),
             piece_weight_g=snapshot["piece_weight_g"],
-            density_g_per_ml=snapshot["density_g_per_ml"],
+            density_g_per_ml=snapshot.get("density_g_per_ml"),
         )
-    return live_attrs(content.ingredients[str(extra.ingredient_id)])
+    return content.ingredients[str(extra.ingredient_id)].attrs()
 
 
 def _part(
@@ -227,7 +222,7 @@ def _meal_parts(content: ListContent, list_meal: ListMeal) -> list[Part]:
                 row.ingredient_id,
                 row.amount,
                 row.unit,
-                live_attrs(content.ingredients[row.ingredient_id]),
+                content.ingredients[row.ingredient_id].attrs(),
                 source,
                 factor,
             )
@@ -244,7 +239,7 @@ def _extra_part(content: ListContent, extra: ListExtraItem) -> Part:
     source = SourceRef("extra", extra.id)
     if extra.ingredient_id is None:
         return Part(line_key=text_key(extra.id), amount=None, unit=None, attrs=None, source=source)
-    attrs = _extra_attrs(content, extra)
+    attrs = extra_attrs(content, extra)
     return _part(extra.ingredient_id, extra.amount, extra.unit, attrs, source)
 
 

@@ -99,7 +99,12 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
         nutrients={"kcal": 64},
     )
     eggs = api.create_ingredient(
-        member, f"Eier {tag}", category_key="dairy_eggs", piece_weight_g=60, nutrients={"kcal": 155}
+        member,
+        f"Eier {tag}",
+        category_key="dairy_eggs",
+        base_unit="piece",
+        piece_weight_g=60,
+        nutrients={"kcal": 155},
     )
     salt = api.create_ingredient(member, f"Salz {tag}")
     name = f"Pfannkuchen {tag}"

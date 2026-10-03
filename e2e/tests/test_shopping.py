@@ -75,7 +75,11 @@ def test_couple_shops_together(
     ben = invite_user(unique("ben"), unique("Ben"))
     make_couple(anna, ben)
     onions = api.create_ingredient(
-        anna, f"Zwiebeln {tag}", category_key="fruit_vegetables", piece_weight_g=80
+        anna,
+        f"Zwiebeln {tag}",
+        category_key="fruit_vegetables",
+        base_unit="piece",
+        piece_weight_g=80,
     )
     flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
     tart = api.create_meal(

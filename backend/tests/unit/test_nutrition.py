@@ -9,6 +9,8 @@ from app.domain.nutrition import MealRow, Missing, meal_nutrition
 from app.domain.units import BaseUnit, IngredientAttrs, Unit
 
 G = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
+# A g ingredient with a piece weight, and an ml one with a density, as only rows frozen before
+# D-32 have them: the nutrition counts by the fitting rule all the same.
 EGG = IngredientAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
 MILK = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=1.03)
 EGG_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
@@ -30,8 +32,8 @@ def test_meal_nutrition() -> None:
     rows = [
         row("Spaghetti", 500, Unit.G, values={"kcal": 350, "protein": 12, "carbs": 70,
                                                "sugar": 3, "fat": 1.5}),
-        row("Eier", 2, Unit.PIECE, EGG, values={"kcal": 155, "protein": 13, "carbs": 1,
-                                                 "sugar": 1, "fat": 11}),
+        row("Eier", 2, Unit.PIECE, EGG_PIECES, values={"kcal": 155, "protein": 13, "carbs": 1,
+                                                        "sugar": 1, "fat": 11}),
         row("Milch", 0.25, Unit.L, MILK, values={"kcal": 64, "protein": 3.4, "carbs": 4.8,
                                                   "sugar": None, "fat": 3.5}),
     ]  # fmt: skip
@@ -58,25 +60,29 @@ def test_what_cannot_be_counted() -> None:
 
     result = meal_nutrition(rows, servings=4)
 
-    assert result.missing == [
-        Missing("salz", "Salz", "no_amount"),
-        Missing("pfeffer", "Pfeffer", "no_amount"),
-        Missing("knoblauch", "Knoblauch", "not_convertible"),
-        Missing("mehl", "Mehl", "not_convertible"),
-        *(Missing("zucker", "Zucker", "unknown_value", key) for key in NUTRIENT_KEYS[1:]),
-    ]
+    assert (
+        result.missing
+        == [
+            Missing("salz", "Salz", "no_amount"),
+            Missing("pfeffer", "Pfeffer", "unit_mismatch"),  # no unit: pieces of a g ingredient
+            Missing("knoblauch", "Knoblauch", "unit_mismatch"),
+            Missing("mehl", "Mehl", "unit_mismatch"),
+            *(Missing("zucker", "Zucker", "unknown_value", key) for key in NUTRIENT_KEYS[1:]),
+        ]
+    )
     assert result.totals == {"kcal": pytest.approx(60), **dict.fromkeys(NUTRIENT_KEYS[1:])}
     assert result.per_serving == {"kcal": pytest.approx(15), **dict.fromkeys(NUTRIENT_KEYS[1:])}
     assert result.estimate  # 1 tbsp of sugar counted as 15 g (NUT-05)
 
 
 def test_pieces_of_a_piece_ingredient() -> None:
-    """NUT-05: pieces times the piece weight against the values per 100 g; without a piece
-    weight they count as unknown and the marker names it; other units can't be converted."""
+    """NUT-05: pieces (or an amount without a unit) times the piece weight against the values
+    per 100 g; without a piece weight they count as unknown and the marker names it; other units
+    don't fit."""
     egg_values = {"kcal": 155, "protein": 13, "carbs": 1, "sugar": 1, "fat": 11}
     rows = [
         row("Eier", 2, Unit.PIECE, EGG_PIECES, values=egg_values),
-        row("Eier", 0.5, Unit.PIECE, EGG_PIECES, values=egg_values),
+        row("Eier", 0.5, None, EGG_PIECES, values=egg_values),
         row("Brötchen", 3, Unit.PIECE, BARE_PIECES),
         row("Eier", 100, Unit.G, EGG_PIECES, values=egg_values),
         row("Eier", 1, Unit.TBSP, EGG_PIECES, values=egg_values),
@@ -88,10 +94,40 @@ def test_pieces_of_a_piece_ingredient() -> None:
     assert result.totals["fat"] == pytest.approx(150 / 100 * 11)
     assert result.missing == [
         Missing("brötchen", "Brötchen", "no_piece_weight"),
-        Missing("eier", "Eier", "not_convertible"),
-        Missing("eier", "Eier", "not_convertible"),
+        Missing("eier", "Eier", "unit_mismatch"),
+        Missing("eier", "Eier", "unit_mismatch"),
     ]
     assert not result.estimate  # spoons of a piece ingredient are no 1 g/ml estimate
+
+
+@pytest.mark.parametrize(
+    ("amount", "unit", "attrs"),
+    [
+        (2, Unit.PIECE, EGG),  # a piece weight on a g ingredient converts nothing (D-32)
+        (2, None, EGG),
+        (0.5, Unit.L, IngredientAttrs(BaseUnit.G, None, density_g_per_ml=1.03)),
+        (103, Unit.G, MILK),
+        (1, Unit.TBSP, EGG_PIECES),
+    ],
+)
+def test_an_amount_that_does_not_fit_counts_as_unknown(
+    amount: float, unit: Unit | None, attrs: IngredientAttrs
+) -> None:
+    """NUT-05: named in the "incomplete" marker, never converted, whatever the attributes
+    (REF-02, D-33)."""
+    result = meal_nutrition([row("Eier", amount, unit, attrs)], servings=1)
+    assert result.missing == [Missing("eier", "Eier", "unit_mismatch")]
+    assert result.totals == dict.fromkeys(NUTRIENT_KEYS)
+
+
+def test_spoons_of_a_g_ingredient_are_an_estimate() -> None:
+    """NUT-05: 2 tbsp of sugar count as 30 g; spoons of an ml ingredient are exact."""
+    sugar = row("Zucker", 2, Unit.TBSP, values={"kcal": 400})
+    oil = row("Öl", 1, Unit.TBSP, IngredientAttrs(BaseUnit.ML, None, None), values=FULL)
+
+    assert meal_nutrition([sugar], servings=1).totals["kcal"] == pytest.approx(120)
+    assert meal_nutrition([sugar], servings=1).estimate
+    assert not meal_nutrition([oil], servings=1).estimate
 
 
 def test_an_empty_meal() -> None:

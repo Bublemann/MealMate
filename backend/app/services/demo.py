@@ -89,8 +89,8 @@ class DemoIngredient:
     category: str
     creator: str
     base_unit: str = "g"
+    # Only for base unit piece (D-32).
     piece_weight_g: float | None = None
-    density_g_per_ml: float | None = None
     nutrients: Mapping[str, float] = field(default_factory=dict)
     # A branded product as if scanned: brand, barcode, and the pack as text, quantity and unit.
     brand: str | None = None
@@ -99,20 +99,22 @@ class DemoIngredient:
 
 
 DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
-    DemoIngredient("Äpfel", "fruit_vegetables", "anna", piece_weight_g=180,
+    DemoIngredient("Äpfel", "fruit_vegetables", "anna", base_unit="piece", piece_weight_g=180,
                    nutrients=_values(52, 0.3, 11.4, 10.4, 0.2)),
-    DemoIngredient("Zwiebeln", "fruit_vegetables", "ben", piece_weight_g=150,
+    DemoIngredient("Zwiebeln", "fruit_vegetables", "ben", base_unit="piece", piece_weight_g=150,
                    nutrients=_values(40, 1.1, 9.3, 4.2, 0.1)),
-    DemoIngredient("Knoblauch", "fruit_vegetables", "carl", piece_weight_g=5),
-    DemoIngredient("Tomaten", "fruit_vegetables", "anna", piece_weight_g=100,
+    DemoIngredient("Knoblauch", "fruit_vegetables", "carl", base_unit="piece", piece_weight_g=5),
+    DemoIngredient("Tomaten", "fruit_vegetables", "anna", base_unit="piece", piece_weight_g=100,
                    nutrients=_values(18, 0.9, 3.9, 2.6, 0.2)),
-    DemoIngredient("Kartoffeln", "fruit_vegetables", "ben", piece_weight_g=150,
+    DemoIngredient("Kartoffeln", "fruit_vegetables", "ben",
                    nutrients=_values(77, 2.0, 17.0, 0.8, 0.1)),
-    DemoIngredient("Karotten", "fruit_vegetables", "carl", piece_weight_g=80),
-    DemoIngredient("Brot", "bread_bakery", "anna", nutrients=_values(245, 8.5, 45.0, 3.0, 1.6)),
-    DemoIngredient("Milch", "dairy_eggs", "anna", base_unit="ml", density_g_per_ml=1.03,
+    DemoIngredient("Karotten", "fruit_vegetables", "carl", base_unit="piece", piece_weight_g=80),
+    # Counted in pieces without a piece weight: its meals' nutrition is incomplete.
+    DemoIngredient("Brot", "bread_bakery", "anna", base_unit="piece",
+                   nutrients=_values(245, 8.5, 45.0, 3.0, 1.6)),
+    DemoIngredient("Milch", "dairy_eggs", "anna", base_unit="ml",
                    nutrients=_values(64, 3.4, 4.8, 4.8, 3.5)),
-    DemoIngredient("Eier", "dairy_eggs", "carl", piece_weight_g=60,
+    DemoIngredient("Eier", "dairy_eggs", "carl", base_unit="piece", piece_weight_g=60,
                    nutrients=_values(155, 13.0, 1.1, 1.1, 11.0)),
     DemoIngredient("Butter", "dairy_eggs", "ben", nutrients=_values(741, 0.6, 0.6, 0.6, 82.0),
                    brand="Kerrygold", barcode="4061453007189", pack=("250 g", 250, Unit.G)),
@@ -134,7 +136,7 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Passierte Tomaten", "canned_jars", "anna",
                    nutrients=_values(36, 1.6, 5.4, 4.8, 0.2),
                    brand="Mutti", barcode="8004207009356", pack=("700 g", 700, Unit.G)),
-    DemoIngredient("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml", density_g_per_ml=0.92,
+    DemoIngredient("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml",
                    nutrients=_values(828, 0.0, 0.0, 0.0, 92.0),
                    brand="Bertolli", barcode="4017952000633", pack=("750 ml", 750, Unit.ML)),
     DemoIngredient("Salz", "sauces_spices_oils", "ben"),
@@ -529,7 +531,6 @@ async def _insert_catalog(
             category_id=categories[item.category],
             base_unit=item.base_unit,
             piece_weight_g=item.piece_weight_g,
-            density_g_per_ml=item.density_g_per_ml,
             quantity_text=quantity_text,
             pack_quantity=pack_quantity,
             pack_unit=None if pack_unit is None else pack_unit.value,
