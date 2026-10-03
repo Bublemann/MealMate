@@ -245,6 +245,53 @@ describe('OffSearchDialog', () => {
     expect(body.off.edited_fields).toEqual(['name']);
   });
 
+  it('keeps what was typed where a product has no value, but nothing of a product chosen before (BAR-03, BAR-04)', async () => {
+    const OAT_DRINK = proposal({
+      barcode: '2000000000015',
+      name: 'Haferdrink',
+      brand: null,
+      nutrients: { kcal: 46, protein: null, carbs: 6.7, sugar: 3.3, fat: null },
+      category_key: null,
+    });
+    const { fetchMock, user } = renderSearch({
+      'GET /api/ingredients/off-search': page([found(MILK), found(OAT_DRINK)]),
+      'POST /api/ingredients': Response.json(ingredient({ id: 'ing-new' }), { status: 201 }),
+    });
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const form = await screen.findByTestId(testIds.ingredientForm);
+    await user.type(within(form).getByLabelText('Name'), 'Milch');
+    await user.type(within(form).getByLabelText('Protein'), '1');
+
+    // Typed first, then a product without a protein value: the typed value stays.
+    await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
+    let dialog = await screen.findByTestId(testIds.offSearchDialog);
+    await user.click((await within(dialog).findAllByTestId(testIds.offSearchResult))[1]!);
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(within(form).getByLabelText('Protein')).toHaveValue('1');
+
+    // Milch has a brand and every value; the oat drink chosen after it has neither brand nor fat,
+    // and those were Milch's, not typed.
+    await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
+    dialog = await screen.findByTestId(testIds.offSearchDialog);
+    await user.click((await within(dialog).findAllByTestId(testIds.offSearchResult))[0]!);
+    await waitFor(() => expect(within(form).getByLabelText('Brand')).toHaveValue('Weidehof'));
+    await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
+    dialog = await screen.findByTestId(testIds.offSearchDialog);
+    await user.click((await within(dialog).findAllByTestId(testIds.offSearchResult))[1]!);
+    await waitFor(() => expect(within(form).getByLabelText('Name')).toHaveValue('Haferdrink'));
+    expect(within(form).getByLabelText('Brand')).toHaveValue('');
+    expect(within(form).getByLabelText('Fat')).toHaveValue('');
+    expect(within(form).getByLabelText('Protein')).toHaveValue('');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1));
+    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toMatchObject({
+      name: 'Haferdrink',
+      nutrients: { kcal: 46, carbs: 6.7, sugar: 3.3 },
+      off: { edited_fields: [] },
+    });
+  });
+
   it("keeps the chosen category when the product doesn't suggest one", async () => {
     const { user } = renderSearch({
       'GET /api/ingredients/off-search': page([

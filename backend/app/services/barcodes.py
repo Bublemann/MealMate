@@ -48,18 +48,35 @@ def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
     )
 
 
+def _not_found(barcode: str, *, off_unavailable: bool) -> BarcodeLookup:
+    return BarcodeLookup(
+        barcode=barcode,
+        found_in="none",
+        ingredient=None,
+        proposal=None,
+        off_unavailable=off_unavailable,
+    )
+
+
 async def user_language(session: AsyncSession, principal: Principal) -> str:
     user = await users_repo.get(session, principal.user_id)
     return user.language if user is not None else DEFAULT_LANGUAGE
 
 
 async def lookup(
-    session: AsyncSession, off: OffClient, principal: Principal, text: str
+    session: AsyncSession,
+    off: OffClient,
+    principal: Principal,
+    text: str,
+    *,
+    own_only: bool = False,
 ) -> BarcodeLookup:
     """Look a barcode up (422 `invalid_format` if it is not a valid EAN/UPC code): an
     ingredient of ours, else Open Food Facts' proposal, else nothing (after a transient
     failure, Open Food Facts gets a second try before that, see `OffClient.fetch`). While too
-    many lookups wait for Open Food Facts: 503 `off.busy`."""
+    many lookups wait for Open Food Facts: 503 `off.busy`. With `own_only`, Open Food Facts
+    isn't asked: the edit pop-up's scan only needs to know whether another ingredient has
+    the barcode (BAR-03)."""
     barcode = ingredients.canonical_barcode(text, ("query", "barcode"))
     async with session.begin():
         row = await ingredients_repo.by_barcode(session, barcode)
@@ -71,6 +88,8 @@ async def lookup(
                 proposal=None,
                 off_unavailable=False,
             )
+        if own_only:
+            return _not_found(barcode, off_unavailable=False)
         language = await user_language(session, principal)
 
     # The user waits for this answer: a transient failure gets a second try, "not found" none.
@@ -78,13 +97,7 @@ async def lookup(
     if response.status == "busy":
         raise ApiError(ErrorCode.OFF_BUSY, status_code=503)
     if response.product is None:
-        return BarcodeLookup(
-            barcode=barcode,
-            found_in="none",
-            ingredient=None,
-            proposal=None,
-            off_unavailable=response.status == "unavailable",
-        )
+        return _not_found(barcode, off_unavailable=response.status == "unavailable")
     return BarcodeLookup(
         barcode=barcode,
         found_in="off",

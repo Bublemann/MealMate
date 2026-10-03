@@ -17,9 +17,9 @@ interface BarcodeScanDialogProps {
 }
 
 /**
- * The scanner for the ingredient form's barcode field: it only reads the digits into the field
- * and looks nothing up, because the form already holds the ingredient's values. A lazy-loaded
- * chunk with the decoder, like `/scan` (PERF-03).
+ * The plain scanner over the ingredient pop-up (BAR-01): it hands the scanned or typed digits
+ * back and looks nothing up; the pop-up does that (BAR-02/03), so the scanner never imports the
+ * form. A lazy-loaded chunk with the decoder (PERF-03).
  */
 export function BarcodeScanDialog({ open, onOpenChange, onBarcode }: BarcodeScanDialogProps) {
   const { t } = useTranslation();

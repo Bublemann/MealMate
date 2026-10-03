@@ -9,7 +9,10 @@ import {
   CATEGORIES_WITH_UNCATEGORIZED,
   expectInPageOrder,
   ingredient,
+  lookupResult,
+  proposal,
   REFERENCE_ROUTES,
+  scanInForm,
   summary,
   UNCATEGORIZED,
 } from '@/test/ingredients';
@@ -803,27 +806,6 @@ describe('IngredientFormDialog (create)', () => {
     ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Other']);
   });
 
-  it('fills in the barcode from the scan icon next to the name, through the typed digits (BAR-01)', async () => {
-    const { fetchMock, user } = renderIngredients();
-
-    await user.click(await screen.findByTestId(testIds.newIngredient));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
-    // The barcode field has no scan button of its own.
-    expect(within(dialog).getAllByRole('button', { name: 'Scan barcode' })).toEqual([
-      within(dialog).getByTestId(testIds.ingredientFormScan),
-    ]);
-    await user.click(within(dialog).getByRole('button', { name: 'Scan barcode' }));
-    const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
-    await user.type(within(scanner).getByTestId(testIds.barcodeInput), '4006381333931{Enter}');
-
-    await waitFor(() => expect(scanner).not.toBeInTheDocument());
-    // Only filled in: nothing is looked up yet, and the form is still open.
-    const form = screen.getByTestId(testIds.ingredientForm);
-    expect(within(form).getByLabelText('Barcode')).toHaveValue('4006381333931');
-    expect(screen.getByRole('dialog', { name: 'New ingredient' })).toBeVisible();
-    expect(requestsTo(fetchMock, 'GET /api/ingredients/lookup')).toHaveLength(0);
-  });
-
   it('shows a barcode another ingredient has next to the field', async () => {
     const { user } = renderIngredients({
       'POST /api/ingredients': errorResponse(409, 'ingredient.barcode_taken'),
@@ -919,5 +901,255 @@ describe('IngredientFormDialog (create)', () => {
       new URL(request.url).searchParams.get('name'),
     );
     expect(names).toEqual(['Apfel']);
+  });
+});
+
+describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
+  const BARCODE = '4006381333931';
+  const LOOKUP = 'GET /api/ingredients/lookup';
+
+  /** Opens "New ingredient" from the tile. */
+  async function openNew(user: ReturnType<typeof renderApp>['user'], title = 'New ingredient') {
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    return screen.findByRole('dialog', { name: title });
+  }
+
+  it('starts the scanner only on a tap on the scan icon (BAR-01)', async () => {
+    const { fetchMock, user } = renderIngredients({ [LOOKUP]: lookupResult() });
+
+    const dialog = await openNew(user);
+    // The barcode field has no scan button of its own.
+    expect(within(dialog).getAllByRole('button', { name: 'Scan barcode' })).toEqual([
+      within(dialog).getByTestId(testIds.ingredientFormScan),
+    ]);
+    expect(screen.queryByTestId(testIds.barcodeScanDialog)).not.toBeInTheDocument();
+    await scanInForm(user, dialog, BARCODE);
+
+    await waitFor(() => expect(requestsTo(fetchMock, LOOKUP)).toHaveLength(1));
+    // Our own ingredients first, then Open Food Facts.
+    expect(new URL(requestsTo(fetchMock, LOOKUP)[0]!.url).search).toBe(`?barcode=${BARCODE}`);
+  });
+
+  it('names the ingredient a scanned barcode belongs to, fills in nothing and opens it', async () => {
+    await i18n.changeLanguage('de');
+    const milk = ingredient({
+      id: 'ing-milch',
+      name: 'Milch',
+      brand: 'Weihenstephan',
+      barcode: BARCODE,
+    });
+    const { fetchMock, user, router } = renderIngredients({
+      [LOOKUP]: lookupResult({ found_in: 'db', ingredient: milk }),
+      'GET /api/ingredients/ing-milch': milk,
+    });
+
+    const dialog = await openNew(user, 'Neue Zutat');
+    await user.type(within(dialog).getByLabelText('Name'), 'Milchig');
+    await scanInForm(user, dialog, BARCODE);
+
+    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    expect(notice).toHaveTextContent(/^Gehört schon zu Milch \(Weihenstephan\)öffnen$/);
+    // The pop-up stays open and nothing is filled in.
+    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Milchig');
+    expect(within(dialog).queryByTestId(testIds.offAttribution)).not.toBeInTheDocument();
+    expect(within(notice).queryByTestId(testIds.ingredientScanTake)).not.toBeInTheDocument();
+    const open = within(notice).getByRole('link', { name: 'öffnen' });
+    expect(open).toHaveAccessibleDescription('Gehört schon zu Milch (Weihenstephan)');
+    expect(open).toHaveAttribute('data-testid', testIds.ingredientScanOpen);
+    await user.click(open);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-milch'));
+    expect(dialog).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+
+  it('fills the form like a chosen search result, keeping what was typed where Open Food Facts has no value (BAR-03, BAR-04)', async () => {
+    const hit = proposal({
+      brand: null,
+      nutrients: { kcal: 64, protein: null, carbs: 4.8, sugar: 4.8, fat: 3.5 },
+    });
+    const { fetchMock, user } = renderIngredients({
+      [LOOKUP]: lookupResult({ found_in: 'off', proposal: hit }),
+      'POST /api/ingredients': Response.json(ingredient({ id: 'ing-vollmilch' }), {
+        status: 201,
+      }),
+      'GET /api/ingredients/ing-vollmilch': ingredient({ id: 'ing-vollmilch' }),
+    });
+
+    const dialog = await openNew(user);
+    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    await user.type(within(form).getByLabelText('Name'), 'Milch');
+    await user.type(within(form).getByLabelText('Brand'), 'Hofgut');
+    await user.type(within(form).getByLabelText('Calories'), '50');
+    await user.type(within(form).getByLabelText('Protein'), '3,3');
+    await scanInForm(user, dialog, BARCODE);
+
+    await waitFor(() =>
+      expect(within(form).getByLabelText('Name')).toHaveValue('Frische Vollmilch 3,5 %'),
+    );
+    // What Open Food Facts has no value for keeps what was typed.
+    expect(within(form).getByLabelText('Brand')).toHaveValue('Hofgut');
+    expect(within(form).getByLabelText('Protein')).toHaveValue('3,3');
+    expect(within(form).getByLabelText('Calories')).toHaveValue('64');
+    await waitFor(() =>
+      expect(within(form).getByLabelText('Category')).toHaveValue('cat-dairy_eggs'),
+    );
+    expect(within(form).getByRole('radio', { name: 'Millilitres (ml)' })).toBeChecked();
+    // The barcode belongs to the values: read-only, and the scan icon can't replace it.
+    expect(within(form).getByLabelText('Barcode')).toHaveValue(BARCODE);
+    expect(within(form).getByLabelText('Barcode')).toHaveAttribute('readonly');
+    expect(within(form).getByTestId(testIds.ingredientFormScan)).toBeDisabled();
+    expect(within(form).getByTestId(testIds.offAttribution)).toBeVisible();
+    expect(within(form).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+      name: 'Frische Vollmilch 3,5 %',
+      base_unit: 'ml',
+      category_id: 'cat-dairy_eggs',
+      brand: 'Hofgut',
+      barcode: BARCODE,
+      quantity_text: '1 l',
+      pack_quantity: 1,
+      pack_unit: 'l',
+      nutrients: { kcal: 64, protein: 3.3, carbs: 4.8, sugar: 4.8, fat: 3.5 },
+      // What the user typed is theirs: a refresh keeps it.
+      off: {
+        off_last_modified_at: '2026-09-01T10:00:00Z',
+        edited_fields: ['brand', 'nutrients.protein'],
+      },
+    });
+  });
+
+  it('fills in only a barcode Open Food Facts does not know, with a notice (BAR-03)', async () => {
+    await i18n.changeLanguage('de');
+    const { user } = renderIngredients({ [LOOKUP]: lookupResult() });
+
+    const dialog = await openNew(user, 'Neue Zutat');
+    await user.type(within(dialog).getByLabelText('Name'), 'Quitten');
+    await scanInForm(user, dialog, BARCODE);
+
+    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    expect(notice).toHaveTextContent(/^Nicht bei Open Food Facts – trag die Werte selbst ein$/);
+    const barcode = within(dialog).getByLabelText('Barcode');
+    expect(barcode).toHaveValue(BARCODE);
+    expect(barcode).not.toHaveAttribute('readonly');
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Quitten');
+    expect(within(dialog).queryByTestId(testIds.offAttribution)).not.toBeInTheDocument();
+
+    // A barcode typed over the scanned one has nothing to do with the notice.
+    await user.type(barcode, '{Backspace}');
+    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['cannot be reached', lookupResult({ off_unavailable: true })],
+    ['is busy', errorResponse(503, 'off.busy')],
+  ])(
+    'fills in the barcode when Open Food Facts %s, and looks it up again on request (BAR-03)',
+    async (_, slow) => {
+      const answers: unknown[] = [slow, lookupResult({ found_in: 'off', proposal: proposal() })];
+      const { fetchMock, user } = renderIngredients({ [LOOKUP]: () => answers.shift() });
+
+      const dialog = await openNew(user);
+      await scanInForm(user, dialog, BARCODE);
+
+      const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+      expect(notice).toHaveTextContent(
+        /^Open Food Facts is slow right now – try again or enter the values yourselfTry again$/,
+      );
+      expect(within(dialog).getByLabelText('Barcode')).toHaveValue(BARCODE);
+      const retry = within(notice).getByRole('button', { name: 'Try again' });
+      expect(retry).toHaveAttribute('data-testid', testIds.ingredientScanRetry);
+      await user.click(retry);
+
+      await waitFor(() =>
+        expect(within(dialog).getByLabelText('Name')).toHaveValue('Frische Vollmilch 3,5 %'),
+      );
+      expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+      expect(within(dialog).getByLabelText('Barcode')).toHaveAttribute('readonly');
+      expect(requestsTo(fetchMock, LOOKUP)).toHaveLength(2);
+    },
+  );
+
+  it('says when the scanned digits are not a valid barcode, filling in nothing', async () => {
+    const { user } = renderIngredients({
+      [LOOKUP]: errorResponse(422, 'common.validation', [
+        { loc: ['query', 'barcode'], code: 'invalid_format' },
+      ]),
+    });
+
+    const dialog = await openNew(user);
+    await scanInForm(user, dialog, '4006381333932');
+
+    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    expect(notice).toHaveTextContent(
+      "4006381333932 isn't a valid barcode. Please check the digits.",
+    );
+    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
+  });
+
+  it('adds a scanned barcode to a similar ingredient without one, and opens it (BAR-03)', async () => {
+    await i18n.changeLanguage('de');
+    const milk = ALL[3]!;
+    const linked = ingredient({ ...milk, barcode: BARCODE });
+    const { fetchMock, user, router } = renderIngredients({
+      [LOOKUP]: lookupResult(),
+      'GET /api/ingredients/similar': [milk, ALL[2]],
+      'POST /api/ingredients/ing-milch/barcode': linked,
+      'GET /api/ingredients/ing-milch': linked,
+    });
+
+    const dialog = await openNew(user, 'Neue Zutat');
+    await user.type(within(dialog).getByLabelText('Name'), 'Milch');
+    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    // Before a scan, the matches are only links.
+    expect(within(hint).getByRole('link', { name: 'Milch' })).toBeVisible();
+    await scanInForm(user, dialog, BARCODE);
+
+    const attach = await within(hint).findByRole('button', {
+      name: 'Barcode zu Milch hinzufügen',
+    });
+    // Butter has a barcode: another package is another ingredient (D-21).
+    expect(within(hint).getByRole('link', { name: 'Butter (Kerrygold)' })).toBeVisible();
+    expect(within(hint).queryByRole('link', { name: 'Milch' })).not.toBeInTheDocument();
+    await user.click(attach);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-milch'));
+    expect(dialog).not.toBeInTheDocument();
+    await expect(
+      requestsTo(fetchMock, 'POST /api/ingredients/ing-milch/barcode')[0]?.json(),
+    ).resolves.toEqual({ barcode: BARCODE });
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+
+  it('shows a failed attaching in the pop-up, and attaches only the scanned barcode', async () => {
+    const { fetchMock, user, router } = renderIngredients({
+      [LOOKUP]: lookupResult(),
+      'GET /api/ingredients/similar': [ALL[3]],
+      'POST /api/ingredients/ing-milch/barcode': errorResponse(409, 'ingredient.has_barcode'),
+    });
+
+    const dialog = await openNew(user);
+    await user.type(within(dialog).getByLabelText('Name'), 'Milch');
+    await scanInForm(user, dialog, BARCODE);
+    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    await user.click(await within(hint).findByRole('button', { name: 'Add the barcode to Milch' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      /^This ingredient already has a barcode/,
+    );
+    expect(router.state.location.pathname).toBe('/ingredients');
+    expect(requestsTo(fetchMock, 'POST /api/ingredients/ing-milch/barcode')).toHaveLength(1);
+
+    // A barcode typed in by hand is no scan: the match is only a link again.
+    const barcode = within(dialog).getByLabelText('Barcode');
+    await user.clear(barcode);
+    await user.type(barcode, '5011038133535');
+    expect(within(hint).getByRole('link', { name: 'Milch' })).toBeVisible();
+    expect(within(hint).queryByRole('button')).not.toBeInTheDocument();
   });
 });

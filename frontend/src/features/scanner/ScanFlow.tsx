@@ -1,7 +1,7 @@
 import { ChevronLeft, CircleAlert, Link2, RotateCcw, ScanBarcode } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fieldErrorCodes, isApiError } from '@/api/errors';
+import { fieldErrorCodes } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { IngredientForm } from '@/features/ingredients/IngredientFormDialog';
 import { IngredientPicker } from '@/features/ingredients/IngredientPicker';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { testIds } from '@/testIds';
-import { useBarcodeLookup, type BarcodeLookup } from './api';
+import { isOffSlow, useBarcodeLookup, type BarcodeLookup } from './api';
 import { BarcodeScanner } from './BarcodeScanner';
 
 type Step =
@@ -24,11 +24,6 @@ interface ScanFlowProps {
    * created from the scanned product (BAR-03), or an existing one the barcode was linked to.
    */
   onIngredient: (ingredient: IngredientSummary) => void;
-}
-
-/** When Open Food Facts can't answer in time: try again, or enter the values by hand. */
-function isOffSlow(error: unknown): boolean {
-  return isApiError(error) && (error.code === 'off.busy' || error.code === 'client.timeout');
 }
 
 /**
@@ -46,16 +41,19 @@ export function ScanFlow({ onIngredient }: ScanFlowProps) {
 
   function lookUp(code: string) {
     setBarcode(code);
-    lookup.mutate(code, {
-      onSuccess: (result) => {
-        if (result.found_in === 'db' && result.ingredient) {
-          onIngredient(toSummary(result.ingredient));
-          return;
-        }
-        setAttempt((current) => current + 1);
-        setStep({ kind: 'form', lookup: result });
+    lookup.mutate(
+      { barcode: code },
+      {
+        onSuccess: (result) => {
+          if (result.found_in === 'db' && result.ingredient) {
+            onIngredient(toSummary(result.ingredient));
+            return;
+          }
+          setAttempt((current) => current + 1);
+          setStep({ kind: 'form', lookup: result });
+        },
       },
-    });
+    );
   }
 
   function restart() {

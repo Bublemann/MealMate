@@ -1,17 +1,30 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { createQueryClient } from '@/app/queryClient';
 import { mockApi, requestsTo } from '@/test/api';
-import { ingredient, proposal, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import {
+  ingredient,
+  lookupResult,
+  proposal,
+  REFERENCE_ROUTES,
+  scanInForm,
+  summary,
+} from '@/test/ingredients';
 import { testIds } from '@/testIds';
-import type { IngredientSummary } from './api';
+import { toSummary, type IngredientSummary } from './api';
 import { IngredientPicker } from './IngredientPicker';
 
 type Schemas = components['schemas'];
+
+// jsdom has no camera: the scanner of the form's scan icon shows its manual input.
+vi.mock('@/features/scanner/decoder', () => ({
+  loadDecoder: () => Promise.resolve(),
+  decodeVideoFrame: () => Promise.resolve(null),
+}));
 
 const APPLES = summary('Äpfel', 'fruit_vegetables');
 const APPLE_JUICE = summary('Apfelsaft', 'other', {
@@ -215,5 +228,88 @@ describe('IngredientPicker, created from Open Food Facts', () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(known);
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+});
+
+describe('IngredientPicker, scanning in "New ingredient" (BAR-02, BAR-03)', () => {
+  const BARCODE = '4006381333931';
+  const LOOKUP = 'GET /api/ingredients/lookup';
+  const HONEY = summary('Honig', 'other');
+  const HONEY_JAR = summary('Honig', 'other', {
+    id: 'ing-honig-imkerei',
+    brand: 'Imkerei',
+    barcode: '4000000000013',
+  });
+
+  /** Types `name` into the picker and opens "New ingredient" for it. */
+  async function openNew(user: UserEvent, name: string) {
+    await user.type(screen.getByLabelText('Search ingredient'), name);
+    await user.click(await screen.findByTestId(testIds.ingredientPickerCreate));
+    return screen.findByRole('dialog', { name: 'New ingredient' });
+  }
+
+  it('takes the ingredient a scanned barcode belongs to', async () => {
+    const known = ingredient({ id: 'ing-honig', name: 'Honig', barcode: BARCODE });
+    const { fetchMock, onSelect, user } = renderPicker(
+      {},
+      { [LOOKUP]: lookupResult({ found_in: 'db', ingredient: known }) },
+    );
+
+    const dialog = await openNew(user, 'Honi');
+    await scanInForm(user, dialog, BARCODE);
+
+    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    expect(notice).toHaveTextContent(/^Already belongs to Honiguse$/);
+    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
+    expect(within(notice).queryByRole('link')).not.toBeInTheDocument();
+    const take = within(notice).getByRole('button', { name: 'use' });
+    expect(take).toHaveAttribute('data-testid', testIds.ingredientScanTake);
+    await user.click(take);
+
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(toSummary(known));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+
+  it('gives a similar ingredient without a barcode the scanned one, then takes it', async () => {
+    const linked = ingredient({ ...HONEY, barcode: BARCODE });
+    const { fetchMock, onSelect, user } = renderPicker(
+      {},
+      {
+        [LOOKUP]: lookupResult(),
+        'GET /api/ingredients/similar': [HONEY, HONEY_JAR],
+        'POST /api/ingredients/ing-honig/barcode': linked,
+      },
+    );
+
+    const dialog = await openNew(user, 'Honig');
+    await scanInForm(user, dialog, BARCODE);
+    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    await user.click(within(hint).getByRole('button', { name: 'Use Honig' }));
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledExactlyOnceWith(toSummary(linked)));
+    expect(dialog).not.toBeInTheDocument();
+    await expect(
+      requestsTo(fetchMock, 'POST /api/ingredients/ing-honig/barcode')[0]?.json(),
+    ).resolves.toEqual({ barcode: BARCODE });
+    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+  });
+
+  it('takes a similar ingredient that has a barcode as it is (D-21)', async () => {
+    const { fetchMock, onSelect, user } = renderPicker(
+      {},
+      { [LOOKUP]: lookupResult(), 'GET /api/ingredients/similar': [HONEY, HONEY_JAR] },
+    );
+
+    const dialog = await openNew(user, 'Honig');
+    await scanInForm(user, dialog, BARCODE);
+    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    await user.click(within(hint).getByRole('button', { name: 'Use Honig (Imkerei)' }));
+
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(HONEY_JAR);
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(requestsTo(fetchMock, 'POST /api/ingredients/ing-honig-imkerei/barcode')).toHaveLength(
+      0,
+    );
   });
 });

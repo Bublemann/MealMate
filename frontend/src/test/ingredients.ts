@@ -1,6 +1,8 @@
-import { within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import type { UserEvent } from '@testing-library/user-event';
 import { expect } from 'vitest';
 import type { components } from '@/api/generated/schema';
+import { testIds } from '@/testIds';
 import { BEN, TEST_USER, userRef } from './api';
 
 type Schemas = components['schemas'];
@@ -218,6 +220,31 @@ export function proposal(
     off_last_modified_at: '2026-09-01T10:00:00Z',
     ...overrides,
   };
+}
+
+/** The barcode lookup's answer (BAR-02, BAR-03); by default, a barcode nobody knows. */
+export function lookupResult(
+  overrides: Partial<Schemas['BarcodeLookup']> = {},
+): Schemas['BarcodeLookup'] {
+  return {
+    barcode: '4006381333931',
+    found_in: 'none',
+    ingredient: null,
+    proposal: null,
+    off_unavailable: false,
+    ...overrides,
+  };
+}
+
+/**
+ * Taps the scan icon of the ingredient pop-up `dialog` and types `digits` into the scanner, the
+ * fallback without a camera (jsdom has none, BAR-01); returns once the scanner has closed.
+ */
+export async function scanInForm(user: UserEvent, dialog: HTMLElement, digits: string) {
+  await user.click(within(dialog).getByTestId(testIds.ingredientFormScan));
+  const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
+  await user.type(within(scanner).getByTestId(testIds.barcodeInput), `${digits}{Enter}`);
+  await waitFor(() => expect(scanner).not.toBeInTheDocument());
 }
 
 /** Answers for the reference data every ingredient screen loads. */

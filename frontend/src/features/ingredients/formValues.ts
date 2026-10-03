@@ -87,8 +87,9 @@ export function fitName(name: string): string {
 
 /**
  * The form with a barcode and, if Open Food Facts knows it, its proposal (BAR-03). What the
- * proposal doesn't have (the piece weight, a name and a category guess when it has none)
- * stays as it was: a category the user chose is kept unless the proposal guesses one.
+ * proposal has no value for (the piece weight, and a name, brand, category guess, base unit or
+ * nutrient when it has none) stays as it was: a category the user chose is kept unless the
+ * proposal guesses one.
  */
 export function valuesFromPrefill(
   { barcode, proposal }: Prefill,
@@ -96,16 +97,37 @@ export function valuesFromPrefill(
   language: Language,
 ): FormValues {
   if (!proposal) return { ...current, barcode };
+  const nutrients = { ...current.nutrients };
+  for (const key of NUTRIENT_KEYS) {
+    const value = proposal.nutrients[key];
+    if (value !== null && value !== undefined) nutrients[key] = numberInputValue(value, language);
+  }
   return {
     ...current,
     name: proposal.name ? fitName(proposal.name) : current.name,
-    brand: proposal.brand?.slice(0, BRAND_MAX_LENGTH) ?? '',
+    brand: proposal.brand ? proposal.brand.slice(0, BRAND_MAX_LENGTH) : current.brand,
     categoryId: proposal.category_key ? null : current.categoryId,
     categoryKey: proposal.category_key ?? current.categoryKey,
     baseUnit: proposal.nutrition_basis ?? current.baseUnit,
     barcode,
-    nutrients: nutrientTexts(proposal.nutrients, language),
+    nutrients,
   };
+}
+
+/**
+ * The form without the texts and nutrients an earlier proposal filled in (`proposed` is its
+ * `proposalValues`) and the user left as they were: a product chosen instead keeps only the ones
+ * the user typed, so another product's values are never saved as user-edited (BAR-03, BAR-04).
+ */
+export function typedValues(values: FormValues, proposed: FormValues): FormValues {
+  const typed: FormValues = { ...values, nutrients: { ...values.nutrients } };
+  for (const field of TEXT_FIELDS) {
+    if (values[field].trim() === proposed[field].trim()) typed[field] = '';
+  }
+  for (const key of NUTRIENT_KEYS) {
+    if (values.nutrients[key].trim() === proposed.nutrients[key]) typed.nutrients[key] = '';
+  }
+  return typed;
 }
 
 /**

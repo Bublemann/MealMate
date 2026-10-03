@@ -6,7 +6,9 @@ import {
   APPLES,
   CATEGORIES_WITH_UNCATEGORIZED,
   expectInPageOrder,
+  lookupResult,
   REFERENCE_ROUTES,
+  scanInForm,
   summary,
   WEIDEHOF_MILK,
 } from '@/test/ingredients';
@@ -459,24 +461,78 @@ describe('IngredientDetailScreen', () => {
     });
   });
 
-  it('gives an ingredient typed by hand its package’s barcode with the scan icon (ING-04)', async () => {
+  it('gives an ingredient typed by hand its package’s barcode with the scan icon, without asking Open Food Facts (ING-04, BAR-03)', async () => {
     const { fetchMock, user } = renderDetail({
+      'GET /api/ingredients/lookup': lookupResult(),
       'PATCH /api/ingredients/ing-aepfel': { ...APPLES, barcode: '4006381333931' },
     });
 
     await user.click(await screen.findByTestId(testIds.editIngredient));
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
-    await user.click(within(dialog).getByTestId(testIds.ingredientFormScan));
-    const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
-    await user.type(within(scanner).getByTestId(testIds.barcodeInput), '4006381333931{Enter}');
-    await waitFor(() => expect(scanner).not.toBeInTheDocument());
-    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('4006381333931');
+    await scanInForm(user, dialog, '4006381333931');
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Barcode')).toHaveValue('4006381333931'),
+    );
+    // Only whether another ingredient has it is asked; nothing else changes.
+    const [lookup] = requestsTo(fetchMock, 'GET /api/ingredients/lookup');
+    expect(new URL(lookup!.url).search).toBe('?barcode=4006381333931&own_only=true');
+    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Äpfel');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await expect(
       requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
     ).resolves.toEqual({ barcode: '4006381333931' });
+  });
+
+  it('names the ingredient a scanned barcode belongs to instead of filling it in (BAR-02)', async () => {
+    const { fetchMock, user, router } = renderDetail({
+      'GET /api/ingredients/lookup': lookupResult({
+        barcode: WEIDEHOF_MILK.barcode!,
+        found_in: 'db',
+        ingredient: WEIDEHOF_MILK,
+      }),
+    });
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
+    await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
+
+    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    expect(notice).toHaveTextContent(/^Already belongs to Vollmilch \(Weidehof\)open$/);
+    expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
+    await user.click(within(notice).getByRole('link', { name: 'open' }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/ingredients/${WEIDEHOF_MILK.id}`),
+    );
+    expect(dialog).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')).toHaveLength(0);
+  });
+
+  it('fills in an ingredient’s own barcode scanned again, without a notice', async () => {
+    const { user } = renderDetail(
+      {
+        'GET /api/ingredients/lookup': lookupResult({
+          barcode: WEIDEHOF_MILK.barcode!,
+          found_in: 'db',
+          ingredient: WEIDEHOF_MILK,
+        }),
+      },
+      false,
+      WEIDEHOF_MILK.id,
+    );
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
+    const barcode = within(dialog).getByLabelText('Barcode');
+    await user.clear(barcode);
+    await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
+
+    await waitFor(() => expect(barcode).toHaveValue(WEIDEHOF_MILK.barcode));
+    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
   });
 
   it('does not send stored numbers with more decimals than shown unless they were edited', async () => {
