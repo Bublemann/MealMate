@@ -24,7 +24,7 @@ services:
       - 127.0.0.1:8080:8080
 
   frontend:
-    image: node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+    image: node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
     working_dir: /src/frontend
     command: sh -c 'npm ci && npm run dev -- --host 0.0.0.0'
     environment:
