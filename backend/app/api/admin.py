@@ -158,8 +158,10 @@ async def admin_merge_ingredient(
     now: Now,
 ) -> Ingredient:
     """Merge a duplicate into `into_id`: its references move there and it is deleted
-    (ING-05). Returns the ingredient merged into."""
-    return await ingredients.merge(session, principal, ingredient_id, body.into_id, now=now)
+    (ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the
+    number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
+    is true (D-33)."""
+    return await ingredients.merge(session, principal, ingredient_id, body, now=now)
 
 
 @router.delete(

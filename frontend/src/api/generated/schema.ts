@@ -170,7 +170,9 @@ export interface paths {
         /**
          * Admin Merge Ingredient
          * @description Merge a duplicate into `into_id`: its references move there and it is deleted
-         *     (ING-05). Returns the ingredient merged into.
+         *     (ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the
+         *     number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
+         *     is true (D-33).
          */
         post: operations["admin_merge_ingredient"];
         delete?: never;
@@ -804,7 +806,9 @@ export interface paths {
         /**
          * Update Ingredient
          * @description Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.
-         *     Clearing or changing the barcode of one from Open Food Facts makes it manual.
+         *     Clearing or changing the barcode of one from Open Food Facts makes it manual. 409
+         *     `ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit
+         *     change would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33).
          */
         patch: operations["update_ingredient"];
         trace?: never;
@@ -1884,7 +1888,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "ingredient.in_use" | "ingredient.barcode_taken" | "ingredient.has_barcode" | "ingredient.no_pending_update" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "ingredient.in_use" | "ingredient.barcode_taken" | "ingredient.has_barcode" | "ingredient.no_pending_update" | "ingredient.unit_mismatch" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -2231,9 +2235,14 @@ export interface components {
         };
         /**
          * IngredientMerge
-         * @description Merge the ingredient into `into_id` (ING-05).
+         * @description Merge the ingredient into `into_id` (ING-05). A merge across base units that would leave
+         *     amounts of the ingredient not fitting the base unit of `into_id` is refused (409
+         *     `ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
+         *     isn't).
          */
         IngredientMerge: {
+            /** Accept Unit Mismatch */
+            accept_unit_mismatch?: boolean | null;
             /** Into Id */
             into_id: string;
         };
@@ -2291,9 +2300,14 @@ export interface components {
          *     another product's. The base unit may change freely; the values are not converted.
          *     Changing it to or from `piece` clears the piece weight, unless the change to `piece` sends
          *     one. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces
-         *     (422 `invalid` otherwise, D-32).
+         *     (422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on
+         *     drafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless
+         *     `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
+         *     they are and flagged.
          */
         IngredientUpdate: {
+            /** Accept Unit Mismatch */
+            accept_unit_mismatch?: boolean | null;
             /** Barcode */
             barcode?: string | null;
             /** Base Unit */

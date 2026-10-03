@@ -7,6 +7,7 @@ follow ingredient merges. Each hook runs inside the caller's transaction and mus
 `now` is the time of the triggering request.
 """
 
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,6 +94,28 @@ async def ingredient_references(session: AsyncSession, ingredient_id: str) -> di
         "meals": await meals_repo.count_with_ingredient(session, ingredient_id),
         "lists": await lists_repo.count_with_ingredient(session, ingredient_id),
     }
+
+
+async def amounts_that_would_not_fit(
+    session: AsyncSession,
+    ingredient_id: str,
+    would_not_fit: Callable[[float | None, str | None], bool],
+) -> dict[str, int]:
+    """The ingredient's amounts that `would_not_fit(amount, unit)` after a base-unit change
+    (ING-02) or a merge (ING-05), counted (D-33):
+
+    - `meals`: the meals with such rows;
+    - `lists`: the drafts with such linked extra items (lists being shopped and done lists keep
+      the base unit they copied, LIST-11);
+    - `amounts`: those rows and extra items.
+    """
+
+    def owners(amounts: list[tuple[str, float | None, str | None]]) -> list[str]:
+        return [owner for owner, amount, unit in amounts if would_not_fit(amount, unit)]
+
+    meals = owners(await meals_repo.amounts_of(session, ingredient_id))
+    lists = owners(await lists_repo.draft_amounts_of(session, ingredient_id))
+    return {"meals": len(set(meals)), "lists": len(set(lists)), "amounts": len(meals) + len(lists)}
 
 
 async def before_ingredient_deleted(session: AsyncSession, ingredient_id: str) -> None:
