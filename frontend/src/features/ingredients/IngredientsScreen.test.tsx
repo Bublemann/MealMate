@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import {
   CATEGORIES,
+  CATEGORIES_AFTER_DELETE,
   CATEGORIES_WITH_ADDED,
+  CATEGORIES_WITH_UNCATEGORIZED,
   ingredient,
   REFERENCE_ROUTES,
   summary,
@@ -578,6 +580,75 @@ describe('IngredientFormDialog (create)', () => {
       name: 'Feta',
       category_id: 'cat-cheese-counter',
     });
+  });
+
+  it('never offers Uncategorized or a deleted category (ING-02, D-30)', async () => {
+    const { user } = renderIngredients({ 'GET /api/categories': CATEGORIES_AFTER_DELETE });
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const category = within(dialog).getByLabelText('Category');
+    await waitFor(() => expect(category).toHaveDisplayValue('Other'));
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Other']);
+  });
+
+  it('loads the categories again when the one chosen was just deleted (REF-01)', async () => {
+    let deleted = false;
+    const { fetchMock, user } = renderIngredients({
+      'GET /api/categories': () =>
+        deleted ? CATEGORIES_AFTER_DELETE : CATEGORIES_WITH_UNCATEGORIZED,
+      'POST /api/ingredients': () => {
+        deleted = true;
+        return errorResponse(422, 'common.validation', [
+          { loc: ['body', 'category_id'], code: 'invalid' },
+        ]);
+      },
+    });
+
+    await user.click(await screen.findByTestId(testIds.newIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const category = within(dialog).getByLabelText('Category');
+    await waitFor(() => expect(category).toHaveDisplayValue('Other'));
+    await user.type(within(dialog).getByLabelText('Name'), 'Feta');
+    await user.selectOptions(category, 'Cheese');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(category).toHaveAccessibleDescription(
+        'This category no longer exists. Pick another one.',
+      ),
+    );
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/categories')).toHaveLength(2));
+    // Still shown as chosen, but no longer offered.
+    await waitFor(() =>
+      expect(within(category).getByRole('option', { name: 'Cheese' })).toBeDisabled(),
+    );
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .filter((option) => !(option as HTMLOptionElement).disabled)
+        .map((option) => option.textContent),
+    ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Other']);
+  });
+
+  it('names Uncategorized in the rows, but leaves it and deleted ones out of the filter panel (REF-01)', async () => {
+    const { user } = renderIngredients({
+      'GET /api/categories': CATEGORIES_AFTER_DELETE,
+      'GET /api/ingredients': [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })],
+    });
+
+    await waitFor(() => expect(rowTexts()).toEqual(['GoudaUncategorized · g']));
+    await user.click(screen.getByTestId(testIds.filterButton));
+    const panel = await screen.findByRole('dialog', { name: 'Filters' });
+    const boxes = within(panel).getAllByRole('checkbox');
+    ['Fruit & vegetables', 'Dairy & eggs', 'Other'].forEach((name, index) =>
+      expect(boxes[index]).toHaveAccessibleName(name),
+    );
+    expect(boxes).toHaveLength(3);
   });
 
   it('scans a barcode into the barcode field', async () => {

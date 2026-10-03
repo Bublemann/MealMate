@@ -32,6 +32,8 @@ CATALOG_ROUTES = [
     ("PUT", "/api/admin/categories/order"),
     ("POST", "/api/admin/categories"),
     ("PATCH", "/api/admin/categories/x"),
+    ("GET", "/api/admin/categories/x/usage"),
+    ("DELETE", "/api/admin/categories/x"),
     ("POST", "/api/admin/ingredients/x/merge"),
     ("DELETE", "/api/admin/ingredients/x"),
 ]
@@ -65,18 +67,23 @@ async def test_categories_in_the_seeded_order(api: AsyncClient, anna: Account) -
 
 
 async def test_categories_have_a_name_per_language(api: AsyncClient, anna: Account) -> None:
-    """I18N-04, D-31: each category comes with its names by UI language, next to its id, key
-    and sort order."""
+    """I18N-04, D-31: each category comes with its names by UI language, next to its id, key,
+    sort order and whether it is deleted (D-30). *Uncategorized* is seeded last (REF-01)."""
     response = await api.get("/api/categories", headers=anna.headers)
     categories = response.json()
-    first, *_, last = categories
+    first, *_, other, last = categories
     assert first == {
         "id": first["id"],
         "key": "fruit_vegetables",
         "names": {"de": "Obst & Gemüse", "en": "Fruit & vegetables"},
         "sort_order": 0,
+        "deleted": False,
     }
-    assert (last["key"], last["names"]) == ("other", {"de": "Sonstiges", "en": "Other"})
+    assert (other["key"], other["names"]) == ("other", {"de": "Sonstiges", "en": "Other"})
+    assert (last["key"], last["names"]) == (
+        "uncategorized",
+        {"de": "Ohne Kategorie", "en": "Uncategorized"},
+    )
     assert [(item["key"], item["names"]) for item in categories] == [
         (category.key, {"de": category.name_de, "en": category.name_en})
         for category in SEEDED_CATEGORIES
@@ -311,6 +318,7 @@ async def test_add_categories_at_the_end_of_the_order(
         "key": None,
         "names": {"de": "Käsetheke", "en": "Cheese counter"},
         "sort_order": len(CATEGORY_KEYS),
+        "deleted": False,
     }
     bakery = (await post_category(api, admin, "Backstube", "Bakehouse")).json()
     assert bakery["sort_order"] == len(CATEGORY_KEYS) + 1

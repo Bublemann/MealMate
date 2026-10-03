@@ -3,7 +3,7 @@
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.text import fold_umlauts
@@ -74,6 +74,26 @@ async def names(session: AsyncSession) -> list[tuple[str, str]]:
     """`(id, name_norm)` of every ingredient."""
     result = await session.execute(select(Ingredient.id, Ingredient.name_norm))
     return [(row[0], row[1]) for row in result]
+
+
+async def count_in_category(session: AsyncSession, category_id: str) -> int:
+    result = await session.execute(
+        select(func.count()).select_from(Ingredient).where(Ingredient.category_id == category_id)
+    )
+    return result.scalar_one()
+
+
+async def move_category(session: AsyncSession, from_id: str, into_id: str) -> int:
+    """Move every ingredient of a category into another, as no one's edit: who changed it
+    last, and when, stay (plan § 6). Returns how many moved."""
+    moved = await session.scalars(
+        update(Ingredient)
+        .where(Ingredient.category_id == from_id)
+        .values(category_id=into_id, updated_at=Ingredient.updated_at)
+        .returning(Ingredient.id)
+        .execution_options(synchronize_session="fetch")
+    )
+    return len(moved.all())
 
 
 async def by_ids(session: AsyncSession, ingredient_ids: Iterable[str]) -> dict[str, Ingredient]:

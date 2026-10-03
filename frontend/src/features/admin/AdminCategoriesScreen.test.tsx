@@ -2,7 +2,13 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { errorResponse, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
-import { CATEGORIES, CHEESE_COUNTER } from '@/test/ingredients';
+import {
+  CATEGORIES,
+  CATEGORIES_AFTER_DELETE,
+  CATEGORIES_WITH_UNCATEGORIZED,
+  CHEESE_COUNTER,
+  UNCATEGORIZED,
+} from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -12,7 +18,7 @@ type Category = components['schemas']['Category'];
 async function reordered(request: Request) {
   const { category_ids } = (await request.json()) as { category_ids: string[] };
   return category_ids.map((id, index) => ({
-    ...[...CATEGORIES, CHEESE_COUNTER].find((category) => category.id === id),
+    ...[...CATEGORIES, CHEESE_COUNTER, UNCATEGORIZED].find((category) => category.id === id),
     sort_order: index,
   }));
 }
@@ -74,7 +80,8 @@ describe('AdminCategoriesScreen', () => {
       'dialog',
     );
     expect(screen.queryByRole('button', { name: 'Save order' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    // The status line only speaks after a delete.
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('saves the order on every tap; the focus follows the moved category', async () => {
@@ -314,5 +321,122 @@ describe('AdminCategoriesScreen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     expect(await within(dialog).findByRole('alert')).toBeVisible();
+  });
+
+  it('moves Uncategorized like any other category, but has no dialog for it (REF-01)', async () => {
+    const { fetchMock, user } = renderCategories({
+      'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED,
+    });
+    await screen.findByTestId(testIds.adminCategoryList);
+
+    expect(names()).toEqual([
+      '1Fruit & vegetables',
+      '2Dairy & eggs',
+      '3Cheese',
+      '4Other',
+      '5Uncategorized',
+    ]);
+    // Its name is plain text: it can't be renamed or deleted.
+    expect(screen.queryByRole('button', { name: 'Uncategorized' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Move Uncategorized up' }));
+
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(1),
+    );
+    expect(await sentOrders(fetchMock)).toEqual([
+      ['cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-cheese', 'cat-uncategorized', 'cat-other'],
+    ]);
+  });
+
+  it('leaves deleted categories out of the list and the order (D-30)', async () => {
+    const { fetchMock, user } = renderCategories({
+      'GET /api/categories': CATEGORIES_AFTER_DELETE,
+    });
+    await screen.findByTestId(testIds.adminCategoryList);
+
+    expect(names()).toEqual(['1Fruit & vegetables', '2Dairy & eggs', '3Other', '4Uncategorized']);
+    await user.click(screen.getByRole('button', { name: 'Move Uncategorized up' }));
+
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, 'PUT /api/admin/categories/order')).toHaveLength(1),
+    );
+    expect(await sentOrders(fetchMock)).toEqual([
+      ['cat-fruit_vegetables', 'cat-dairy_eggs', 'cat-uncategorized', 'cat-other'],
+    ]);
+  });
+
+  it('offers "Delete" in the dialog of every category but Other (REF-01)', async () => {
+    const { user } = renderCategories();
+    await screen.findByTestId(testIds.adminCategoryList);
+
+    await user.click(screen.getByRole('button', { name: 'Cheese' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit category' });
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Other' }));
+    const other = await screen.findByRole('dialog', { name: 'Edit category' });
+    expect(within(other).getByRole('button', { name: 'Save' })).toBeVisible();
+    expect(within(other).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('deletes a category once confirmed, naming what moves (REF-01)', async () => {
+    let deleted = false;
+    const { fetchMock, user } = renderCategories({
+      'GET /api/categories': () =>
+        deleted ? CATEGORIES_AFTER_DELETE : CATEGORIES_WITH_UNCATEGORIZED,
+      'GET /api/admin/categories/cat-cheese/usage': { ingredients: 3, extra_items: 1 },
+      'DELETE /api/admin/categories/cat-cheese': () => {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    await screen.findByTestId(testIds.adminCategoryList);
+
+    await user.click(screen.getByRole('button', { name: 'Cheese' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit category' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Cheese?' });
+    await waitFor(() =>
+      expect(confirm).toHaveAccessibleDescription(
+        '3 ingredients move to “Uncategorized”. 1 free-text item on drafts moves to “Other”. ' +
+          "Lists being shopped and done lists stay as they are. This can't be undone.",
+      ),
+    );
+    expect(requestsTo(fetchMock, 'DELETE /api/admin/categories/cat-cheese')).toHaveLength(0);
+    await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, 'DELETE /api/admin/categories/cat-cheese')).toHaveLength(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Category “Cheese” deleted.');
+    // The categories load again, as the server now orders them.
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/categories')).toHaveLength(2));
+    await waitFor(() =>
+      expect(names()).toEqual(['1Fruit & vegetables', '2Dairy & eggs', '3Other', '4Uncategorized']),
+    );
+  });
+
+  it('keeps the confirmation open and says why when deleting fails', async () => {
+    const { user } = renderCategories({
+      'GET /api/admin/categories/cat-cheese/usage': { ingredients: 0, extra_items: 0 },
+      'DELETE /api/admin/categories/cat-cheese': errorResponse(409, 'category.not_deletable'),
+    });
+    await screen.findByTestId(testIds.adminCategoryList);
+
+    await user.click(screen.getByRole('button', { name: 'Cheese' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit category' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Cheese?' });
+    await waitFor(() =>
+      expect(within(confirm).getByRole('button', { name: 'Delete' })).toBeEnabled(),
+    );
+    await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+
+    expect(await within(confirm).findByRole('alert')).toHaveTextContent(
+      "This category always exists and can't be deleted.",
+    );
+    expect(confirm).toBeVisible();
   });
 });

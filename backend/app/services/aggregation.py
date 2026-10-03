@@ -14,12 +14,15 @@ the frontend (AGG-01).
    has one (taken when shopping starts or when it is added while shopping), else with the live
    attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
    `amount_text` is shown as it is.
-3. In a draft, an ingredient line shows the live ingredient's name, brand and category; once
-   shopping started, those of the first of its parts with a snapshot (frozen rows in the order
-   of the meals, then extra items), so ingredient edits no longer change the list (LIST-11).
+3. In a draft, an ingredient line shows the live ingredient's name, brand and category; a line
+   that only detached meals make keeps the category they were frozen with, a deleted one
+   included (REF-01, LIST-15). Once shopping started, a line shows the name, brand and category
+   of the first of its parts with a snapshot (frozen rows in the order of the meals, then extra
+   items), so ingredient edits no longer change the list (LIST-11).
    Two brands of the same thing are two ingredients and so two lines. A free-text line shows
    its text and category. Lines are sorted by category order, then normalised name and brand,
-   then key (AGG-05), and carry their hidden state (LIST-07).
+   then key (AGG-05), and carry their hidden state (LIST-07). A deleted category keeps its last
+   `sort_order` (D-30), so a tie goes to the category that isn't deleted, then by category id.
 4. Outside a draft, lines carry their check state (plan § 5.7): a line without a stored state
    is `new` while shopping; a checked line that needs more since it was checked (or a free-text
    item that was edited) is reported unchecked, with the reason (LIST-12). Nothing is stored
@@ -303,6 +306,23 @@ def _snapshot_labels(content: ListContent, shopping_list: ShoppingList) -> dict[
     return labels
 
 
+def _live_keys(content: ListContent, shopping_list: ShoppingList) -> set[str]:
+    """The ingredient lines with a part that follows the live ingredient: a row of a live meal,
+    or a linked extra item without a snapshot."""
+    keys = {
+        ingredient_key(row.ingredient_id)
+        for list_meal in content.meals.get(shopping_list.id, [])
+        if (meal := content.live_meal(list_meal)) is not None
+        for row in content.meal_rows.get(meal.id, [])
+    }
+    keys.update(
+        ingredient_key(extra.ingredient_id)
+        for extra in content.extras.get(shopping_list.id, [])
+        if extra.ingredient_id is not None and extra.attrs_snapshot is None
+    )
+    return keys
+
+
 def _by_key(_line_key: str) -> tuple[()]:
     return ()
 
@@ -398,22 +418,31 @@ def lines(
     extras = {row.id: row for row in content.extras.get(shopping_list.id, [])}
     states = content.states.get(shopping_list.id, {})
     other_category_id = content.other_category_id()
-    labels = {} if shopping_list.status == "draft" else _snapshot_labels(content, shopping_list)
+    draft = shopping_list.status == "draft"
+    labels = _snapshot_labels(content, shopping_list)
+    live_keys = _live_keys(content, shopping_list) if draft else set()
 
     def describe(line_key: str) -> _Label:
         """The name, brand and category id of a line."""
         if line_key.startswith(INGREDIENT_KEY_PREFIX):
-            if (label := labels.get(line_key)) is not None:
-                return label
+            frozen = labels.get(line_key)
+            if frozen is not None and not draft:
+                return frozen
             ingredient = content.ingredients[line_key.removeprefix(INGREDIENT_KEY_PREFIX)]
+            # Only detached meals make this draft line: it keeps their category (REF-01).
+            if frozen is not None and line_key not in live_keys:
+                return _Label(ingredient.name, ingredient.brand, frozen.category_id)
             return _Label(ingredient.name, ingredient.brand, ingredient.category_id)
         extra = extras[line_key.removeprefix(TEXT_KEY_PREFIX)]
         return _Label(extra.text or "", None, extra.category_id or other_category_id)
 
-    def order(line_key: str) -> tuple[int, str, str]:
+    def order(line_key: str) -> tuple[int, bool, str, str, str]:
         label = describe(line_key)
+        category = content.categories[label.category_id]
         return (
-            content.categories[label.category_id].sort_order,
+            category.sort_order,
+            category.deleted_at is not None,
+            category.id,
             normalize(label.name),
             normalize(label.brand or ""),
         )

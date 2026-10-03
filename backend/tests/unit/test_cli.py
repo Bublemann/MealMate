@@ -121,6 +121,8 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "unhide_list_line",
         "admin_create_category",
         "admin_rename_category",
+        "admin_category_usage",
+        "admin_delete_category",
         "admin_reorder_categories",
         "admin_merge_ingredient",
         "admin_delete_ingredient",

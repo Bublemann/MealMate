@@ -4,9 +4,9 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import type { BaseUnit } from '@/features/ingredients/api';
 import { useCategories, type Unit } from '@/features/reference/api';
-import { categoryName, unitLabel } from '@/features/reference/labels';
+import { CategoryOptions } from '@/features/reference/CategoryOptions';
+import { unitLabel } from '@/features/reference/labels';
 import { useUnitChoice } from '@/features/reference/units';
-import { useLanguage } from '@/i18n';
 
 /** The longest free-text amount the server takes (LIST-06). */
 export const MAX_AMOUNT_TEXT_LENGTH = 30;
@@ -94,7 +94,10 @@ interface FreeTextFieldsProps {
   withoutCategory?: boolean;
 }
 
-/** Optional free-text amount and the category of a free-text extra item (LIST-06). */
+/**
+ * Optional free-text amount and the category of a free-text extra item (LIST-06). Neither a
+ * deleted category nor *Uncategorized* is offered; an item already in a deleted one shows it.
+ */
 export function FreeTextFields({
   amountText,
   categoryId,
@@ -105,7 +108,6 @@ export function FreeTextFields({
   withoutCategory = false,
 }: FreeTextFieldsProps) {
   const { t } = useTranslation();
-  const language = useLanguage();
   const categories = useCategories();
 
   return (
@@ -135,11 +137,9 @@ export function FreeTextFields({
               {!categories.data && (
                 <NativeSelectOption value="">{t('common.loading')}</NativeSelectOption>
               )}
-              {categories.data?.map((category) => (
-                <NativeSelectOption key={category.id} value={category.id}>
-                  {categoryName(category, language)}
-                </NativeSelectOption>
-              ))}
+              {categories.data && (
+                <CategoryOptions categories={categories.data} selected={categoryId} />
+              )}
             </NativeSelect>
           )}
         </FormField>

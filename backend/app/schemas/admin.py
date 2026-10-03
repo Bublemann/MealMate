@@ -27,6 +27,7 @@ class AdminAction(StrEnum):
     USER_DELETE = "user.delete"
     CATEGORY_CREATE = "category.create"
     CATEGORY_RENAME = "category.rename"
+    CATEGORY_DELETE = "category.delete"
     CATEGORY_REORDER = "category.reorder"
     INGREDIENT_MERGE = "ingredient.merge"
     INGREDIENT_DELETE = "ingredient.delete"

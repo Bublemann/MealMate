@@ -185,8 +185,18 @@ class Api:
 
     def categories(self, account: Account) -> list[dict[str, Any]]:
         """GET /api/categories: every category in its walking order, with its `names` by
-        language."""
+        language; deleted ones too, marked `deleted` (D-30)."""
         return self.call("GET", "/api/categories", token=self.token(account))
+
+    def ordered_categories(self, account: Account) -> list[dict[str, Any]]:
+        """The categories admins put in order: those that aren't deleted, *Uncategorized*
+        included."""
+        return [c for c in self.categories(account) if not c["deleted"]]
+
+    def pickable_categories(self, account: Account) -> list[dict[str, Any]]:
+        """The categories pickers offer, in walking order: neither deleted ones nor
+        *Uncategorized* (REF-01)."""
+        return [c for c in self.ordered_categories(account) if c["key"] != "uncategorized"]
 
     def category_name(self, account: Account, key: str, language: str = "en") -> str:
         """The name of the category `key` in `language`, as the app shows it: category names
@@ -203,14 +213,31 @@ class Api:
             json={"category_ids": category_ids},
         )
 
+    def create_category(self, admin: Account, name_de: str, name_en: str) -> dict[str, Any]:
+        """POST /api/admin/categories: a new category, last in the walking order."""
+        return self.call(
+            "POST",
+            "/api/admin/categories",
+            token=self.token(admin),
+            json={"names": {"de": name_de, "en": name_en}},
+        )
+
     def create_ingredient(
-        self, account: Account, name: str, *, category_key: str = "other", **fields: Any
+        self,
+        account: Account,
+        name: str,
+        *,
+        category_key: str = "other",
+        category_id: str | None = None,
+        **fields: Any,
     ) -> dict[str, Any]:
-        """POST /api/ingredients in the category `category_key`, e.g. with `brand="REWE"`,
-        `barcode=new_barcode()` or `nutrients={"kcal": 52}`; the created Ingredient."""
+        """POST /api/ingredients in the category `category_key` (or `category_id`, for one an
+        admin added), e.g. with `brand="REWE"`, `barcode=new_barcode()` or
+        `nutrients={"kcal": 52}`; the created Ingredient."""
         token = self.token(account)
-        categories = self.call("GET", "/api/categories", token=token)
-        [category_id] = [c["id"] for c in categories if c["key"] == category_key]
+        if category_id is None:
+            categories = self.call("GET", "/api/categories", token=token)
+            [category_id] = [c["id"] for c in categories if c["key"] == category_key]
         body = {"name": name, "category_id": category_id, **fields}
         return self.call("POST", "/api/ingredients", token=token, json=body)
 

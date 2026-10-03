@@ -50,6 +50,7 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
+from app.schemas.ingredients import base_unit_name
 from app.schemas.lists import (
     ExtraItem,
     ExtraItemCreate,
@@ -65,9 +66,8 @@ from app.schemas.lists import (
     ListUpdate,
 )
 from app.schemas.users import UserRef
-from app.services import access, aggregation, detach, shopping
+from app.services import access, aggregation, detach, reference, shopping
 from app.services.access import ListRights
-from app.services.ingredients import base_unit_name
 from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
 from app.services.users import hidden_by, user_refs
@@ -429,8 +429,9 @@ async def _copy(
 ) -> ListCopyResult:
     """A new draft of the principal from a list: same name, the meals that still exist and
     they may see (the current versions, live again), with their servings, and the extra items
-    (unchecked, without snapshots). `left_out` counts the other meals (VIS-06). Hidden lines
-    and check states are not copied (LIST-07)."""
+    (unchecked, without snapshots; a free-text item whose category was deleted goes to *Other*,
+    LIST-06). `left_out` counts the other meals (VIS-06). Hidden lines and check states are not
+    copied (LIST-07)."""
     visible = await access.visible_owner_ids(session, principal.user_id, "meals")
     list_meals = (await lists_repo.meals_for(session, [source.id]))[source.id]
     meals = await meals_repo.by_ids(session, (row.meal_id for row in list_meals))
@@ -453,7 +454,11 @@ async def _copy(
                 amount=extra.amount,
                 unit=extra.unit,
                 amount_text=extra.amount_text,
-                category_id=extra.category_id,
+                category_id=(
+                    None
+                    if extra.category_id is None
+                    else await free_text_category_id(session, extra.category_id)
+                ),
                 added_by=principal.user_id,
                 created_at=now,
                 updated_at=now,
@@ -661,17 +666,25 @@ def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
 
 
 async def _find_references(
-    session: AsyncSession, *, ingredient_id: str | None, category_id: str | None
+    session: AsyncSession,
+    *,
+    ingredient_id: str | None,
+    category_id: str | None,
+    current_category_id: str | None = None,
 ) -> tuple[list[FieldProblem], Ingredient | None]:
-    """Look up the referenced ingredient and category: the problems with unknown ones, and the
-    ingredient if one was given and found."""
+    """Look up the referenced ingredient and category: the problems with an unknown ingredient
+    or a category a free-text item can't be put into (a deleted one or *Uncategorized*, LIST-06;
+    an item keeps the category it has, even a deleted one), and the ingredient if one was given
+    and found."""
     problems = []
     ingredient = None
     if ingredient_id is not None:
         ingredient = await ingredients_repo.get(session, ingredient_id)
         if ingredient is None:
             problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
-    if category_id is not None and await reference_repo.get_category(session, category_id) is None:
+    if category_id is not None and not await reference.can_pick(
+        session, category_id, keeping=current_category_id
+    ):
         problems.append(_field("category_id", FieldErrorCode.INVALID))
     return problems, ingredient
 
@@ -688,6 +701,15 @@ async def other_category_id(session: AsyncSession) -> str:
     if other is None:  # pragma: no cover -- seeded by migration 0003, never deleted (REF-01)
         raise RuntimeError("the 'other' category is missing")
     return other.id
+
+
+async def free_text_category_id(session: AsyncSession, category_id: str | None) -> str:
+    """Where a free-text item that names `category_id` goes when it must not fail (copies,
+    ops): there, unless it names none or one it can't be put into (a deleted one, LIST-06),
+    then into *Other*."""
+    if category_id is not None and await reference.can_pick(session, category_id):
+        return category_id
+    return await other_category_id(session)
 
 
 def _stored_unit(amount: float | None, unit: Unit | str | None) -> str | None:
@@ -807,6 +829,7 @@ async def update_extra(
             session,
             ingredient_id=body.ingredient_id if linked else None,
             category_id=None if linked else body.category_id,
+            current_category_id=extra.category_id,
         )
         problems += found
         if linked and not problems and _changed(extra, values):

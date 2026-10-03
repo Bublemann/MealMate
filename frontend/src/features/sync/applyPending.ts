@@ -1,9 +1,10 @@
 import { ingredientLabel } from '@/features/ingredients/label';
 import { otherCategoryId } from '@/features/lists/format';
+import { pickableCategories } from '@/features/reference/categories';
 import type { Category, ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
 
-/** What a free-text item's category is found by. */
-type CategoryRef = Pick<Category, 'id' | 'key'>;
+/** What a free-text item's category is found by, and whether it can still take one. */
+type CategoryRef = Pick<Category, 'id' | 'key' | 'deleted'>;
 
 /** A line as the view shows it; `pending`: changed by an op that wasn't sent yet (SYNC-07). */
 export type PendingLine = ListLine & { pending?: boolean };
@@ -134,15 +135,17 @@ type ExtraUpdate = Extract<Op, { type: 'extra.update' }>['payload'];
 
 /**
  * The category of a free-text item as the server picks it (LIST-06): by id, or by key in an op an
- * app version before D-31 queued; *Other* for none or an unknown one.
+ * app version before D-31 queued; *Other* for none, an unknown or a deleted one, or
+ * *Uncategorized*.
  */
 function extraCategoryId(
   { category_id, category_key }: ExtraAdd,
   categories: readonly CategoryRef[],
 ): string {
+  const pickable = pickableCategories(categories);
   let named: CategoryRef | undefined;
-  if (category_id) named = categories.find((category) => category.id === category_id);
-  else if (category_key) named = categories.find((category) => category.key === category_key);
+  if (category_id) named = pickable.find((category) => category.id === category_id);
+  else if (category_key) named = pickable.find((category) => category.key === category_key);
   return named?.id ?? otherCategoryId(categories);
 }
 

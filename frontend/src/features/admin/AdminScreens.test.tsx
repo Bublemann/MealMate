@@ -382,6 +382,12 @@ describe('AdminEventsScreen', () => {
       created_at: '2026-09-27T10:00:00Z',
     });
     const events: AdminEvent[] = [
+      event('e4', 'category.delete', {
+        name_de: 'Käsetheke',
+        name_en: 'Cheese counter',
+        ingredients: 3,
+        extra_items: 1,
+      }),
       event('e3', 'category.rename', {
         old_name_de: 'Käse',
         old_name_en: 'Cheese',
@@ -405,6 +411,7 @@ describe('AdminEventsScreen', () => {
 
     await screen.findByTestId(testIds.eventList);
     expect(descriptions()).toEqual([
+      'Admin deleted the category Cheese counter (moved: 3 ingredients, 1 free-text item)',
       'Admin renamed the category Cheese to Cheese counter',
       'Admin renamed the category Drinks to Beverages',
       'Admin added the category Bakehouse',
@@ -414,6 +421,7 @@ describe('AdminEventsScreen', () => {
     await i18n.changeLanguage('de');
     await waitFor(() =>
       expect(descriptions()).toEqual([
+        'Admin hat die Kategorie Käsetheke gelöscht (verschoben: 3 Zutaten, 1 Freitext-Artikel)',
         'Admin hat die Kategorie Käse in Käsetheke umbenannt',
         // The German name stayed.
         'Admin hat den Namen der Kategorie Getränke in einer anderen Sprache geändert',

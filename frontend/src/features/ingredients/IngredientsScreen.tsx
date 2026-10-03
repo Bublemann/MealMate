@@ -10,6 +10,7 @@ import { NoMatches } from '@/components/NoMatches';
 import { PinnedBlock } from '@/components/PinnedBlock';
 import { Screen } from '@/components/Screen';
 import { useCategories, type Category } from '@/features/reference/api';
+import { pickableCategories } from '@/features/reference/categories';
 import { categoryName } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { useTabMemory } from '@/lib/tabMemory';
@@ -61,10 +62,12 @@ export function IngredientsScreen() {
             groups={[
               {
                 label: t('ingredients.filter.categories'),
-                options: categories.data?.map((category) => ({
-                  id: category.id,
-                  label: categoryName(category, language),
-                })),
+                options:
+                  categories.data &&
+                  pickableCategories(categories.data).map((category) => ({
+                    id: category.id,
+                    label: categoryName(category, language),
+                  })),
                 checked: categoryIds,
                 active: categoryIds.length > 0,
                 onChange: (checked) => remember({ categoryIds: checked }),

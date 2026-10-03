@@ -36,7 +36,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0012"
+HEAD = "0013"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -60,7 +60,7 @@ LIST_TABLES = {
 }
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
-# one, 0011 changes only values, 0012 makes one optional.
+# one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row.
 HEAD_TABLES = TABLES_0006 - {"products"}
 
 
@@ -138,6 +138,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0011")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0012")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0013")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0012")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0011")
     assert tables(database_path) == HEAD_TABLES
@@ -826,6 +830,153 @@ def test_keys_stay_unique(config: Config, database_path: Path) -> None:
         pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
     ):
         connection.execute("UPDATE categories SET key = 'other' WHERE key = 'cheese'")
+
+
+# --- 0013 -----------------------------------------------------------------------------------
+
+UNCATEGORIZED = {
+    "key": "uncategorized",
+    "name_de": "Ohne Kategorie",
+    "name_de_norm": "ohne kategorie",
+    "name_en": "Uncategorized",
+    "name_en_norm": "uncategorized",
+    "deleted_at": None,
+}
+
+
+def dump_without_categories(path: Path) -> list[str]:
+    """The database as SQL, without the categories' table, indexes and rows."""
+    schema = ('CREATE TABLE "categories"', "CREATE UNIQUE INDEX ix_categories_")
+    return [
+        line
+        for line in dump_without(path, "categories", "alembic_version")
+        if not line.startswith(schema)
+    ]
+
+
+def test_0013_adds_uncategorized_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0012 → 0013 (REF-01, D-30): categories gain an empty deletion time, and
+    *Uncategorized* is added last in the walking order; no row is lost and no other value
+    changes. The downgrade removes both again."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "0012")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    before = rows_of(path, "categories")
+    rest = dump_without_categories(path)
+
+    command.upgrade(config, "0013")
+
+    assert row_counts(path) == counts | {"categories": counts["categories"] + 1}
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_categories(path) == rest
+    assert_clean(path)
+    after = {row["id"]: row for row in rows_of(path, "categories")}
+    assert [after[row["id"]] for row in before] == [row | {"deleted_at": None} for row in before]
+    [added] = [row for row in after.values() if row["id"] not in {r["id"] for r in before}]
+    assert {column: added[column] for column in UNCATEGORIZED} == UNCATEGORIZED
+    assert added["sort_order"] == len(before)
+    assert uuid.UUID(str(added["id"])).version == 7
+
+    command.downgrade(config, "0012")
+    assert rows_of(path, "categories") == before
+    assert row_counts(path) == counts
+    assert_clean(path)
+
+
+def test_the_0013_downgrade_closes_the_gap_of_uncategorized(
+    config: Config, database_path: Path
+) -> None:
+    """An admin may have moved *Uncategorized*; the categories after it move up again."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        connection.execute("UPDATE categories SET sort_order = sort_order + 1")
+        connection.execute("UPDATE categories SET sort_order = 0 WHERE key = 'uncategorized'")
+
+    command.downgrade(config, "0012")
+
+    assert query(database_path, "SELECT key, sort_order FROM categories ORDER BY 2") == [
+        (key, position) for position, key in enumerate(CATEGORY_KEYS[:-1])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name_de", "name_en"),
+    [("ohne KATEGORIE", "Without category"), ("Unsortiert", "Uncategorized")],
+)
+def test_0013_refuses_names_an_added_category_took(
+    config: Config, database_path: Path, name_de: str, name_en: str
+) -> None:
+    """An admin may have added a category with one of *Uncategorized*'s names before 0013; the
+    upgrade then fails with a clear message and changes nothing, so it can be renamed first."""
+    command.upgrade(config, "0012")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        insert(
+            connection,
+            "categories",
+            name_de=name_de,
+            name_de_norm=name_de.lower(),
+            name_en=name_en,
+            name_en_norm=name_en.lower(),
+            sort_order=len(CATEGORY_KEYS) - 1,
+        )
+    before = dump_without(database_path)
+
+    with pytest.raises(RuntimeError, match=rf"\({name_en!r}\) already uses .* rename it first"):
+        command.upgrade(config, "0013")
+
+    assert current_revision(database_path) == "0012"
+    assert dump_without(database_path) == before
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            "UPDATE categories SET deleted_at = '2026-10-03 10:00:00' WHERE key = 'cheese'",
+            r"admins deleted categories \('Cheese'\)",
+        ),
+        (
+            "UPDATE ingredients SET category_id = "
+            "(SELECT id FROM categories WHERE key = 'uncategorized') WHERE name = 'Zwiebeln'",
+            r"ingredients in 'Uncategorized' \(1\)",
+        ),
+    ],
+)
+def test_the_0013_downgrade_refuses_to_undo_a_delete(
+    tmp_path: Path, change: str, message: str
+) -> None:
+    """Below 0013 there are neither deleted categories nor *Uncategorized*: the downgrade fails
+    with a clear message and changes nothing, rather than rewriting lists or ingredients."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0006(path)
+    command.upgrade(config, "head")
+    execute(path, change)
+    before = dump_without(path)
+
+    with pytest.raises(RuntimeError, match=message):
+        command.downgrade(config, "0012")
+
+    assert current_revision(path) == HEAD
+    assert dump_without(path) == before
+
+
+def test_names_are_unique_among_categories_that_arent_deleted(
+    config: Config, database_path: Path
+) -> None:
+    """REF-01: a deleted category's names can be used again, by one category at a time."""
+    command.upgrade(config, "head")
+    with closing(sqlite3.connect(database_path)) as connection, connection:
+        connection.execute("UPDATE categories SET deleted_at = ? WHERE key = 'cheese'", (NOW,))
+        names = {"name_de": "Käse", "name_de_norm": "kaese", "name_en": "Cheese"}
+        insert(connection, "categories", **names, name_en_norm="cheese", sort_order=99)
+    with (
+        closing(sqlite3.connect(database_path)) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="UNIQUE"),
+    ):
+        insert(connection, "categories", **names, name_en_norm="cheese 2", sort_order=100)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

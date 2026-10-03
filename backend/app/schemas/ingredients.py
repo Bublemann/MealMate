@@ -47,6 +47,17 @@ else:
     IngredientField = Literal[OFF_FIELDS]
 
 
+def base_unit_name(value: str) -> BaseUnitName:
+    """A stored base unit as the API names it."""
+    match value:
+        case "ml":
+            return "ml"
+        case "piece":
+            return "piece"
+        case _:
+            return "g"
+
+
 def blank_to_none(text: str) -> str | None:
     """Optional texts left empty (after trimming) are stored as null."""
     return text or None

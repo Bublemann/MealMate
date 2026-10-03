@@ -28,7 +28,7 @@ export type EditedField = Ingredient['user_edited_fields'][number];
  */
 export const OFF_TIMEOUT_MS = 25_000;
 
-const INGREDIENTS_KEY = ['ingredients'] as const;
+export const INGREDIENTS_KEY = ['ingredients'] as const;
 const listKey = (query: string, categoryIds: readonly string[]) =>
   [...INGREDIENTS_KEY, 'list', query, categoryIds] as const;
 const detailKey = (id: string) => [...INGREDIENTS_KEY, 'detail', id] as const;

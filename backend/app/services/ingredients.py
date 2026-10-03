@@ -48,7 +48,6 @@ from app.repositories import ingredients as ingredients_repo
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction
 from app.schemas.ingredients import (
-    BaseUnitName,
     Ingredient,
     IngredientBarcodeLink,
     IngredientCreate,
@@ -56,9 +55,10 @@ from app.schemas.ingredients import (
     IngredientSummary,
     IngredientUpdate,
     IngredientUsage,
+    base_unit_name,
 )
 from app.schemas.nutrition import NutrientValues
-from app.services import events, hooks
+from app.services import events, hooks, reference
 from app.services.off_fields import (
     IGNORED,
     drop_pending,
@@ -77,16 +77,6 @@ SEARCH_LIMIT = 1000
 _SIMILAR_CANDIDATES = 50
 # The plain fields of an update that are Open Food Facts fields (the others need more care).
 _PLAIN_OFF_FIELDS = ("quantity_text", "pack_quantity")
-
-
-def base_unit_name(value: str) -> BaseUnitName:
-    match value:
-        case "ml":
-            return "ml"
-        case "piece":
-            return "piece"
-        case _:
-            return "g"
 
 
 def source_name(value: str) -> IngredientSource:
@@ -161,8 +151,12 @@ def _piece_weight_problem(piece_weight_g: float | None, base_unit: str) -> Field
     return None
 
 
-async def _category_problem(session: AsyncSession, category_id: str) -> FieldProblem | None:
-    if await reference_repo.get_category(session, category_id) is None:
+async def _category_problem(
+    session: AsyncSession, category_id: str, *, current: str | None = None
+) -> FieldProblem | None:
+    """A deleted category and *Uncategorized* can't be picked (ING-02); keeping the category an
+    ingredient has is always fine, so an uncategorized one can be saved as it is."""
+    if not await reference.can_pick(session, category_id, keeping=current):
         return FieldProblem(("body", "category_id"), FieldErrorCode.INVALID)
     return None
 
@@ -307,7 +301,7 @@ async def update_ingredient(
         base_unit = body.base_unit or row.base_unit
         problems: list[FieldProblem] = []
         if body.category_id is not None and (
-            problem := await _category_problem(session, body.category_id)
+            problem := await _category_problem(session, body.category_id, current=row.category_id)
         ):
             problems.append(problem)
         if problem := _piece_weight_problem(body.piece_weight_g, base_unit):

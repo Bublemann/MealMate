@@ -118,13 +118,13 @@ async def _check(batch: _Batch, op: LineCheckOp) -> Outcome:
 
 async def _extra_category_id(session: AsyncSession, payload: ExtraAddPayload) -> str:
     """The category of a free-text item added by op: by id, or by key from app versions before
-    D-31; *Other* if it names none or an unknown one, so that the op never fails (LIST-06)."""
-    category = None
-    if payload.category_id is not None:
-        category = await reference_repo.get_category(session, payload.category_id)
-    elif payload.category_key is not None:
-        category = await reference_repo.category_by_key(session, payload.category_key)
-    return category.id if category is not None else await lists.other_category_id(session)
+    D-31; *Other* if it names none, an unknown or a deleted one, or *Uncategorized*, so that the
+    op never fails (LIST-06)."""
+    category_id = payload.category_id
+    if category_id is None and payload.category_key is not None:
+        named = await reference_repo.category_by_key(session, payload.category_key)
+        category_id = None if named is None else named.id
+    return await lists.free_text_category_id(session, category_id)
 
 
 async def _add_extra(batch: _Batch, op: ExtraAddOp) -> Outcome:

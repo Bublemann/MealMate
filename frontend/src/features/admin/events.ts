@@ -14,6 +14,7 @@ const ACTION_KEYS = {
   'user.delete': 'admin.events.action.userDelete',
   'category.create': 'admin.events.action.categoryCreate',
   'category.rename': 'admin.events.action.categoryRename',
+  'category.delete': 'admin.events.action.categoryDelete',
   'category.reorder': 'admin.events.action.categoryReorder',
   'ingredient.merge': 'admin.events.action.ingredientMerge',
   'ingredient.delete': 'admin.events.action.ingredientDelete',
@@ -47,6 +48,18 @@ export function describeEvent(t: TFunction, event: AdminEvent, language: Languag
     );
   if (event.action === 'category.create') {
     return t(ACTION_KEYS[event.action], { actor, name: category() });
+  }
+  if (event.action === 'category.delete') {
+    const count = (key: string) => {
+      const value = event.details[key];
+      return typeof value === 'number' ? value : 0;
+    };
+    return t(ACTION_KEYS[event.action], {
+      actor,
+      name: category(),
+      ingredients: t('admin.events.ingredients', { count: count('ingredients') }),
+      items: t('admin.events.extraItems', { count: count('extra_items') }),
+    });
   }
   if (event.action === 'category.rename') {
     const from = category('old_');
