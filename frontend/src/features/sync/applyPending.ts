@@ -165,6 +165,8 @@ function addExtra(
       text,
       amount: null,
       unit: null,
+      base_unit: null,
+      unit_fits: true,
       amount_text: amountText,
       category_id: categoryId,
       added_by: me,

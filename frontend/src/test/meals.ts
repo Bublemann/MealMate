@@ -19,7 +19,7 @@ export const TAGS: Schemas['Tag'][] = [
 
 export const FLOUR = summary('Mehl', 'other');
 export const MILK = summary('Milch', 'dairy_eggs', { base_unit: 'ml' });
-export const EGGS = summary('Eier', 'dairy_eggs');
+export const EGGS = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
 export const SALT = summary('Salz', 'other');
 
 const EMPTY_VALUES: Schemas['NutrientValues'] = {
@@ -29,6 +29,19 @@ const EMPTY_VALUES: Schemas['NutrientValues'] = {
   sugar: null,
   fat: null,
 };
+
+/** A meal row whose unit fits its ingredient, as the server sends it. */
+export function row(
+  id: string,
+  position: number,
+  ingredient: Schemas['IngredientSummary'],
+  amount: number | null,
+  unit: Schemas['MealIngredientRow']['unit'],
+  note: string | null = null,
+  overrides: Partial<Schemas['MealIngredientRow']> = {},
+): Schemas['MealIngredientRow'] {
+  return { id, position, ingredient, amount, unit, unit_fits: true, note, ...overrides };
+}
 
 /** Pancakes: 200 g flour, 300 ml milk, 2 eggs, salt to taste (no amount). */
 export function meal(overrides: Partial<Schemas['Meal']> = {}): Schemas['Meal'] {
@@ -47,10 +60,10 @@ export function meal(overrides: Partial<Schemas['Meal']> = {}): Schemas['Meal'] 
       thumb_url: '/api/media/abc-thumb.webp?exp=1&sig=x',
     },
     ingredients: [
-      { id: 'row-1', position: 0, ingredient: FLOUR, amount: 200, unit: 'g', note: null },
-      { id: 'row-2', position: 1, ingredient: MILK, amount: 300, unit: 'ml', note: null },
-      { id: 'row-3', position: 2, ingredient: EGGS, amount: 2, unit: 'piece', note: 'Größe M' },
-      { id: 'row-4', position: 3, ingredient: SALT, amount: null, unit: null, note: 'to taste' },
+      row('row-1', 0, FLOUR, 200, 'g'),
+      row('row-2', 1, MILK, 300, 'ml'),
+      row('row-3', 2, EGGS, 2, 'piece', 'Größe M'),
+      row('row-4', 3, SALT, null, null, 'to taste'),
     ],
     nutrition: {
       per_meal: { kcal: 1106, protein: 40.5, carbs: 160.2, sugar: 15, fat: 30.25 },

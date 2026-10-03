@@ -2,9 +2,11 @@
 
 Freezing copies a meal's current rows into `list_meal_ingredients`, with the ingredient's name
 and brand and the attributes and category needed to calculate them, and refreshes the meal's
-name and servings snapshots, so the list keeps showing the same amounts. Detaching also drops
-the link to the meal (`meal_id` null) and says why (`deleted` | `unavailable`); the list owner
-can then remove it. Both run inside the caller's transaction and bump the affected lists' versions.
+name and servings snapshots, so the list keeps showing the same amounts. The attributes are the
+live ones (`Ingredient.attrs()`, D-32): rows frozen since then have no density, and a piece
+weight only for an ingredient counted in pieces. Detaching also drops the link to the meal
+(`meal_id` null) and says why (`deleted` | `unavailable`); the list owner can then remove it.
+Both run inside the caller's transaction and bump the affected lists' versions.
 """
 
 from collections.abc import Sequence
@@ -36,6 +38,7 @@ async def freeze(session: AsyncSession, list_meals: Sequence[ListMeal], *, now: 
         list_meal.updated_at = now
         for row in rows.get(meal.id, []):
             ingredient = ingredients[row.ingredient_id]
+            attrs = ingredient.attrs()
             session.add(
                 ListMealIngredient(
                     list_meal_id=list_meal.id,
@@ -43,9 +46,9 @@ async def freeze(session: AsyncSession, list_meals: Sequence[ListMeal], *, now: 
                     ingredient_id=row.ingredient_id,
                     ingredient_name_snapshot=ingredient.name,
                     ingredient_brand_snapshot=ingredient.brand,
-                    base_unit_snapshot=ingredient.base_unit,
-                    piece_weight_g_snapshot=ingredient.piece_weight_g,
-                    density_snapshot=ingredient.density_g_per_ml,
+                    base_unit_snapshot=attrs.base_unit.value,
+                    piece_weight_g_snapshot=attrs.piece_weight_g,
+                    density_snapshot=attrs.density_g_per_ml,
                     category_id_snapshot=ingredient.category_id,
                     amount=row.amount,
                     unit=row.unit,

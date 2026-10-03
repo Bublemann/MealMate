@@ -32,7 +32,7 @@ export function missingLines(
   }
   return [...groups.values()].map(({ name, reason, nutrients }) => {
     if (reason === 'no_amount') return t('meals.nutrition.reason.no_amount', { name });
-    if (reason === 'not_convertible') return t('meals.nutrition.reason.not_convertible', { name });
+    if (reason === 'unit_mismatch') return t('meals.nutrition.reason.unit_mismatch', { name });
     if (reason === 'no_piece_weight') return t('meals.nutrition.reason.no_piece_weight', { name });
     return nutrients.length > 0
       ? t('meals.nutrition.reason.unknown_value', {

@@ -29,7 +29,7 @@ from app.domain.lists import (
     ListStatus,
 )
 from app.domain.units import Unit
-from app.schemas.ingredients import IdInput, blank_to_none, not_null
+from app.schemas.ingredients import BaseUnitName, IdInput, blank_to_none, not_null
 from app.schemas.meals import AmountInput, ServingsInput
 from app.schemas.users import UserRef
 
@@ -165,13 +165,21 @@ class ListLine(BaseModel):
 
 class ExtraItem(BaseModel):
     """An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`
-    and `unit`) or free text (`text`, optional `amount_text`, `category_id`)."""
+    and `unit`) or free text (`text`, optional `amount_text`, `category_id`).
+
+    A linked item's `base_unit` is the one its line is calculated with: its ingredient's, or
+    the one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false
+    for an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,
+    or left by a base-unit change or a merge, and is kept as it is (D-33). Free text always
+    fits."""
 
     id: str
     ingredient_id: str | None
     text: str | None
     amount: float | None
     unit: Unit | None
+    base_unit: BaseUnitName | None
+    unit_fits: bool
     amount_text: str | None
     category_id: str | None
     added_by: UserRef | None
@@ -272,8 +280,9 @@ class ExtraItemCreate(BaseModel):
     """Exactly one of `ingredient_id` and `text` (LIST-06).
 
     - linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
-      without a unit counts as pieces, a unit without an amount is refused; no `amount_text`
-      or `category_id`;
+      without a unit counts as pieces, a unit without an amount is refused, and the unit must
+      fit the ingredient's base unit (REF-02; `unit` `unit_mismatch` otherwise); no
+      `amount_text` or `category_id`;
     - free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)
       and `category_id` (default: *Other*); no `amount` or `unit`.
 
@@ -292,7 +301,9 @@ class ExtraItemCreate(BaseModel):
 class ExtraItemUpdate(BaseModel):
     """Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of
     item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
-    unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`."""
+    unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`. A linked
+    item whose amount doesn't fit stays as it is while its ingredient, amount and unit stay the
+    same; changing any of them needs a unit that fits (D-33)."""
 
     ingredient_id: IdInput | None = None
     amount: AmountInput | None = None

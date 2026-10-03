@@ -526,6 +526,8 @@ async def test_add_free_text_items(
         "text": "Kerzen",
         "amount": None,
         "unit": None,
+        "base_unit": None,
+        "unit_fits": True,
         "amount_text": "1 Packung",
         "category_id": categories["household_hygiene"],
         "added_by": ref(ben),
@@ -801,7 +803,7 @@ async def test_parallel_batches_lose_nothing(
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     for ingredient in ingredients:
-        await extra_added(api, anna, list_id, ingredient_id=ingredient["id"], amount=1)
+        await extra_added(api, anna, list_id, ingredient_id=ingredient["id"], amount=1, unit="kg")
     before = await start_shopping(api, anna, list_id)
 
     def batch(index: int) -> list[Any]:

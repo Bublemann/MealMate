@@ -23,6 +23,7 @@ from tests.catalog import (
     create_from_off,
     create_ingredient,
     ref,
+    set_stored,
 )
 from tests.lists import create_list, detail, extra_added
 from tests.meals import create_meal
@@ -85,7 +86,6 @@ async def test_create_with_defaults(api: AsyncClient, anna: Account) -> None:
         "category_id": categories["other"],
         "base_unit": "g",
         "piece_weight_g": None,
-        "density_g_per_ml": None,
         "nutrients": NO_NUTRIENTS,
         "quantity_text": None,
         "pack_quantity": None,
@@ -114,8 +114,6 @@ async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
         barcode=" 4006381 333931 ",
         category_id=categories["dairy_eggs"],
         base_unit="ml",
-        piece_weight_g=1030,
-        density_g_per_ml=1.03,
         nutrients={"kcal": 64, "fat": 3.5, "sugar": None},
         quantity_text="1 l",
         pack_quantity=1,
@@ -123,11 +121,7 @@ async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
     )
     assert (body["name"], body["brand"], body["barcode"]) == ("Milch", "Weihenstephan", EAN_13)
     assert body["category_id"] == categories["dairy_eggs"]
-    assert (body["base_unit"], body["piece_weight_g"], body["density_g_per_ml"]) == (
-        "ml",
-        1030,
-        1.03,
-    )
+    assert (body["base_unit"], body["piece_weight_g"]) == ("ml", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"kcal": 64, "fat": 3.5}
     assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("1 l", 1, "l")
     # Typed by hand: nothing to refresh, nothing marked.
@@ -168,8 +162,9 @@ async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Ac
         ({"base_unit": "piece", "piece_weight_g": 10_000.5}, "piece_weight_g", "out_of_range"),
         ({"piece_weight_g": 0}, "piece_weight_g", "out_of_range"),
         ({"piece_weight_g": 10_000.5}, "piece_weight_g", "out_of_range"),
-        ({"density_g_per_ml": 0.09}, "density_g_per_ml", "out_of_range"),
-        ({"density_g_per_ml": 5.01}, "density_g_per_ml", "out_of_range"),
+        # Only an ingredient counted in pieces has a piece weight (D-32).
+        ({"piece_weight_g": 60}, "piece_weight_g", "invalid"),
+        ({"base_unit": "ml", "piece_weight_g": 1030}, "piece_weight_g", "invalid"),
         ({"barcode": ""}, "barcode", "too_short"),
         ({"barcode": "1" * 33}, "barcode", "too_long"),
         ({"brand": "x" * 81}, "brand", "too_long"),
@@ -248,14 +243,51 @@ async def test_limits_are_inclusive(api: AsyncClient, anna: Account) -> None:
         api,
         anna,
         "Grenzfall",
+        base_unit="piece",
         piece_weight_g=10_000,
-        density_g_per_ml=5,
         nutrients={"kcal": 900, "protein": 0, "carbs": 100, "sugar": 100, "fat": 100},
         pack_quantity=100_000,
     )
     assert body["nutrients"] == {"kcal": 900, "protein": 0, "carbs": 100, "sugar": 100, "fat": 100}
-    other = await create_ingredient(api, anna, "Leicht", density_g_per_ml=0.1)
-    assert other["density_g_per_ml"] == 0.1
+    assert body["piece_weight_g"] == 10_000
+
+
+async def test_density_is_gone(app: FastAPI, api: AsyncClient, anna: Account) -> None:
+    """D-32: no density in or out; one sent by an older app is ignored."""
+    oil = await create_ingredient(api, anna, "Olivenöl", base_unit="ml", density_g_per_ml=0.92)
+    assert "density_g_per_ml" not in oil
+    body = (await patch(api, anna, oil["id"], density_g_per_ml=0.9)).json()
+    assert "density_g_per_ml" not in body
+    assert await scalars(app, select(Ingredient.density_g_per_ml)) == [None]
+
+
+async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """A piece weight and density from before D-32 are neither shown nor touched: they stay for
+    the migration (D-34). A null piece weight is ignored; a new one is refused."""
+    apples = await create_ingredient(api, anna, "Äpfel")
+    await set_stored(app, apples["id"], piece_weight_g=180, density_g_per_ml=0.8)
+    assert (await get(api, anna, apples["id"]))["piece_weight_g"] is None
+
+    body = (await patch(api, anna, apples["id"], name="Apfel", piece_weight_g=None)).json()
+    assert (body["name"], body["piece_weight_g"]) == ("Apfel", None)
+    response = await patch(api, anna, apples["id"], name="Äpfel", piece_weight_g=150)
+    assert fields(response) == {("body", "piece_weight_g"): "invalid"}
+    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
+    assert await scalars(app, select(Ingredient.density_g_per_ml)) == [0.8]
+
+    # Counted in millilitres, it still has it; counted in pieces, it has the piece weight sent
+    # along, or none: the hidden one would surprise (ING-02).
+    await patch(api, anna, apples["id"], base_unit="ml")
+    await patch(api, anna, apples["id"], base_unit="g")
+    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
+    body = (await patch(api, anna, apples["id"], base_unit="piece")).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
+    await patch(api, anna, apples["id"], base_unit="g")
+    await set_stored(app, apples["id"], piece_weight_g=180)
+    body = (await patch(api, anna, apples["id"], base_unit="piece", piece_weight_g=150)).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 150)
 
 
 async def test_unknown_ingredient(api: AsyncClient, anna: Account) -> None:
@@ -443,6 +475,7 @@ async def test_editing_an_off_ingredient_marks_the_fields(
         brand=None,
         quantity_text="500 g",
         nutrients={"kcal": 372, "fat": None},
+        base_unit="piece",
         piece_weight_g=1,
         category_id=oats["category_id"],
     )
@@ -455,7 +488,7 @@ async def test_editing_an_off_ingredient_marks_the_fields(
         "500 g",
     )
     assert body["nutrients"] == NO_NUTRIENTS | {"kcal": 372}
-    # Only Open Food Facts fields are marked (not the piece weight or category).
+    # Only Open Food Facts fields are marked (not the base unit, piece weight or category).
     assert body["user_edited_fields"] == [
         "name",
         "brand",
@@ -804,7 +837,7 @@ async def test_anyone_edits_and_is_recorded(
 ) -> None:
     categories = await category_ids(api, anna)
     apples = await create_ingredient(
-        api, anna, "Apfel", piece_weight_g=180, density_g_per_ml=0.8, nutrients={"kcal": 52}
+        api, anna, "Apfel", base_unit="piece", piece_weight_g=180, nutrients={"kcal": 52}
     )
     clock.advance(minutes=5)
 
@@ -823,8 +856,7 @@ async def test_anyone_edits_and_is_recorded(
     body = response.json()
     assert (body["name"], body["brand"]) == ("Äpfel", "Bio")
     assert body["category_id"] == categories["fruit_vegetables"]
-    assert body["piece_weight_g"] is None
-    assert body["density_g_per_ml"] == 0.8  # not sent, kept
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
     assert body["nutrients"] == NO_NUTRIENTS | {"protein": 0.3}
     assert body["user_edited_fields"] == []
     assert body["created_by"] == ref(anna)
@@ -832,8 +864,6 @@ async def test_anyone_edits_and_is_recorded(
     assert body["created_at"] == "2026-09-27T12:00:00Z"
     assert body["updated_at"] == "2026-09-27T12:05:00Z"
     assert await get(api, anna, apples["id"]) == body
-    cleared = (await patch(api, anna, apples["id"], density_g_per_ml=None)).json()
-    assert cleared["density_g_per_ml"] is None
     assert await search(api, anna, q="bio") == ["Äpfel (Bio)"]
 
 
@@ -877,11 +907,9 @@ async def test_a_piece_ingredient_with_a_piece_weight(api: AsyncClient, anna: Ac
 
 
 async def test_counting_an_ingredient_in_pieces(api: AsyncClient, anna: Account) -> None:
-    """Nothing is converted: the piece weight stays, the values are per 100 g as before."""
-    rolls = await create_ingredient(
-        api, anna, "Brötchen", piece_weight_g=50, nutrients={"kcal": 270}
-    )
-    body = (await patch(api, anna, rolls["id"], base_unit="piece")).json()
+    """Nothing is converted: the values are per 100 g as before; a piece weight comes along."""
+    rolls = await create_ingredient(api, anna, "Brötchen", nutrients={"kcal": 270})
+    body = (await patch(api, anna, rolls["id"], base_unit="piece", piece_weight_g=50)).json()
     assert (body["base_unit"], body["piece_weight_g"], body["nutrients"]["kcal"]) == (
         "piece",
         50,
@@ -900,11 +928,15 @@ async def test_leaving_pieces_clears_the_piece_weight(
 
     body = (await patch(api, anna, eggs["id"], base_unit=base_unit)).json()
     assert (body["base_unit"], body["piece_weight_g"]) == (base_unit, None)
+    # Back to pieces, it has none.
+    body = (await patch(api, anna, eggs["id"], base_unit="piece")).json()
+    assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
 
-    # One sent along is kept: a g or ml ingredient may still have one.
+    # One sent along is refused: a g or ml ingredient has none (D-32).
     again = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
-    body = (await patch(api, anna, again["id"], base_unit=base_unit, piece_weight_g=55)).json()
-    assert (body["base_unit"], body["piece_weight_g"]) == (base_unit, 55)
+    response = await patch(api, anna, again["id"], base_unit=base_unit, piece_weight_g=55)
+    assert fields(response) == {("body", "piece_weight_g"): "invalid"}
+    assert (await get(api, anna, again["id"]))["piece_weight_g"] == 60
 
 
 async def test_invalid_updates(api: AsyncClient, anna: Account) -> None:
@@ -938,7 +970,7 @@ async def test_null_is_refused_for_required_fields(
 async def test_an_empty_update_only_records_the_editor(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel", piece_weight_g=180)
+    apples = await create_ingredient(api, anna, "Äpfel", base_unit="piece", piece_weight_g=180)
     clock.advance(minutes=1)
     body = (await patch(api, ben, apples["id"])).json()
     changed = {"updated_by": None, "updated_at": None}
@@ -950,7 +982,7 @@ async def test_an_empty_update_only_records_the_editor(
 async def test_deleted_creator(
     app: FastAPI, api: AsyncClient, anna: Account, ben: Account, admin: Account
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
+    apples = await create_ingredient(api, anna, "Äpfel", base_unit="piece")
     await patch(api, ben, apples["id"], piece_weight_g=180)
     assert (
         await api.delete(f"/api/admin/users/{anna.id}", headers=admin.headers)
@@ -1006,7 +1038,7 @@ async def test_merge(
 
     monkeypatch.setattr(hooks, "on_ingredients_merged", on_ingredients_merged)
     duplicate = await create_ingredient(api, anna, "Paradeiser", nutrients={"kcal": 20})
-    tomatoes = await create_ingredient(api, anna, "Tomaten", piece_weight_g=100, base_unit="ml")
+    tomatoes = await create_ingredient(api, anna, "Tomaten", piece_weight_g=100, base_unit="piece")
     clock.advance(minutes=10)
 
     response = await merge(api, admin, duplicate["id"], tomatoes["id"])
@@ -1103,7 +1135,7 @@ async def test_merging_moves_meal_rows_and_list_lines(
     api: AsyncClient, anna: Account, admin: Account
 ) -> None:
     duplicate = await create_ingredient(api, anna, "Paradeiser")
-    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    tomatoes = await create_ingredient(api, anna, "Tomaten", base_unit="piece")
     salt = await create_ingredient(api, anna, "Salz")
     meal = await create_meal(
         api,
@@ -1121,11 +1153,15 @@ async def test_merging_moves_meal_rows_and_list_lines(
     assert (await merge(api, admin, duplicate["id"], tomatoes["id"])).status_code == 200
 
     response = await api.get(f"/api/meals/{meal['id']}", headers=anna.headers)
-    rows = [(row["id"], row["ingredient"]["id"]) for row in response.json()["ingredients"]]
+    rows = [
+        (row["id"], row["ingredient"]["id"], row["unit_fits"])
+        for row in response.json()["ingredients"]
+    ]
+    # Nothing is converted: 200 g of the merged ingredient don't fit Tomaten (D-33).
     assert rows == [
-        (meal["ingredients"][0]["id"], tomatoes["id"]),
-        (meal["ingredients"][1]["id"], salt["id"]),
-        (meal["ingredients"][2]["id"], tomatoes["id"]),
+        (meal["ingredients"][0]["id"], tomatoes["id"], True),
+        (meal["ingredients"][1]["id"], salt["id"], True),
+        (meal["ingredients"][2]["id"], tomatoes["id"], False),
     ]
     lines = (await detail(api, anna, shopping_list["id"]))["lines"]
     assert [line["key"] for line in lines] == [f"i:{tomatoes['id']}"]

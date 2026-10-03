@@ -9,13 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import FieldErrorCode, FieldProblem, not_found, validation_error
 from app.domain.reference import CUISINE_KEYS
 from app.domain.text import normalize
-from app.domain.units import UNIT_KIND, Unit
+from app.domain.units import FITTING_UNITS, UNIT_KIND, Unit
 from app.models import Category as CategoryRow
 from app.models import Cuisine as CuisineRow
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction, AdminEventDetail
 from app.schemas.reference import Category, CategoryNames, Cuisine, Tag, UnitInfo
 from app.services import events
+from app.services.ingredients import base_unit_name
 from app.services.principal import Principal
 
 TAGS_LIMIT = 20
@@ -48,8 +49,19 @@ async def list_categories(session: AsyncSession) -> list[Category]:
 
 
 def list_units() -> list[UnitInfo]:
-    """Every unit, in display order."""
-    return [UnitInfo(unit=unit, kind=UNIT_KIND[unit]) for unit in Unit]
+    """Every unit, in display order, with the base units it fits (REF-02)."""
+    return [
+        UnitInfo(
+            unit=unit,
+            kind=UNIT_KIND[unit],
+            base_units=[
+                base_unit_name(base_unit)
+                for base_unit, units in FITTING_UNITS.items()
+                if unit in units
+            ],
+        )
+        for unit in Unit
+    ]
 
 
 async def list_cuisines(session: AsyncSession) -> list[Cuisine]:

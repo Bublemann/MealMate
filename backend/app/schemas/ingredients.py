@@ -21,8 +21,6 @@ from pydantic_core import PydanticCustomError
 from app.domain.catalog import (
     BARCODE_INPUT_MAX_LENGTH,
     BRAND_MAX_LENGTH,
-    DENSITY_MAX_G_PER_ML,
-    DENSITY_MIN_G_PER_ML,
     INGREDIENT_NAME_MAX_LENGTH,
     OFF_FIELDS,
     PACK_QUANTITY_MAX,
@@ -69,9 +67,6 @@ IngredientNameInput = Annotated[
     AfterValidator(check_name),
 ]
 PieceWeightInput = Annotated[float, Field(gt=0, le=PIECE_WEIGHT_MAX_G, allow_inf_nan=False)]
-DensityInput = Annotated[
-    float, Field(ge=DENSITY_MIN_G_PER_ML, le=DENSITY_MAX_G_PER_ML, allow_inf_nan=False)
-]
 BarcodeInput = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=BARCODE_INPUT_MAX_LENGTH)
 ]
@@ -133,7 +128,7 @@ class IngredientUsage(BaseModel):
 class Ingredient(BaseModel):
     """An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count
-    with `piece_weight_g` (NUT-05).
+    with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
 
     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
@@ -150,7 +145,6 @@ class Ingredient(BaseModel):
     category_id: str
     base_unit: BaseUnitName
     piece_weight_g: float | None
-    density_g_per_ml: float | None
     nutrients: NutrientValues
     quantity_text: str | None
     pack_quantity: float | None
@@ -181,11 +175,11 @@ class IngredientCreate(BaseModel):
     """A new ingredient (ING-02), in one request also when it was scanned.
 
     `category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:
-    0 < x ≤ 10000; `density_g_per_ml`: 0.1 ≤ x ≤ 5. `nutrients` per 100 g, or per 100 ml for
-    base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a valid check digit (spaces are
-    ignored; 422 `invalid_format` otherwise) and stored as EAN-13 (UPC-A with a leading 0, UPC-E
-    expanded first), an EAN-8 as it is; a barcode another ingredient has is 409
-    `ingredient.barcode_taken`.
+    0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per
+    100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
+    valid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13
+    (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
+    ingredient has is 409 `ingredient.barcode_taken`.
 
     With `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs
     its `barcode` (422 `required` without). Names need not be unique: the "similar ingredient
@@ -198,7 +192,6 @@ class IngredientCreate(BaseModel):
     category_id: IdInput | None = None
     base_unit: BaseUnitName = "g"
     piece_weight_g: PieceWeightInput | None = None
-    density_g_per_ml: DensityInput | None = None
     nutrients: NutrientValues | None = None
     quantity_text: QuantityTextInput | None = None
     pack_quantity: PackQuantityInput | None = None
@@ -216,7 +209,9 @@ class IngredientUpdate(BaseModel):
     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
     another product's. The base unit may change freely; the values are not converted.
-    Changing it away from `piece` clears the piece weight, unless the request sets one.
+    Changing it to or from `piece` clears the piece weight, unless the change to `piece` sends
+    one. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces
+    (422 `invalid` otherwise, D-32).
     """
 
     name: IngredientNameInput | None = None
@@ -225,7 +220,6 @@ class IngredientUpdate(BaseModel):
     category_id: IdInput | None = None
     base_unit: BaseUnitName | None = None
     piece_weight_g: PieceWeightInput | None = None
-    density_g_per_ml: DensityInput | None = None
     nutrients: NutrientValues | None = None
     quantity_text: QuantityTextInput | None = None
     pack_quantity: PackQuantityInput | None = None

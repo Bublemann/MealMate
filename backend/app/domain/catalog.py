@@ -21,8 +21,6 @@ BARCODE_INPUT_MAX_LENGTH = 32
 
 # Exclusive lower bound 0, inclusive upper bound.
 PIECE_WEIGHT_MAX_G = 10_000.0
-DENSITY_MIN_G_PER_ML = 0.1
-DENSITY_MAX_G_PER_ML = 5.0
 PACK_QUANTITY_MAX = 100_000.0
 
 # Normalised names can be longer than typed ones ("ß" → "ss", compatibility forms).
@@ -30,8 +28,8 @@ NAME_NORM_FACTOR = 4
 
 # The fields of an ingredient that Open Food Facts provides and refreshes (BAR-04..06), other
 # than the nutrients. Each one a user changes on an ingredient from Open Food Facts is recorded
-# as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base unit, piece weight
-# and density are the user's alone: a refresh never touches them.
+# as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base unit and piece
+# weight are the user's alone: a refresh never touches them.
 OFF_DATA_FIELDS: tuple[str, ...] = (
     "name",
     "brand",

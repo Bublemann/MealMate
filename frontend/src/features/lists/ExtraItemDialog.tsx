@@ -91,10 +91,12 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
   const remove = useRemoveExtraItem(listId);
   const linked = item.ingredient_id !== null;
   const [text, setText] = useState(item.text ?? '');
-  const [amount, setAmount] = useState(
+  const [initialAmount] = useState(() =>
     item.amount === null ? '' : formatNumber(item.amount, language, { useGrouping: false }),
   );
-  const [unit, setUnit] = useState<Unit>(item.unit ?? 'piece');
+  const [amount, setAmount] = useState(initialAmount);
+  // Without an amount, the item starts on its base unit (REF-02).
+  const [unit, setUnit] = useState<Unit>(item.unit ?? item.base_unit ?? 'piece');
   const [amountText, setAmountText] = useState(item.amount_text ?? '');
   const [categoryId, setCategoryId] = useState(item.category_id ?? '');
   const [amountInvalid, setAmountInvalid] = useState(false);
@@ -109,7 +111,9 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
     if (linked) {
       const trimmed = amount.trim();
       if (trimmed === '') return { amount: null, unit: null };
-      const value = parseAmount(trimmed);
+      // Unchanged text keeps the stored amount, which may have more decimals than shown: an older
+      // item that doesn't fit stays only while it is sent back as it is (D-33).
+      const value = trimmed === initialAmount ? item.amount : parseAmount(trimmed);
       return value === null ? null : { amount: value, unit };
     }
     return {
@@ -155,6 +159,8 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
           <AmountFields
             amount={amount}
             unit={unit}
+            baseUnit={item.base_unit}
+            name={name}
             onAmountChange={(value) => {
               setAmountInvalid(false);
               setAmount(value);

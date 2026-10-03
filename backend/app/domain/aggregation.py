@@ -9,16 +9,17 @@ Merging rules (AGG-03), deliberately simple:
 2. if all parts with an amount are of one kind, they add up in that kind's segment: pieces stay
    pieces and spoons stay a volume, nothing is converted;
 3. otherwise every part is converted strictly (no 1 g/ml estimate) to the ingredient's base
-   unit where its attributes allow it; the others stay in their own kind's segment, so
-   "500 g + 2 Stk." appears while a g ingredient has no piece weight, and always beside the
-   pieces of a `piece` ingredient, which takes nothing but pieces (`units.convert`).
+   unit where its attributes allow it; the others stay in their own kind's segment. Only parts
+   frozen before D-32 cross kinds (a piece weight or density with g or ml); live ingredients
+   have neither (`IngredientAttrs.live`), so their spoons of a g ingredient and amounts that
+   don't fit sit beside the rest: "500 g + 2 Stk." (`units.convert`).
 
 Sums use `math.fsum`, so they do not depend on the order of the parts (AGG-05).
 
 "Needs more" (LIST-12) compares in the ingredient's base unit whenever every part with an
 amount converts to it strictly, so rule 2 cannot make a line look different in kind: a checked
-"2 Stk. + 100 g" (460 g of apples) stays checked when only "2 Stk." (360 g) remain. Otherwise it
-compares segment by segment.
+"2 Stk. + 100 g" (460 g of apples frozen before D-32) stays checked when only "2 Stk." (360 g)
+remain. Otherwise it compares segment by segment.
 """
 
 import math

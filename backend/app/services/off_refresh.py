@@ -26,7 +26,7 @@ so the next refresh tries again (BAR-07). Found, field by field (BAR-06):
   very value (the ignored entries kept in `pending_update`, see `services.off_fields`);
 - nutrients only while Open Food Facts gives them per what the ingredient's are per: 100 g,
   or 100 ml for an ml ingredient (`NUTRITION_BASIS`);
-- the category, base unit, piece weight, density and barcode are never touched.
+- the category, base unit, piece weight and barcode are never touched.
 """
 
 import logging
