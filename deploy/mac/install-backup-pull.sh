@@ -68,7 +68,9 @@ say "Homebrew rsync and python3"
 prefix=$("$BREW" --prefix)
 rsync=$prefix/bin/rsync
 python=$prefix/bin/python3
-"$rsync" --version | head -n 1
+# sed, not head: head stops reading after one line, rsync dies of SIGPIPE writing the rest, and
+# pipefail would end the script without a message.
+"$rsync" --version | sed -n 1p
 
 # 2. Scripts.
 say "scripts in $app_dir/bin"
@@ -101,7 +103,8 @@ read -r key_type key_value _ <"$key.pub"
 # 5. Backup folder outside iCloud Drive; FileVault.
 mkdir -p "$dest"
 chmod 0700 "$dest"
-if command -v fdesetup >/dev/null && ! fdesetup status | grep -q 'FileVault is On'; then
+# grep without -q reads all of fdesetup's output (pipefail, as above).
+if command -v fdesetup >/dev/null && ! fdesetup status | grep 'FileVault is On' >/dev/null; then
   echo "WARNING: FileVault is off. The backups contain credentials (OPS-10): turn it on in System Settings > Privacy & Security." >&2
 fi
 

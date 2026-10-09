@@ -262,6 +262,15 @@ def test_mac_scripts_avoid_bash4_features(script: str) -> None:
     assert text.startswith("#!/bin/bash\n")
 
 
+@pytest.mark.parametrize("script", ["pull.sh", "install-backup-pull.sh"])
+def test_mac_scripts_pipe_only_into_readers_that_read_to_the_end(script: str) -> None:
+    """head and grep -q stop reading early; the writer then dies of SIGPIPE, and pipefail ends
+    the script without a message (the installer did that after printing the rsync version)."""
+    text = (DEPLOY / "mac" / script).read_text()
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    assert not re.search(r"\|\s*(head\b|grep\s+-[a-zA-Z]*q)", code)
+
+
 def test_mac_scripts_parse_with_bash32(mac_bash: str) -> None:
     for script in ("pull.sh", "install-backup-pull.sh"):
         run([mac_bash, "-n", DEPLOY / "mac" / script])
