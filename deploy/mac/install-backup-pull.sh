@@ -103,9 +103,13 @@ read -r key_type key_value _ <"$key.pub"
 # 5. Backup folder outside iCloud Drive; FileVault.
 mkdir -p "$dest"
 chmod 0700 "$dest"
-# grep without -q reads all of fdesetup's output (pipefail, as above).
-if command -v fdesetup >/dev/null && ! fdesetup status | grep 'FileVault is On' >/dev/null; then
-  echo "WARNING: FileVault is off. The backups contain credentials (OPS-10): turn it on in System Settings > Privacy & Security." >&2
+if command -v fdesetup >/dev/null; then
+  # Captured, not piped into grep -q, which can stop reading early (pipefail, as above).
+  filevault=$(fdesetup status || true)
+  case $filevault in
+    *"FileVault is On"*) ;;
+    *) echo "WARNING: FileVault is off. The backups contain credentials (OPS-10): turn it on in System Settings > Privacy & Security." >&2 ;;
+  esac
 fi
 
 # 6. Shields up: the tailnet cannot open connections to this Mac.
