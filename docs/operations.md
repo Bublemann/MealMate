@@ -488,6 +488,7 @@ The deploy tests (`deploy/tests/`, `make test-deploy`, CI job "Deploy tests") ru
 | `MEALMATE_DISK_PATH` / `MEALMATE_DISK_MIN_FREE_PERCENT` | `/` / `20` | disk check |
 | `DOCKER`, `TAILSCALE`, `COSIGN`, `CURL`, `SYSTEMCTL`, `SQLITE3`, `PYTHON3`, `RSYNC`, `SETPRIV`, `APT_GET` | the real tools (`COSIGN=/usr/local/bin/cosign`) | tests use shims for `cosign`, `tailscale`, `systemctl`, `apt-get` and fault-injecting wrappers of `docker` and `curl` |
 | Mac: `MM_PULL_CONFIG` and the `MM_*` keys of the config | `~/.mealmate-backup/config` | `MM_REMOTE` may be a local path in tests |
+| Mac installer: `BREW`, `SSH`, `LAUNCHCTL`, `TAILSCALE` | the real tools | tests use shims for these, and `uname`, `fdesetup` and `plutil` on `PATH` |
 
 What the tests cannot cover is listed in § 13.5.
 
@@ -522,4 +523,4 @@ The deploy tests run the real scripts against the real image, but these can only
 5. `setpriv` reading `data/media` as uid 10001 on the Pi (every backup; a failure says *copying the photos as the app user failed*).
 6. systemd timers and `mealmate-backup.path` (the admin page's "Back up now").
 7. The update path on the Pi: a real nightly update and, once, a rollback drill (e.g. temporarily pinning a known digest).
-8. rrsync with Homebrew rsync (O-5), the Mac installer and launchd.
+8. rrsync with Homebrew rsync (O-5), and the Mac installer against the real Pi (SSH, `sudo`, the pinned host key) and launchd. The deploy tests run the installer itself with shims.
