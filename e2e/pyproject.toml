@@ -11,12 +11,12 @@ dependencies = [
     "axe-playwright-python==0.1.8",
     "httpx==0.28.1",
     # fake_off/: the Open Food Facts stand-in (plan § 9)
-    "fastapi==0.141.1",
+    "fastapi==0.142.2",
     "uvicorn==0.54.0",
 ]
 
 [dependency-groups]
-dev = ["ruff==0.16.9"]
+dev = ["ruff==0.16.10"]
 
 # Not a package: the suite runs from this directory with `uv run pytest`.
 [tool.uv]
