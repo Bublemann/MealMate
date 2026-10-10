@@ -7,7 +7,7 @@ license = "AGPL-3.0-or-later"
 dependencies = ["pytest==9.1.1"]
 
 [dependency-groups]
-dev = ["ruff==0.16.9"]
+dev = ["ruff==0.16.10"]
 
 # Not a package: the suite runs from this directory with `uv run pytest`.
 [tool.uv]
