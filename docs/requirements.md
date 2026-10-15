@@ -703,6 +703,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - typing into the last field of every pop-up with a text field, and reaching its main button with the keyboard up;
   - reaching "Speichern" in the pinned footer of "Neue Zutat" with the keyboard up;
   - the name row of "Neue Zutat" with its two icons at the largest text size;
+  - the headline in the pinned block of Lists, Meals and Ingredients at the largest text size (D-44);
   - the tab bar and the update banner hiding while typing, in pop-ups and in page fields;
   - the frosted tab bar, pinned block and floating "Einkauf starten" / "Einkauf beenden" bar staying readable over meal photos, in light and dark mode, and the floating bar hiding with the tab bar while typing.
 - **QA-07** **Linting and formatting** are enforced in CI:
