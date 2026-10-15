@@ -2,7 +2,14 @@
 
 ## Agent skills
 
-The mattpocock skills live in `.claude/skills/` as unchanged upstream copies. Before updating or editing them, read `docs/agents/skills.md`.
+### Skills
+
+The mattpocock skills in `.claude/skills/` are upstream copies that stay unchanged. To update them, or before changing how they behave here, read `docs/agents/skills.md`. Where a skill's workflow differs from this file, this file wins:
+
+- `implement-spec`: `main` is the integration branch. Each ticket gets its own worktree, its own branch from `origin/main` and its own PR, finished as below; a ticket starts once its blockers are merged.
+- `pr`: the PR body follows `.github/pull_request_template.md`. The skill's advice shapes the Summary section.
+- `prototype`: the prototype stays in the session's own worktree and is never pushed. Its verdict, the question it settled, and screenshots or key code go on the issue.
+- `teach`: run it in a folder outside this repo.
 
 ### Issue tracker
 
@@ -14,7 +21,7 @@ The five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` at the repo root. Decisions are D-nn rows in the decision log, `docs/requirements.md` §7, where the skills say ADR. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` at the repo root. Where the skills say ADR, write a D-nn row in the decision log, `docs/requirements.md` §7. See `docs/agents/domain.md`.
 
 ## Tickets and pull requests
 
@@ -27,7 +34,7 @@ Single-context: `GLOSSARY.md` at the repo root. Decisions are D-nn rows in the d
 The owner does not review PRs. Take your own ticket PR (from a `feature/`, `fix/`, `docs/` or `chore/` branch into `main`) to merged yourself. Never merge, squash or change anyone else's PR: release sync and back-merge PRs, `hotfix/` PRs and Dependabot PRs stay with the owner.
 
 1. Wait until every required check passes (`gh pr checks <n> --watch`). If one fails, fix it on the branch and wait again.
-2. Review the whole PR diff against the ticket's acceptance criteria and this repo's rules (`CONTRIBUTING.md`, `frontend/README.md`), using the `code-review` skill with the ticket as the spec. Fix what you find, push, and go back to step 1.
+2. Review the whole PR diff against the ticket's acceptance criteria and this repo's rules (`CONTRIBUTING.md`, `frontend/README.md`), using the repo's two-axis `code-review` skill (`.claude/skills/code-review/`, Standards and Spec), with `origin/main` (after `git fetch`) as the fixed point and the ticket as the spec. Fix what you find, push, and go back to step 1.
 3. Post the review result as a PR comment. GitHub doesn't let you approve your own PR, and `main` requires no approval.
 4. Merge with `gh pr merge <n> --squash --delete-branch --subject "<PR title> (#<n>)"` once the checks are green, the review found nothing, and every blocker is merged. Pass `--subject`: for a one-commit PR GitHub would otherwise take the commit's subject, and the squash commit's subject becomes the changelog entry.
 
