@@ -45,7 +45,7 @@ MealMate is a self-hosted web app for a small group of people (one household, 1â
 
 ## 3. Glossary
 
-The domain terms (ingredient, meal, shopping list, line, couple and the rest) are defined in [`CONTEXT.md`](../CONTEXT.md) at the repo root, the single glossary for docs, code and tickets.
+The domain terms (ingredient, meal, shopping list, line, couple and the rest) are defined in [`GLOSSARY.md`](../GLOSSARY.md) at the repo root, the single glossary for docs, code and tickets.
 
 ## 4. Functional requirements
 
