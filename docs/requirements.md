@@ -84,7 +84,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - change their password (which logs out all other devices).
 - **ACC-10** Forgotten password: an admin creates a single-use **reset link** (`/reset#<code>`), valid 24 h, and shares it the same way as an invite.
   - Using it sets a new password and ends all of that user's sessions.
-  - Afterwards the user sees "Password reset by *<admin>* on *<date>*" in *Me → Security*.
+  - Afterwards the user sees "Password reset by *<admin>* on *<date>*" in *Settings → Security*.
 - **ACC-11** Wrong login attempts slow down further attempts for that username and client (increasing delay). No account is ever permanently locked.
 - **ACC-12** The **first admin** is created with a command on the Pi (`mealmate create-admin`), interactively. A non-interactive form exists for automation and tests. If the last admin is locked out, `mealmate reset-link <username>` prints a reset link and also reactivates the account.
 - **ACC-13** Users can change their display name, language and privacy settings.
@@ -92,7 +92,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 ### 4.2 Couples (CPL)
 
 - **CPL-01** A user can send another user a **couple request**. The other user can accept or decline it, and the sender can cancel it.
-  - The picker lists all active users by display name.
+  - The picker lists all active users by display name. When it would be empty, it says what is missing instead: admins get "Lade deinen Partner ein" with a button to the invites (ADM-01), other users "Bitte einen Admin, deinen Partner einzuladen" (D-49).
   - A user can be in at most one couple.
   - A user can have at most one outgoing pending request.
   - Accepting cancels all other pending requests that involve either user.
@@ -137,6 +137,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 - **REF-01** **Categories** are seeded once, globally, with a German and an English name, in a default German-supermarket walking order. The seed list is in the [appendix](#appendix-a--seed-data).
   - Admins **add**, **rename**, **delete** and **reorder** categories to match the store (ADM-01). A new category goes to the end of the walking order. A rename shows on every list, old ones included (LIST-11).
+  - **Own walking order** (D-48): each couple, or a user without one, can reorder the categories for themselves on the settings page "Reihenfolge im Laden" (drag, or up and down buttons). The switch "Reihenfolge der Verwaltung übernehmen" is on by default and follows the admins' order live; moving a category turns it off. Turning it back on drops the own order after a confirmation. A category added by an admin goes to the end of an own order, marked "neu" until it is moved. Every list, read-only ones included, is grouped in the viewer's order; the text export in the exporter's (EXP-02). When a couple ends, each partner keeps the order; when it forms and both have one, the requester's applies.
   - **Names:** both are required, at most 40 characters each, and unique per language among the categories that aren't deleted, ignoring case, umlauts and accents. Seeded names count.
   - `Other / Sonstiges` and `Uncategorized / Ohne Kategorie` always exist. *Other* can be renamed and moved, but not deleted. *Uncategorized* can only be moved, and is never picked by hand (ING-02, LIST-06).
   - **Deleting** a category moves its ingredients to *Uncategorized*, so the lines of drafts, which follow the ingredients, move there too; only detached meals (LIST-15), which are frozen, keep it. Free-text items on drafts move to *Other* (LIST-06). Lists being shopped and done lists keep the deleted category (LIST-11, D-30). The message after a delete offers "Zeigen", which opens the Ingredients tab with *Uncategorized* as its only category and no search (ING-03).
@@ -167,7 +168,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - for a Stück ingredient only, an optional **piece weight** in g (e.g. egg = 60 g). It only serves the nutrition (NUT-05);
   - no density: nothing converts between grams and millilitres (D-32);
   - its nutrition values (NUT-02), all optional, per 100 g for Gramm and Stück, per 100 ml for Milliliter;
-  - the **pack size** ("500 g", "6 × 1,5 l") when it comes from Open Food Facts, as information only. It is never typed in (BAR-04, D-38).
+  - an optional **pack size** ("500 g", "6 × 1,5 l"), as text: filled from Open Food Facts or typed in, and editable; it can stay empty (D-47). It is information only.
 
   Changing the base unit converts nothing: the values stay as they are, now per 100 g or 100 ml of the new base unit, and changing away from Stück clears the piece weight. When meal rows, or linked extra items on drafts, use the ingredient in units that would no longer fit, the app first names how many ("Eier wird in 3 Gerichten in g verwendet. Diese Mengen passen dann nicht mehr.") and asks "Trotzdem ändern" or "Abbrechen"; those amounts are then kept and flagged (MEAL-02). A change no amount depends on asks nothing.
 - **ING-03** Search covers the name and the brand and ignores case, umlauts and accents: `apfel`, `Äpfel` and `aepfel` all find "Äpfel". Everywhere an ingredient is shown, the brand follows the name ("Milch (Weihenstephan)"). When a user creates an ingredient, a "similar ingredient already exists" hint is shown; it doesn't block creating it. The **Ingredients tab**:
@@ -211,20 +212,20 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - in the meal form's scan: adds that ingredient's row at once;
   - in an edit pop-up: is shown the same way instead of being filled in, so no barcode is used twice.
 - **BAR-03** A scan in "Neue Zutat" of a barcode no ingredient has:
-  - when OFF knows it, **fills the form** like a chosen search result (BAR-11): name in the user's language if available, brand, category guess, base unit, nutrition and barcode, with the pack size kept as information (ING-02). Fields OFF has no value for keep what the user typed. The user can correct anything and saves with **one tap**;
+  - when OFF knows it, **fills the form** like a chosen search result (BAR-11): name in the user's language if available, brand, category guess, base unit, nutrition and barcode, with the pack size (ING-02). Fields OFF has no value for keep what the user typed. The user can correct anything and saves with **one tap**;
   - when OFF doesn't know it, fills in only the barcode, with a one-line notice below it;
   - when OFF is slow or can't be reached, fills in the barcode with a notice and "Nochmal versuchen".
 
   A barcode that came from OFF stays read-only, so the values and the barcode belong to the same product. When editing, a scan only fills in the barcode (or shows BAR-02's notice).
 
   **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has, the similar-ingredients hint (ING-03) offers to attach it to a match that has no barcode: "Milch nehmen" in the meal form gives Milch the barcode and takes Milch into the meal; "Barcode zu Milch hinzufügen" elsewhere gives Milch the barcode, closes the pop-up and opens Milch. A match that has a barcode is offered without attaching anything: another package is another ingredient (D-21). There is no separate "Das gibt es schon in MealMate" step.
-- **BAR-04** Values the user changed or typed are marked as **user-edited per field** and are never overwritten automatically. The pack size is never edited by a user (ING-02), so it is never marked and always comes from OFF.
+- **BAR-04** Values the user changed or typed are marked as **user-edited per field** and are never overwritten automatically. The pack size is no exception (D-47).
 - **BAR-05** Ingredients from OFF are refreshed when older than **30 days** (configurable):
   - in the background when the ingredient is scanned or opened;
   - by a nightly job.
 - **BAR-06** When a refresh returns new values:
-  - fields that were not user-edited, and the pack size always, update silently;
-  - for user-edited fields, the app shows a hint (never for the pack size): "Open Food Facts has newer values: kcal 165 → 158 [Apply] [Ignore]".
+  - fields that were not user-edited update silently;
+  - for user-edited fields, the app shows a hint: "Open Food Facts has newer values: kcal 165 → 158 [Apply] [Ignore]".
 - **BAR-07** When OFF is unreachable, or the product was removed there, the cached values stay and the next scheduled refresh tries again.
 - **BAR-08** OFF usage rules:
   - a descriptive User-Agent (`MealMate/<version> (<contact>)`);
@@ -269,27 +270,28 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - offers in its filter panel several cuisines (a meal matches **any** of them), several tags (a meal must have **all** of them) and the user filter (MEAL-10);
   - sorts meals A–Z in dictionary order (ING-03), so "Äpfel im Schlafrock" sits next to "Apfelstrudel".
 
-  The list-building picker ("Gerichte hinzufügen") shows "recently used" meals first. It offers every meal the user can see, whatever the user filter on Meals says, shows the owner's initial marker in its rows, and opens without the keyboard.
+  The meal field's list on a shopping list (LIST-03) shows "recently used" meals first. It offers every meal the user can see, whatever the user filter on Meals says, shows the owner's initial marker in its rows, and opens without the keyboard.
 - **MEAL-10** The **user filter** on Meals is a group of checkboxes in the filter panel, one per user whose meals are visible, including oneself and the partner. Each checkbox shows or hides that user's meals. It is saved per user on the server, separately from the user filter on Lists (UI-02), so it follows them across devices. The meal picker ignores it (MEAL-09).
 
 ### 4.9 Shopping lists: building (LIST)
 
-- **LIST-01** "**+ New list**" immediately creates a draft and opens the meal picker. A user can have any number of drafts, and a draft can stay forever.
+- **LIST-01** "**+ New list**" immediately creates a draft and opens it with the meal field's list showing (LIST-03), keyboard closed. A user can have any number of drafts, and a draft can stay forever.
 - **LIST-02** **Name and date:** a list can be renamed.
   - The display is always `<name> (<creation date>)`, e.g. "Grillabend (26.09.2026)".
   - Without a custom name, it shows the translated default in the **viewer's** language, e.g. "Einkaufsliste (26.09.2026)".
-- **LIST-03** **Adding meals:** any meal visible to the user (own, partner's or other users' public meals) can be added directly; no copy is needed. A meal can be created on the spot from the picker.
+- **LIST-03** **Adding meals:** any meal visible to the user (own, partner's or other users' public meals) can be added directly; no copy is needed. Meals are added through the **meal field** at the top of the Gerichte section (D-41): picking a meal, or ＋ with its exact name, opens a pop-up with its servings and "Hinzufügen"; afterwards the field empties and keeps the keyboard, so several meals are added in a row. Focused while empty, the field lists the visible meals (MEAL-09). "„X“ als neues Gericht", directly under the field, creates a meal on the spot through the meal form; ＋ without an exact match does the same. Offline the field is inactive.
 - **LIST-04** **Servings:**
-  - Each meal on a list has a **servings** count (whole number ≥ 1) with +/- buttons.
+  - Each meal on a list has a **servings** count (whole number ≥ 1) with a compact "− *n* +" at the right of its row (D-40).
+  - Swiping a meal to the left reveals "Entfernen", which removes it from the list without a confirmation; a swipe all the way through removes it at once. Without swiping (mouse, keyboard, screen reader), "Entfernen" is a button that shows on focus and on hover.
   - It starts at the meal's own `servings` value.
   - The scale factor is `list servings ÷ meal servings`.
   - A meal appears at most once per list; adding it again raises its servings.
-- **LIST-05** The list view shows at the **top** the meals with their servings, and **below** the aggregated lines grouped by category in category order (AGG).
-- **LIST-06** **Extra items** are added through one input with autocomplete over ingredients:
+- **LIST-05** The list view has two sections: at the **top** **Gerichte**, the meal field (LIST-03) and the meals with their servings; **below** **Artikel**, the item field (LIST-06) and the aggregated lines grouped by category in category order (AGG). Both headings show even when their section is empty.
+- **LIST-06** **Extra items** are added through the **item field** at the top of the Artikel section, which looks like the meal field (D-41) and searches ingredients. Picking an ingredient, or ＋ with its exact name, opens a pop-up with the amount and unit; "„X“ als Artikel" and ＋ without an exact match open one with the free-text amount and the category; "„X“ als neue Zutat" opens "Neue Zutat" (ING-04) and then the amount pop-up. The two "„X“" options sit directly under the field, above the results. Offline only "„X“ als Artikel" is offered (D-10):
   - picking an ingredient adds a linked extra item (optional amount and unit) that merges with the same ingredient from meals. Its unit follows the same rule as a meal row (MEAL-02): only units that fit the ingredient's base unit are offered and accepted, and an existing item that doesn't fit is kept and flagged;
   - anything else becomes a **free-text** item with an optional free-text amount. It goes into *Other* unless the user picks a category. The choices are the categories that aren't deleted, in walking order, without *Uncategorized* (REF-01).
   - **When an admin deletes a category**, the free-text items in it move to *Other* on drafts and keep the deleted category on lists being shopped and done lists. "Shop again" (SHOP-06) and "Copy to my lists" (VIS-03) put them into *Other*. A free-text item added offline whose category was deleted before it was sent also lands in *Other*, so sending it never fails (SYNC-04).
-- **LIST-07** In a draft, a calculated line can be **removed for this list only** (swipe), e.g. "still have rice". It moves to a collapsed "Removed" section and can be restored. Nothing is remembered for future lists (there is no pantry logic).
+- **LIST-07** In a draft, a calculated line can be **removed for this list only**, e.g. "still have rice": swiping it to the left reveals "Ausblenden" (a swipe all the way through hides it at once), and its pop-up (LIST-08) offers the same (D-40). It moves to a collapsed "Removed" section and can be restored. Nothing is remembered for future lists (there is no pantry logic); recurring items (LIST-16) are the one exception, and they don't follow from hiding a line.
 - **LIST-08** Tapping a line shows which meals and extra items it comes from. Meals the viewer can't see show as "Private meal" (VIS-06).
 - **LIST-09** Every change is saved to the server immediately. A draft can be continued on another device, even after closing the app or restarting the phone. Offline behaviour is covered in SYNC.
 - **LIST-10** **List states:**
@@ -314,15 +316,20 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
     - a free-text item's text or amount is edited (shown as "changed").
   - A checked line that needs less stays checked.
 - **LIST-13** **Delete:** the owner can delete a list in any state, after a confirmation.
-- **LIST-14** **Reminder:** the last row of every list is a random, friendly reminder, e.g. "Nichts vergessen? Klopapier? Salz?" / "Didn't forget anything? Toilet paper? Salt?".
-  - It comes from a pool of about 10 per language, kept in the translation files.
-  - It stays the same for a given list.
-  - The same reminder appears in the finish dialog (SHOP-04).
+- **LIST-14** ~~**Reminder**~~: removed (D-43). Lists show no reminder row.
 - **LIST-15** **Detached meals:** when a meal on a not-yet-frozen list is **deleted** by its owner, or **stops being visible** to the list's owner (privacy switched off, couple ended, owner's account deleted), it is detached from that list:
   - its current ingredients are frozen into the list (as in LIST-11), so the list keeps working;
   - it is marked "no longer available", and the list owner can remove it.
 
   It is never removed silently. Lists that are already frozen are unaffected.
+
+- **LIST-16** **Recurring items** (D-42): a user, or a couple together, keeps a set of ingredients they buy again and again (toilet paper, toothpaste).
+  - Making an ingredient recurring (on the settings page "Regelmäßige Artikel", or "Regelmäßig kaufen…" in the ingredient's ⋯ menu) asks for an interval in weeks and when it was last bought (default today).
+  - It is **due** once the interval has passed since the last purchase. While due, every draft the user can edit shows it in a "Fällig" box at the top of the Artikel section (LIST-05), unless the ingredient is already on that list. ＋ opens the amount pop-up (LIST-06) with the last amount filled in; ✕ hides it on that list only. Nothing is suggested while shopping.
+  - A **purchase** is a checked line of that ingredient on a list that the user or the partner finished; its date is the check-off time. After two purchases the interval becomes the average of the last three, unless the user set it by hand (they can switch back to "automatisch").
+  - Each recurring item keeps only its last purchase date, its last amount and its last three intervals, so deleting lists changes nothing. A merge (ING-05) moves it to the surviving ingredient.
+  - A couple shares one set, and either partner can change it. When the couple ends, each keeps a copy.
+  - The settings page lists each item with "alle ~4 Wochen · zuletzt 02.10. · fällig in 5 Tagen". An empty page shows a hint with examples; nothing is seeded.
 
 ### 4.10 Aggregation, units and rounding (AGG)
 
@@ -346,7 +353,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - Each checked line shows who checked it (initial).
 - **SHOP-02** Extra items can be added quickly while shopping.
 - **SHOP-03** The list shows a sync indicator (SYNC-07).
-- **SHOP-04** **Finish:** "Finish shopping" opens a dialog with the reminder (LIST-14), "*N* items not checked", and two buttons: *Finish* and *Keep shopping*. When the last item is checked, the app offers to finish.
+- **SHOP-04** **Finish:** "Finish shopping" opens a dialog with "*N* items not checked", and two buttons: *Finish* and *Keep shopping*. When the last item is checked, the app offers to finish.
 - **SHOP-05** **Done lists** stay in the Lists feed (UI-02), in their place by creation date, with a check and "gekauft am 26.09." (the day they were **finished**). There is no separate history page.
   - In an opened done list, checked lines count as bought; unchecked lines are shown greyed.
   - One's own done lists and shared ones have no lock. A shared done list shows like that in both partners' feeds while the couple exists (see CPL-05 for what happens after).
@@ -399,8 +406,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - uses the exporting user's language and number format;
   - has the list name and date first;
   - then the meals with their servings;
-  - then the lines grouped by category (unchecked first);
-  - then the reminder.
+  - then the lines grouped by category (unchecked first).
 - **EXP-03** Export works offline for locally stored lists (SYNC-02).
 
 ### 4.14 Languages and formatting (I18N)
@@ -408,7 +414,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 - **I18N-01** The UI is in **German and English**, with a language switch in settings. The choice is stored per user on the server. Adding a language must only require adding one translation file (plus seed translations and its empty category name columns, [plan § 6](plan.md#6-data-model)). Category names are data (I18N-04): a new language shows the English category names until admins fill in names in it.
 - **I18N-02** Before login, the phone or browser language is used (German if it starts with `de`, otherwise English). The chosen language is saved at registration.
 - **I18N-03** The backend never returns user-facing text. Errors are **codes** with parameters, e.g. `meal.not_found`, and the frontend translates them. Every error code must have a German and an English translation, enforced by a test.
-- **I18N-04** Units, seeded cuisines and the reminder texts are translated through keys. **Category names** are data, not translation keys: each category has one name per UI language, which admins maintain (REF-01, D-31). User-created text (meal, ingredient and tag names, instructions) is never translated.
+- **I18N-04** Units and seeded cuisines are translated through keys. **Category names** are data, not translation keys: each category has one name per UI language, which admins maintain (REF-01, D-31). User-created text (meal, ingredient and tag names, instructions) is never translated.
 - **I18N-05** **Formats follow the UI language:**
   - German: `26.09.2026`, `1,5 kg`;
   - English: `26/09/2026`, `1.5 kg` (day first).
@@ -418,7 +424,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
 ### 4.15 Administration (ADM)
 
-- **ADM-01** The admin section (in *Me*) offers:
+- **ADM-01** The admin section (in *Settings*) offers:
   - creating and revoking invites, and seeing their status (open / used by X / expired / revoked);
   - creating reset links;
   - listing users;
@@ -447,9 +453,10 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 ### 4.16 App shell and navigation (UI)
 
 - **UI-01** Mobile-first layout for iPhone, one-handed use.
-  - **Tab bar:** a floating, frosted bar at the bottom with **Lists**, **Meals**, **Ingredients** and **Me**, as icons only; screen readers still read the tab names. It keeps a gap at both sides and above the bottom edge, also on iPhones without a home indicator, and taps beside it reach the content. The active tab gets a subtle lighter pill and a green icon with a thicker stroke, so colour is not the only signal. The bar stays visible while scrolling and its icons stay readable over meal photos, in light and dark mode.
-  - **Tab screens** (Lists, Meals, Ingredients, Me) show no visible headline; each still has a heading that screen readers announce. Detail screens (a shopping list, a meal, an ingredient, the admin pages) keep their visible titles.
-  - **Pinned block:** Lists, Meals and Ingredients have a frosted block at the top that stays put while scrolling. It holds a search field (not on Lists), a filter button and a green "Neu…" tile shaped like a row of that tab ("Neue Liste", "Neues Gericht", "Neue Zutat"). It appears at once and looks the same while the tab loads, when it is empty and when it is filled.
+  - **Tab bar:** a floating, frosted bar at the bottom with **Lists**, **Meals**, **Ingredients** and **Settings**, as icons only; screen readers still read the tab names. It keeps a gap at both sides and above the bottom edge, also on iPhones without a home indicator, and taps beside it reach the content. The active tab gets a subtle lighter pill and a green icon with a thicker stroke, so colour is not the only signal. The bar stays visible while scrolling and its icons stay readable over meal photos, in light and dark mode.
+  - **Tab screens** (Lists, Meals, Ingredients, Settings) show a visible headline (D-44): "Einkaufslisten", "Gerichte", "Zutaten", "Einstellungen". On Lists, Meals and Ingredients it is the top of the pinned block and stays put with it. Detail screens (a shopping list, a meal, an ingredient, the admin pages) keep their visible titles.
+  - **Detail screens** (D-39, D-46): a frosted strip stays at the top while scrolling, with the back link "‹ *parent*" on the left and a ⋯ button on the right that opens a pull-down menu with the screen's actions; destructive ones are red, last, and ask first. The visible title follows below the strip and scrolls with the page. On a shopping list, "Einkauf starten" (draft) and "Einkauf beenden" (shopping) sit in a frosted bar floating just above the tab bar; the list scrolls underneath it and can scroll its last row clear of it.
+  - **Pinned block:** Lists, Meals and Ingredients have a frosted block at the top that stays put while scrolling. It holds the headline (D-44), a search field (not on Lists), a filter button and a green "Neu…" tile shaped like a row of that tab ("Neue Liste", "Neues Gericht", "Neue Zutat"). It appears at once and looks the same while the tab loads, when it is empty and when it is filled.
   - **Filter panel:** the filter button opens a panel that slides up from the bottom (without animation under Reduce Motion) with groups of checkboxes. Each change applies immediately. "Zurücksetzen" resets every group and "Fertig" closes the panel. The button shows how many groups are not at their default, also in its accessible name.
   - **Kept per tab:** the search text and the cuisine, tag and category choices stay until the app is closed, so opening a meal or an ingredient and coming back keeps them. The user filter and the state filter are saved on the server (UI-02, MEAL-10).
   - **Keyboard:** while the on-screen keyboard is open, in a pop-up or on a page, the tab bar and the update banner (the notice that a new version is ready to load) hide. Pop-ups fit into the space above the keyboard, so their last field and main button can be reached. Pinch-zoom is not mistaken for an open keyboard (A11Y-02).
@@ -466,7 +473,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
     | Done list (SHOP-05) | check | "gekauft am *date*" |
 
     One's own unshared lists add no "von" text.
-  - **Pinned block** (UI-01): the green "Neue Liste" tile, which creates a draft and opens the meal picker (LIST-01), and the filter button. There is no search field.
+  - **Pinned block** (UI-01): the green "Neue Liste" tile, which creates a draft and opens it with its meal list showing (LIST-01), and the filter button. There is no search field.
   - **Filter panel:** the **user filter**, one checkbox per user whose lists are visible, including oneself and the partner; unticking a user hides all of that user's lists, shared ones too. The **state filter**: "Entwurf", "Einkauf" and "Erledigt", all ticked by default. Both are saved per user on the server, so they follow the user across devices.
   - The first-login hints and the offline and sync notices sit below the pinned block and scroll away with the feed.
   - **Local copy:** until the feed's first page arrives, also online, the tab shows the local copy (SYNC-02, SYNC-09), sorted like the feed. **Offline** it shows only the local copy, whatever the saved user filter and state filter say, and disables the filter button and the "Neue Liste" tile. Read-only and done lists need a connection.
@@ -477,7 +484,13 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - when the search or the filters hide everything, "Keine Treffer" with a "Filter zurücksetzen" button, which clears the search text and resets every filter group.
 - **UI-04** Dark mode follows the iPhone setting automatically.
 - **UI-05** Branding: name **MealMate**, a green accent colour (from the v1 `#4CAF50` family), and a simple basket icon for the Home Screen and favicon. All colours are defined once as design tokens so the design can be re-skinned easily.
-- **UI-06** The *Me* tab shows the version and a **"Source code (AGPL-3.0)"** link to the exact source revision being run (LIC-02). It also contains the OFF attribution (BAR-09).
+- **UI-06** The *Settings* tab's "Über MealMate" page shows the version and a **"Source code (AGPL-3.0)"** link to the exact source revision being run (LIC-02). It also contains the OFF attribution (BAR-09).
+- **UI-07** **Settings tab** (D-45): a list of rows, each opening its own page (a detail screen):
+  - Profil (display name and language), Privatsphäre, Paar, Sicherheit, Regelmäßige Artikel (LIST-16), Reihenfolge im Laden (REF-01);
+  - **Verwaltung**, for admins only (ADM-01): Benutzer, Einladungen, Kategorien, Aktivitäten, System;
+  - Über MealMate (UI-06), then Abmelden as a red, centred row that keeps the question about unsent changes (SYNC-05).
+
+  A row shows a short value where it helps: the display name, the partner, how many recurring items are due, the last backup, the version. The headline scrolls with the page.
 
 ## 5. Non-functional requirements
 
@@ -553,7 +566,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
   The server does not log request paths with codes, or query strings.
 - **SEC-11** **Dependencies are kept current:**
-  - Dependabot weekly, grouped;
+  - Dependabot **monthly**, minor and patch updates grouped per ecosystem, majors skipped; a quarterly update ticket moves to the majors that are ready (D-50). Dependabot security alerts and security updates stay on;
   - CI fails on known high or critical vulnerabilities in runtime dependencies;
   - a weekly scheduled scan of the **published** image opens an issue when fixable vulnerabilities appear.
 
@@ -691,7 +704,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - reaching "Speichern" in the pinned footer of "Neue Zutat" with the keyboard up;
   - the name row of "Neue Zutat" with its two icons at the largest text size;
   - the tab bar and the update banner hiding while typing, in pop-ups and in page fields;
-  - the frosted tab bar and pinned block staying readable over meal photos, in light and dark mode.
+  - the frosted tab bar, pinned block and floating "Einkauf starten" / "Einkauf beenden" bar staying readable over meal photos, in light and dark mode, and the floating bar hiding with the tab bar while typing.
 - **QA-07** **Linting and formatting** are enforced in CI:
   - backend: ruff (lint and format) and mypy;
   - frontend: eslint, prettier and `tsc`.
@@ -715,15 +728,16 @@ These are not in v2.0. The data model should not make them hard.
 | One-off adjustment of a meal's ingredient amounts when adding it to a list | e.g. 250 g instead of 200 g chicken for this list only |
 | Package sizes and rounding up to whole packs | the product's pack size (OFF `product_quantity`) is already stored |
 | Receipt photo → local OCR → purchased items and prices | the Pi 3 is too weak; run the OCR as a separate worker on stronger hardware |
-| Price tracking, cost analytics, long-term statistics | |
+| Price tracking, cost analytics, long-term statistics | recurring items (LIST-16) keep only three intervals each, not a purchase history |
 | Multiple households on one server | not needed now: "public" means everyone on the server |
 | Push notifications (e.g. "Anna added milk") | needs Web Push and the Home Screen app |
-| Category order per store (Rewe vs Lidl) | |
+| Category order per store (Rewe vs Lidl) | one order per couple exists (REF-01, D-48) |
 | More nutrients (fibre, salt, …) and more languages | planned extension points (NUT-01, I18N-01) |
 | Scan a barcode to check an item off in the store | |
 | Public access without the Tailscale app (Tailscale Funnel) | would need extra hardening |
 | Storybook / visual regression tests for the frontend developer | |
-| Admin-editable cuisines and reminder texts | |
+| Admin-editable cuisines | |
+| Inviting someone straight into a couple ("Als mein Partner einladen") | the new user would find a couple request from the inviter after registering (D-49) |
 
 ## 7. Decision log
 
@@ -766,7 +780,19 @@ These are not in v2.0. The data model should not make them hard.
 | D-35 | "Neue Zutat" becomes one compact pop-up for creating from the Ingredients tab or the meal form and for the meal form's scan, and an ingredient's edit pop-up gets the same layout: no explanatory text under the headline; the Open Food Facts attribution while its values are shown; the name with a magnifier (Open Food Facts search, not when editing) and a scan icon next to it; the barcode directly below; the similar-ingredients hint while there are matches; the brand with a placeholder instead of a hint; the category; the base unit as three choices; the piece weight only for Stück; the nutrition values in two columns; "Speichern" in a footer pinned below the scroll area. The cursor starts in the name only when it is empty (2026-10-02) | on the iPhone the old form was long, explained every field and asked for values nobody fills in; its buttons sat far from what they fill and "Speichern" at the end of a long scroll; a scan's result shows at once below the name; with a name filled in, the keyboard would cover the icons and the category |
 | D-36 | Scanning moves into "Neue Zutat": a known barcode shows "Gehört schon zu …" with "öffnen" or "nehmen" instead of jumping away; a barcode Open Food Facts knows fills the form; an unknown one fills only the barcode. While the form holds a scanned barcode that no ingredient has, the similar-ingredients hint attaches it to a match without a barcode. When editing, a scan only fills in the barcode. The separate "Das gibt es schon in MealMate" step goes (2026-10-02) | creating an ingredient happens in one place, whichever way it starts; no second copy of the form opens and nothing navigates away mid-task; the hint the user already sees is the natural place to say "this package is my Milch", so a typed-in ingredient gets its barcode without a search of its own |
 | D-37 | The scan page `/scan` is removed and its address leads to the Ingredients tab. The meal form keeps "Barcode scannen": a known barcode adds its row, an unknown one opens "Neue Zutat" filled as after a scan inside it (2026-10-02) | the pop-up's scan icon does everything the page did, and no tab linked to it any more (D-27); old links don't break; in the kitchen, scanning a package into a meal stays one step |
-| D-38 | The pack size ("500 g", "6 × 1,5 l") is information from Open Food Facts only: never typed in or edited, refreshed silently, shown in the search results and on the detail page (2026-10-02) | nobody knows or needs it when typing an ingredient; it tells products apart in the search ("Milch 1 l" or "6 × 1,5 l"); a value nobody edits needs no "newer values" question; it stays stored for the postponed pack rounding |
+| D-38 | ~~The pack size ("500 g", "6 × 1,5 l") is information from Open Food Facts only: never typed in or edited, refreshed silently, shown in the search results and on the detail page (2026-10-02)~~ — replaced by D-47 | |
+| D-39 | Detail screens (a shopping list, a meal, an ingredient) move their actions into a ⋯ pull-down menu at the top right (D-46), even when only one action is left: on one's own list rename, export, the "shared with partner" switch (still a switch, inside the menu, with no badge on the screen) and delete; on a read-only list "Copy to my lists" and export; on a done list "Shop again", "Reopen" and export; on a meal edit, copy and delete (only copy on another user's meal); on an ingredient edit. Delete is red, last, and still asks first. "Einkauf starten" on a draft and "Einkauf beenden" while shopping sit in a frosted bar floating just above the tab bar; it hides with the tab bar while the keyboard is open, and "Einkauf starten" stays visible but inactive offline (2026-10-15) | the owner wants a clean screen: the row of outline buttons above the list took room and attention every time a list was opened; starting and finishing are what a list is opened for, so they stay one tap away under the thumb, while the rest is occasional; one pattern on every detail screen is easier to learn than a menu here and buttons there |
+| D-40 | A meal row on a list is one line: thumbnail, name, and a compact "− *n* +" at the right; the ✕ and the stepper's second row go. Swiping a meal to the left reveals a red "Entfernen", swiping a line reveals a grey "Ausblenden" (LIST-07); a swipe all the way through acts at once, as in iOS Mail. "Entfernen" needs no confirmation. For a mouse, a keyboard and screen readers, the meal's "Entfernen" stays reachable as a button that shows on focus and on hover; lines keep "Ausblenden" in their pop-up. The same applies while shopping (2026-10-15) | the owner wants compact meal rows; two different left swipes on one screen (one acting on release, one revealing a button) would trip people up; a revealed button makes a removal deliberate without a confirmation; vertical arrows with 44 pt targets would double the row height, so the stepper stays horizontal |
+| D-41 | Meals and extra items are added the same way: a list has two sections, **Gerichte** and **Artikel**, each starting with a field that looks the same (a search field and a ＋). Picking a result, or ＋ with an exact match, opens a small pop-up: servings for a meal (starting at its own servings), an optional amount and a fitting unit for an ingredient, an optional free-text amount and a category (default *Other*) for free text; its main button is "Hinzufügen". Afterwards the field empties and keeps the keyboard. "„X“ als neues Gericht" (meal field) and "„X“ als Artikel" and "„X“ als neue Zutat" (item field) sit directly under the field, above the results, so late results never move them; ＋ without an exact match creates the meal or adds the free text. Focused while empty, the meal field lists the visible meals; "Neue Liste" opens with that list showing and the keyboard closed. The meal picker dialog goes. Offline the meal field is inactive and the item field offers only free text (2026-10-15) | the owner found two different ways of adding (a picker dialog for meals, an inline row with its own amount fields for items) confusing; one look for both, with the details asked afterwards, keeps the list screen compact; two fields rather than one keep meal and ingredient results apart, so the same name ("Lasagne" the meal, "Lasagneplatten" the ingredient) can't be mixed up; create options that never move fix the missed taps seen in the meal form |
+| D-42 | **Recurring items** (toilet paper, toothpaste): an ingredient a user, or a couple together, marks as recurring, with a starting interval in weeks and the date it was last bought (default today). It is **due** once the interval has passed since the last purchase, and then every draft the user can edit shows it in a "Fällig" box at the top of the Artikel section until it is bought again: ＋ opens the amount pop-up prefilled with the last amount, ✕ hides it on that list only; items already on the list aren't offered; nothing shows while shopping. A purchase is a checked line of that ingredient on a finished list of the user or the partner; after two purchases the interval becomes the average of the last three, unless it was set by hand. Each recurring item stores only its last purchase date, last amount and last three intervals. A couple shares one set; when the couple ends, each keeps a copy. A merge moves the recurring item to the surviving ingredient. Managed on a settings page "Regelmäßige Artikel" and through "Regelmäßig kaufen…" in the ingredient's ⋯ menu; no starter items are seeded (2026-10-15, an exception to LIST-07's "no pantry logic") | the owner forgets household goods that no meal brings onto a list; only ingredients can be matched across lists, free text can't; per couple, because a household buys toilet paper once, whoever buys it; storing three intervals instead of reading old lists keeps working when lists are deleted or ingredients merged and stays far from long-term statistics (§6); ingredients are shared, so seeded non-food items would show up for every user |
+| D-43 | The list reminder (LIST-14) is removed everywhere: from drafts, the shopping view, the finish dialog, done lists and the text export, with its translation texts and the `reminder_seed` column (2026-10-15) | the owner found the jokes in the way rather than helpful; recurring items (D-42) now do the job the reminder joked about ("Klopapier?") |
+| D-44 | Tab screens get a visible headline again: "Einkaufslisten", "Gerichte", "Zutaten", "Einstellungen" (English: "Shopping lists", "Meals", "Ingredients", "Settings"). On Lists, Meals and Ingredients it sits at the top of the pinned block and stays put with it. The fourth tab is renamed from "Profil"/"Me" to "Einstellungen"/"Settings". The tab bar keeps icons only (D-28) (2026-10-15, replaces D-22's "tab screens without a visible headline") | without a headline, the owner couldn't tell at a glance where they were; "Gerichte" stays, as everywhere else in the app, rather than "Mahlzeiten", which also means breakfast or lunch; the fourth tab now holds settings of which the profile is one |
+| D-45 | The Settings tab becomes a list of tappable rows, each opening its own page: a first group with Profil (with the language), Privatsphäre, Paar, Sicherheit and Regelmäßige Artikel; a group **Verwaltung** for admins with Benutzer, Einladungen, Kategorien, Aktivitäten and System; at the bottom Über MealMate (version, source link, OFF attribution, diagnostics for admins) and a red, centred Abmelden. Rows show a short value where one helps (name, partner, items due, last backup, version). Its headline scrolls with the page. Sub-pages are detail screens under `/me/…`; the admin pages keep their addresses (2026-10-15) | the stacked cards made one long page where the admin links sat under the user's own settings; rows that open pages look like the rest of the app and keep the tab short; the `/me` addresses stay so old links still work |
+| D-46 | Every detail screen starts with a frosted strip that stays at the top while scrolling: the back link "‹ *parent*" on the left ("Alle Listen", "Alle Gerichte", "Alle Zutaten", "Einstellungen", the meal's name in the meal form) and the ⋯ menu (D-39) on the right. The title follows below it and scrolls with the page. The link leads to that fixed parent, not back in the history (2026-10-15) | the back link sat below the title, where people don't look for it; on a long list or meal it scrolled away, so leaving meant scrolling all the way up |
+| D-47 | The pack size ("500 g", "6 × 1,5 l") becomes an optional text field on every ingredient, in "Neue Zutat" below the brand and in the edit pop-up; it can stay empty. Open Food Facts fills it like the other fields. Once a user changes it, it is user-edited (BAR-04): a refresh no longer overwrites it and offers the newer value instead (BAR-06). The stored amount for the postponed pack rounding is taken from the text when it is a plain amount and unit, and left empty otherwise (2026-10-15, replaces D-38) | a scan of Henglein Kartoffel-Gnocchi (4001163134218) showed 250 g for a 500 g pack because Open Food Facts has 250 g; the owner wants to correct such values at once instead of waiting for Open Food Facts; the field is optional, so typing an ingredient stays as quick as before |
+| D-48 | Each couple, or a user without one, can keep its own **walking order**. A switch "Reihenfolge der Verwaltung übernehmen" (on by default) follows the admins' order live; moving a category turns it off and freezes the order as the couple's own, and turning it back on drops that order after a confirmation. A category an admin adds goes to the end of an own order, marked "neu" until it is moved; renames and deletions apply as before. The categories themselves and which ingredient is in which stay shared and admin-maintained. Every list is shown in the viewer's order, the text export in the exporter's. When a couple ends, each partner keeps the order; when a couple forms and both have one, the requester's applies. Edited on the settings page "Reihenfolge im Laden" (2026-10-15) | the owner's store runs differently from the admins' order and wants full control of it, without admin changes reshuffling it; per couple, because shared lists only exist inside a couple, so both partners see a shared list the same way; own categories and own filing of the shared ingredients would cost about as much as the editable-categories work again, for a need the order alone meets; one order per couple, not per store (§6) |
+| D-49 | When nobody else could be picked for a couple, the Paar page says why: admins get "Lade deinen Partner ein" with a button to Verwaltung → Einladungen, other users "Bitte einen Admin, deinen Partner einzuladen". Inviting someone straight into a couple is postponed (§6) (2026-10-15) | the owner found the Paar section without any button and didn't know that the partner needs an invite first; an invite that also sends a couple request would change registration for a step each household takes once |
+| D-50 | Dependabot runs monthly instead of weekly, with only minor and patch updates, grouped per ecosystem; majors are skipped. Every quarter (January, April, July, October) a `chore(deps)` ticket moves to the majors whose ecosystem is ready and records what is held back and why. Security alerts and security updates stay on (2026-10-15) | of 15 Dependabot PRs, 9 were closed, nearly all majors that arrived before the tools around them supported them (TypeScript 7, ESLint 10, Vite 8); the grouped minor and patch PRs were the useful ones; one deliberate pass over the majors per quarter costs less than closing single PRs each week |
 
 ## 8. Owner decisions
 
@@ -805,4 +831,3 @@ Items that can only be settled on the real hardware are tracked as open points i
 
 **Cuisines:** german, italian, french, greek, turkish, mediterranean, american, mexican, indian, chinese, japanese, thai, other (translated). Users can add more as plain text.
 
-**Reminder texts:** about 10 per language, written in `de.json` and `en.json` (they are not literal translations of each other).
