@@ -39,14 +39,14 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 This repo records decisions as rows of the decision log in `docs/requirements.md` §7. Wherever a skill says ADR or `docs/adr/`, write a row there instead:
 
-- Every owner decision behind a rule that isn't obvious gets a row, product and UI choices included (D-35, D-38). The skills' three-part ADR test (hard to reverse, surprising, real trade-off) sets no bar here.
+- Every non-obvious decision the owner makes gets a §7 row (§8 holds only the answers to the original planning questions), product and UI choices included, even easily reversed ones such as D-35 and D-38.
 - Take the next free `D-nn`, checked against the latest `origin/main`: parallel tickets often pick the same number.
 - **Decision** states the decision and ends with `(date)`, or `(date, replaces D-nn)` when it replaces an older one, as D-21 shows. **Why** gives the reasons.
 - A replaced row is struck through and points to its successor, as D-06 shows.
 
 ## Where glossary and decision edits land
 
-The skills edit `GLOSSARY.md` and the decision log inline, as terms and decisions settle. Outside a ticket (a grilling, triage or architecture session), make those edits in the session's own worktree on a `docs/<topic>` branch from `origin/main`, created before the first edit, and land them through its PR, like the docs ticket #62. Inside a ticket, they ride on the ticket's branch.
+The skills edit `GLOSSARY.md` and the decision log inline, as terms and decisions settle. Inside a ticket, they ride on the ticket's branch. A grilling, triage or architecture session outside a ticket first opens a `docs:` ticket, then makes the edits in the session's own worktree on a `docs/<topic>` branch from `origin/main`, created before the first edit, and finishes it like any ticket (as #62 did).
 
 ## Flag decision conflicts
 

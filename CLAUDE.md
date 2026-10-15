@@ -6,10 +6,10 @@
 
 The mattpocock skills in `.claude/skills/` are upstream copies that stay unchanged. To update them, or before changing how they behave here, read `docs/agents/skills.md`. Where a skill's workflow differs from this file, this file wins:
 
-- `implement-spec`: `main` is the integration branch. Each ticket gets its own worktree, its own branch from `origin/main` and its own PR, finished as below; a ticket starts once its blockers are merged.
-- `pr`: the PR body follows `.github/pull_request_template.md`. The skill's advice shapes the Summary section.
-- `prototype`: the prototype stays in the session's own worktree and is never pushed. Its verdict, the question it settled, and screenshots or key code go on the issue.
-- `teach`: run it in a folder outside this repo.
+- `implement-spec`: `main` is the integration branch, so steps 3, 5, 7 and 8 (integration branch, merger, final review, draft PR) give way to "Tickets and pull requests" below: each ticket gets its own worktree, branch from `origin/main` and PR, and starts once its blockers are merged. The spec closes when its last ticket merges.
+- `pr`: the PR body has the sections of `.github/pull_request_template.md`. The skill's diagram and before/after evidence go under Summary.
+- `prototype`: the prototype lives in the session's own worktree and stays local. Before the worktree goes, post the verdict, the question it settled and the key code (in a collapsed `<details>` block) on the issue.
+- `teach`: when started here, ask for a folder outside this repo and keep the teaching workspace there.
 
 ### Issue tracker
 

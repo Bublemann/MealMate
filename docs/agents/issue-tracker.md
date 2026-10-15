@@ -44,10 +44,12 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
-- **Labels**: the five `wayfinder:*` labels above are created on first use. Before the first `gh issue create --label wayfinder:<type>`, run `gh label create wayfinder:<type>` for each one `gh label list` doesn't show yet.
-- **Research findings** are the research ticket's **Resolve** comment. They stay on the ticket, never on a `research/` branch: nothing is pushed for a research ticket.
+- **Labels**: `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling` and `wayfinder:task` are created on first use: before the first `gh issue create` with one of them, run `gh label create <label>` for each one `gh label list` doesn't show yet.
+- **Research findings**: the research subagent writes its notes to a file outside the repo and posts them as the ticket's **Resolve** comment. That comment is the context pointer, so the `research/<name>` branch of the skill's step 5 is not created.
 - **Dropping a ticket** that a decision made obsolete: `gh issue close <n> --reason "not planned" --comment "<why>"`, and update the map. Issues are closed, never deleted.
 
 ## Rejected requests
 
-The skills' `.out-of-scope/` knowledge base is, in this repo, the closed `wontfix` issues plus §6 "Postponed / future ideas" of `docs/requirements.md`. For the prior-rejection check, search both (`gh issue list --state closed --label wontfix --search "<terms>"`). A rejected enhancement is recorded in the comment that closes it as `wontfix`, with the reason; no `.out-of-scope/` folder is created.
+The skills' `.out-of-scope/` knowledge base is, in this repo, the closed issues labelled `wontfix`. For the prior-rejection check, search them (`gh issue list --state closed --label wontfix --search "<terms>"`). A rejected enhancement gets the `wontfix` label and is closed with `--reason "not planned"` and a comment giving the reason, which is its record.
+
+A request that matches an idea in §6 "Postponed / future ideas" of `docs/requirements.md` is postponed, not rejected: point to the §6 row.
