@@ -252,18 +252,36 @@ BASH4_ONLY = [
 ]
 
 
-@pytest.mark.parametrize("script", ["pull.sh", "install-backup-pull.sh"])
+MAC_SCRIPTS = ["pull.sh", "install-backup-pull.sh"]
+
+
+def without_comments(text: str) -> str:
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+@pytest.mark.parametrize("script", MAC_SCRIPTS)
 def test_mac_scripts_avoid_bash4_features(script: str) -> None:
     """macOS ships bash 3.2 (the pull tests also run pull.sh with a real bash 3.2)."""
     text = (DEPLOY / "mac" / script).read_text()
-    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    code = without_comments(text)
     for pattern, feature in BASH4_ONLY:
         assert not re.search(pattern, code), f"{script} uses {feature}"
     assert text.startswith("#!/bin/bash\n")
 
 
+@pytest.mark.parametrize("script", MAC_SCRIPTS)
+def test_mac_scripts_do_not_pipe_into_head_or_grep_q(script: str) -> None:
+    """head and grep -q / -m stop reading early; the writer then dies of SIGPIPE, and pipefail
+    ends the script without a message (the installer did that after printing the rsync version)."""
+    code = without_comments((DEPLOY / "mac" / script).read_text())
+    early = re.search(
+        r"\|\s*(head\b|grep\b[^|\n]*\s(-[a-zA-Z]*[qm]|--quiet|--silent|--max-count))", code
+    )
+    assert not early, f"{script} pipes into a reader that stops early: {early.group(0)}"
+
+
 def test_mac_scripts_parse_with_bash32(mac_bash: str) -> None:
-    for script in ("pull.sh", "install-backup-pull.sh"):
+    for script in MAC_SCRIPTS:
         run([mac_bash, "-n", DEPLOY / "mac" / script])
 
 
