@@ -142,5 +142,9 @@ A meal on a draft that was deleted or stopped being visible to the list's owner.
 _Avoid_: orphaned meal, removed meal
 
 **Recurring item**:
-An ingredient a user, or a couple together, buys again and again (toilet paper, toothpaste). It becomes **due** once its interval has passed since it was last bought, and is suggested on drafts until it is bought again.
+An ingredient that a user, or a couple together, buys again and again at a roughly steady interval (toilet paper, toothpaste).
 _Avoid_: staple, pantry item, regular item
+
+**Due** (recurring item):
+The state of a recurring item whose interval has passed since it was last bought, until it is bought again.
+_Avoid_: overdue, expired
