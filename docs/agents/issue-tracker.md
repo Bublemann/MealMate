@@ -52,4 +52,4 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 
 The skills' `.out-of-scope/` knowledge base is, in this repo, the closed issues labelled `wontfix`. For the prior-rejection check, search them (`gh issue list --state closed --label wontfix --search "<terms>"`). A rejected enhancement gets the `wontfix` label and is closed with `--reason "not planned"` and a comment giving the reason, which is its record.
 
-A request that matches an idea in §6 "Postponed / future ideas" of `docs/requirements.md` is postponed, not rejected: point to the §6 row.
+A request that matches an idea in §6 "Postponed / future ideas" of `docs/requirements.md` was postponed, not rejected: name the §6 row in the recommendation, like a prior rejection, and let the maintainer decide.
