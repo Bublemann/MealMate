@@ -179,8 +179,8 @@ export function useList(id: string) {
 
 /**
  * List `id` as another screen names it, e.g. the meal form's back link (D-46): the cached list or
- * the local copy as it is, else loaded once. Unlike `useList` it is never loaded again while that
- * screen shows. An empty id loads nothing.
+ * the local copy as it is, else loaded once. Unlike `useList` it isn't polled, nor loaded again
+ * on its own while that screen shows. An empty id loads nothing.
  */
 export function useListOnce(id: string) {
   return useQuery({ ...useListQuery(id), staleTime: Infinity, enabled: id !== '' });
