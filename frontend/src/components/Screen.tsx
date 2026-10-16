@@ -6,16 +6,16 @@ interface ScreenProps {
   title: string;
   testId: TestId;
   /**
-   * `pinned` for Lists, Meals and Ingredients: their pinned block shows the headline as its first
-   * element, so it stays put with the block (D-44). Otherwise the headline sits above the content
-   * and scrolls with it: on the detail screens and the Settings tab.
+   * Where the headline sits. `scrolling` (the default): above the content, scrolling with it, as
+   * on the Settings tab and the detail screens. `pinned` for Lists, Meals and Ingredients: their
+   * pinned block shows it as its first element, so it stays put with the block (D-44).
    */
-  variant?: 'pinned' | 'detail';
+  variant?: 'scrolling' | 'pinned';
   children: ReactNode;
 }
 
 /** A top-level screen: one <h1> and its content, labelled for assistive technology. */
-export function Screen({ title, testId, variant = 'detail', children }: ScreenProps) {
+export function Screen({ title, testId, variant = 'scrolling', children }: ScreenProps) {
   const headingId = useId();
   const heading = useMemo(() => ({ id: headingId, title }), [headingId, title]);
 

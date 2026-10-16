@@ -131,8 +131,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   translation per tab (`nav.*`, D-44): "Einkaufslisten", "Gerichte", "Zutaten", "Einstellungen".
   Every screen shows its headline as its one level-1 heading, which labels the screen's section
   (`Screen`): on Lists, Meals and Ingredients as the first element of the pinned block
-  (`<Screen variant="pinned">`), elsewhere above the content, scrolling with it (the Settings tab
-  and the detail screens). The Settings tab keeps the address `/me` and the test IDs `tabMe` and
+  (`<Screen variant="pinned">`), elsewhere above the content, scrolling with it (the default
+  `scrolling` variant: the Settings tab and the detail screens). The Settings tab keeps the address `/me` and the test IDs `tabMe` and
   `screenMe` from when it was called "Me". The frosted look is
   the `frosted` utility (`index.css`) with the `--frosted*` tokens; the bar's size and position
   are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it leaves room
