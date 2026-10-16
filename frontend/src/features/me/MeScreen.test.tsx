@@ -90,9 +90,9 @@ describe('MeScreen', () => {
 
     await user.selectOptions(select, 'Deutsch');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Profil' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Sprache' })).toHaveValue('de');
-    expect(screen.getByTestId(testIds.tabLists)).toHaveTextContent('Listen');
+    expect(screen.getByTestId(testIds.tabLists)).toHaveTextContent('Einkaufslisten');
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('de');
     expect(document.documentElement.lang).toBe('de');
     await waitFor(() => expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(1));
@@ -103,7 +103,7 @@ describe('MeScreen', () => {
     await waitFor(() => expect(screen.getByTestId(testIds.languageSelect)).toBeEnabled());
     await user.selectOptions(screen.getByTestId(testIds.languageSelect), 'English');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Me' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('en');
   });
 
@@ -111,7 +111,7 @@ describe('MeScreen', () => {
     mockApi({ 'GET /api/me': { ...TEST_USER, language: 'de' } });
     renderApp('/me');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Profil' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
   });
 
   it('changes the display name and shows field errors', async () => {
