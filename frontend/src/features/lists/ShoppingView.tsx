@@ -265,6 +265,9 @@ interface CheckRowProps extends RowProps {
  * through and shows who checked it. A line with an extra item has a button to change or remove
  * the item (editors, LIST-12). A line whose change hasn't been sent yet is faded and says so
  * (SYNC-07).
+ *
+ * The box, the name and the marker share a middle line. Where badges or the pending note stack
+ * under the name, that line is the name's first one and the rest of the row hangs below it.
  */
 function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const { t } = useTranslation();
@@ -273,39 +276,52 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const more = line.needs_more ? needsMoreTexts(t, language, line.needs_more) : [];
   const checkedBy = line.checked ? line.checked_by : null;
   const extraId = line.sources.find((source) => source.kind === 'extra')?.extra_id ?? null;
+  const stacked = line.pending || line.new || more.length > 0;
 
   return (
     <li
       data-testid={testIds.shoppingLine}
-      className={cn('flex items-center', line.pending && 'bg-muted/50')}
+      className={cn(
+        'flex',
+        stacked ? 'items-start' : 'items-center',
+        line.pending && 'bg-muted/50',
+      )}
     >
+      {/*
+       * The box and the marker count as one line high and overflow it, so a stacked row lines them
+       * up with the name's first line, and its top padding makes room for the box. The minimum
+       * height keeps the box's own height plus padding, as for a row without badges.
+       */}
       <label
         className={cn(
-          'flex min-h-14 min-w-0 flex-1 items-center gap-3 py-1.5 pr-4 pl-1.5',
+          'flex min-h-[calc(var(--tap-target)+0.75rem)] min-w-0 flex-1 gap-3 py-1.5 pr-4 pl-1.5',
+          stacked ? 'items-start pt-[calc((var(--tap-target)-1lh)/2)]' : 'items-center',
           editable && 'cursor-pointer hover:bg-accent/50',
         )}
       >
-        <span className="relative flex size-(--tap-target) shrink-0 items-center justify-center">
-          <input
-            ref={box(line.key)}
-            type="checkbox"
-            aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
-              name: lineLabel(line),
-            })}
-            checked={line.checked}
-            disabled={!editable}
-            onChange={(event) => onCheck(line, event.target.checked)}
-            className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
-          />
-          <span
-            aria-hidden="true"
-            className={cn(
-              'flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60',
-              // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
-              line.pending && 'opacity-50 peer-checked:opacity-50',
-            )}
-          >
-            {line.checked && <Check className="size-6" strokeWidth={3} />}
+        <span className="flex h-[1lh] shrink-0 items-center">
+          <span className="relative flex size-(--tap-target) items-center justify-center">
+            <input
+              ref={box(line.key)}
+              type="checkbox"
+              aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
+                name: lineLabel(line),
+              })}
+              checked={line.checked}
+              disabled={!editable}
+              onChange={(event) => onCheck(line, event.target.checked)}
+              className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
+            />
+            <span
+              aria-hidden="true"
+              className={cn(
+                'flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60',
+                // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
+                line.pending && 'opacity-50 peer-checked:opacity-50',
+              )}
+            >
+              {line.checked && <Check className="size-6" strokeWidth={3} />}
+            </span>
           </span>
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -356,7 +372,9 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
         </span>
         {checkedBy && (
           <>
-            <InitialMarker user={checkedBy} decorative testId={testIds.lineCheckedBy} />
+            <span className="flex h-[1lh] shrink-0 items-center">
+              <InitialMarker user={checkedBy} decorative testId={testIds.lineCheckedBy} />
+            </span>
             <span className="sr-only">
               {t('lists.shop.checkedBy', { name: userLabel(t, checkedBy) })}
             </span>
