@@ -1,8 +1,8 @@
 """Draft lists: build a list from meals and extra items (QA-04 journey 6), partners, copies.
 
-LIST-01..08, LIST-14, AGG, CPL-02/03, VIS-03/06 (plan § 12, M5a). All tests of a run share one
-database, so names get a unique tag, and the category order is read from the app (another test
-reorders the categories).
+LIST-01..08, AGG, CPL-02/03, VIS-03/06 (plan § 12, M5a). All tests of a run share one database, so
+names get a unique tag, and the category order is read from the app (another test reorders the
+categories).
 """
 
 import re
@@ -111,7 +111,6 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     expect(lines.get_by_role("heading", level=3)).to_have_text(
         category_names(api, anna, {"fruit_vegetables", "baking", "sauces_spices_oils"})
     )
-    expect(page.get_by_test_id(TEST_IDS["listReminder"])).to_be_visible()
 
     # A linked extra item merges with the flour of the meals: 550 g + 450 g = 1 kg (LIST-06).
     form = page.get_by_role("form", name=text("lists.extra.label"))

@@ -22,9 +22,8 @@ import { testIds } from '@/testIds';
 import { shoppingOps, stampOp } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { ExtraItemInput } from './ExtraItemInput';
-import { groupByCategory, lineAmount, lineLabel, needsMoreTexts, reminderText } from './format';
+import { groupByCategory, lineAmount, lineLabel, needsMoreTexts } from './format';
 import { ListMeals } from './ListMeals';
-import { Reminder } from './Reminder';
 
 interface ShoppingViewProps {
   /** The list with the user's waiting changes applied. */
@@ -161,7 +160,6 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
             {t('lists.shop.finish')}
           </Button>
         )}
-        <Reminder seed={list.reminder_seed} />
       </section>
       {editable && <ExtraItemInput listId={list.id} shopping />}
       <ListMeals list={list} editable={editable} collapsible onAddMeals={onAddMeals} />
@@ -390,9 +388,9 @@ interface FinishDialogProps {
 }
 
 /**
- * SHOP-04: the reminder, how many items aren't checked, then *Finish* or *Keep shopping*. *Finish*
- * is an op of the outbox, stamped at the tap (the list counts as finished then), so it works
- * offline too (SYNC-03); the view shows the done list at once.
+ * SHOP-04: how many items aren't checked, then *Finish* or *Keep shopping*. *Finish* is an op of
+ * the outbox, stamped at the tap (the list counts as finished then), so it works offline too
+ * (SYNC-03); the view shows the done list at once.
  */
 function FinishDialog({
   list,
@@ -424,10 +422,6 @@ function FinishDialog({
         {unchecked > 0 && (
           <p className="font-semibold">{t('lists.shop.unchecked', { count: unchecked })}</p>
         )}
-        <p className="rounded-xl bg-accent px-4 py-3 text-accent-foreground">
-          <span className="sr-only">{t('lists.reminderLabel')}: </span>
-          {reminderText(t, list.reminder_seed)}
-        </p>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('lists.shop.keepShopping')}

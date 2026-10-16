@@ -2,13 +2,10 @@ import type { TFunction } from 'i18next';
 import type { Category } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import type { ListDetail } from './api';
-import { groupByCategory, lineAmount, lineLabel, listDisplayName, reminderText } from './format';
+import { groupByCategory, lineAmount, lineLabel, listDisplayName } from './format';
 
 /** What the export needs of a list: exactly what the list view already loaded. */
-export type ExportableList = Pick<
-  ListDetail,
-  'name' | 'created_at' | 'status' | 'reminder_seed' | 'meals' | 'lines'
->;
+export type ExportableList = Pick<ListDetail, 'name' | 'created_at' | 'status' | 'meals' | 'lines'>;
 
 type ExportLine = ExportableList['lines'][number];
 
@@ -21,11 +18,11 @@ interface ExportOptions {
 
 /**
  * The list as plain text for the share sheet (EXP-02), in the exporting user's language and
- * number format: name and date, the meals with their servings, the lines grouped by category in
- * the list's order (removed lines left out), then the reminder. Within a category the lines still
- * to buy come first, then the checked ones marked "✓"; on a done list the lines that weren't
- * bought say so, as plain text can't be greyed out (SHOP-05). Built synchronously from loaded
- * data, so the share button can call `navigator.share` within the tap (plan § 8).
+ * number format: name and date, the meals with their servings, then the lines grouped by category
+ * in the list's order (removed lines left out). Within a category the lines still to buy come
+ * first, then the checked ones marked "✓"; on a done list the lines that weren't bought say so, as
+ * plain text can't be greyed out (SHOP-05). Built synchronously from loaded data, so the share
+ * button can call `navigator.share` within the tap (plan § 8).
  */
 export function exportText(list: ExportableList, { t, language, categories }: ExportOptions) {
   const blocks: string[] = [listDisplayName(list, t, language)];
@@ -61,6 +58,5 @@ export function exportText(list: ExportableList, { t, language, categories }: Ex
     );
   }
 
-  blocks.push(reminderText(t, list.reminder_seed));
   return blocks.join('\n\n');
 }

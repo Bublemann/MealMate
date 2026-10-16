@@ -26,7 +26,6 @@ import {
 } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { groupByCategory, lineAmount, lineLabel, sourceAmount } from './format';
-import { Reminder } from './Reminder';
 
 interface ListLinesProps {
   list: ListDetail;
@@ -40,8 +39,7 @@ interface ListLinesProps {
  * The aggregated lines under their category headings, in the order the server sorted them
  * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be hidden for
  * this list by swiping it to the left (D-40) or with the button in that dialog, and comes back
- * from the collapsed "Hidden" section (LIST-07). The reminder is the last row (LIST-14). Offline
- * these changes are disabled (SYNC-03).
+ * from the collapsed "Hidden" section (LIST-07). Offline these changes are disabled (SYNC-03).
  */
 export function ListLines({ list, categories, editable }: ListLinesProps) {
   const { t } = useTranslation();
@@ -95,7 +93,6 @@ export function ListLines({ list, categories, editable }: ListLinesProps) {
           onRestore={(line) => hide(line, false)}
         />
       )}
-      <Reminder seed={list.reminder_seed} />
       <SourcesDialog
         listId={list.id}
         line={open}

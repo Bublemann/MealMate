@@ -8,6 +8,7 @@ import {
   checkedBy,
   doneList,
   FLOUR_EXTRA_ID,
+  FORMER_REMINDER,
   line,
   LIST_ID,
   LIST_ROUTES,
@@ -146,7 +147,8 @@ describe('shopping view (SHOP-01)', () => {
     const meals = screen.getByTestId(testIds.shoppingMeals);
     expect(within(meals).getByText('Meals (3)')).toBeVisible();
     expect(meals).not.toHaveAttribute('open');
-    expect(screen.getByTestId(testIds.listReminder)).toHaveTextContent('Toilet paper');
+    // No reminder (D-43).
+    expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
   });
 
   it('names each brand of the same thing on its own line', async () => {
@@ -783,14 +785,14 @@ describe('offline (SYNC-03)', () => {
 });
 
 describe('finish (SHOP-04)', () => {
-  it('asks with the reminder and the unchecked count, and keeps shopping', async () => {
+  it('asks with the unchecked count, without a reminder, and keeps shopping', async () => {
     const { user, fetchMock } = renderList();
 
     await user.click(await screen.findByTestId(testIds.finishShopping));
 
     const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
     expect(dialog).toHaveTextContent('3 items not checked');
-    expect(dialog).toHaveTextContent("Reminder: Didn't forget anything? Toilet paper? Salt?");
+    expect(dialog).not.toHaveTextContent(FORMER_REMINDER);
     await user.click(within(dialog).getByRole('button', { name: 'Keep shopping' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(0);
@@ -1042,6 +1044,7 @@ describe('done list (SHOP-05/06)', () => {
     expect(milk).toHaveTextContent('(bought)');
     expect(milk).not.toHaveClass('text-muted-foreground');
     expect(within(lines).queryByText('Eier')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.renameList)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();

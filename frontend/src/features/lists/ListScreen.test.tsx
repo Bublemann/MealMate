@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BEN, CARL, errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import {
   emptyList,
+  FORMER_REMINDER,
   LIST_ID,
   LIST_ROUTES,
   listDetail,
@@ -109,11 +110,9 @@ describe('ListScreen', () => {
       'Salz',
     ]);
     expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
-    // Hidden lines are collapsed below (LIST-07), the reminder is the last row (LIST-14).
+    // Hidden lines are collapsed below (LIST-07); no reminder follows them (D-43).
     expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Hidden (1)');
-    expect(screen.getByTestId(testIds.listReminder)).toHaveTextContent(
-      "Reminder: Didn't forget anything? Toilet paper? Salt?",
-    );
+    expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
   });
 
   it('shows the German formats and texts', async () => {
@@ -1250,7 +1249,8 @@ describe('ListScreen', () => {
       );
       expect(text).toContain('Dairy & eggs\n- Milch: 1.5 l');
       expect(text).not.toContain('Eier');
-      expect(text.endsWith("Didn't forget anything? Toilet paper? Salt?")).toBe(true);
+      // It ends with the lines (D-43).
+      expect(text.endsWith('- Mehl: 850 g\n- Salz')).toBe(true);
     });
 
     it('copies the text where there is no share sheet', async () => {
@@ -1283,7 +1283,7 @@ describe('ListScreen', () => {
       await screen.findByText('No meals yet. Add some and the shopping list below fills itself.'),
     ).toBeVisible();
     expect(screen.getByText('Nothing to buy yet.')).toBeVisible();
-    expect(screen.getByTestId(testIds.listReminder)).toHaveTextContent('Got your shopping bags?');
+    expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
     expect(screen.queryByTestId(testIds.hiddenLines)).not.toBeInTheDocument();
     // Only a list opened from "+ New list" starts with the picker.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
