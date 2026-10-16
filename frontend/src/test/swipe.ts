@@ -7,7 +7,6 @@ interface SwipeOptions {
   /** How far it drifts down meanwhile (px). */
   dy?: number;
   pointerType?: 'touch' | 'pen' | 'mouse';
-  pointerId?: number;
   /** Lets go with `pointercancel`, as when the browser takes over to scroll. */
   cancel?: boolean;
 }
@@ -19,10 +18,10 @@ interface SwipeOptions {
  */
 export function swipe(
   element: Element,
-  { from, to, dy = 2, pointerType = 'touch', pointerId = 1, cancel = false }: SwipeOptions,
+  { from, to, dy = 2, pointerType = 'touch', cancel = false }: SwipeOptions,
 ) {
   const y = 10;
-  const pointer = { pointerId, pointerType, isPrimary: true };
+  const pointer = { pointerId: 1, pointerType, isPrimary: true };
   fireEvent.pointerDown(element, { ...pointer, clientX: from, clientY: y });
   const steps = 4;
   for (let step = 1; step <= steps; step++) {

@@ -17,8 +17,16 @@ const SLOP = 8;
 const OPEN_SHARE = 0.75;
 /** Let go past this much of the row's width, the action happens at once (a full swipe). */
 const FULL_SHARE = 0.5;
-/** The action's width in rem (`w-24`): it grows with the text size, icon above its label. */
+/** The action's width in rem: it grows with the text size, its icon above its label. */
 const ACTION_WIDTH_REM = 6;
+/** A rem in px where nothing is laid out (tests), the browsers' default. */
+const DEFAULT_REM_PX = 16;
+/**
+ * How long (ms) after letting go a click still belongs to the gesture: a browser may send one
+ * after a short swipe or a tap, and it is swallowed. A later click (a keyboard, switch control)
+ * goes through.
+ */
+const CLICK_AFTER_GESTURE_MS = 500;
 
 // The one open row on the screen: opening a row, or starting to swipe one, closes the other.
 let openRow: string | null = null;
@@ -30,13 +38,18 @@ function setOpenRow(row: string | null) {
   for (const listener of listeners) listener();
 }
 
+/** Closes `row` if it is the open one. */
+function closeRow(row: string) {
+  if (openRow === row) setOpenRow(null);
+}
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
 /** The one action a swipe reveals at the row's right edge. */
-export interface SwipeAction {
+interface SwipeAction {
   /** Its visible text, e.g. "Remove". */
   label: string;
   icon: LucideIcon;
@@ -58,7 +71,9 @@ interface Gesture {
   x: number;
   y: number;
   /** Where the content was when the finger went down (px, ≤ 0). */
-  from: number;
+  startOffset: number;
+  rowWidth: number;
+  actionWidth: number;
   /** Moved sideways past the slop: a swipe, not a tap or scrolling. */
   swiping: boolean;
 }
@@ -66,9 +81,14 @@ interface Gesture {
 interface Drag {
   /** Where the content is (px, ≤ 0). */
   offset: number;
-  actionWidth: number;
   /** Past the full-swipe point: letting go acts at once. */
   full: boolean;
+}
+
+/** The action's width in px, in the current text size. */
+function actionWidthPx() {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || DEFAULT_REM_PX;
+  return ACTION_WIDTH_REM * rem;
 }
 
 /**
@@ -88,24 +108,24 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
   const open = useSyncExternalStore(subscribe, () => openRow === id);
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
-  // The click that follows a swipe, or a tap on the open row, is swallowed.
-  const swiped = useRef(false);
+  // The pointer went down on this row while it was open: letting go closes it.
   const tappedOpen = useRef(false);
+  // Until when (event time) a click on the content belongs to the last gesture.
+  const swallowClickUntil = useRef(0);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [openWidth, setOpenWidth] = useState(ACTION_WIDTH_REM * 16);
-  const offset = drag?.offset ?? (open ? -openWidth : 0);
-  const actionWidth = drag?.actionWidth ?? openWidth;
+  const [actionWidth, setActionWidth] = useState(ACTION_WIDTH_REM * DEFAULT_REM_PX);
+  const offset = drag?.offset ?? (open ? -actionWidth : 0);
+
+  function act() {
+    setOpenRow(null);
+    action.onAction();
+  }
 
   // Offline, or the row is gone: it can't stay open.
   useEffect(() => {
-    if (disabled && openRow === id) setOpenRow(null);
+    if (disabled) closeRow(id);
   }, [disabled, id]);
-  useEffect(
-    () => () => {
-      if (openRow === id) setOpenRow(null);
-    },
-    [id],
-  );
+  useEffect(() => () => closeRow(id), [id]);
 
   // A tap elsewhere closes the open row.
   useEffect(() => {
@@ -118,32 +138,28 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [open]);
 
-  /** The row's and the action's width in px; without a layout (tests), the window's and 16 px. */
-  function measure() {
-    const rowWidth = root.current?.offsetWidth || window.innerWidth;
-    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    return { rowWidth, actionWidth: ACTION_WIDTH_REM * rem };
-  }
-
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    swiped.current = false;
     tappedOpen.current = open;
+    swallowClickUntil.current = 0;
     gesture.current = null;
     if (disabled || event.pointerType === 'mouse' || !event.isPrimary) return;
+    const width = actionWidthPx();
     gesture.current = {
       pointer: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      from: offset,
+      startOffset: open ? -width : 0,
+      rowWidth: root.current?.offsetWidth || window.innerWidth,
+      actionWidth: width,
       swiping: false,
     };
   }
 
-  /** Where the content would be for the pointer at `clientX`, and what letting go there does. */
+  /** Where the content is for the pointer at `clientX`, and whether letting go there acts. */
   function dragTo(current: Gesture, clientX: number): Drag {
-    const { rowWidth, actionWidth: width } = measure();
-    const position = Math.min(0, Math.max(-rowWidth, current.from + clientX - current.x));
-    return { offset: position, actionWidth: width, full: -position >= rowWidth * FULL_SHARE };
+    const position = current.startOffset + clientX - current.x;
+    const clamped = Math.min(0, Math.max(-current.rowWidth, position));
+    return { offset: clamped, full: -clamped >= current.rowWidth * FULL_SHARE };
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -159,47 +175,43 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
         return;
       }
       current.swiping = true;
-      swiped.current = true;
+      setActionWidth(current.actionWidth);
       setOpenRow(id);
     }
     setDrag(dragTo(current, event.clientX));
   }
 
   function onPointerUp(event: PointerEvent<HTMLDivElement>) {
-    const current = gesture.current;
-    if (!current || current.pointer !== event.pointerId) return;
+    const current = gesture.current?.pointer === event.pointerId ? gesture.current : null;
     gesture.current = null;
-    if (!current.swiping) return;
-    const end = dragTo(current, event.clientX);
-    setDrag(null);
-    if (end.full) {
-      setOpenRow(null);
-      action.onAction();
-    } else if (-end.offset >= end.actionWidth * OPEN_SHARE) {
-      setOpenWidth(end.actionWidth);
-      setOpenRow(id);
-    } else {
-      setOpenRow(null);
+    if (current?.swiping) {
+      swallowClickUntil.current = event.timeStamp + CLICK_AFTER_GESTURE_MS;
+      const end = dragTo(current, event.clientX);
+      setDrag(null);
+      if (end.full) act();
+      else if (-end.offset >= current.actionWidth * OPEN_SHARE) setOpenRow(id);
+      else setOpenRow(null);
+    } else if (tappedOpen.current) {
+      // A tap on the open row only closes it.
+      swallowClickUntil.current = event.timeStamp + CLICK_AFTER_GESTURE_MS;
+      closeRow(id);
     }
+    tappedOpen.current = false;
   }
 
   function onPointerCancel() {
     // The browser took over, e.g. to scroll: like iOS, scrolling closes the row. No click follows.
     gesture.current = null;
-    swiped.current = false;
     tappedOpen.current = false;
     setDrag(null);
-    if (openRow === id) setOpenRow(null);
+    closeRow(id);
   }
 
   function onClickCapture(event: MouseEvent<HTMLDivElement>) {
-    if (!swiped.current && !tappedOpen.current) return;
+    if (event.timeStamp > swallowClickUntil.current) return;
+    swallowClickUntil.current = 0;
     event.preventDefault();
     event.stopPropagation();
-    // A tap on the open row only closes it; where a swipe left the row, it decided already.
-    if (!swiped.current) setOpenRow(null);
-    swiped.current = false;
-    tappedOpen.current = false;
   }
 
   const revealed = -offset;
@@ -227,11 +239,9 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
             <button
               type="button"
               tabIndex={-1}
-              onClick={() => {
-                setOpenRow(null);
-                action.onAction();
-              }}
-              className="flex w-24 shrink-0 flex-col items-center justify-center gap-1 px-1 text-xs font-medium break-words outline-none"
+              onClick={act}
+              className="flex shrink-0 flex-col items-center justify-center gap-1 px-1 text-xs font-medium break-words outline-none"
+              style={{ width: `${ACTION_WIDTH_REM}rem` }}
             >
               <Icon aria-hidden="true" className="size-5 shrink-0" />
               {action.label}

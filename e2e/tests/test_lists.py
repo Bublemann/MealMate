@@ -100,7 +100,8 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     for meal, servings in ((tart, 4), (bread, 2)):
         group = meals.get_by_role("group", name=text("lists.meals.servingsOf", name=meal["name"]))
         # The compact stepper shows the number; screen readers read "4 servings" (LIST-04).
-        expect(group.get_by_text(f"{servings} servings", exact=True)).to_have_count(1)
+        read_as = text("lists.meals.servings_other", count=str(servings))
+        expect(group.get_by_text(read_as, exact=True)).to_have_count(1)
 
     # Flour: 200 g x 4/2 + 300 g x 2/4 = 400 g + 150 g = 550 g. Onions: 1 x 4/2 = 2 pieces.
     # Oil: 2 tbsp x 2/4 = 1 tbsp (a line of spoons only stays in tbsp, AGG-04).
@@ -169,7 +170,8 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     # Meal A down to 3 servings with the compact stepper: flour 200 g x 3/2 + 150 g + 450 g.
     group = meals.get_by_role("group", name=text("lists.meals.servingsOf", name=tart["name"]))
     group.get_by_role("button", name=text("lists.meals.fewer", name=tart["name"])).click()
-    expect(group.get_by_text("3 servings", exact=True)).to_have_count(1)
+    read_as = text("lists.meals.servings_other", count="3")
+    expect(group.get_by_text(read_as, exact=True)).to_have_count(1)
     expect(line(page, flour["name"])).to_contain_text("900 g")
 
     # Without swiping (no swipe gestures here), meal B goes with its "Remove", which shows on

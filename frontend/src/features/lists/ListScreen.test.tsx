@@ -1,7 +1,16 @@
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BEN, CARL, errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import {
+  BEN,
+  CARL,
+  errorResponse,
+  goOffline,
+  heldRoute,
+  mockApi,
+  requestsTo,
+  TEST_USER,
+} from '@/test/api';
 import {
   emptyList,
   FORMER_REMINDER,
@@ -43,15 +52,6 @@ function lineTexts(container: HTMLElement) {
   return within(container)
     .getAllByTestId(testIds.listLine)
     .map((line) => line.textContent);
-}
-
-/** No signal: requests fail and the browser says it is offline (SYNC-03). */
-function goOffline(fetchMock: ReturnType<typeof mockApi>) {
-  fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
-  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-  act(() => {
-    window.dispatchEvent(new Event('offline'));
-  });
 }
 
 afterEach(() => {
@@ -401,6 +401,23 @@ describe('ListScreen', () => {
         tap(link);
         expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
         expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`);
+      });
+
+      it('lets a later click through, e.g. from a keyboard, after a swipe', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { fetchMock } = renderList({ [`PATCH ${BASE}/meals/lm-pancakes`]: listDetail() });
+        await screen.findByTestId(testIds.listMeals);
+        const row = mealRow('Pfannkuchen');
+
+        // No click follows this short swipe, as on a phone.
+        swipe(within(row).getByRole('link'), { from: 600, to: 580 });
+        vi.advanceTimersByTime(1000);
+        fireEvent.click(within(row).getByRole('button', { name: 'More servings of Pfannkuchen' }));
+
+        await waitFor(() =>
+          expect(requestsTo(fetchMock, `PATCH ${BASE}/meals/lm-pancakes`)).toHaveLength(1),
+        );
+        vi.useRealTimers();
       });
 
       it('keeps one row open at a time, and closes it on a tap elsewhere', async () => {
@@ -825,7 +842,10 @@ describe('ListScreen', () => {
       }
 
       function hideAction() {
-        return within(milk().closest('li')!).queryByRole('button', { name: 'Hide', hidden: true });
+        const row = within(screen.getByTestId(testIds.listLines))
+          .getAllByTestId(testIds.listLine)
+          .find((line) => within(line).queryByRole('button', { name: /^Milch/ }));
+        return within(row!).queryByRole('button', { name: 'Hide', hidden: true });
       }
 
       it('reveals a "Hide" that hides the line, without opening its sources', async () => {
@@ -854,11 +874,13 @@ describe('ListScreen', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       });
 
-      it('keeps a line that was swiped only a little, and ignores the mouse', async () => {
+      it('keeps a line that was swiped only a little or scrolled past, and ignores the mouse', async () => {
         const { fetchMock } = renderList({ [HIDE]: milkHidden });
         await screen.findByTestId(testIds.listLines);
 
         swipe(milk(), { from: 600, to: 560 });
+        expect(hideAction()).not.toBeInTheDocument();
+        swipe(milk(), { from: 600, to: 450, dy: 200 });
         expect(hideAction()).not.toBeInTheDocument();
         swipe(milk(), { from: 900, to: 300, pointerType: 'mouse' });
         expect(hideAction()).not.toBeInTheDocument();

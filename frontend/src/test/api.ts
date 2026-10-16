@@ -144,6 +144,18 @@ export function heldRoute() {
   return { route, answer };
 }
 
+/**
+ * No signal (SYNC-03): every request of `fetchMock` fails, the browser says it is offline and
+ * fires `offline`.
+ */
+export function goOffline(fetchMock: ReturnType<typeof mockApi>) {
+  fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  act(() => {
+    window.dispatchEvent(new Event('offline'));
+  });
+}
+
 interface NodeProcess {
   getBuiltinModule(id: 'node:buffer'): { File: typeof File };
 }

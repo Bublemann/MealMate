@@ -438,7 +438,8 @@ ingredient in the picker and links to it elsewhere. "More results" loads the nex
 `renderApp(path)` renders the whole app signed in as `TEST_USER`; pass `{ user: TEST_ADMIN }` or
 `{ user: null }` (signed out, runs the start-up refresh). `mockApi({ 'METHOD /path': answer })` from
 `src/test/api.ts` stubs `fetch` with defaults for the signed-in shell; unknown routes answer 404.
-`requestsTo(fetchMock, 'POST /api/…')` returns the requests sent, e.g. to check their JSON body. A test
+`requestsTo(fetchMock, 'POST /api/…')` returns the requests sent, e.g. to check their JSON body, and
+`goOffline(fetchMock)` takes the connection away (requests fail, the browser says offline). A test
 that uploads a file uses `nodeFormClasses()` (Node's FormData and File; jsdom's can't be sent
 through Node's `Request`).
 

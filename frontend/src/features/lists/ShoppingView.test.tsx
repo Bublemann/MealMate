@@ -2,7 +2,7 @@ import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { BEN, errorResponse, mockApi, requestsTo } from '@/test/api';
+import { BEN, errorResponse, goOffline, mockApi, requestsTo } from '@/test/api';
 import {
   CANDLES_EXTRA_ID,
   checkedBy,
@@ -379,6 +379,7 @@ describe('shopping view (SHOP-01)', () => {
     const { fetchMock, user } = renderList({
       [`DELETE ${BASE}/meals/lm-pancakes`]: shoppingList({ meals: [PRIVATE_MEAL, DETACHED_MEAL] }),
       [`DELETE ${BASE}/meals/lm-detached`]: shoppingList({ meals: [PRIVATE_MEAL] }),
+      [`DELETE ${BASE}/meals/lm-private`]: shoppingList({ meals: [] }),
     });
     const meals = await screen.findByTestId(testIds.shoppingMeals);
     await user.click(within(meals).getByText('Meals (3)'));
@@ -395,6 +396,11 @@ describe('shopping view (SHOP-01)', () => {
     ).toBeVisible();
     await user.click(within(detached).getByTestId(testIds.removeListMeal));
     await waitFor(() => expect(within(meals).getByText('Meals (1)')).toBeVisible());
+    // A full swipe removes at once.
+    const other = within(meals).getByRole('listitem', { name: 'Private meal (3 servings)' });
+    swipe(within(other).getByText('Private meal (3 servings)'), { from: 900, to: 300 });
+    await waitFor(() => expect(within(meals).getByText('Meals (0)')).toBeVisible());
+    expect(requestsTo(fetchMock, `DELETE ${BASE}/meals/lm-private`)).toHaveLength(1);
   });
 
   it('is read-only for someone who may not change the list', async () => {
@@ -631,14 +637,6 @@ describe('extra items while shopping (LIST-12)', () => {
 });
 
 describe('offline (SYNC-03)', () => {
-  function goOffline(fetchMock: ReturnType<typeof mockApi>) {
-    fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
-    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-    act(() => {
-      window.dispatchEvent(new Event('offline'));
-    });
-  }
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
