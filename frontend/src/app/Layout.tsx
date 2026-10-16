@@ -1,4 +1,4 @@
-import { CircleUserRound, CookingPot, Carrot, ListChecks, type LucideIcon } from 'lucide-react';
+import { CookingPot, Carrot, ListChecks, Settings, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
 import { SyncBanners } from '@/features/sync/SyncBanners';
@@ -20,7 +20,8 @@ const TABS: readonly Tab[] = [
   { to: '/lists', label: 'nav.lists', icon: ListChecks, testId: testIds.tabLists },
   { to: '/meals', label: 'nav.meals', icon: CookingPot, testId: testIds.tabMeals },
   { to: '/ingredients', label: 'nav.ingredients', icon: Carrot, testId: testIds.tabIngredients },
-  { to: '/me', label: 'nav.me', icon: CircleUserRound, testId: testIds.tabMe },
+  // The Settings tab keeps the address and test ID it had as "Me" (D-44).
+  { to: '/me', label: 'nav.me', icon: Settings, testId: testIds.tabMe },
 ];
 
 /**
