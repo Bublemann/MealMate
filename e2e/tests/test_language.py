@@ -5,11 +5,12 @@ from collections.abc import Callable
 from playwright.sync_api import BrowserContext, Page, expect
 
 from support.api import Account, Api, sign_in
-from support.frontend import TEST_IDS, translations
+from support.frontend import TEST_IDS, text, translations
 from support.ui import log_in, log_out
 
 
 def expect_language(page: Page, language: str) -> None:
+    """The page is in `language`, and so are the tab names, which are the headlines (D-44)."""
     strings = translations(language)
     expect(page.locator("html")).to_have_attribute("lang", language)
     for key, tab in [
@@ -22,7 +23,7 @@ def expect_language(page: Page, language: str) -> None:
 
 
 def switch_language(page: Page, label: str) -> None:
-    """Picks `label` in Me and waits until the server has stored it."""
+    """Picks `label` on the Settings tab and waits until the server has stored it."""
     with page.expect_response(
         lambda response: response.url.endswith("/api/me") and response.request.method == "PATCH"
     ) as saved:
@@ -44,6 +45,8 @@ def test_language_is_kept_by_the_account(
 
     switch_language(page, "Deutsch")
     expect_language(page, "de")
+    # One translation per tab: its name and its screen's headline (D-44).
+    expect(page.get_by_role("heading", level=1)).to_have_text(text("nav.me", "de"))
     page.reload()
     expect_language(page, "de")
     expect(select).to_have_value("de")

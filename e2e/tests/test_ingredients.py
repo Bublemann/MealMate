@@ -116,29 +116,40 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
 
 def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
     """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
-    wraps a long "Create …" tile instead of clipping it or widening the page, and leaves room for
-    the content below it, because its text stops growing at about the first accessibility size
-    (D-29)."""
+    wraps its headline and a long "Create …" tile instead of clipping them or widening the page,
+    and leaves room for the content below it, because its text stops growing at about the first
+    accessibility size (D-29, D-44)."""
     page = member_page
     page.goto("/ingredients")
     page.add_style_tag(content="html { font-size: 53px !important; }")
     name = f"Quittengelee mit Zimt {unique('aus dem Garten')}"
     page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(name)
 
-    tile = page.get_by_test_id(TEST_IDS["newIngredient"])
+    block = page.get_by_test_id(TEST_IDS["pinnedBlock"])
+    headline = block.get_by_role("heading", level=1, name=text("nav.ingredients"))
+    tile = block.get_by_test_id(TEST_IDS["newIngredient"])
+    expect(headline).to_be_visible()
     expect(tile).to_have_text(text("ingredients.createNamed", name=name))
     reset = page.get_by_role("button", name=text("common.resetFilters"))
     expect(reset).to_be_visible()
     viewport = page.viewport_size
     assert viewport is not None
     assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
-    assert tile.evaluate("tile => tile.scrollWidth <= tile.clientWidth")
-    box = tile.bounding_box()
+    for element in (headline, tile):
+        assert element.evaluate("element => element.scrollWidth <= element.clientWidth")
+        box = element.bounding_box()
+        assert box is not None
+        assert box["x"] + box["width"] <= viewport["width"]
+    # While the content scrolls, the block stays at the top with its headline and leaves at least
+    # a quarter of the screen for the content, which a name this long at full text size would
+    # cover.
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    assert page.evaluate("window.scrollY") > 0
+    box = block.bounding_box()
     assert box is not None
-    assert box["x"] + box["width"] <= viewport["width"]
-    # The tile is the pinned block's last row: at least a quarter of the screen stays for the
-    # content, which a name this long at full text size would cover.
-    assert box["y"] + box["height"] < viewport["height"] * 0.75
+    assert abs(box["y"]) < 1, box
+    assert box["height"] < viewport["height"] * 0.75, box
+    expect(headline).to_be_in_viewport()
 
 
 def test_member_filters_by_categories(member_page: Page, api: Api, member: Account) -> None:
