@@ -13,9 +13,22 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.core.config import Settings
+from app.db.session import Database
 from app.main import create_app
-from tests.accounts import Account, FakeClock, error, fields, login, make_couple, make_user
-from tests.catalog import create_ingredient, summary
+from app.services import demo
+from app.services.context import AuthConfig
+from tests.accounts import (
+    PUBLIC_URL,
+    Account,
+    FakeClock,
+    error,
+    fields,
+    login,
+    make_couple,
+    make_user,
+)
+from tests.catalog import category_ids, create_ingredient, summary
 from tests.recurring import (
     create_recurring,
     make_recurring,
@@ -584,3 +597,56 @@ async def test_days_are_counted_in_the_instance_time_zone(
         assert await due_today(api, anna) == (1, False, 0)
         clock.advance(minutes=1)
         assert await due_today(api, anna) == (0, True, 1)
+
+
+# --- demo data (seed-demo) ------------------------------------------------------------------
+
+
+async def test_the_demo_couple_has_two_recurring_items_one_of_them_due(
+    app: FastAPI, api: AsyncClient, make_settings: SettingsFactory, clock: FakeClock
+) -> None:
+    """seed-demo gives anna and ben's couple "Klopapier", last bought five weeks ago with a
+    four-week interval and so due, and "Zahnpasta", bought last week; carl has none."""
+    settings: Settings = make_settings(public_url=PUBLIC_URL)
+    database: Database = app.state.database
+    async with database.write_sessions() as session:
+        seed = await demo.seed_demo(
+            session,
+            AuthConfig.from_settings(settings),
+            app.state.media,
+            now=clock.now,
+            zone=settings.zone,
+        )
+    users = {
+        name: Account(id=user_id, username=name, display_name=name.capitalize())
+        for name, user_id in seed.user_ids.items()
+    }
+    for user in users.values():
+        await login(api, user, seed.password)
+    anna, ben, carl = users["anna"], users["ben"], users["carl"]
+
+    body = await recurring(api, anna)
+    household = (await category_ids(api, anna))["household_hygiene"]
+    assert [
+        (
+            item["ingredient"]["name"],
+            item["ingredient"]["category_id"] == household,
+            item["ingredient"]["base_unit"],
+            item["interval"],
+            item["last_purchased_on"],
+            item["due_on"],
+            item["days_until_due"],
+            item["due"],
+            item["last_amount"],
+        )
+        for item in body["items"]
+    ] == [
+        ("Klopapier", True, "piece", {"value": 4, "unit": "week", "automatic": True},
+         "2026-08-23", "2026-09-20", -7, True, {"value": 1, "unit": "piece"}),
+        ("Zahnpasta", True, "piece", {"value": 6, "unit": "week", "automatic": True},
+         "2026-09-20", "2026-11-01", 35, False, {"value": 2, "unit": "piece"}),
+    ]  # fmt: skip
+    assert body["due_count"] == 1
+    assert await recurring(api, ben) == body
+    assert await recurring(api, carl) == {"items": [], "due_count": 0}
+    assert await recurring(api, users["admin"]) == {"items": [], "due_count": 0}

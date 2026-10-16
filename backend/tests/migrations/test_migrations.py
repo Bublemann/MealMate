@@ -1828,7 +1828,8 @@ def test_the_downgrade_needs_unique_names(config: Config, database_path: Path) -
 
 def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`seed-demo` at head leaves a clean database with every kind of reference; going down is
-    refused at 0014 (D-34) and changes nothing. (Below 0014, see the next test.)"""
+    refused at 0015, as the demo couple has recurring items (LIST-16), and changes nothing.
+    (Below 0015, see the 0015 tests; below 0014, the next test.)"""
     data_dir = tmp_path / "data"
     path = data_dir / "mealmate.db"
     upgrade_database(data_dir)
@@ -1839,12 +1840,13 @@ def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert references["meals.copied_from_meal_id"] == 1
     assert references["list_meals.meal_id"] > 0
     assert references["list_extra_items.ingredient_id"] > 0
+    assert references["recurring_items.couple_id"] == len(demo.DEMO_RECURRING)
     assert_clean(path)
 
     command.upgrade(alembic_config(path), "head")
     assert non_null_foreign_keys(path) == references
     before = dump_without(path)
-    with pytest.raises(RuntimeError, match="cannot downgrade below 0014"):
+    with pytest.raises(RuntimeError, match="cannot downgrade below 0015"):
         command.downgrade(alembic_config(path), "base")
     assert current_revision(path) == HEAD
     assert dump_without(path) == before
