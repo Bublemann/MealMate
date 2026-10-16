@@ -341,6 +341,8 @@ async def test_security_without_events(app: FastAPI, api: AsyncClient) -> None:
         ("GET", "/api/me/sessions"),
         ("DELETE", "/api/me/sessions/x"),
         ("GET", "/api/me/security"),
+        ("GET", "/api/me/notices"),
+        ("POST", "/api/me/notices/x/dismiss"),
         ("GET", "/api/couple"),
         ("POST", "/api/couple/requests"),
         ("POST", "/api/couple/requests/x/accept"),

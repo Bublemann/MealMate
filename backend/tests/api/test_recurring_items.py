@@ -89,7 +89,7 @@ async def test_a_new_item_was_last_bought_today(
 
 
 async def test_the_set_is_sorted_by_due_date_then_by_name(api: AsyncClient, anna: Account) -> None:
-    """Due items first, the most overdue on top; items due on the same day in dictionary
+    """Due items first, the earliest due date on top; items due on the same day in dictionary
     order ("Äpfel" next to "Apfelsaft", not after "Zitronen"). An item last bought five weeks
     ago with a four-week interval is due at once."""
     for name, weeks, last_purchased_on in (
@@ -378,6 +378,18 @@ async def test_a_removed_item_is_gone(api: AsyncClient, anna: Account, toilet_pa
 # --- who sees what --------------------------------------------------------------------------
 
 
+async def test_recurring_routes_need_a_token(api: AsyncClient) -> None:
+    for method, path in (
+        ("GET", "/api/recurring-items"),
+        ("POST", "/api/recurring-items"),
+        ("PATCH", "/api/recurring-items/x"),
+        ("DELETE", "/api/recurring-items/x"),
+    ):
+        response = await api.request(method, path)
+        assert response.status_code == 401, (method, path)
+        assert error(response) == "common.unauthorized"
+
+
 async def test_another_users_item_is_not_found(
     api: AsyncClient, anna: Account, carl: Account, toilet_paper: Any
 ) -> None:
@@ -406,8 +418,8 @@ async def test_another_users_item_is_not_found(
 async def test_a_couple_shares_one_set(
     api: AsyncClient, anna: Account, ben: Account, carl: Account, toilet_paper: Any
 ) -> None:
-    """Either partner sees, changes and removes the couple's items (D-42); carl still sees
-    none of them."""
+    """Either partner sees, changes and removes the couple's items (D-42); carl neither sees
+    them nor can change or remove them (SEC-04)."""
     await make_couple(api, anna, ben)
     item = await make_recurring(api, anna, toilet_paper["id"])
     assert await recurring(api, ben) == await recurring(api, anna)
@@ -416,9 +428,16 @@ async def test_a_couple_shares_one_set(
     assert (await recurring(api, anna))["items"] == [changed]
     response = await create_recurring(api, ben, toilet_paper["id"])
     assert fields(response) == {("body", "ingredient_id"): "taken"}
-    assert (await recurring(api, carl))["items"] == []
 
     url = f"/api/recurring-items/{item['id']}"
+    assert (await recurring(api, carl))["items"] == []
+    for response in (
+        await api.patch(url, json={"interval_weeks": 1}, headers=carl.headers),
+        await api.delete(url, headers=carl.headers),
+    ):
+        assert (response.status_code, error(response)) == (404, "common.not_found")
+    assert (await recurring(api, anna))["items"] == [changed]
+
     assert (await api.delete(url, headers=ben.headers)).status_code == 204
     assert (await recurring(api, anna))["items"] == []
 
@@ -434,10 +453,11 @@ async def test_forming_a_couple_combines_both_sets(
     api: AsyncClient, anna: Account, ben: Account
 ) -> None:
     """For an ingredient both keep, the one bought more recently stays with all its values; on
-    a tie the requester's (anna's). The others move as they are."""
-    toilet_paper, toothpaste, coffee, milk = [
+    a tie the requester's (anna's), whoever made the ingredient recurring first. The others
+    move as they are."""
+    toilet_paper, toothpaste, dish_soap, coffee, milk = [
         (await create_ingredient(api, anna, name))["id"]
-        for name in ("Klopapier", "Zahnpasta", "Kaffee", "Milch")
+        for name in ("Klopapier", "Zahnpasta", "Spülmittel", "Kaffee", "Milch")
     ]
     await make_recurring(api, anna, toilet_paper, weeks=4, last_purchased_on=date(2026, 9, 1))
     later = await make_recurring(
@@ -445,6 +465,10 @@ async def test_forming_a_couple_combines_both_sets(
     )
     tie = await make_recurring(api, anna, toothpaste, weeks=6, last_purchased_on=date(2026, 9, 20))
     await make_recurring(api, ben, toothpaste, weeks=3, last_purchased_on=date(2026, 9, 20))
+    await make_recurring(api, ben, dish_soap, weeks=2, last_purchased_on=date(2026, 9, 15))
+    tie_after_ben = await make_recurring(
+        api, anna, dish_soap, weeks=5, last_purchased_on=date(2026, 9, 15)
+    )
     newer = await make_recurring(api, anna, coffee, weeks=1, last_purchased_on=date(2026, 9, 25))
     await make_recurring(api, ben, coffee, weeks=5, last_purchased_on=date(2026, 9, 24))
     only_ben = await make_recurring(api, ben, milk, weeks=1)
@@ -452,7 +476,9 @@ async def test_forming_a_couple_combines_both_sets(
     await make_couple(api, anna, ben)
 
     combined = await recurring(api, anna)
-    assert by_id(combined) == {item["id"]: item for item in (later, tie, newer, only_ben)}
+    assert by_id(combined) == {
+        item["id"]: item for item in (later, tie, tie_after_ben, newer, only_ben)
+    }
     assert await recurring(api, ben) == combined
 
 
@@ -463,13 +489,15 @@ def without_id(item: Any) -> Any:
 async def test_each_partner_keeps_a_copy_when_the_couple_ends(
     app: FastAPI, api: AsyncClient, anna: Account, ben: Account, toilet_paper: Any
 ) -> None:
-    """Each copy has all the values of the couple's item, and the two go separate ways."""
+    """Each copy has all the values of the couple's item, an interval set by hand included,
+    and the two go separate ways."""
     await make_couple(api, anna, ben)
     item = await make_recurring(api, anna, toilet_paper["id"], weeks=4)
     await store_purchases(
         app, item["id"], last_amount=2, last_unit="piece", measured_intervals=[10, 12]
     )
-    [item] = (await recurring(api, anna))["items"]
+    item = await updated(api, anna, item["id"], interval_weeks=2)
+    assert item["interval"]["automatic"] is False
 
     assert (await api.delete("/api/couple", headers=ben.headers)).status_code == 204
 
