@@ -26,7 +26,6 @@ import {
 } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { groupByCategory, lineAmount, lineLabel, sourceAmount } from './format';
-import { Reminder } from './Reminder';
 
 /** How far (px) a line has to be swiped to the left to be removed for this list (LIST-07). */
 const SWIPE_DISTANCE = 96;
@@ -43,8 +42,7 @@ interface ListLinesProps {
  * The aggregated lines under their category headings, in the order the server sorted them
  * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be removed for
  * this list by swiping it to the left or with the button in that dialog, and comes back from the
- * collapsed "Removed" section (LIST-07). The reminder is the last row (LIST-14). Offline these
- * changes are disabled (SYNC-03).
+ * collapsed "Removed" section (LIST-07). Offline these changes are disabled (SYNC-03).
  */
 export function ListLines({ list, categories, editable }: ListLinesProps) {
   const { t } = useTranslation();
@@ -98,7 +96,6 @@ export function ListLines({ list, categories, editable }: ListLinesProps) {
           onRestore={(line) => hide(line, false)}
         />
       )}
-      <Reminder seed={list.reminder_seed} />
       <SourcesDialog
         listId={list.id}
         line={open}
