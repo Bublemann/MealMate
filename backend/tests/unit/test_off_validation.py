@@ -209,12 +209,12 @@ def test_nutrition_basis(per: Any, unit: str | None, expected: BaseUnit | None) 
         ("g" + " " * 20 + "x", None),
         (1, None),
         ("kg", None),
-        # Pieces are a base unit, not a pack unit Open Food Facts gives.
+        # Pieces are a base unit, not a unit Open Food Facts sells by.
         ("piece", None),
         (None, None),
     ],
 )
-def test_pack_unit(unit: Any, expected: BaseUnit | None) -> None:
+def test_quantity_unit(unit: Any, expected: BaseUnit | None) -> None:
     """What the nutrition basis of a product sold by volume goes by."""
     assert product(product_quantity_unit=unit).product_quantity_unit is expected
 

@@ -666,7 +666,7 @@ describe('IngredientFormDialog (create)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Birnen (Hofgut)' })).toBeVisible();
   });
 
-  it('takes a pack size typed in, which may stay empty (ING-02, D-47)', async () => {
+  it('takes a pack size typed in (ING-02, D-47)', async () => {
     const { fetchMock, user } = renderIngredients({
       'POST /api/ingredients': Response.json(ingredient({ id: 'ing-wasser' }), { status: 201 }),
       'GET /api/ingredients/ing-wasser': ingredient({ id: 'ing-wasser' }),

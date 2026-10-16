@@ -2132,7 +2132,8 @@ export interface components {
          *     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
          *     Facts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food
          *     Facts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from
-         *     the text when it is a plain amount and unit ("500 g", "1,5 l"), else null (D-47).
+         *     the text when it is a plain amount and unit ("500 g", "1,5 l"), else null (D-47); one saved
+         *     before D-47 keeps Open Food Facts' amount until its text changes.
          *     `created_by` / `updated_by` are null for a deleted user (ING-06).
          */
         Ingredient: {

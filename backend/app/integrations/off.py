@@ -178,9 +178,9 @@ def _number(value: object) -> float | None:
     return 0.0 if number == 0 else number
 
 
-def _pack_unit(value: object) -> BaseUnit | None:
-    """`g` or `ml` exactly (after cleaning); anything else, such as `mlx`, `kg` or `piece`, is
-    unknown."""
+def _quantity_unit(value: object) -> BaseUnit | None:
+    """What the product is sold by, for its nutrition basis: `g` or `ml` exactly (after
+    cleaning); anything else, such as `mlx`, `kg` or `piece`, is unknown."""
     if not isinstance(value, str) or len(value) > _UNIT_MAX_LENGTH:
         return None
     text = clean_text(value, _UNIT_MAX_LENGTH)
@@ -241,7 +241,7 @@ class OffProduct(BaseModel):
     quantity: Annotated[
         str | None, BeforeValidator(partial(_text, max_length=QUANTITY_TEXT_MAX_LENGTH))
     ] = None
-    product_quantity_unit: Annotated[BaseUnit | None, BeforeValidator(_pack_unit)] = None
+    product_quantity_unit: Annotated[BaseUnit | None, BeforeValidator(_quantity_unit)] = None
     nutrition_data_per: Annotated[str | None, BeforeValidator(_per)] = None
     nutriments: Annotated[dict[str, float], BeforeValidator(_nutrients)] = {}
     categories_tags: Annotated[tuple[str, ...], BeforeValidator(_tags)] = ()

@@ -231,7 +231,7 @@ describe('IngredientDetailScreen', () => {
 
     it('offers a pack size from Open Food Facts as “Packung” (BAR-06, D-47)', async () => {
       await i18n.changeLanguage('de');
-      const pack = {
+      const corrected = {
         ...WEIDEHOF_MILK,
         quantity_text: '250 g',
         user_edited_fields: ['quantity_text'],
@@ -240,7 +240,7 @@ describe('IngredientDetailScreen', () => {
           off_last_modified_at: '2026-09-25T10:00:00Z',
         },
       } satisfies typeof WEIDEHOF_MILK;
-      renderDetail({ [`GET ${MILK_PATH}`]: pack }, false, WEIDEHOF_MILK.id);
+      renderDetail({ [`GET ${MILK_PATH}`]: corrected }, false, WEIDEHOF_MILK.id);
 
       const hint = await screen.findByTestId(testIds.pendingUpdate);
       expect(within(hint).getByRole('listitem')).toHaveTextContent(/^Packung: 250 g → 500 g$/);
