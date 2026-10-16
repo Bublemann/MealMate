@@ -1,4 +1,4 @@
-"""Who owns per-household data: a user's couple while they are in one, else the user.
+"""Who owns data a couple shares: a user's couple while they are in one, else the user.
 
 Recurring items (D-42) and the walking order (D-48) belong to such an owner, so both partners
 of a couple see and change the same data. `services.access.owner_key` resolves a user's

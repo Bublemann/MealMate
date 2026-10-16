@@ -61,9 +61,9 @@ async def partner_id(session: AsyncSession, user_id: str) -> str | None:
 
 
 async def owner_key(session: AsyncSession, user_id: str) -> OwnerKey:
-    """Who owns the user's per-household data now (recurring items D-42, walking order D-48):
-    their couple while they are in one (a deactivated partner included, CPL-07), else the
-    user."""
+    """Who owns the data the user shares with their partner now (recurring items D-42,
+    walking order D-48): their couple while they are in one (a deactivated partner included,
+    CPL-07), else the user."""
     couple = await couples_repo.accepted_for(session, user_id)
     if couple is None:
         return OwnerKey(couple_id=None, user_id=user_id)

@@ -1,4 +1,4 @@
-"""Who owns per-household data: a couple, or a user without one (D-42, D-48)."""
+"""Who owns data a couple shares: the couple, or a user without one (D-42, D-48)."""
 
 import pytest
 
