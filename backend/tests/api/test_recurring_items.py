@@ -280,6 +280,20 @@ async def test_automatic_serves_the_set_interval_until_two_are_measured(
     )
 
 
+async def test_an_interval_below_a_week_reads_in_days(
+    app: FastAPI, api: AsyncClient, anna: Account, toilet_paper: Any
+) -> None:
+    """Bought every 4 and 5 days, the average of 4.5 days (5, half up) reads in days; the edit
+    pop-up keeps the typed weeks."""
+    item = await make_recurring(api, anna, toilet_paper["id"], weeks=4)
+    await store_purchases(app, item["id"], measured_intervals=[4, 5])
+    assert schedule((await recurring(api, anna))["items"][0]) == (
+        {"value": 5, "unit": "day", "automatic": True},
+        4,
+        "2026-10-02",
+    )
+
+
 async def test_a_new_interval_and_automatic_in_one_change(
     app: FastAPI, api: AsyncClient, anna: Account, toilet_paper: Any
 ) -> None:
@@ -577,6 +591,22 @@ async def test_an_item_is_due_from_midnight_in_berlin(
     assert await due_today(api, anna) == (0, True, 1)
     clock.advance(days=3)
     assert await due_today(api, anna) == (-3, True, 1)
+
+
+async def test_today_is_the_day_in_berlin_when_an_item_is_made_recurring(
+    api: AsyncClient, anna: Account, toilet_paper: Any, clock: FakeClock
+) -> None:
+    """At 00:30 in Berlin (22:30 UTC, still 27 September there) it is already 28 September:
+    a new item was last bought that day, and 28 September isn't in the future."""
+    clock.advance(hours=10, minutes=30)
+    await login(api, anna)
+    toothpaste = await create_ingredient(api, anna, "Zahnpasta")
+    item = await make_recurring(api, anna, toothpaste["id"], weeks=1)
+    assert (item["last_purchased_on"], item["days_until_due"]) == ("2026-09-28", 7)
+
+    item = await make_recurring(api, anna, toilet_paper["id"], 1, date(2026, 9, 21))
+    item = await updated(api, anna, item["id"], last_purchased_on="2026-09-28")
+    assert (item["last_purchased_on"], item["days_until_due"]) == ("2026-09-28", 7)
 
 
 async def test_days_are_counted_in_the_instance_time_zone(
