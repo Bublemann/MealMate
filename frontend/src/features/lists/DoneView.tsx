@@ -15,7 +15,6 @@ import { useReopenList, useShopAgain, type ListDetail, type ListLine } from './a
 import { groupByCategory, lineAmount, lineLabel } from './format';
 import { ListMeals } from './ListMeals';
 import type { ListViewState } from './ListScreen';
-import { Reminder } from './Reminder';
 
 interface DoneViewProps {
   /** `pendingFinish`: finished here, not sent yet; reopening waits until it is. */
@@ -93,7 +92,6 @@ export function DoneView({ list, categories }: DoneViewProps) {
             ))}
           </div>
         )}
-        <Reminder seed={list.reminder_seed} />
       </section>
     </>
   );

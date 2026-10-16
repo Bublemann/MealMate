@@ -236,6 +236,12 @@ export function emptyList(overrides: Partial<Schemas['ListDetail']> = {}): Schem
   });
 }
 
+/**
+ * The reminder lists showed before D-43 removed it: its screen-reader label and its texts for
+ * "Wochenende" and the empty list. The screen tests check that none of it shows any more.
+ */
+export const FORMER_REMINDER = /Reminder|Didn't forget anything|Got your shopping bags/;
+
 export function listSummary(
   overrides: Partial<Schemas['ListSummary']> = {},
 ): Schemas['ListSummary'] {
