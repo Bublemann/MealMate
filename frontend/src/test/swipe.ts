@@ -15,7 +15,7 @@ interface SwipeOptions {
 /**
  * A swipe across `element` (something inside a row, where the finger lands), as the pointer
  * events a phone sends: down, a few moves, up. jsdom lays nothing out, so a row counts as wide as
- * the window (1024 px) and its action as wide as its least width (96 px).
+ * the window (1024 px) and its action as 6 rem of 16 px (96 px).
  */
 export function swipe(
   element: Element,

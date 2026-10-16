@@ -17,8 +17,8 @@ const SLOP = 8;
 const OPEN_SHARE = 0.75;
 /** Let go past this much of the row's width, the action happens at once (a full swipe). */
 const FULL_SHARE = 0.5;
-/** The action's least width (`min-w-24`) at the default text size, for when nothing is laid out. */
-const ACTION_MIN_WIDTH = 96;
+/** The action's width in rem (`w-24`): it grows with the text size, icon above its label. */
+const ACTION_WIDTH_REM = 6;
 
 // The one open row on the screen: opening a row, or starting to swipe one, closes the other.
 let openRow: string | null = null;
@@ -87,13 +87,12 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
   const id = useId();
   const open = useSyncExternalStore(subscribe, () => openRow === id);
   const root = useRef<HTMLDivElement>(null);
-  const actionButton = useRef<HTMLButtonElement>(null);
   const gesture = useRef<Gesture | null>(null);
   // The click that follows a swipe, or a tap on the open row, is swallowed.
   const swiped = useRef(false);
   const tappedOpen = useRef(false);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [openWidth, setOpenWidth] = useState(ACTION_MIN_WIDTH);
+  const [openWidth, setOpenWidth] = useState(ACTION_WIDTH_REM * 16);
   const offset = drag?.offset ?? (open ? -openWidth : 0);
   const actionWidth = drag?.actionWidth ?? openWidth;
 
@@ -119,10 +118,11 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [open]);
 
+  /** The row's and the action's width in px; without a layout (tests), the window's and 16 px. */
   function measure() {
     const rowWidth = root.current?.offsetWidth || window.innerWidth;
-    const width = actionButton.current?.offsetWidth || ACTION_MIN_WIDTH;
-    return { rowWidth, actionWidth: width };
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return { rowWidth, actionWidth: ACTION_WIDTH_REM * rem };
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -225,14 +225,13 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
         >
           {revealed > 0 && (
             <button
-              ref={actionButton}
               type="button"
               tabIndex={-1}
               onClick={() => {
                 setOpenRow(null);
                 action.onAction();
               }}
-              className="flex min-w-24 shrink-0 items-center justify-center gap-2 px-4 text-sm font-medium outline-none"
+              className="flex w-24 shrink-0 flex-col items-center justify-center gap-1 px-1 text-xs font-medium break-words outline-none"
             >
               <Icon aria-hidden="true" className="size-5 shrink-0" />
               {action.label}
