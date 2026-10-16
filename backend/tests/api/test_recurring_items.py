@@ -19,6 +19,7 @@ from tests.catalog import create_ingredient, summary
 from tests.recurring import (
     create_recurring,
     make_recurring,
+    notices,
     recurring,
     store_purchases,
     update_recurring,
@@ -481,6 +482,62 @@ async def test_a_deactivated_partner_changes_nothing(
     assert response.status_code == 200
     assert (await recurring(api, anna))["items"] == [item]
     assert (await updated(api, anna, item["id"], interval_weeks=2))["interval_weeks"] == 2
+
+
+# --- ingredients merged (ING-05) -------------------------------------------------------------
+
+
+async def merge(api: AsyncClient, admin: Account, ingredient_id: str, into_id: str) -> None:
+    response = await api.post(
+        f"/api/admin/ingredients/{ingredient_id}/merge",
+        json={"into_id": into_id},
+        headers=admin.headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+async def test_a_merge_moves_the_item_to_the_surviving_ingredient(
+    api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any
+) -> None:
+    """Merging "WC-Papier" into "Klopapier" keeps anna's item with all its values; she gets no
+    notice."""
+    duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
+    item = await make_recurring(api, anna, duplicate["id"], last_purchased_on=date(2026, 9, 1))
+
+    await merge(api, admin, duplicate["id"], toilet_paper["id"])
+
+    assert (await recurring(api, anna))["items"] == [item | {"ingredient": summary(toilet_paper)}]
+    assert (await notices(api, anna))["count"] == 0
+
+
+async def test_when_a_set_has_both_the_later_purchase_stays(
+    api: AsyncClient,
+    anna: Account,
+    ben: Account,
+    carl: Account,
+    admin: Account,
+    toilet_paper: Any,
+) -> None:
+    """anna bought "WC-Papier" more recently, so that item stays (now of "Klopapier"); the
+    couple ben and carl bought both on one day, so their "Klopapier" item stays (D-42)."""
+    duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
+    await make_couple(api, ben, carl)
+    later = await make_recurring(
+        api, anna, duplicate["id"], weeks=6, last_purchased_on=date(2026, 9, 20)
+    )
+    await make_recurring(
+        api, anna, toilet_paper["id"], weeks=2, last_purchased_on=date(2026, 9, 10)
+    )
+    await make_recurring(api, ben, duplicate["id"], weeks=3, last_purchased_on=date(2026, 9, 15))
+    tie = await make_recurring(
+        api, carl, toilet_paper["id"], weeks=5, last_purchased_on=date(2026, 9, 15)
+    )
+
+    await merge(api, admin, duplicate["id"], toilet_paper["id"])
+
+    assert (await recurring(api, anna))["items"] == [later | {"ingredient": summary(toilet_paper)}]
+    assert (await recurring(api, ben))["items"] == [tie]
+    assert (await notices(api, anna))["count"] == (await notices(api, ben))["count"] == 0
 
 
 # --- due over time --------------------------------------------------------------------------

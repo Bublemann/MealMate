@@ -3,8 +3,13 @@
 The account, ingredient and meal rules call these hooks at the right point of their write
 transaction: meals (M4) fill in the ingredient references, shopping lists (M5a) detach meals
 that go away or become invisible (LIST-15), move shared lists on user deletion (ADM-03) and
-follow ingredient merges. Each hook runs inside the caller's transaction and must not commit;
-`now` is the time of the triggering request.
+follow ingredient merges. Recurring items (LIST-16, D-42) follow couples as they form and end
+and ingredients as they are merged, and an ingredient's deletion leaves notices (D-51). Each
+hook runs inside the caller's transaction and must not commit; `now` is the time of the
+triggering request.
+
+This module must not import `services.recurring`, which imports `services.ingredients`, which
+imports this module.
 """
 
 from collections.abc import Callable
@@ -13,6 +18,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import ingredient_key
+from app.domain.owners import OwnerKey
 from app.domain.recurring import preferred_stays
 from app.models import Couple, ListLineState, RecurringItem
 from app.repositories import couples as couples_repo
@@ -187,7 +193,9 @@ async def on_ingredients_merged(
       back, LIST-07) goes;
     - neither has a line: the state of `into_id` stays, else the one of `from_id` moves.
 
-    Every list whose lines change gets a new version.
+    Every list whose lines change gets a new version. Recurring items move as well, without a
+    notice: in a set that has both ingredients, the one bought more recently stays, on a tie
+    the one of `into_id` (D-42).
     """
     from_lists = await lists_repo.lists_with_parts_of(session, from_id)
     into_lists = await lists_repo.lists_with_parts_of(session, into_id)
@@ -220,6 +228,7 @@ async def on_ingredients_merged(
             await session.delete(source)
     await session.flush()
     await lists_repo.bump(session, changed, now)
+    await _move_recurring_items(session, from_id, into_id, now=now)
 
 
 def _uncheck(state: ListLineState) -> None:
@@ -231,6 +240,25 @@ def _copy_state(source: ListLineState, target: ListLineState) -> None:
     target.hidden, target.checked = source.hidden, source.checked
     target.checked_at, target.checked_by = source.checked_at, source.checked_by
     target.checked_op_id, target.checked_snapshot = source.checked_op_id, source.checked_snapshot
+
+
+async def _move_recurring_items(
+    session: AsyncSession, from_id: str, into_id: str, *, now: datetime
+) -> None:
+    """The recurring items of `from_id` become items of `into_id`. In a set that has both, the
+    one bought more recently stays, on a tie the one of `into_id` (D-42)."""
+    into = {
+        OwnerKey(item.couple_id, item.user_id): item
+        for item in await recurring_repo.with_ingredient(session, into_id)
+    }
+    moving = []
+    for item in await recurring_repo.with_ingredient(session, from_id):
+        other = into.get(OwnerKey(item.couple_id, item.user_id))
+        if other is None or await _one_stays(session, other, item) is item:
+            moving.append(item)
+    await session.flush()  # a set holds an ingredient once: the item that goes, goes first
+    for item in moving:
+        item.ingredient_id, item.updated_at = into_id, now
 
 
 def _copy_for(item: RecurringItem, user_id: str, *, now: datetime) -> RecurringItem:
