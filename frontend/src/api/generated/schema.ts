@@ -1230,6 +1230,47 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/me/notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notices
+         * @description The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a
+         *     recurring item.
+         */
+        get: operations["list_notices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notices/{notice_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Notice
+         * @description Mark one of the own notices as read; dismissing it again changes nothing.
+         */
+        post: operations["dismiss_notice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/password": {
         parameters: {
             query?: never;
@@ -1474,6 +1515,55 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/recurring-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recurring Items
+         * @description The caller's set (their couple's while in one, else their own), due first.
+         */
+        get: operations["list_recurring_items"];
+        put?: never;
+        /**
+         * Create Recurring Item
+         * @description Make an ingredient recurring in the caller's set.
+         */
+        post: operations["create_recurring_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recurring-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Recurring Item
+         * @description Remove an item from the caller's set ("Nicht mehr regelmäßig").
+         */
+        delete: operations["delete_recurring_item"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Recurring Item
+         * @description Change an item's interval, switch it back to automatic, or correct its last purchase
+         *     date.
+         */
+        patch: operations["update_recurring_item"];
         trace?: never;
     };
     "/api/tags": {
@@ -3036,6 +3126,39 @@ export interface components {
             tags?: string[] | null;
         };
         /**
+         * Notice
+         * @description An unread notice of the caller's.
+         */
+        Notice: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "recurring_item.ingredient_deleted";
+            /** Params */
+            params: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * NoticeList
+         * @description The caller's unread notices, newest first, and how many there are (the count on the
+         *     Settings tab, UI-07).
+         */
+        NoticeList: {
+            /** Count */
+            count: number;
+            /** Notices */
+            notices: components["schemas"]["Notice"][];
+        };
+        /**
          * NutrientValues
          * @description Values per 100 g or 100 ml; null means unknown. In requests every value must be plausible: 0 up to the nutrient's maximum (900 kcal, 100 g for the others).
          */
@@ -3182,6 +3305,96 @@ export interface components {
             pack_unit: components["schemas"]["Unit"] | null;
             /** Quantity Text */
             quantity_text: string | null;
+        };
+        /**
+         * RecurringInterval
+         * @description The interval an item is due after, as the app shows it (MNT-02): below a week in days,
+         *     else in whole weeks rounded to the nearest. `automatic` while it adapts to the purchases
+         *     ("alle ~4 Wochen"); off when it was set by hand ("alle 4 Wochen").
+         */
+        RecurringInterval: {
+            /** Automatic */
+            automatic: boolean;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "day" | "week";
+            /** Value */
+            value: number;
+        };
+        /**
+         * RecurringItem
+         * @description An item of the caller's set. It is due from `due_on` on: the last purchase plus the
+         *     interval, in calendar days of the instance's time zone. `days_until_due` counts from today
+         *     (0 "fällig heute", 1 "fällig morgen", -3 "fällig seit 3 Tagen"). `interval_weeks` is the
+         *     set interval for the edit pop-up. `last_amount` is the last purchase's amount, only while
+         *     its unit fits the ingredient's base unit (REF-02).
+         */
+        RecurringItem: {
+            /** Days Until Due */
+            days_until_due: number;
+            /** Due */
+            due: boolean;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /** Id */
+            id: string;
+            ingredient: components["schemas"]["IngredientSummary"];
+            interval: components["schemas"]["RecurringInterval"];
+            /** Interval Weeks */
+            interval_weeks: number;
+            last_amount: components["schemas"]["DisplayAmountOut"] | null;
+            /**
+             * Last Purchased On
+             * Format: date
+             */
+            last_purchased_on: string;
+        };
+        /**
+         * RecurringItemCreate
+         * @description Make an ingredient recurring: every `interval_weeks` (1 to 52), last bought on
+         *     `last_purchased_on` (today if left out; not in the future, at most 730 days back:
+         *     422 `out_of_range`). An ingredient already in the set is 422 `taken`, an unknown one
+         *     `invalid`. The interval adapts automatically from the second purchase on.
+         */
+        RecurringItemCreate: {
+            /** Ingredient Id */
+            ingredient_id: string;
+            /** Interval Weeks */
+            interval_weeks: number;
+            /** Last Purchased On */
+            last_purchased_on?: string | null;
+        };
+        /**
+         * RecurringItemList
+         * @description The caller's set (their couple's while in one, else their own), sorted by due date and
+         *     then by the ingredient's name, and how many items are due.
+         */
+        RecurringItemList: {
+            /** Due Count */
+            due_count: number;
+            /** Items */
+            items: components["schemas"]["RecurringItem"][];
+        };
+        /**
+         * RecurringItemUpdate
+         * @description Only the fields that are sent change; null is refused (422 `invalid`). A new
+         *     `interval_weeks` sets the interval by hand. `automatic` true lets it adapt again, with the
+         *     set interval serving until two intervals are measured; false alone keeps the interval that
+         *     serves now, as set by hand. `last_purchased_on` corrects the last purchase date, within
+         *     the same range as on create.
+         */
+        RecurringItemUpdate: {
+            /** Automatic */
+            automatic?: boolean | null;
+            /** Interval Weeks */
+            interval_weeks?: number | null;
+            /** Last Purchased On */
+            last_purchased_on?: string | null;
         };
         /**
          * RefreshRequest
@@ -5508,6 +5721,64 @@ export interface operations {
             };
         };
     };
+    list_notices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeList"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dismiss_notice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     change_password: {
         parameters: {
             query?: never;
@@ -5964,6 +6235,132 @@ export interface operations {
                 };
                 content: {
                     "image/webp": string;
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_recurring_items: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringItemList"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_recurring_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringItem"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_recurring_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_recurring_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringItem"];
                 };
             };
             /** @description Error envelope; `code` names the error */
