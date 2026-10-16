@@ -1,4 +1,3 @@
-import type { TFunction } from 'i18next';
 import { ChevronLeft, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrentUser } from '@/features/auth/context';
 import { useCategories } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
-import { useLanguage, type Language } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { formatDate, formatNumber } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
@@ -77,7 +76,6 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
   const notSet = <span className="text-muted-foreground">{t('ingredients.detail.notSet')}</span>;
 
   const label = ingredientLabel(ingredient.name, ingredient.brand);
-  const pack = packText(t, language, ingredient);
 
   const rows = [
     { label: t('ingredients.detail.brand'), value: ingredient.brand ?? notSet },
@@ -107,7 +105,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
         ]
       : []),
     { label: t('ingredients.detail.barcode'), value: ingredient.barcode ?? notSet },
-    { label: t('ingredients.detail.pack'), value: pack ?? notSet },
+    // The pack size is its text alone, as in the edit pop-up (D-47).
+    { label: t('ingredients.detail.pack'), value: ingredient.quantity_text ?? notSet },
     {
       label: t('ingredients.detail.source'),
       value: t(`ingredients.detail.source.${ingredient.source}`),
@@ -162,20 +161,6 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
       <IngredientFormDialog open={editing} onOpenChange={setEditing} ingredient={ingredient} />
     </Card>
   );
-}
-
-/**
- * The pack size as Open Food Facts gave it (D-38): the printed text ("6 × 1,5 l"), else the
- * contents with their unit; null when neither is known. Information only (nothing is computed
- * from it).
- */
-function packText(t: TFunction, language: Language, ingredient: Ingredient): string | null {
-  if (ingredient.quantity_text) return ingredient.quantity_text;
-  if (ingredient.pack_quantity === null) return null;
-  const value = formatNumber(ingredient.pack_quantity, language, { maximumFractionDigits: 3 });
-  return ingredient.pack_unit
-    ? t('common.amount', { value, unit: unitLabel(t, ingredient.pack_unit) })
-    : value;
 }
 
 /**

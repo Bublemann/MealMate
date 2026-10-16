@@ -5,19 +5,21 @@ import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
 /** The longest ingredient name the server accepts; a name from Open Food Facts may be longer. */
 export const NAME_MAX_LENGTH = 60;
 export const BRAND_MAX_LENGTH = 80;
+export const PACK_SIZE_MAX_LENGTH = 40;
 
-/** The text fields of the form. */
-export const TEXT_FIELDS = ['name', 'brand'] as const;
+/** The text fields of the form, each an Open Food Facts field (BAR-04). */
+export const TEXT_FIELDS = ['name', 'brand', 'quantity_text'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];
 
 /**
  * What the form shows, as typed: numbers stay text until saving, so a half-typed "0," isn't
- * turned into something else, and a field counts as changed only when its text changed. The
- * pack size isn't typed in: it comes with an Open Food Facts proposal (D-38).
+ * turned into something else, and a field counts as changed only when its text changed.
  */
 export interface FormValues {
   name: string;
   brand: string;
+  /** The pack size ("500 g", "6 × 1,5 l"), optional (D-47). */
+  quantity_text: string;
   /** The chosen category; null until one is chosen, then `categoryKey` or "other" is shown. */
   categoryId: string | null;
   /** A category guessed from Open Food Facts, by key (the ids are only known once loaded). */
@@ -43,6 +45,7 @@ export function emptyValues(name = '', language: Language): FormValues {
   return {
     name,
     brand: '',
+    quantity_text: '',
     categoryId: null,
     categoryKey: null,
     baseUnit: 'g',
@@ -57,6 +60,7 @@ export function valuesFromIngredient(ingredient: Ingredient, language: Language)
   return {
     name: ingredient.name,
     brand: ingredient.brand ?? '',
+    quantity_text: ingredient.quantity_text ?? '',
     categoryId: ingredient.category_id,
     categoryKey: null,
     baseUnit: ingredient.base_unit,
@@ -80,9 +84,9 @@ export function fitName(name: string): string {
 
 /**
  * The form filled with an Open Food Facts proposal, its barcode included (BAR-03, BAR-11). What
- * the proposal has no value for (the piece weight, and a name, brand, category guess, base unit
- * or nutrient when it has none) stays as it was: a category the user chose is kept unless the
- * proposal guesses one.
+ * the proposal has no value for (the piece weight, and a name, brand, pack size, category guess,
+ * base unit or nutrient when it has none) stays as it was: a category the user chose is kept
+ * unless the proposal guesses one.
  */
 export function valuesFromProposal(
   proposal: OffProposal,
@@ -98,6 +102,9 @@ export function valuesFromProposal(
     ...current,
     name: proposal.name ? fitName(proposal.name) : current.name,
     brand: proposal.brand ? proposal.brand.slice(0, BRAND_MAX_LENGTH) : current.brand,
+    quantity_text: proposal.quantity_text
+      ? proposal.quantity_text.slice(0, PACK_SIZE_MAX_LENGTH)
+      : current.quantity_text,
     categoryId: proposal.category_key ? null : current.categoryId,
     categoryKey: proposal.category_key ?? current.categoryKey,
     baseUnit: proposal.nutrition_basis ?? current.baseUnit,

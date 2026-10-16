@@ -76,7 +76,6 @@ def test_empty_product() -> None:
     empty = product()
     assert empty.name("de") is None
     assert (empty.brands, empty.quantity) == (None, None)
-    assert empty.pack == (None, None)
     assert empty.nutrition_basis is None
     assert empty.nutrients == dict.fromkeys(("kcal", "protein", "carbs", "sugar", "fat"))
     assert empty.category_key is None
@@ -85,8 +84,6 @@ def test_empty_product() -> None:
         "name": None,
         "brand": None,
         "quantity_text": None,
-        "pack_quantity": None,
-        "pack_unit": None,
     }
 
 
@@ -192,7 +189,6 @@ def test_nutrition_basis(per: Any, unit: str | None, expected: BaseUnit | None) 
     found = product(
         nutrition_data_per=per,
         nutriments=ALL_NUTRIENTS,
-        product_quantity=500,
         product_quantity_unit=unit,
     )
     assert found.nutrition_basis is expected
@@ -202,30 +198,25 @@ def test_nutrition_basis(per: Any, unit: str | None, expected: BaseUnit | None) 
 
 
 @pytest.mark.parametrize(
-    ("quantity", "unit", "expected"),
+    ("unit", "expected"),
     [
-        (500, "g", (500, BaseUnit.G)),
-        ("1000", "ml", (1000, BaseUnit.ML)),
-        ("0.75", " ML ", (None, None)),
-        (250, " ml ", (250, BaseUnit.ML)),
-        (250, "mlx", (None, None)),
-        (250, "gram", (None, None)),
-        (250, "g" + " " * 20 + "x", (None, None)),
-        (250, 1, (None, None)),
-        (500, "kg", (None, None)),
-        # Pieces are a base unit, not a pack unit Open Food Facts gives (D-38).
-        (6, "piece", (None, None)),
-        (500, None, (None, None)),
-        (None, "g", (None, None)),
-        (0, "g", (None, None)),
-        (-3, "g", (None, None)),
-        (100_001, "g", (None, None)),
-        (True, "g", (None, None)),
-        ([500], "g", (None, None)),
+        ("g", BaseUnit.G),
+        ("ml", BaseUnit.ML),
+        (" ml ", BaseUnit.ML),
+        (" ML ", None),
+        ("mlx", None),
+        ("gram", None),
+        ("g" + " " * 20 + "x", None),
+        (1, None),
+        ("kg", None),
+        # Pieces are a base unit, not a unit Open Food Facts sells by.
+        ("piece", None),
+        (None, None),
     ],
 )
-def test_pack_size(quantity: Any, unit: Any, expected: tuple[Any, Any]) -> None:
-    assert product(product_quantity=quantity, product_quantity_unit=unit).pack == expected
+def test_quantity_unit(unit: Any, expected: BaseUnit | None) -> None:
+    """What the nutrition basis of a product sold by volume goes by."""
+    assert product(product_quantity_unit=unit).product_quantity_unit is expected
 
 
 @pytest.mark.parametrize(
@@ -265,7 +256,6 @@ def test_fields_by_product_field() -> None:
         product_name_de="Haferflocken",
         brands="Test Kitchen",
         quantity="500 g",
-        product_quantity=500,
         product_quantity_unit="g",
         nutrition_data_per="100g",
         nutriments=ALL_NUTRIENTS | {"fat_100g": 101},
@@ -274,8 +264,6 @@ def test_fields_by_product_field() -> None:
         "name": "Haferflocken",
         "brand": "Test Kitchen",
         "quantity_text": "500 g",
-        "pack_quantity": 500,
-        "pack_unit": "g",
         "nutrients.kcal": 372,
         "nutrients.protein": 13.5,
         "nutrients.carbs": 58.7,

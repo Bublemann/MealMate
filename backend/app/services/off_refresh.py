@@ -20,11 +20,12 @@ write transaction (plan § 5.1). Unavailable, removed or busy: the values and `f
 so the next refresh tries again (BAR-07). Found, field by field (BAR-06):
 
 - a value Open Food Facts does not know (any more) never replaces a known one;
-- not user-edited, and the pack size always (D-38): updated silently. "User-edited" marks on the
-  pack size from before D-38 are ignored and stay as they are;
-- user-edited and different: collected into `pending_update`, unless the user ignored this very
-  Open Food Facts version (`ignored_off_modified_at`) or, for an ingredient without a version, this
-  very value (the ignored entries kept in `pending_update`, see `services.off_fields`);
+- not user-edited: updated silently, the pack size's amount along with its text (D-47);
+- user-edited (`off_fields.edited_fields`, where a mark on the pack size's amount from before
+  D-38 counts for the pack size) and different: collected into `pending_update`, unless the user
+  ignored this very Open Food Facts version (`ignored_off_modified_at`) or, for an ingredient
+  without a version, this very value (the ignored entries kept in `pending_update`, see
+  `services.off_fields`);
 - nutrients only while Open Food Facts gives them per what the ingredient's are per: 100 g,
   or 100 ml for an ml ingredient (`NUTRITION_BASIS`);
 - the category, base unit, piece weight and barcode are never touched.
@@ -44,14 +45,14 @@ from app.core.config import Settings
 from app.core.ratelimit import Clock
 from app.db.base import utcnow
 from app.db.session import Database
-from app.domain.catalog import OFF_DATA_FIELDS, PACK_FIELDS
+from app.domain.catalog import OFF_DATA_FIELDS
 from app.domain.units import NUTRITION_BASIS, BaseUnit
 from app.integrations.off import OffClient, OffProduct
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import users as users_repo
 from app.schemas.ingredients import Ingredient
-from app.services.off_fields import field_value, ignored_entries, set_field_value
+from app.services.off_fields import edited_fields, field_value, ignored_entries, set_field_value
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +110,8 @@ def apply_refresh(
     the module docstring; runs inside the caller's write transaction."""
     proposed = found.fields(language)
     if found.nutrition_basis != NUTRITION_BASIS[BaseUnit(row.base_unit)]:
-        kept = {*OFF_DATA_FIELDS, *PACK_FIELDS}
-        proposed = {field: value for field, value in proposed.items() if field in kept}
-    edited = set(row.user_edited_fields).difference(PACK_FIELDS)
+        proposed = {field: value for field, value in proposed.items() if field in OFF_DATA_FIELDS}
+    edited = set(edited_fields(row))
     ignored = (
         found.last_modified_at is not None and found.last_modified_at == row.ignored_off_modified_at
     )

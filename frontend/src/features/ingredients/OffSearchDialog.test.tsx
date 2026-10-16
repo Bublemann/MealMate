@@ -20,8 +20,6 @@ const OATS = proposal({
   name: 'Haferflocken zart',
   brand: 'Kornmühle',
   quantity_text: '500 g',
-  pack_quantity: 500,
-  pack_unit: 'g',
   nutrition_basis: 'g',
   nutrients: { kcal: 372, protein: 13.5, carbs: 58.7, sugar: 0.7, fat: 7 },
   category_key: 'other',
@@ -141,7 +139,7 @@ describe('OffSearchDialog', () => {
     );
   });
 
-  it('fills the form with the chosen product, saved in one request with its pack size (BAR-04, D-38)', async () => {
+  it('fills the form with the chosen product, saved in one request with its pack size (BAR-04, D-47)', async () => {
     const created = ingredient({ id: 'ing-vollmilch', name: 'Frische Vollmilch 3,5 %' });
     const { fetchMock, user, router } = renderSearch({
       'POST /api/ingredients': Response.json(created, { status: 201 }),
@@ -180,8 +178,6 @@ describe('OffSearchDialog', () => {
       brand: 'Weidehof',
       barcode: '4006381333931',
       quantity_text: '1 l',
-      pack_quantity: 1,
-      pack_unit: 'l',
       nutrients: { kcal: 64, protein: 3.4, carbs: 4.8, sugar: 4.8, fat: 3.6 },
       off: { off_last_modified_at: '2026-09-01T10:00:00Z', edited_fields: ['nutrients.fat'] },
     });
