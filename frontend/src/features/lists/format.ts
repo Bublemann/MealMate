@@ -114,12 +114,6 @@ export function groupByCategory<Line extends { category_id: string }>(
   return groups;
 }
 
-/** LIST-14: the list's reminder, the same one every time (`reminder_seed` never changes). */
-export function reminderText(t: TFunction, seed: number): string {
-  const number = (Math.abs(Math.trunc(seed)) % 10) + 1;
-  return t(`reminder.${number}` as 'reminder.1');
-}
-
 /** The id of the category *Other*, where free-text items go unless another is chosen (LIST-06). */
 export function otherCategoryId(
   categories: readonly { id: string; key: string | null }[] | undefined,

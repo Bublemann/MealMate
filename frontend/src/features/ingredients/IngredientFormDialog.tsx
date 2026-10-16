@@ -53,6 +53,7 @@ import {
   editedFields,
   emptyValues,
   NAME_MAX_LENGTH,
+  PACK_SIZE_MAX_LENGTH,
   proposalValues,
   typedValues,
   valuesFromIngredient,
@@ -87,6 +88,7 @@ const INLINE_LINK =
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'name',
   'brand',
+  'quantity_text',
   'category_id',
   'base_unit',
   'barcode',
@@ -200,11 +202,11 @@ interface Proposed {
  * One form for every ingredient, new or existing, typed by hand, searched or scanned (ING-04,
  * D-35, D-36). Top to bottom: the Open Food Facts attribution while its values are shown; the
  * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
- * the barcode with the scan's notice; the similar-ingredients hint; brand; category; base unit
- * (g, ml or pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. "Save"
- * sits in a footer below the fields, which scroll on their own. A product chosen in the search
- * or scanned is saved in one request, with its pack size passed on and the fields the user
- * changed named as edited (BAR-04, D-38).
+ * the barcode with the scan's notice; the similar-ingredients hint; brand; pack size (D-47);
+ * category; base unit (g, ml or pieces) with the piece weight for pieces only; the nutrition per
+ * 100 g/ml. "Save" sits in a footer below the fields, which scroll on their own. A product chosen
+ * in the search or scanned is saved in one request, with the fields the user changed named as
+ * edited (BAR-04).
  *
  * The scan looks the barcode up (BAR-02/03): a barcode another ingredient has fills in nothing
  * and offers that one instead; one Open Food Facts knows fills the form like a chosen product;
@@ -383,6 +385,7 @@ function IngredientForm({
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
+      quantity_text: values.quantity_text.trim() || null,
       barcode: barcode || null,
     };
 
@@ -390,6 +393,7 @@ function IngredientForm({
       const body: IngredientCreate = { name: texts.name, base_unit: values.baseUnit };
       if (selectedCategory) body.category_id = selectedCategory;
       if (texts.brand !== null) body.brand = texts.brand;
+      if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
       if (texts.barcode !== null) body.barcode = texts.barcode;
       if (pieceWeight !== null) body.piece_weight_g = pieceWeight;
       const given: Partial<NutrientValues> = {};
@@ -399,10 +403,6 @@ function IngredientForm({
       if (Object.keys(given).length > 0) body.nutrients = given;
       const proposal = proposed?.proposal;
       if (proposal) {
-        // The pack size is Open Food Facts' alone, passed on as it came (D-38).
-        if (proposal.quantity_text !== null) body.quantity_text = proposal.quantity_text;
-        if (proposal.pack_quantity !== null) body.pack_quantity = proposal.pack_quantity;
-        if (proposal.pack_unit !== null) body.pack_unit = proposal.pack_unit;
         // Saved with its Open Food Facts origin; only the corrected values count as edited.
         body.off = {
           off_last_modified_at: proposal.off_last_modified_at,
@@ -418,6 +418,7 @@ function IngredientForm({
     const body: IngredientUpdate = {};
     if (texts.name !== ingredient.name) body.name = texts.name;
     if (texts.brand !== ingredient.brand) body.brand = texts.brand;
+    if (texts.quantity_text !== ingredient.quantity_text) body.quantity_text = texts.quantity_text;
     if (selectedCategory !== ingredient.category_id) body.category_id = selectedCategory;
     if (values.baseUnit !== ingredient.base_unit) body.base_unit = values.baseUnit;
     if (texts.barcode !== ingredient.barcode) body.barcode = texts.barcode;
@@ -567,6 +568,23 @@ function IngredientForm({
               placeholder={t('ingredients.field.brandPlaceholder')}
               value={values.brand}
               onChange={(event) => set('brand', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          label={t('ingredients.field.packSize')}
+          hint={editedHint('quantity_text')}
+          error={fieldError('quantity_text')}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              name="quantity_text"
+              autoComplete="off"
+              maxLength={PACK_SIZE_MAX_LENGTH}
+              placeholder={t('ingredients.field.packSizePlaceholder')}
+              value={values.quantity_text}
+              onChange={(event) => set('quantity_text', event.target.value)}
             />
           )}
         </FormField>

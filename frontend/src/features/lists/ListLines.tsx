@@ -26,7 +26,6 @@ import {
 } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { groupByCategory, lineAmount, lineLabel, sourceAmount } from './format';
-import { Reminder } from './Reminder';
 
 /** How far (px) a line has to be swiped to the left to be removed for this list (LIST-07). */
 const SWIPE_DISTANCE = 96;
@@ -43,8 +42,7 @@ interface ListLinesProps {
  * The aggregated lines under their category headings, in the order the server sorted them
  * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be removed for
  * this list by swiping it to the left or with the button in that dialog, and comes back from the
- * collapsed "Removed" section (LIST-07). The reminder is the last row (LIST-14). Offline these
- * changes are disabled (SYNC-03).
+ * collapsed "Removed" section (LIST-07). Offline these changes are disabled (SYNC-03).
  */
 export function ListLines({ list, categories, editable }: ListLinesProps) {
   const { t } = useTranslation();
@@ -98,7 +96,6 @@ export function ListLines({ list, categories, editable }: ListLinesProps) {
           onRestore={(line) => hide(line, false)}
         />
       )}
-      <Reminder seed={list.reminder_seed} />
       <SourcesDialog
         listId={list.id}
         line={open}
@@ -237,13 +234,18 @@ function LineRow({ line, swipeable, onOpen, onHide }: LineRowProps) {
           event.stopPropagation();
         }}
       >
+        {/* Centred in the tap target, while name and amount share a baseline. */}
         <button
           type="button"
           onClick={onOpen}
-          className="flex min-h-(--tap-target) w-full items-baseline justify-between gap-3 px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex min-h-(--tap-target) w-full items-center px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <span className="min-w-0 break-words">{lineLabel(line)}</span>
-          {amount && <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>}
+          <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+            <span className="min-w-0 break-words">{lineLabel(line)}</span>
+            {amount && (
+              <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>
+            )}
+          </span>
         </button>
       </div>
     </li>

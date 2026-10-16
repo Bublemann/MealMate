@@ -163,8 +163,6 @@ async def test_an_open_food_facts_proposal_is_not_saved(
             "name": "Haferflocken",
             "brand": "MealMate Test Kitchen",
             "quantity_text": "500 g",
-            "pack_quantity": 500,
-            "pack_unit": "g",
             "nutrition_basis": "g",
             "nutrients": OATS_NUTRIENTS,
             "category_key": "breakfast_spreads",
@@ -188,8 +186,6 @@ async def test_the_proposal_name_follows_the_users_language(
         "name": "test_default",
         "brand": None,
         "quantity_text": "100 g",
-        "pack_quantity": 100,
-        "pack_unit": "g",
         "nutrition_basis": "g",
         "nutrients": {"kcal": 140.5, "protein": 4.5, "carbs": 10.5, "sugar": 12.5, "fat": 8.5},
         "category_key": "snacks_sweets",
@@ -206,7 +202,6 @@ async def test_a_proposal_without_basis_or_name(
             MILK,
             nutrition_data_per="serving",
             nutriments={"energy-kcal_100g": 64},
-            product_quantity="1000",
             product_quantity_unit="ml",
         )
     )
@@ -217,7 +212,6 @@ async def test_a_proposal_without_basis_or_name(
     proposal = body["proposal"]
     assert (proposal["name"], proposal["nutrition_basis"]) == (None, None)
     assert proposal["nutrients"] == NO_NUTRIENTS
-    assert (proposal["pack_quantity"], proposal["pack_unit"]) == (1000, "ml")
 
 
 async def test_a_hostile_product_is_cleaned(
@@ -404,8 +398,6 @@ async def test_save_a_proposal_in_one_request(
         proposal["barcode"],
         brand=proposal["brand"],
         quantity_text=proposal["quantity_text"],
-        pack_quantity=proposal["pack_quantity"],
-        pack_unit=proposal["pack_unit"],
         nutrients=proposal["nutrients"] | {"kcal": 370},
         edited_fields=["name", "nutrients.kcal"],
         off_last_modified_at=proposal["off_last_modified_at"],

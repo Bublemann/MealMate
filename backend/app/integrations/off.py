@@ -80,7 +80,6 @@ from app.domain.barcodes import normalize_barcode
 from app.domain.catalog import (
     BRAND_MAX_LENGTH,
     INGREDIENT_NAME_MAX_LENGTH,
-    PACK_QUANTITY_MAX,
     QUANTITY_TEXT_MAX_LENGTH,
     clean_text,
     cut_at_word,
@@ -109,7 +108,6 @@ FIELDS = ",".join(
         *(f"generic_name_{language}" for language in LANGUAGES),
         "brands",
         "quantity",
-        "product_quantity",
         "product_quantity_unit",
         "nutriments",
         "nutrition_data_per",
@@ -180,14 +178,9 @@ def _number(value: object) -> float | None:
     return 0.0 if number == 0 else number
 
 
-def _pack_quantity(value: object) -> float | None:
-    number = _number(value)
-    return number if number is not None and 0 < number <= PACK_QUANTITY_MAX else None
-
-
-def _pack_unit(value: object) -> BaseUnit | None:
-    """`g` or `ml` exactly (after cleaning); anything else, such as `mlx`, `kg` or `piece`, is
-    unknown."""
+def _quantity_unit(value: object) -> BaseUnit | None:
+    """What the product is sold by, for its nutrition basis: `g` or `ml` exactly (after
+    cleaning); anything else, such as `mlx`, `kg` or `piece`, is unknown."""
     if not isinstance(value, str) or len(value) > _UNIT_MAX_LENGTH:
         return None
     text = clean_text(value, _UNIT_MAX_LENGTH)
@@ -248,8 +241,7 @@ class OffProduct(BaseModel):
     quantity: Annotated[
         str | None, BeforeValidator(partial(_text, max_length=QUANTITY_TEXT_MAX_LENGTH))
     ] = None
-    product_quantity: Annotated[float | None, BeforeValidator(_pack_quantity)] = None
-    product_quantity_unit: Annotated[BaseUnit | None, BeforeValidator(_pack_unit)] = None
+    product_quantity_unit: Annotated[BaseUnit | None, BeforeValidator(_quantity_unit)] = None
     nutrition_data_per: Annotated[str | None, BeforeValidator(_per)] = None
     nutriments: Annotated[dict[str, float], BeforeValidator(_nutrients)] = {}
     categories_tags: Annotated[tuple[str, ...], BeforeValidator(_tags)] = ()
@@ -288,13 +280,6 @@ class OffProduct(BaseModel):
         }
 
     @property
-    def pack(self) -> tuple[float, BaseUnit] | tuple[None, None]:
-        """The pack size and its unit, only when both are known."""
-        if self.product_quantity is None or self.product_quantity_unit is None:
-            return None, None
-        return self.product_quantity, self.product_quantity_unit
-
-    @property
     def category_key(self) -> str | None:
         return guess_category(self.categories_tags)
 
@@ -305,13 +290,10 @@ class OffProduct(BaseModel):
     def fields(self, language: str) -> dict[str, str | float | None]:
         """The product's values by ingredient field (`name`, ..., `nutrients.kcal`, ...), with
         the name in `language`; nutrients only when the basis is known."""
-        pack_quantity, pack_unit = self.pack
         values: dict[str, str | float | None] = {
             "name": self.name(language),
             "brand": self.brands,
             "quantity_text": self.quantity,
-            "pack_quantity": pack_quantity,
-            "pack_unit": None if pack_unit is None else pack_unit.value,
         }
         if self.nutrition_basis is not None:
             for key, value in self.nutrients.items():

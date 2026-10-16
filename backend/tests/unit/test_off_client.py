@@ -73,7 +73,6 @@ async def test_found_product_from_a_recorded_response(
     assert product.name("de") == "test_default"
     assert product.brands is None
     assert product.quantity == "100 g"
-    assert product.pack == (100, BaseUnit.G)
     assert product.nutrition_basis is BaseUnit.G
     assert product.nutrients == {
         "kcal": 140.5,
@@ -104,7 +103,6 @@ def test_fields_asked_for() -> None:
         "generic_name_en",
         "brands",
         "quantity",
-        "product_quantity",
         "product_quantity_unit",
         "nutriments",
         "nutrition_data_per",

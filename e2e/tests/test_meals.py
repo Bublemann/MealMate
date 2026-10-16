@@ -232,6 +232,45 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     expect(line).to_contain_text(f"2 {text('unit.piece')}")
 
 
+def test_member_creates_an_ingredient_in_the_meal_form_with_one_tap(
+    member_page: Page, api: Api, member: Account
+) -> None:
+    """MEAL-03: "Create “…”" sits right under the picker's field, so results landing never move
+    it, and a tap made before the search has answered creates the ingredient at once."""
+    page = member_page
+    tag = unique("e2e")
+    quince = api.create_ingredient(member, f"Quitte {tag}")
+    name = f"{quince['name']} Gelee"
+
+    page.goto("/meals/new")
+    meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
+    picker = meal_form.get_by_test_id(TEST_IDS["ingredientPicker"])
+    field = picker.get_by_label(text("meals.field.addIngredient"), exact=True)
+    create = picker.get_by_test_id(TEST_IDS["ingredientPickerCreate"])
+    field.fill(quince["name"])
+    before = create.bounding_box()
+    assert before is not None
+    expect(
+        picker.get_by_role("button", name=re.compile(f"^{re.escape(quince['name'])}"))
+    ).to_be_visible()
+    after = create.bounding_box()
+    assert after is not None
+    assert after["y"] == before["y"]
+
+    # The longer name's search waits for the 250 ms debounce: the tap comes before it.
+    field.press_sequentially(" Gelee")
+    create.click()
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    expect(dialog.get_by_label(text("ingredients.field.name"), exact=True)).to_have_value(name)
+    dialog.get_by_role("button", name=text("common.save")).click()
+    expect(dialog).to_be_hidden()
+
+    # Its "Save" added the new ingredient's row, and only that one.
+    row = meal_form.get_by_test_id(TEST_IDS["mealIngredientRow"])
+    expect(row).to_have_count(1)
+    expect(row).to_have_accessible_name(text("meals.row.label", name=name))
+
+
 def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
     """Journey 5 (MEAL-07, MEAL-08, VIS-04): copy a public meal, edit the copy only."""
     tag = unique("e2e")

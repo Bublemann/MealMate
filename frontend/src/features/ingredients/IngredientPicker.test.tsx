@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { createQueryClient } from '@/app/queryClient';
-import { mockApi, requestsTo } from '@/test/api';
+import { heldRoute, mockApi, requestsTo } from '@/test/api';
 import {
   ingredient,
   lookupResult,
@@ -96,14 +96,59 @@ describe('IngredientPicker', () => {
     await user.type(input, 'apf');
     await screen.findByRole('button', { name: /^Apfelsaft/ });
     await user.keyboard('{ArrowDown}');
+    expect(screen.getByTestId(testIds.ingredientPickerCreate)).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('button', { name: /^Äpfel/ })).toHaveFocus();
     await user.keyboard('{ArrowDown}{ArrowDown}');
-    expect(screen.getByTestId(testIds.ingredientPickerCreate)).toHaveFocus();
+    expect(screen.getByRole('button', { name: /^Apfelsaft/ })).toHaveFocus();
     await user.keyboard('{ArrowUp}{ArrowUp}{ArrowUp}');
     expect(input).toHaveFocus();
-    await user.keyboard('{ArrowDown}{Enter}');
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
 
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(APPLES);
+  });
+
+  it('keeps "Create" first while results arrive, change and go, hiding an earlier search’s results (MEAL-03)', async () => {
+    const search = heldRoute();
+    const { fetchMock, user } = renderPicker({}, { 'GET /api/ingredients': search.route });
+    const picker = screen.getByTestId(testIds.ingredientPicker);
+    const input = screen.getByLabelText('Search ingredient');
+    // The picker's buttons in DOM order: what a tap under the field lands on.
+    const options = () =>
+      within(picker)
+        .getAllByRole('button')
+        .map((button) => button.textContent);
+
+    await user.type(input, 'apf');
+    expect(options()).toEqual(['Create “apf”']);
+    await search.answer([APPLES, APPLE_JUICE]);
+    await within(picker).findByRole('button', { name: /^Apfelsaft/ });
+    expect(options()).toEqual([
+      'Create “apf”',
+      'ÄpfelFruit & vegetables · g',
+      'Apfelsaft (Hofgut) with barcodeOther · ml',
+    ]);
+
+    // While the longer text waits for the debounce and then for its answer, the shorter one's
+    // results are gone.
+    await user.type(input, 'els');
+    expect(options()).toEqual(['Create “apfels”']);
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/ingredients')).toHaveLength(2));
+    expect(options()).toEqual(['Create “apfels”']);
+    await search.answer([APPLE_JUICE]);
+    await within(picker).findByRole('button', { name: /^Apfelsaft/ });
+    expect(options()).toEqual(['Create “apfels”', 'Apfelsaft (Hofgut) with barcodeOther · ml']);
+
+    await user.type(input, 'x');
+    expect(options()).toEqual(['Create “apfelsx”']);
+    await search.answer([]);
+    const nothing = await screen.findByText('Nothing found.');
+    expect(options()).toEqual(['Create “apfelsx”']);
+    // The notice comes after the option, so it doesn't push the option down either.
+    expect(
+      screen.getByTestId(testIds.ingredientPickerCreate).compareDocumentPosition(nothing) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('says when nothing matches and offers to create it', async () => {

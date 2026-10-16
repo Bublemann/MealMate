@@ -22,9 +22,8 @@ import { testIds } from '@/testIds';
 import { shoppingOps, stampOp } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { ExtraItemInput } from './ExtraItemInput';
-import { groupByCategory, lineAmount, lineLabel, needsMoreTexts, reminderText } from './format';
+import { groupByCategory, lineAmount, lineLabel, needsMoreTexts } from './format';
 import { ListMeals } from './ListMeals';
-import { Reminder } from './Reminder';
 
 interface ShoppingViewProps {
   /** The list with the user's waiting changes applied. */
@@ -161,7 +160,6 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
             {t('lists.shop.finish')}
           </Button>
         )}
-        <Reminder seed={list.reminder_seed} />
       </section>
       {editable && <ExtraItemInput listId={list.id} shopping />}
       <ListMeals list={list} editable={editable} collapsible onAddMeals={onAddMeals} />
@@ -265,6 +263,9 @@ interface CheckRowProps extends RowProps {
  * through and shows who checked it. A line with an extra item has a button to change or remove
  * the item (editors, LIST-12). A line whose change hasn't been sent yet is faded and says so
  * (SYNC-07).
+ *
+ * The box and the marker are centred on the name, with or without badges and the pending note
+ * stacked under it. On such a stacked row the edit button lines up with the name's first line.
  */
 function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const { t } = useTranslation();
@@ -273,90 +274,111 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const more = line.needs_more ? needsMoreTexts(t, language, line.needs_more) : [];
   const checkedBy = line.checked ? line.checked_by : null;
   const extraId = line.sources.find((source) => source.kind === 'extra')?.extra_id ?? null;
+  const hasBadges = line.new || more.length > 0;
+  const stacked = line.pending || hasBadges;
 
   return (
     <li
       data-testid={testIds.shoppingLine}
-      className={cn('flex items-center', line.pending && 'bg-muted/50')}
+      className={cn(
+        'flex',
+        stacked ? 'items-start' : 'items-center',
+        line.pending && 'bg-muted/50',
+      )}
     >
+      {/*
+       * The first grid row holds the box, the name and the marker, centred on each other; the
+       * pending note and the badges go in the rows below, under the name. The box and the marker
+       * count as one line high and overflow it, so what is stacked follows right under the name;
+       * a stacked row's top padding makes room for the box. The minimum height keeps the box's
+       * own height plus padding, as for a row with nothing stacked.
+       */}
       <label
         className={cn(
-          'flex min-h-14 min-w-0 flex-1 items-center gap-3 py-1.5 pr-4 pl-1.5',
+          'grid min-h-[calc(var(--tap-target)+0.75rem)] min-w-0 flex-1 items-center gap-x-3 gap-y-1 py-1.5 pr-4 pl-1.5',
+          checkedBy ? 'grid-cols-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)]',
+          stacked && 'pt-[calc((var(--tap-target)-1lh)/2)]',
           editable && 'cursor-pointer hover:bg-accent/50',
         )}
       >
-        <span className="relative flex size-(--tap-target) shrink-0 items-center justify-center">
-          <input
-            ref={box(line.key)}
-            type="checkbox"
-            aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
-              name: lineLabel(line),
-            })}
-            checked={line.checked}
-            disabled={!editable}
-            onChange={(event) => onCheck(line, event.target.checked)}
-            className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
-          />
-          <span
-            aria-hidden="true"
-            className={cn(
-              'flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60',
-              // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
-              line.pending && 'opacity-50 peer-checked:opacity-50',
-            )}
-          >
-            {line.checked && <Check className="size-6" strokeWidth={3} />}
+        <span className="flex h-[1lh] items-center">
+          <span className="relative flex size-(--tap-target) items-center justify-center">
+            <input
+              ref={box(line.key)}
+              type="checkbox"
+              aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
+                name: lineLabel(line),
+              })}
+              checked={line.checked}
+              disabled={!editable}
+              onChange={(event) => onCheck(line, event.target.checked)}
+              className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
+            />
+            <span
+              aria-hidden="true"
+              className={cn(
+                'flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60',
+                // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
+                line.pending && 'opacity-50 peer-checked:opacity-50',
+              )}
+            >
+              {line.checked && <Check className="size-6" strokeWidth={3} />}
+            </span>
           </span>
         </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="flex items-baseline justify-between gap-3">
+        <span className="flex items-baseline justify-between gap-3">
+          <span
+            className={cn(
+              'min-w-0 break-words',
+              line.checked && 'text-muted-foreground line-through',
+            )}
+          >
+            {lineLabel(line)}
+          </span>
+          {amount && (
             <span
               className={cn(
-                'min-w-0 break-words',
+                'shrink-0 text-right font-medium tabular-nums',
                 line.checked && 'text-muted-foreground line-through',
               )}
             >
-              {lineLabel(line)}
-            </span>
-            {amount && (
-              <span
-                className={cn(
-                  'shrink-0 text-right font-medium tabular-nums',
-                  line.checked && 'text-muted-foreground line-through',
-                )}
-              >
-                {amount}
-              </span>
-            )}
-          </span>
-          {line.pending && (
-            <span data-testid={testIds.linePending} className="text-sm text-muted-foreground">
-              {t('lists.sync.pending')}
-            </span>
-          )}
-          {(line.new || more.length > 0) && (
-            <span className="flex flex-wrap gap-1">
-              {line.new && (
-                <Badge data-testid={testIds.lineNew} variant="secondary">
-                  {t('lists.shop.new')}
-                </Badge>
-              )}
-              {more.length > 0 && (
-                <span data-testid={testIds.lineNeedsMore} className="flex flex-wrap gap-1">
-                  <span className="sr-only">{t('lists.shop.needsMore')}</span>
-                  {more.map((text) => (
-                    <Badge key={text} variant="outline">
-                      {text}
-                    </Badge>
-                  ))}
-                </span>
-              )}
+              {amount}
             </span>
           )}
         </span>
+        {line.pending && (
+          <span
+            data-testid={testIds.linePending}
+            className="col-start-2 text-sm text-muted-foreground"
+          >
+            {t('lists.sync.pending')}
+          </span>
+        )}
+        {hasBadges && (
+          <span className="col-start-2 flex flex-wrap gap-1">
+            {line.new && (
+              <Badge data-testid={testIds.lineNew} variant="secondary">
+                {t('lists.shop.new')}
+              </Badge>
+            )}
+            {more.length > 0 && (
+              <span data-testid={testIds.lineNeedsMore} className="flex flex-wrap gap-1">
+                <span className="sr-only">{t('lists.shop.needsMore')}</span>
+                {more.map((text) => (
+                  <Badge key={text} variant="outline">
+                    {text}
+                  </Badge>
+                ))}
+              </span>
+            )}
+          </span>
+        )}
         {checkedBy && (
           <>
-            <InitialMarker user={checkedBy} decorative testId={testIds.lineCheckedBy} />
+            {/* In the first row, one line high like the box. */}
+            <span className="col-start-3 row-start-1 flex h-[1lh] items-center">
+              <InitialMarker user={checkedBy} decorative testId={testIds.lineCheckedBy} />
+            </span>
             <span className="sr-only">
               {t('lists.shop.checkedBy', { name: userLabel(t, checkedBy) })}
             </span>
@@ -390,9 +412,9 @@ interface FinishDialogProps {
 }
 
 /**
- * SHOP-04: the reminder, how many items aren't checked, then *Finish* or *Keep shopping*. *Finish*
- * is an op of the outbox, stamped at the tap (the list counts as finished then), so it works
- * offline too (SYNC-03); the view shows the done list at once.
+ * SHOP-04: how many items aren't checked, then *Finish* or *Keep shopping*. *Finish* is an op of
+ * the outbox, stamped at the tap (the list counts as finished then), so it works offline too
+ * (SYNC-03); the view shows the done list at once.
  */
 function FinishDialog({
   list,
@@ -424,10 +446,6 @@ function FinishDialog({
         {unchecked > 0 && (
           <p className="font-semibold">{t('lists.shop.unchecked', { count: unchecked })}</p>
         )}
-        <p className="rounded-xl bg-accent px-4 py-3 text-accent-foreground">
-          <span className="sr-only">{t('lists.reminderLabel')}: </span>
-          {reminderText(t, list.reminder_seed)}
-        </p>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('lists.shop.keepShopping')}
