@@ -1,15 +1,16 @@
-import { ChevronLeft } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/errors';
+import type { BackLink } from '@/components/DetailStrip';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAddListMeal } from '@/features/lists/api';
+import { useAddListMeal, useListOnce } from '@/features/lists/api';
+import { listDisplayName } from '@/features/lists/format';
 import type { ListViewState } from '@/features/lists/ListScreen';
 import { useLanguage } from '@/i18n';
 import { errorMessage, fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
@@ -63,6 +64,7 @@ function EditMeal({ id }: { id: string }) {
       <Screen
         title={t('meals.form.editTitle', { name: meal.data?.name ?? '' })}
         testId={testIds.screenMealForm}
+        back={meal.data ? mealBack(meal.data) : { to: '/meals', label: t('meals.detail.back') }}
       >
         {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
         <LoadError error={meal.error ?? forbidden} />
@@ -70,6 +72,29 @@ function EditMeal({ id }: { id: string }) {
     );
   }
   return <MealFormView meal={meal.data} />;
+}
+
+/** Editing goes back to the meal, by its name (D-46). */
+function mealBack(meal: Meal): BackLink {
+  return { to: `/meals/${meal.id}`, label: meal.name };
+}
+
+/**
+ * Where the form leads back to (D-46): the meal it edits, the list a new meal goes onto (by its
+ * display name, LIST-02, or "Einkaufsliste" until that is known), or else all meals.
+ */
+function useBackLink(meal: Meal | undefined, addToList: string): BackLink {
+  const { t } = useTranslation();
+  const language = useLanguage();
+  const list = useListOnce(meal ? '' : addToList);
+  if (meal) return mealBack(meal);
+  if (addToList) {
+    return {
+      to: `/lists/${addToList}`,
+      label: list.data ? listDisplayName(list.data, t, language) : t('lists.defaultName'),
+    };
+  }
+  return { to: '/meals', label: t('meals.detail.back') };
 }
 
 interface MealFormViewProps {
@@ -94,7 +119,7 @@ function MealFormView({ meal, addToList = '', name = '' }: MealFormViewProps) {
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const title = meal ? t('meals.form.editTitle', { name: meal.name }) : t('meals.form.createTitle');
-  const back = meal ? `/meals/${meal.id}` : addToList ? `/lists/${addToList}` : '/meals';
+  const back = useBackLink(meal, addToList);
 
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const shown = new Set(Object.keys(serverFields).filter(isShownPath));
@@ -166,14 +191,7 @@ function MealFormView({ meal, addToList = '', name = '' }: MealFormViewProps) {
   }
 
   return (
-    <Screen title={title} testId={testIds.screenMealForm}>
-      <Link
-        to={back}
-        className="-mt-3 inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
-      >
-        <ChevronLeft aria-hidden="true" className="size-5" />
-        {meal ? meal.name : addToList ? t('meals.form.backToList') : t('meals.detail.back')}
-      </Link>
+    <Screen title={title} testId={testIds.screenMealForm} back={back}>
       <form
         onSubmit={(event) => void onSubmit(event)}
         noValidate
@@ -270,7 +288,7 @@ function MealFormView({ meal, addToList = '', name = '' }: MealFormViewProps) {
             {saving ? t('meals.form.saving') : meal ? t('common.save') : t('meals.form.create')}
           </Button>
           <Button variant="outline" asChild>
-            <Link to={back}>{t('meals.form.cancel')}</Link>
+            <Link to={back.to}>{t('meals.form.cancel')}</Link>
           </Button>
         </div>
       </form>

@@ -846,7 +846,7 @@ describe('MealFormScreen (edit)', () => {
     it('adds the new meal to the list and goes back there', async () => {
       const { fetchMock, user, router } = renderFromList();
       const form = await screen.findByTestId(testIds.mealForm);
-      expect(screen.getByRole('link', { name: 'Back to the list' })).toHaveAttribute(
+      expect(await screen.findByRole('link', { name: 'Wochenende (26/09/2026)' })).toHaveAttribute(
         'href',
         `/lists/${LIST_ID}`,
       );

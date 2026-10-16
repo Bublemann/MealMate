@@ -167,6 +167,24 @@ export function useList(id: string) {
 }
 
 /**
+ * List `id` as another screen names it, e.g. the meal form's back link (D-46): the cached list or
+ * the local copy at once, else loaded once. Unlike `useList` it isn't checked for changes while
+ * that screen shows. An empty id loads nothing.
+ */
+export function useListOnce(id: string) {
+  const queryClient = useQueryClient();
+  const engine = useSyncEngine();
+  return useQuery({
+    queryKey: detailKey(id),
+    queryFn: ({ signal }) => loadList(queryClient, id, signal),
+    initialData: () => engine.copied(id),
+    initialDataUpdatedAt: () => engine.copiedAt(id),
+    structuralSharing: shareWithEtag,
+    enabled: id !== '',
+  });
+}
+
+/**
  * What makes an action one op (SYNC-05/06): a UUIDv7 and the time of the tap, made when the user
  * acts, not when the op is sent (it may wait in the outbox for a long time). Sending it again
  * keeps both, so the server applies it once.

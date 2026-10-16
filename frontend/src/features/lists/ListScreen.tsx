@@ -1,7 +1,7 @@
-import { ChevronLeft, ShoppingCart } from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
@@ -83,14 +83,11 @@ function ListView({ id }: { id: string }) {
   }, [location.state, location.pathname, location.search, navigate]);
 
   return (
-    <Screen title={title} testId={testIds.screenList}>
-      <Link
-        to="/lists"
-        className="-mt-3 inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
-      >
-        <ChevronLeft aria-hidden="true" className="size-5" />
-        {t('lists.detail.back')}
-      </Link>
+    <Screen
+      title={title}
+      testId={testIds.screenList}
+      back={{ to: '/lists', label: t('lists.detail.back') }}
+    >
       {initial.leftOut !== undefined && initial.leftOut > 0 && (
         <Alert data-testid={testIds.listLeftOut}>
           <AlertDescription>
