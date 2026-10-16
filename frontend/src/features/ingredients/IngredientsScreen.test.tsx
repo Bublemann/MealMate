@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import { checkboxNames, openPanel } from '@/test/filters';
-import { pinnedHeadline } from '@/test/pinned';
+import { expectPinnedHeadline } from '@/test/pinned';
 import {
   CATEGORIES,
   CATEGORIES_AFTER_DELETE,
@@ -85,14 +85,14 @@ describe('IngredientsScreen', () => {
     renderIngredients({ 'GET /api/ingredients': ingredients.route });
 
     expect(await screen.findByText('Loading…')).toBeVisible();
-    const headline = pinnedHeadline('Ingredients');
+    const headline = expectPinnedHeadline('Ingredients');
     expect(screen.getByLabelText('Search ingredients')).toBeVisible();
     expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('New ingredient');
 
     await ingredients.answer([]);
     expect(await screen.findByText('No ingredients yet')).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
-    expect(pinnedHeadline('Ingredients')).toBe(headline);
+    expect(expectPinnedHeadline('Ingredients')).toBe(headline);
     expect(screen.getByLabelText('Search ingredients')).toBeVisible();
     expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('New ingredient');
   });
@@ -374,7 +374,7 @@ describe('IngredientsScreen', () => {
 
     await user.type(search, 'Quitten');
     expect(await screen.findByText('No matches')).toBeVisible();
-    pinnedHeadline('Ingredients');
+    expectPinnedHeadline('Ingredients');
     expect(screen.queryByTestId(testIds.ingredientList)).toBeNull();
     // The tile offers to create it; there is no other "Create" button any more.
     expect(screen.getAllByRole('button', { name: 'Create “Quitten”' })).toEqual([
