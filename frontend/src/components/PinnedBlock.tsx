@@ -50,10 +50,11 @@ export function PinnedBlock({ search, filter, newTile }: PinnedBlockProps) {
       data-testid={testIds.pinnedBlock}
       className="frosted pinned sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em]"
     >
-      {/* As large as a detail screen's title, but in em, so the block's cap holds it too. */}
+      {/* As large as a detail screen's title, but in em, so the block's cap holds it too. At
+          the largest text sizes a long one wraps, hyphenated in the UI language (<html lang>). */}
       <h1
         id={heading.id}
-        className="text-[1.875em] leading-[1.2] font-bold tracking-tight wrap-anywhere"
+        className="text-[1.875em] leading-[1.2] font-bold tracking-tight hyphens-auto wrap-anywhere"
       >
         {heading.title}
       </h1>
