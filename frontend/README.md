@@ -534,6 +534,7 @@ order.
 | `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients        |
 | `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                   |
 | `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
+| `pinnedBlock`            | `pinned-block`             | A tab's pinned block, its headline first    |
 | `filterButton`           | `filter-button`            | Filter button in a tab's pinned block       |
 | `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)    |
 | `filterGroup`            | `filter-group`             | One checkbox group in the filter panel      |

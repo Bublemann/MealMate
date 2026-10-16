@@ -12,6 +12,7 @@ import {
 } from '@/test/api';
 import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { CUISINES, ME, meal, MEAL_ROUTES, mealSummary, TAGS } from '@/test/meals';
+import { pinnedHeadline } from '@/test/pinned';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -76,6 +77,7 @@ describe('MealsScreen', () => {
     renderMeals({ 'GET /api/meals': meals.route });
 
     expect(await screen.findByText('Loading…')).toBeVisible();
+    const headline = pinnedHeadline('Meals');
     expect(screen.getByLabelText('Search meals')).toBeVisible();
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
     expect(screen.getByTestId(testIds.newMeal)).toHaveAccessibleName('New meal');
@@ -83,6 +85,7 @@ describe('MealsScreen', () => {
     await meals.answer([]);
     expect(await screen.findByText('No meals yet')).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+    expect(pinnedHeadline('Meals')).toBe(headline);
     expect(screen.getByLabelText('Search meals')).toBeVisible();
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
     expect(screen.getByTestId(testIds.newMeal)).toHaveAccessibleName('New meal');
@@ -93,6 +96,7 @@ describe('MealsScreen', () => {
     renderMeals({ 'GET /api/meals': meals.route });
     await screen.findByTestId(testIds.loadingState);
     const pinned = [
+      pinnedHeadline('Meals'),
       screen.getByLabelText('Search meals'),
       screen.getByTestId(testIds.filterButton),
       screen.getByTestId(testIds.newMeal),
@@ -104,6 +108,7 @@ describe('MealsScreen', () => {
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
     // The very same elements: nothing above the list was rebuilt or moved.
     expect([
+      pinnedHeadline('Meals'),
       screen.getByLabelText('Search meals'),
       screen.getByTestId(testIds.filterButton),
       screen.getByTestId(testIds.newMeal),
@@ -382,6 +387,7 @@ describe('MealsScreen', () => {
     await user.type(search, 'Quitten');
 
     expect(await screen.findByText('No matches')).toBeVisible();
+    pinnedHeadline('Meals');
     expect(screen.queryByText('No meals yet')).toBeNull();
     // The tile offers to create it; there is no other "Create" button.
     expect(screen.getAllByRole('button', { name: 'Create “Quitten”' })).toEqual([

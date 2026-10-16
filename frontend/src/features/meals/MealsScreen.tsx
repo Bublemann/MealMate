@@ -52,7 +52,7 @@ export function MealsScreen() {
   }
 
   return (
-    <Screen variant="tab" title={t('nav.meals')} testId={testIds.screenMeals}>
+    <Screen variant="pinned" title={t('nav.meals')} testId={testIds.screenMeals}>
       <PinnedBlock
         search={{
           label: t('meals.search.label'),

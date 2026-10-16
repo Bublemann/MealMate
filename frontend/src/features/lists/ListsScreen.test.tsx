@@ -13,6 +13,7 @@ import {
 import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { emptyList, FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listSummary } from '@/test/lists';
 import { ME } from '@/test/meals';
+import { pinnedHeadline } from '@/test/pinned';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -110,6 +111,7 @@ describe('ListsScreen', () => {
     renderLists({ 'GET /api/lists': feed.route, 'GET /api/lists/sync': heldRoute().route });
 
     const tile = await screen.findByTestId(testIds.newList);
+    const headline = pinnedHeadline('Shopping lists');
     expect(tile).toHaveTextContent('New list');
     expect(tile).toBeEnabled();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
@@ -118,6 +120,7 @@ describe('ListsScreen', () => {
 
     await feed.answer(feedPage(FEED_LISTS));
     expect(await screen.findByTestId(testIds.listFeed)).toBeVisible();
+    expect(pinnedHeadline('Shopping lists')).toBe(headline);
     expect(screen.getByTestId(testIds.newList)).toBe(tile);
     expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
   });
@@ -126,6 +129,7 @@ describe('ListsScreen', () => {
     renderLists({ 'GET /api/lists': feedPage([]) });
 
     expect(await screen.findByText('No lists yet')).toBeVisible();
+    pinnedHeadline('Shopping lists');
     const tile = screen.getByTestId(testIds.newList);
     expect(tile).toHaveTextContent('New list');
     // The first-login tips come below the pinned block and scroll away with the feed.
@@ -452,6 +456,7 @@ describe('ListsScreen', () => {
     const { fetchMock, user } = renderLists({}, hiding([ME.id, BEN.id], ['draft', 'done']));
 
     expect(await screen.findByText('No matches')).toBeVisible();
+    pinnedHeadline('Shopping lists');
     expect(screen.queryByText('No lists yet')).toBeNull();
     const button = screen.getByTestId(testIds.filterButton);
     await waitFor(() => expect(button).toHaveAccessibleName('Filters, 2 active'));
