@@ -55,9 +55,4 @@ describe.each(Object.entries(catalogs))('translations (%s)', (language, catalog)
     ];
     expect(required.filter((key) => !(key in catalog))).toEqual([]);
   });
-
-  it('has ten reminders', () => {
-    const reminders = Object.keys(catalog).filter((key) => key.startsWith('reminder.'));
-    expect(reminders).toEqual(Array.from({ length: 10 }, (_, i) => `reminder.${i + 1}`));
-  });
 });

@@ -1,4 +1,4 @@
-"""Export a list as text through the share sheet (QA-04 journey 8, EXP-01/02, LIST-14).
+"""Export a list as text through the share sheet (QA-04 journey 8, EXP-01/02, D-43).
 
 `navigator.share` is replaced by an init script that records the shared text, so the test sees
 exactly what the share sheet would get. All tests of a run share one database, so names get a
@@ -35,7 +35,7 @@ DECIMAL_SEPARATORS = {"en": ".", "de": ","}
 def test_export_list_as_text(
     page: Page, api: Api, invite_user: Callable[..., Account], language: str
 ) -> None:
-    """Name and date, meals with servings, lines by category (removed ones left out), reminder."""
+    """Name and date, meals with servings, then the lines by category (removed ones left out)."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"), language=language)
     onions = api.create_ingredient(
@@ -95,11 +95,9 @@ def test_export_list_as_text(
     }
     categories = [c for c in api.categories(anna) if c["key"] in lines]
     created = datetime.fromisoformat(detail["created_at"]).astimezone(TIME_ZONE)
-    reminder = text(f"reminder.{detail['reminder_seed'] % 10 + 1}", language)
     expected = [
         f"{draft['name']} ({created.strftime(DATE_FORMATS[language])})",
         text("lists.export.meal", language, servings="4", name=tart["name"]),
         *("\n".join([c["names"][language], *lines[c["key"]]]) for c in categories),
-        reminder,
     ]
     assert shared == "\n\n".join(expected)

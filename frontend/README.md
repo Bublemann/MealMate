@@ -83,8 +83,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 
 - **All user-facing text goes through i18n keys** in `src/i18n/*.json`. No hard-coded strings in
   components, including `aria-label`s. Keys are flat: `feature.screen.element`; errors are
-  `error.<code>`, field errors `error.field.<code>`, reminders `reminder.<n>`. Keys are
-  type-checked: `t('typo')` fails `tsc`.
+  `error.<code>`, field errors `error.field.<code>`. Keys are type-checked: `t('typo')` fails
+  `tsc`.
 - **API calls only through `src/api`.** Features call the shared `api` client (typed from
   OpenAPI) in their `features/<feature>/api.ts` and expose TanStack Query hooks. Wrap calls in
   `unwrap()`, which rejects with an `ApiError` (`status`, `code`, `params`, `fields`). Show errors
@@ -616,7 +616,6 @@ order.
 | `listLine`               | `list-line`                | One line (opens its sources)                |
 | `lineSources`            | `line-sources`             | Sources dialog of a line                    |
 | `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
-| `listReminder`           | `list-reminder`            | Reminder in the last row of a list          |
 | `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
 | `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
 | `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |
@@ -637,7 +636,7 @@ order.
 | `editShoppingItem`       | `edit-shopping-item`       | Edit button of an extra item while shopping |
 | `shoppingAnnouncement`   | `shopping-announcement`    | Live region: "Mehl is in the cart"          |
 | `finishShopping`         | `finish-shopping`          | "Finish shopping" button                    |
-| `finishDialog`           | `finish-dialog`            | Finish dialog (reminder, not checked)       |
+| `finishDialog`           | `finish-dialog`            | Finish dialog ("N items not checked")       |
 | `listDone`               | `list-done`                | "Bought on …" note of a done list           |
 | `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)     |
 | `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
