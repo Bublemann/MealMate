@@ -37,7 +37,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0014"
+HEAD = "0015"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -63,7 +63,8 @@ TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
 # one.
-HEAD_TABLES = TABLES_0006 - {"products"}
+TABLES_0014 = TABLES_0006 - {"products"}
+HEAD_TABLES = TABLES_0014 | {"recurring_items", "notices"}
 
 
 @pytest.fixture
@@ -130,35 +131,39 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0006")
     assert tables(database_path) == TABLES_0006
     command.upgrade(config, "0007")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0008")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0009")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0010")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0011")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0012")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0013")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0014")
+    assert tables(database_path) == TABLES_0014
+    command.upgrade(config, "0015")
     assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0014")
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0013")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0012")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0011")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0010")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0009")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0008")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0007")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0006")
     assert tables(database_path) == TABLES_0006
     command.downgrade(config, "0005")
@@ -1258,6 +1263,154 @@ def test_the_0014_downgrade_is_refused(tmp_path: Path) -> None:
 
     assert current_revision(path) == "0014"
     assert dump_without(path) == before
+
+
+# --- 0015 -----------------------------------------------------------------------------------
+
+DEMO_COUPLE_ID = "01a0e7f4-995b-7231-87d9-4076436effa6"  # anna and ben in demo-0013.sql
+
+
+def inserts(path: Path) -> list[str]:
+    """The rows of the database as SQL, without its schema."""
+    return [line for line in dump_without(path) if line.startswith("INSERT INTO")]
+
+
+def ingredient_id(connection: sqlite3.Connection, name: str) -> str:
+    row_id: str = connection.execute(
+        "SELECT id FROM ingredients WHERE name = ?", (name,)
+    ).fetchone()[0]
+    return row_id
+
+
+def user_id(connection: sqlite3.Connection, username: str) -> str:
+    row_id: str = connection.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()[0]
+    return row_id
+
+
+def recurring_item(
+    connection: sqlite3.Connection,
+    name: str,
+    *,
+    couple_id: str | None = None,
+    user: str | None = None,
+    measured_intervals: str = "[]",
+) -> str:
+    return insert(
+        connection,
+        "recurring_items",
+        couple_id=couple_id,
+        user_id=None if user is None else user_id(connection, user),
+        ingredient_id=ingredient_id(connection, name),
+        interval_days=28,
+        interval_manual=False,
+        last_purchased_on="2026-09-27",
+        measured_intervals=measured_intervals,
+    )
+
+
+def notice(connection: sqlite3.Connection, username: str) -> None:
+    connection.execute(
+        "INSERT INTO notices (id, user_id, kind, params, created_at) VALUES (?, ?, ?, ?, ?)",
+        (str(uuid.uuid7()), user_id(connection, username), "recurring_item.ingredient_deleted",
+         '{"name": "Klopapier", "brand": null}', NOW),
+    )  # fmt: skip
+
+
+def test_0015_adds_the_tables_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0014 → 0015 (LIST-16, D-51): two empty tables, every row and reference
+    as it was, and nothing seeded."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0014")
+    counts, references, rows = row_counts(path), non_null_foreign_keys(path), inserts(path)
+
+    command.upgrade(config, "0015")
+
+    assert row_counts(path) == counts | {"notices": 0, "recurring_items": 0}
+    assert non_null_foreign_keys(path) == references | {
+        "recurring_items.couple_id": 0,
+        "recurring_items.last_list_id": 0,
+        "recurring_items.user_id": 0,
+    }
+    assert [line for line in inserts(path) if "alembic_version" not in line] == [
+        line for line in rows if "alembic_version" not in line
+    ]
+    assert_clean(path)
+
+
+def test_the_0015_downgrade_refuses_while_there_are_rows(tmp_path: Path) -> None:
+    """Recurring items and notices don't exist before 0015: the downgrade refuses while there
+    are any and changes nothing. Without them it steps down to 0014 as it was (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0014")
+    at_0014 = dump_without(path)
+    command.upgrade(config, "0015")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        recurring_item(connection, "Kaffee", couple_id=DEMO_COUPLE_ID)
+        recurring_item(connection, "Kaffee", user="carl")
+        notice(connection, "anna")
+    before = dump_without(path)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"cannot downgrade below 0015: there are recurring items \(2\) and notices \(1\)",
+    ):
+        command.downgrade(config, "0014")
+
+    assert current_revision(path) == HEAD
+    assert dump_without(path) == before
+    execute(path, "DELETE FROM recurring_items")
+    with pytest.raises(RuntimeError, match=r"recurring items \(0\) and notices \(1\)"):
+        command.downgrade(config, "0014")
+    execute(path, "DELETE FROM notices")
+    command.downgrade(config, "0014")
+    assert dump_without(path) == at_0014
+
+
+@pytest.mark.parametrize(
+    ("earlier", "owner", "message"),
+    [
+        # Exactly one owner: a couple, or a user without one.
+        (None, {}, "CHECK constraint failed: ck_recurring_items_one_owner"),
+        (None, {"couple_id": DEMO_COUPLE_ID, "user": "anna"},
+         "CHECK constraint failed: ck_recurring_items_one_owner"),
+        # One item per ingredient in a set.
+        ({"user": "carl"}, {"user": "carl"}, "UNIQUE"),
+        ({"couple_id": DEMO_COUPLE_ID}, {"couple_id": DEMO_COUPLE_ID}, "UNIQUE"),
+        # The measured intervals are a list, never JSON null.
+        (None, {"user": "carl", "measured_intervals": "null"},
+         "CHECK constraint failed: ck_recurring_items_measured_intervals"),
+    ],
+)  # fmt: skip
+def test_a_recurring_item_has_one_owner_and_each_ingredient_once_per_set(
+    tmp_path: Path, earlier: dict[str, str] | None, owner: dict[str, str], message: str
+) -> None:
+    path = tmp_path / "data" / "mealmate.db"
+    load_demo_0013(path)
+    command.upgrade(alembic_config(path), "head")
+    with closing(sqlite3.connect(path)) as connection:
+        if earlier is not None:
+            recurring_item(connection, "Kaffee", **earlier)
+        with pytest.raises(sqlite3.IntegrityError, match=message):
+            recurring_item(connection, "Kaffee", **owner)
+
+
+def test_sets_of_different_owners_may_share_an_ingredient(tmp_path: Path) -> None:
+    path = tmp_path / "data" / "mealmate.db"
+    load_demo_0013(path)
+    command.upgrade(alembic_config(path), "head")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        recurring_item(connection, "Kaffee", couple_id=DEMO_COUPLE_ID)
+        recurring_item(connection, "Kaffee", user="carl")
+        recurring_item(connection, "Kaffee", user="admin")
+    assert query(path, "SELECT count(*) FROM recurring_items") == [(3,)]
+    assert_clean(path)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
