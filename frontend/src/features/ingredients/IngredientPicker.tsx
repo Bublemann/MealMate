@@ -42,16 +42,18 @@ export function IngredientPicker({
   const listRef = useRef<HTMLUListElement>(null);
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
-  const debounced = useDebouncedValue(query.trim());
+  const typed = query.trim();
+  const debounced = useDebouncedValue(typed);
   const searching = debounced !== '';
   const results = useIngredients(debounced, { enabled: searching });
   const categories = useCategories();
-  const matches = searching
-    ? (results.data ?? [])
-        .filter((ingredient) => !excludeIds.includes(ingredient.id))
-        .slice(0, MAX_RESULTS)
-    : [];
-  const typed = query.trim();
+  // Only the answer for the text in the field: an earlier text's results, kept while the debounce
+  // runs or the search loads, would vanish under the finger when the answer lands (MEAL-03).
+  const answer =
+    searching && debounced === typed && !results.isPlaceholderData ? results.data : undefined;
+  const matches = (answer ?? [])
+    .filter((ingredient) => !excludeIds.includes(ingredient.id))
+    .slice(0, MAX_RESULTS);
 
   function options(): HTMLButtonElement[] {
     return Array.from(listRef.current?.querySelectorAll('button') ?? []);
@@ -87,13 +89,7 @@ export function IngredientPicker({
           onKeyDown={onInputKeyDown}
         />
       </div>
-      <p aria-live="polite" className="text-sm text-muted-foreground">
-        {!typed && t('ingredients.picker.typeToSearch')}
-        {typed && searching && results.isSuccess && matches.length === 0 && (
-          <>{t('ingredients.picker.noResults')}</>
-        )}
-      </p>
-      <ErrorAlert error={results.error} />
+      {/* "Create" comes first, right under the field, so results arriving below never move it. */}
       {typed && (matches.length > 0 || allowCreate) && (
         // The arrow keys only move the focus between the buttons inside.
         // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
@@ -103,6 +99,19 @@ export function IngredientPicker({
           onKeyDown={onListKeyDown}
           className="flex flex-col divide-y rounded-lg border"
         >
+          {allowCreate && (
+            <li>
+              <button
+                type="button"
+                data-testid={testIds.ingredientPickerCreate}
+                onClick={() => setCreating(true)}
+                className="flex min-h-(--tap-target) w-full items-center gap-2 px-3 py-2 text-left font-medium text-primary outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <Plus aria-hidden="true" className="size-5 shrink-0" />
+                {t('ingredients.createNamed', { name: typed })}
+              </button>
+            </li>
+          )}
           {matches.map((ingredient) => (
             <li key={ingredient.id}>
               <button
@@ -118,21 +127,13 @@ export function IngredientPicker({
               </button>
             </li>
           ))}
-          {allowCreate && (
-            <li>
-              <button
-                type="button"
-                data-testid={testIds.ingredientPickerCreate}
-                onClick={() => setCreating(true)}
-                className="flex min-h-(--tap-target) w-full items-center gap-2 px-3 py-2 text-left font-medium text-primary outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-              >
-                <Plus aria-hidden="true" className="size-5 shrink-0" />
-                {t('ingredients.createNamed', { name: typed })}
-              </button>
-            </li>
-          )}
         </ul>
       )}
+      <p aria-live="polite" className="text-sm text-muted-foreground">
+        {!typed && t('ingredients.picker.typeToSearch')}
+        {answer && matches.length === 0 && t('ingredients.picker.noResults')}
+      </p>
+      <ErrorAlert error={results.error} />
       {allowCreate && (
         <IngredientFormDialog
           open={creating}
