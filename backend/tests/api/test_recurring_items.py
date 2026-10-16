@@ -450,11 +450,11 @@ def by_id(body: Any) -> dict[str, Any]:
 
 
 async def test_forming_a_couple_combines_both_sets(
-    api: AsyncClient, anna: Account, ben: Account
+    app: FastAPI, api: AsyncClient, anna: Account, ben: Account
 ) -> None:
-    """For an ingredient both keep, the one bought more recently stays with all its values; on
-    a tie the requester's (anna's), whoever made the ingredient recurring first. The others
-    move as they are."""
+    """For an ingredient both keep, the one bought more recently stays with all its values, its
+    last amount and measured intervals included; on a tie the requester's (anna's), whoever
+    made the ingredient recurring first. The others move as they are."""
     toilet_paper, toothpaste, dish_soap, coffee, milk = [
         (await create_ingredient(api, anna, name))["id"]
         for name in ("Klopapier", "Zahnpasta", "Spülmittel", "Kaffee", "Milch")
@@ -472,6 +472,16 @@ async def test_forming_a_couple_combines_both_sets(
     newer = await make_recurring(api, anna, coffee, weeks=1, last_purchased_on=date(2026, 9, 25))
     await make_recurring(api, ben, coffee, weeks=5, last_purchased_on=date(2026, 9, 24))
     only_ben = await make_recurring(api, ben, milk, weeks=1)
+    for item, amount, measured in ((later, 500, [10, 12]), (newer, 250, [3, 4])):
+        await store_purchases(
+            app, item["id"], last_amount=amount, last_unit="g", measured_intervals=measured
+        )
+    later = by_id(await recurring(api, ben))[later["id"]]
+    newer = by_id(await recurring(api, anna))[newer["id"]]
+    assert (schedule(later), schedule(newer)) == (
+        (weeks(2, automatic=True), 2, "2026-09-21"),  # 11 days on average
+        ({"value": 4, "unit": "day", "automatic": True}, 1, "2026-09-29"),
+    )
 
     await make_couple(api, anna, ben)
 
@@ -489,8 +499,9 @@ def without_id(item: Any) -> Any:
 async def test_each_partner_keeps_a_copy_when_the_couple_ends(
     app: FastAPI, api: AsyncClient, anna: Account, ben: Account, toilet_paper: Any
 ) -> None:
-    """Each copy has all the values of the couple's item, an interval set by hand included,
-    and the two go separate ways."""
+    """Each copy has all the values of the couple's item, an interval set by hand and the
+    measured intervals included, and the two go separate ways: ben's copy, switched back to
+    automatic, takes the average of the measured intervals; anna's stays as it was."""
     await make_couple(api, anna, ben)
     item = await make_recurring(api, anna, toilet_paper["id"], weeks=4)
     await store_purchases(
@@ -505,8 +516,9 @@ async def test_each_partner_keeps_a_copy_when_the_couple_ends(
     [bens] = (await recurring(api, ben))["items"]
     assert without_id(annas) == without_id(bens) == without_id(item)
     assert len({item["id"], annas["id"], bens["id"]}) == 3
-    await updated(api, anna, annas["id"], interval_weeks=1)
-    assert (await recurring(api, ben))["items"] == [bens]
+    bens = await updated(api, ben, bens["id"], automatic=True)
+    assert schedule(bens) == (weeks(2, automatic=True), 2, "2026-10-08")  # 11 days, not 14
+    assert (await recurring(api, anna))["items"] == [annas]
 
 
 async def test_the_partner_keeps_the_set_when_a_user_is_deleted(
@@ -552,12 +564,17 @@ async def merge(api: AsyncClient, admin: Account, ingredient_id: str, into_id: s
 
 
 async def test_a_merge_moves_the_item_to_the_surviving_ingredient(
-    api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any
+    app: FastAPI, api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any
 ) -> None:
-    """Merging "WC-Papier" into "Klopapier" keeps anna's item with all its values; she gets no
-    notice."""
+    """Merging "WC-Papier" into "Klopapier" keeps anna's item with all its values, its last
+    amount and measured intervals included; she gets no notice."""
     duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
     item = await make_recurring(api, anna, duplicate["id"], last_purchased_on=date(2026, 9, 1))
+    await store_purchases(
+        app, item["id"], last_amount=2, last_unit="piece", measured_intervals=[10, 12]
+    )
+    [item] = (await recurring(api, anna))["items"]
+    assert (item["due_on"], item["last_amount"]) == ("2026-09-12", {"value": 2, "unit": "piece"})
 
     await merge(api, admin, duplicate["id"], toilet_paper["id"])
 
@@ -566,6 +583,7 @@ async def test_a_merge_moves_the_item_to_the_surviving_ingredient(
 
 
 async def test_when_a_set_has_both_the_later_purchase_stays(
+    app: FastAPI,
     api: AsyncClient,
     anna: Account,
     ben: Account,
@@ -573,8 +591,9 @@ async def test_when_a_set_has_both_the_later_purchase_stays(
     admin: Account,
     toilet_paper: Any,
 ) -> None:
-    """anna bought "WC-Papier" more recently, so that item stays (now of "Klopapier"); the
-    couple ben and carl bought both on one day, so their "Klopapier" item stays (D-42)."""
+    """anna bought "WC-Papier" more recently, so that item stays with all its values (now of
+    "Klopapier"); the admin bought "Klopapier" more recently, so that item stays; the couple
+    ben and carl bought both on one day, so their "Klopapier" item stays (D-42)."""
     duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
     await make_couple(api, ben, carl)
     later = await make_recurring(
@@ -583,16 +602,27 @@ async def test_when_a_set_has_both_the_later_purchase_stays(
     await make_recurring(
         api, anna, toilet_paper["id"], weeks=2, last_purchased_on=date(2026, 9, 10)
     )
+    await make_recurring(api, admin, duplicate["id"], weeks=3, last_purchased_on=date(2026, 9, 1))
+    kept = await make_recurring(
+        api, admin, toilet_paper["id"], weeks=5, last_purchased_on=date(2026, 9, 12)
+    )
     await make_recurring(api, ben, duplicate["id"], weeks=3, last_purchased_on=date(2026, 9, 15))
     tie = await make_recurring(
         api, carl, toilet_paper["id"], weeks=5, last_purchased_on=date(2026, 9, 15)
     )
+    await store_purchases(
+        app, later["id"], last_amount=4, last_unit="piece", measured_intervals=[10, 12]
+    )
+    later = by_id(await recurring(api, anna))[later["id"]]
+    assert (later["due_on"], later["last_amount"]) == ("2026-10-01", {"value": 4, "unit": "piece"})
 
     await merge(api, admin, duplicate["id"], toilet_paper["id"])
 
     assert (await recurring(api, anna))["items"] == [later | {"ingredient": summary(toilet_paper)}]
+    assert (await recurring(api, admin))["items"] == [kept]
     assert (await recurring(api, ben))["items"] == [tie]
-    assert (await notices(api, anna))["count"] == (await notices(api, ben))["count"] == 0
+    for user in (anna, admin, ben):
+        assert (await notices(api, user))["count"] == 0, user.username
 
 
 # --- due over time --------------------------------------------------------------------------
