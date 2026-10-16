@@ -413,7 +413,7 @@ sudo /srv/mealmate/bin/setup.sh --rotate-secret
 
 ### Diagnostics for the iPhone platform tests (M1 only)
 
-The `/diag` screen (Me → Diagnostics, admins only) needs the diagnostics endpoints, which are off by default. Switch them on for the tests and **off again afterwards**:
+The `/diag` screen (Settings → Diagnostics, admins only) needs the diagnostics endpoints, which are off by default. Switch them on for the tests and **off again afterwards**:
 
 ```bash
 echo 'MEALMATE_DIAGNOSTICS_ENABLED=true' | sudo tee -a /srv/mealmate/.env && sudo /srv/mealmate/bin/mm-compose up -d

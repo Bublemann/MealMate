@@ -58,7 +58,7 @@ frontend/
     ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt, viewport
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
-    │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
+    │   ├── me/ couple/     # Settings tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
@@ -125,10 +125,15 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `--tap-target` and `--control-font-size` tokens keep a px floor under touch targets and form
   text. Colour is never the only signal (e.g. the active tab has a lighter pill and a thicker icon
   stroke besides its green icon). `prefers-reduced-motion` turns animations off.
-- **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only;
-  the tab names stay as visually hidden text (not `aria-label`s), so screen readers and tests still
-  read them. The tab screens (Lists, Meals, Ingredients, Me) have a level-1 heading only screen
-  readers see (`<Screen variant="tab">`); detail screens keep a visible one. The frosted look is
+- **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only
+  (D-28), the fourth a gear; the tab names stay as visually hidden text (not `aria-label`s), so
+  screen readers and tests still read them. A tab's name is its screen's headline, from one
+  translation per tab (`nav.*`, D-44): "Einkaufslisten", "Gerichte", "Zutaten", "Einstellungen".
+  Every screen shows its headline as its one level-1 heading, which labels the screen's section
+  (`Screen`): on Lists, Meals and Ingredients as the first element of the pinned block
+  (`<Screen variant="pinned">`), elsewhere above the content, scrolling with it (the Settings tab
+  and the detail screens). The Settings tab keeps the address `/me` and the test IDs `tabMe` and
+  `screenMe` from when it was called "Me". The frosted look is
   the `frosted` utility (`index.css`) with the `--frosted*` tokens; the bar's size and position
   are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it leaves room
   for the content at the largest text sizes), and `--tab-bar-clearance` keeps the content's end
@@ -141,15 +146,18 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   nothing changes. Tests stub `visualViewport` and fire its events (`app/viewport.test.tsx`).
 - **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
   same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
-  it. It holds the search field (its label only for screen readers), the filter button and the
-  green, row-shaped "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is
-  present and opens the new form with that name. A tab renders it at once and puts its state
-  below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
-  Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
-  clears the search and the filters) when they hide everything. Like the tab bar, the block must
+  it. It holds the tab's headline (D-44, handed over by its `<Screen variant="pinned">`), the
+  search field (its label only for screen readers), the filter button and the green, row-shaped
+  "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is present and opens the new
+  form with that name. A tab renders it at once and puts its state below it: `LoadingState` until
+  the first answer, then the content, `EmptyLine` ("Noch keine Zutaten") on an empty tab, or
+  `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which clears the search and the
+  filters) when they hide everything. Like the tab bar, the block must
   not crowd out the content at the largest text sizes: the `pinned` utility (`index.css`) caps its
   text and its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens
-  (about the first accessibility size, D-29), and its spacing is in `em` of that text.
+  (about the first accessibility size, D-29), and its sizes and spacing are in `em` of that text:
+  the headline is as large as a detail screen's title (`1.875em`, not `text-3xl`, which is in
+  `rem` and would escape the cap) and wraps hyphenated in the UI language.
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
@@ -244,7 +252,8 @@ How the app stays signed in (plan § 5.4, § 8):
   checked with `POST /api/auth/codes/check` before the form appears. Only submitting the form
   consumes it.
 - **Language.** Before login the device language (or the stored choice) is used; the join form
-  sends it. When signed in, the server's `language` wins, and changing it on Me saves it there.
+  sends it. When signed in, the server's `language` wins, and changing it on the Settings tab
+  saves it there.
 
 ## Sharing links
 
@@ -332,7 +341,7 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   copy, whatever the saved user filter and state filter say, and disables the filter button and
   the "New list" tile (UI-02); read-only and done lists need a connection.
 - **Lifecycle** (SYNC-05/10), from the session's end events: logging out (after a confirmation
-  when changes wait, on Me and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
+  when changes wait, on the Settings tab and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
   and keeps only this user's outbox; an expired one keeps both until the same user is back; a
   different user signing in removes the previous copy, and the previous user's ops are never sent
   with the new session.
@@ -492,11 +501,11 @@ order.
 | `tabLists`               | `tab-lists`                | Tab bar link to Lists                       |
 | `tabMeals`               | `tab-meals`                | Tab bar link to Meals                       |
 | `tabIngredients`         | `tab-ingredients`          | Tab bar link to Ingredients                 |
-| `tabMe`                  | `tab-me`                   | Tab bar link to Me                          |
+| `tabMe`                  | `tab-me`                   | Tab bar link to Settings (the gear)         |
 | `screenLists`            | `screen-lists`             | Lists screen                                |
 | `screenMeals`            | `screen-meals`             | Meals screen                                |
 | `screenIngredients`      | `screen-ingredients`       | Ingredients screen                          |
-| `screenMe`               | `screen-me`                | Me screen                                   |
+| `screenMe`               | `screen-me`                | Settings screen                             |
 | `languageSelect`         | `language-select`          | Language select on Me                       |
 | `appVersion`             | `app-version`              | Running version on Me (once loaded)         |
 | `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Me         |
