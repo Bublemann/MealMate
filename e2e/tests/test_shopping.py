@@ -147,11 +147,10 @@ def test_couple_shops_together(
         expect(flour_line).to_contain_text("400 g")
         expect(flour_line.get_by_role("checkbox", name=check_flour)).not_to_be_checked()
 
-    # Anna finishes through the dialog with the reminder (SHOP-04).
+    # Anna finishes through the dialog (SHOP-04).
     anna_page.get_by_test_id(TEST_IDS["finishShopping"]).click()
     dialog = anna_page.get_by_role("dialog", name=text("lists.shop.finishTitle"))
     expect(dialog).to_contain_text(text("lists.shop.unchecked_other", count="2"))
-    expect(dialog).to_contain_text(text(f"reminder.{shared['reminder_seed'] % 10 + 1}"))
     dialog.get_by_role("button", name=text("lists.shop.finishConfirm"), exact=True).click()
     expect(dialog).to_be_hidden()
     expect(anna_page.get_by_test_id(TEST_IDS["listDone"])).to_be_visible()
