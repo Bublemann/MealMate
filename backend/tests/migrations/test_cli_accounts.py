@@ -265,19 +265,19 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     assert "Demo lists: 6" in result.output
     lists = query(
         database,
-        "SELECT u.username, l.name, l.shared_with_partner, l.status, l.reminder_seed, "
+        "SELECT u.username, l.name, l.shared_with_partner, l.status, "
         "(SELECT count(*) FROM list_meals m WHERE m.list_id = l.id), "
         "(SELECT count(*) FROM list_extra_items e WHERE e.list_id = l.id), "
         "(SELECT count(*) FROM list_line_states s WHERE s.list_id = l.id AND s.hidden) "
         "FROM shopping_lists l JOIN users u ON u.id = l.owner_id ORDER BY 1, 2",
     )
     assert lists == [
-        ("anna", "Salatabend", 1, "done", 4, 1, 1, 0),
-        ("anna", "Wocheneinkauf", 1, "shopping", 21, 2, 3, 0),
-        ("anna", "Wochenende", 1, "draft", 3, 2, 3, 1),
-        ("ben", None, 0, "draft", 7, 2, 0, 0),
-        ("carl", "Grillabend", 0, "draft", 12, 3, 1, 0),
-        ("carl", "Vorrat", 0, "done", 58, 1, 1, 0),
+        ("anna", "Salatabend", 1, "done", 1, 1, 0),
+        ("anna", "Wocheneinkauf", 1, "shopping", 2, 3, 0),
+        ("anna", "Wochenende", 1, "draft", 2, 3, 1),
+        ("ben", None, 0, "draft", 2, 0, 0),
+        ("carl", "Grillabend", 0, "draft", 3, 1, 0),
+        ("carl", "Vorrat", 0, "done", 1, 1, 0),
     ]
     checks = query(
         database,

@@ -190,9 +190,8 @@ class ListDetail(BaseModel):
     """A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:
     editors change the name, meals, servings, extra items and hidden lines; only the owner
     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
-    `<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is
-    `reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`
-    are set once shopping started and while the list is done (LIST-10)."""
+    `<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`
+    and `finished_at` are set once shopping started and while the list is done (LIST-10)."""
 
     id: str
     name: str | None
@@ -206,7 +205,6 @@ class ListDetail(BaseModel):
     is_owner: bool
     can_edit: bool
     shared_with_partner: bool
-    reminder_seed: int
     meals: list[ListMealEntry]
     lines: list[ListLine]
     extra_items: list[ExtraItem]

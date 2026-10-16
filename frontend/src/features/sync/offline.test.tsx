@@ -9,6 +9,7 @@ import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
 import {
   FEED_LISTS,
   feedPage,
+  FORMER_REMINDER,
   line,
   LIST_ID,
   LIST_ROUTES,
@@ -140,6 +141,22 @@ describe('lists from the local copy (SYNC-09)', () => {
 
     const lines = await screen.findByTestId(testIds.shoppingLines);
     expect(within(lines).getByRole('list', { name: 'Cheese' })).toHaveTextContent('Gouda');
+  });
+
+  it('shows a list an older app version stored with the reminder’s seed (D-43)', async () => {
+    // Stored before the API stopped sending `reminder_seed`; the field is ignored.
+    await storeCopy({ ...shoppingList(), reminder_seed: 1230 } as Schemas['ListDetail']);
+    serverGone(FAIL);
+
+    const tab = renderApp('/lists');
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    tab.unmount();
+    renderApp(`/lists/${LIST_ID}`);
+
+    expect(await screen.findByRole('checkbox', { name: 'Check off Zwiebeln' })).toBeVisible();
+    expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
   });
 
   it('loads the categories again over ones an older app version stored without names', async () => {

@@ -106,7 +106,7 @@ def names(items: list[Any]) -> list[str | None]:
     return [item["name"] for item in items]
 
 
-# --- create and read (LIST-01, LIST-02, LIST-14) --------------------------------------------
+# --- create and read (LIST-01, LIST-02) ----------------------------------------------------
 
 
 async def test_create_an_empty_draft(api: AsyncClient, anna: Account) -> None:
@@ -114,7 +114,6 @@ async def test_create_an_empty_draft(api: AsyncClient, anna: Account) -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert 0 <= body["reminder_seed"] <= 9999
     assert body == {
         "id": body["id"],
         "name": None,
@@ -128,12 +127,37 @@ async def test_create_an_empty_draft(api: AsyncClient, anna: Account) -> None:
         "is_owner": True,
         "can_edit": True,
         "shared_with_partner": False,
-        "reminder_seed": body["reminder_seed"],
         "meals": [],
         "lines": [],
         "extra_items": [],
     }
     assert await detail(api, anna, body["id"]) == body
+
+
+async def test_no_answer_carries_a_reminder_seed(
+    app: FastAPI, api: AsyncClient, anna: Account
+) -> None:
+    """D-43: with the reminder, its seed is gone from the list detail, the feed and the local
+    copy, and new drafts don't get one: a new list, a copy (VIS-03), "Shop again" (SHOP-06)."""
+    created = await create_list(api, anna, "Woche")
+    list_id = created["id"]
+    copied = await api.post(f"/api/lists/{list_id}/copy", headers=anna.headers)
+    await set_status(app, list_id, "done")
+    again = await api.post(f"/api/lists/{list_id}/shop-again", headers=anna.headers)
+    synced = (await api.get("/api/lists/sync", headers=anna.headers)).json()["lists"]
+    feed = await summaries(api, anna)
+
+    assert (copied.status_code, again.status_code) == (201, 201)
+    assert (len(synced), len(feed)) == (2, 3)
+    answers = [
+        created,
+        await detail(api, anna, list_id),
+        copied.json()["list"],
+        again.json()["list"],
+        *synced,
+        *feed,
+    ]
+    assert [answer["id"] for answer in answers if "reminder_seed" in answer] == []
 
 
 async def test_names(api: AsyncClient, anna: Account) -> None:

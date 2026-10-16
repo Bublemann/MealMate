@@ -352,7 +352,6 @@ class DemoShopping:
 class DemoList:
     owner: str
     name: str | None
-    reminder_seed: int
     shared: bool = False
     meals: tuple[DemoListMeal, ...] = ()
     extras: tuple[DemoExtra, ...] = ()
@@ -363,7 +362,7 @@ class DemoList:
 
 DEMO_LISTS: tuple[DemoList, ...] = (
     DemoList(
-        "anna", "Wochenende", reminder_seed=3, shared=True,
+        "anna", "Wochenende", shared=True,
         meals=(
             DemoListMeal("anna", "Pfannkuchen", 4),
             DemoListMeal("ben", "Tomatensalat", 3),
@@ -376,14 +375,14 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         hidden=("Salz",),
     ),
     DemoList(
-        "ben", None, reminder_seed=7,
+        "ben", None,
         meals=(
             DemoListMeal("ben", "Hähnchen-Reis-Pfanne", 2),
             DemoListMeal("ben", DEMO_DELETED_MEAL.name, 4),
         ),
     ),
     DemoList(
-        "carl", "Grillabend", reminder_seed=12,
+        "carl", "Grillabend",
         meals=(
             DemoListMeal("carl", "Tofu-Gemüse-Curry", 4),
             DemoListMeal("anna", "Spaghetti Bolognese", 2),
@@ -392,7 +391,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         extras=(DemoExtra(text="Grillkohle", amount_text="2 Säcke"),),
     ),
     DemoList(
-        "anna", "Wocheneinkauf", reminder_seed=21, shared=True,
+        "anna", "Wocheneinkauf", shared=True,
         meals=(
             DemoListMeal("anna", "Spaghetti Bolognese", 4),
             DemoListMeal("ben", "Hähnchen-Reis-Pfanne", 2),
@@ -415,7 +414,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         ),
     ),
     DemoList(
-        "anna", "Salatabend", reminder_seed=4, shared=True,
+        "anna", "Salatabend", shared=True,
         meals=(DemoListMeal("ben", "Tomatensalat", 4),),
         extras=(DemoExtra(ingredient="Brot", amount=1, unit=Unit.PIECE),),
         shopping=DemoShopping(
@@ -431,7 +430,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         ),
     ),
     DemoList(
-        "carl", "Vorrat", reminder_seed=58,
+        "carl", "Vorrat",
         meals=(DemoListMeal("carl", "Tofu-Gemüse-Curry", 2),),
         extras=(DemoExtra(text="Spülmittel", amount_text="1 Flasche"),),
         shopping=DemoShopping(
@@ -794,7 +793,6 @@ async def _insert_lists(
             status="draft",
             shared_with_partner=demo.shared,
             version=0,
-            reminder_seed=demo.reminder_seed,
             created_at=now,
             updated_at=now,
         )

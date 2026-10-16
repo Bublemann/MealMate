@@ -13,7 +13,6 @@ done list is read-only (409 `list.done`) until it is reopened. Lines are hidden 
 only in a draft (409 `list.not_draft`).
 """
 
-import secrets
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import datetime
 from typing import cast
@@ -32,7 +31,6 @@ from app.db.ids import new_id
 from app.domain.lists import (
     FEED_PAGE_SIZE,
     LIST_STATUSES,
-    REMINDER_SEED_MAX,
     DetachedReason,
     FeedPosition,
     ListStatus,
@@ -215,7 +213,6 @@ async def list_detail(
         is_owner=rights.is_owner,
         can_edit=rights.can_edit,
         shared_with_partner=shopping_list.shared_with_partner,
-        reminder_seed=shopping_list.reminder_seed,
         meals=[
             _meal_entry(content, media, row, refs, private=row.id in private, now=now)
             for row in list_meals
@@ -348,7 +345,6 @@ async def _new_list(
         status="draft",
         shared_with_partner=partner is not None,
         version=0,
-        reminder_seed=secrets.randbelow(REMINDER_SEED_MAX + 1),
         created_at=now,
         updated_at=now,
     )
