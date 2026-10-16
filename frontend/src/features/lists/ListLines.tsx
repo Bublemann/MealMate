@@ -234,13 +234,18 @@ function LineRow({ line, swipeable, onOpen, onHide }: LineRowProps) {
           event.stopPropagation();
         }}
       >
+        {/* Centred in the tap target, while name and amount share a baseline. */}
         <button
           type="button"
           onClick={onOpen}
-          className="flex min-h-(--tap-target) w-full items-baseline justify-between gap-3 px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex min-h-(--tap-target) w-full items-center px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <span className="min-w-0 break-words">{lineLabel(line)}</span>
-          {amount && <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>}
+          <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+            <span className="min-w-0 break-words">{lineLabel(line)}</span>
+            {amount && (
+              <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>
+            )}
+          </span>
         </button>
       </div>
     </li>
