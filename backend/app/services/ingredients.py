@@ -549,5 +549,5 @@ async def delete(
             now=now,
             details={"name": row.name},
         )
-        await hooks.before_ingredient_deleted(session, row.id)
+        await hooks.before_ingredient_deleted(session, row.id, now=now)
         await session.delete(row)

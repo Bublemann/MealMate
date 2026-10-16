@@ -14,10 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import ingredient_key
 from app.models import ListLineState
+from app.repositories import couples as couples_repo
+from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
+from app.repositories import recurring as recurring_repo
 from app.repositories import users as users_repo
-from app.services import access, detach
+from app.services import access, detach, notices
 
 
 async def on_couple_ended(
@@ -89,6 +92,8 @@ async def ingredient_references(session: AsyncSession, ingredient_id: str) -> di
     - `meals`: the meals with rows (`meal_ingredients`) of this ingredient;
     - `lists`: the lists with frozen rows (`list_meal_ingredients`) or linked extra items that
       are not deleted (`list_extra_items`) of this ingredient.
+
+    Recurring items (LIST-16) are no references: they never block the deletion.
     """
     return {
         "meals": await meals_repo.count_with_ingredient(session, ingredient_id),
@@ -118,10 +123,31 @@ async def amounts_that_would_not_fit(
     return {"meals": len(set(meals)), "lists": len(set(lists)), "amounts": len(meals) + len(lists)}
 
 
-async def before_ingredient_deleted(session: AsyncSession, ingredient_id: str) -> None:
+async def before_ingredient_deleted(
+    session: AsyncSession, ingredient_id: str, *, now: datetime
+) -> None:
     """Runs when an admin deletes an ingredient nothing refers to (ING-05), before its row is
-    deleted: the tombstones of deleted extra items linked to it go with it."""
+    deleted: the tombstones of deleted extra items linked to it go with it. Its recurring
+    items are no references (LIST-16) and go by `ON DELETE CASCADE`; each user who had one
+    gets a notice with the ingredient's name and brand (D-51)."""
     await lists_repo.delete_deleted_extras_of(session, ingredient_id)
+    items = await recurring_repo.with_ingredient(session, ingredient_id)
+    if not items:
+        return
+    ingredient = await ingredients_repo.get(session, ingredient_id)
+    if ingredient is None:  # pragma: no cover -- the caller has just loaded it
+        raise RuntimeError("the deleted ingredient is missing")
+    users = {item.user_id for item in items if item.user_id is not None}
+    couples = {item.couple_id for item in items if item.couple_id is not None}
+    if couples:
+        users.update(await couples_repo.member_ids(session, couples))
+    notices.notify(
+        session,
+        sorted(users),
+        "recurring_item.ingredient_deleted",
+        {"name": ingredient.name, "brand": ingredient.brand},
+        now=now,
+    )
 
 
 async def on_ingredients_merged(

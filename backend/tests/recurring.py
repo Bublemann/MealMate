@@ -64,3 +64,10 @@ async def store_purchases(app: FastAPI, item_id: str, **values: Any) -> None:
         await session.execute(
             update(RecurringItem).where(RecurringItem.id == item_id).values(**values)
         )
+
+
+async def notices(api: AsyncClient, user: Account) -> Any:
+    """The user's unread notices: `{"notices": [...], "count": n}`."""
+    response = await api.get("/api/me/notices", headers=user.headers)
+    assert response.status_code == 200, response.text
+    return response.json()

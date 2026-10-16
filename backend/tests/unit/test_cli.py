@@ -58,6 +58,8 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "list_sessions",
         "revoke_session",
         "get_security",
+        "list_notices",
+        "dismiss_notice",
         "get_couple",
         "create_couple_request",
         "accept_couple_request",
