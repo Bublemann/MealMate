@@ -155,3 +155,21 @@ async def test_each_partner_dismisses_their_own_notice(
     assert await notices(api, ben) == unread_of_ben
     assert (await dismiss(api, anna, notice["id"])).status_code == 204
     assert await notices(api, anna) == {"notices": [], "count": 0}
+
+
+async def test_dismissing_a_notice_leaves_the_users_others_unread(
+    api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any, clock: FakeClock
+) -> None:
+    """anna dismisses the older of her two notices; the newer one stays unread."""
+    toothpaste = await create_ingredient(api, anna, "Zahnpasta")
+    await make_recurring(api, anna, toothpaste["id"])
+    await make_recurring(api, anna, toilet_paper["id"])
+    await delete_ingredient(api, admin, toothpaste["id"])
+    clock.advance(minutes=10)
+    await delete_ingredient(api, admin, toilet_paper["id"])
+    newer, older = (await notices(api, anna))["notices"]
+    assert (newer["params"]["name"], older["params"]["name"]) == ("Klopapier", "Zahnpasta")
+
+    assert (await dismiss(api, anna, older["id"])).status_code == 204
+
+    assert await notices(api, anna) == {"notices": [newer], "count": 1}

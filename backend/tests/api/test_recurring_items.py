@@ -317,6 +317,20 @@ async def test_automatic_off_alone_keeps_the_interval_that_serves(
     assert schedule((await recurring(api, anna))["items"][0]) == schedule(item)
 
 
+async def test_automatic_off_alone_keeps_an_interval_set_by_hand(
+    app: FastAPI, api: AsyncClient, anna: Account, toilet_paper: Any
+) -> None:
+    """Set by hand to 2 weeks, that interval serves, not the average of [10, 11] (11 days), so
+    `automatic` false alone keeps the 2 weeks."""
+    item = await make_recurring(api, anna, toilet_paper["id"], weeks=4)
+    await store_purchases(app, item["id"], measured_intervals=[10, 11])
+    await updated(api, anna, item["id"], interval_weeks=2)
+    item = await updated(api, anna, item["id"], automatic=False)
+    assert schedule(item) == (weeks(2, automatic=False), 2, "2026-10-11")
+    await store_purchases(app, item["id"], measured_intervals=[10, 11, 30])
+    assert schedule((await recurring(api, anna))["items"][0]) == schedule(item)
+
+
 async def test_a_corrected_last_purchase_moves_the_due_date(
     api: AsyncClient, anna: Account, toilet_paper: Any
 ) -> None:
