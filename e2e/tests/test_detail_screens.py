@@ -84,26 +84,34 @@ def test_long_name_is_cut_on_one_line(page: Page, api: Api, member: Account) -> 
     meal = api.create_meal(member, name, servings=4)
     sign_in(page.context, member)
 
+    # The meal's own screen, whose back link "All meals" fits, sets the strip's height.
     page.goto(f"/meals/{meal['id']}")
     expect(page.get_by_role("heading", level=1, name=name)).to_be_visible()
-    short = strip_box(page)
+    one_line = strip_height(page)
 
     page.goto(f"/meals/{meal['id']}/edit")
     back = page.get_by_test_id(TEST_IDS["backLink"])
     expect(back).to_have_accessible_name(name)
     expect(back).to_have_attribute("href", f"/meals/{meal['id']}")
-    assert strip_box(page)["height"] == short["height"]
+    assert strip_height(page) == one_line
     viewport = page.viewport_size
     assert viewport is not None
     link = back.bounding_box()
     assert link is not None
     assert link["x"] + link["width"] <= viewport["width"]
-    assert back.evaluate("link => link.scrollWidth <= link.clientWidth")
+    # The whole name, laid out on one line, is wider than the link shows: it is cut.
+    assert back.evaluate(
+        """link => {
+            const text = document.createRange();
+            text.selectNodeContents(link);
+            return text.getBoundingClientRect().width > link.getBoundingClientRect().width;
+        }"""
+    )
 
 
-def strip_box(page: Page) -> dict[str, float]:
-    strip: Locator = page.get_by_test_id(TEST_IDS["detailStrip"])
+def strip_height(page: Page) -> float:
+    strip = page.get_by_test_id(TEST_IDS["detailStrip"])
     expect(strip).to_be_visible()
     box = strip.bounding_box()
     assert box is not None
-    return {"y": box["y"], "height": box["height"]}
+    return box["height"]

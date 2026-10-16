@@ -1,4 +1,5 @@
 import {
+  queryOptions,
   replaceEqualDeep,
   useInfiniteQuery,
   useMutation,
@@ -146,6 +147,22 @@ function isFinal(error: unknown): boolean {
 }
 
 /**
+ * How list `id` is loaded, the same for every screen that shows it (one query): with the ETag of
+ * the cached copy (SYNC-08), starting from the local copy until the server answers (SYNC-09).
+ */
+function useListQuery(id: string) {
+  const queryClient = useQueryClient();
+  const engine = useSyncEngine();
+  return queryOptions({
+    queryKey: detailKey(id),
+    queryFn: ({ signal }) => loadList(queryClient, id, signal),
+    initialData: () => engine.copied(id),
+    initialDataUpdatedAt: () => engine.copiedAt(id),
+    structuralSharing: shareWithEtag,
+  });
+}
+
+/**
  * One list with its meals and the aggregated lines, as the server computed them (AGG-01). While
  * it is on screen and the app is visible it is checked for changes every 5 seconds, and at once
  * when the app comes back to the foreground (SYNC-08, LIST-09). Until the server answers, the
@@ -153,35 +170,20 @@ function isFinal(error: unknown): boolean {
  * the user's waiting ops on top (`usePendingList`).
  */
 export function useList(id: string) {
-  const queryClient = useQueryClient();
-  const engine = useSyncEngine();
   return useQuery({
-    queryKey: detailKey(id),
-    queryFn: ({ signal }) => loadList(queryClient, id, signal),
-    initialData: () => engine.copied(id),
-    initialDataUpdatedAt: () => engine.copiedAt(id),
+    ...useListQuery(id),
     refetchOnWindowFocus: 'always',
     refetchInterval: (query) => (isFinal(query.state.error) ? false : POLL_INTERVAL_MS),
-    structuralSharing: shareWithEtag,
   });
 }
 
 /**
  * List `id` as another screen names it, e.g. the meal form's back link (D-46): the cached list or
- * the local copy at once, else loaded once. Unlike `useList` it isn't checked for changes while
- * that screen shows. An empty id loads nothing.
+ * the local copy as it is, else loaded once. Unlike `useList` it is never loaded again while that
+ * screen shows. An empty id loads nothing.
  */
 export function useListOnce(id: string) {
-  const queryClient = useQueryClient();
-  const engine = useSyncEngine();
-  return useQuery({
-    queryKey: detailKey(id),
-    queryFn: ({ signal }) => loadList(queryClient, id, signal),
-    initialData: () => engine.copied(id),
-    initialDataUpdatedAt: () => engine.copiedAt(id),
-    structuralSharing: shareWithEtag,
-    enabled: id !== '',
-  });
+  return useQuery({ ...useListQuery(id), staleTime: Infinity, enabled: id !== '' });
 }
 
 /**

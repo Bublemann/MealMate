@@ -462,7 +462,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - **Filter panel:** the filter button opens a panel that slides up from the bottom (without animation under Reduce Motion) with groups of checkboxes. Each change applies immediately. "Zurücksetzen" resets every group and "Fertig" closes the panel. The button shows how many groups are not at their default, also in its accessible name.
   - **Kept per tab:** the search text and the cuisine, tag and category choices stay until the app is closed, so opening a meal or an ingredient and coming back keeps them. The user filter and the state filter are saved on the server (UI-02, MEAL-10).
   - **Keyboard:** while the on-screen keyboard is open, in a pop-up or on a page, the tab bar and the update banner (the notice that a new version is ready to load) hide. Pop-ups fit into the space above the keyboard, so their last field and main button can be reached. Pinch-zoom is not mistaken for an open keyboard (A11Y-02).
-  - At the largest iPhone text size, the pinned block, the filter panel and the tab bar show all their text and controls without clipping or overlap, wrapping where needed.
+  - At the largest iPhone text size, the pinned block, the filter panel and the tab bar show all their text and controls without clipping or overlap, wrapping where needed; the detail strip keeps its back link on one line, shortened with "…" (D-46).
 - **UI-02** The app opens on **Lists**: one **feed** of every shopping list the user can see (their own, their partner's shared and unshared ones, other users' public ones), in every state (draft, shopping, done). It is sorted by creation date, newest first, so a list never moves when it is edited, shopped or finished. The newest 30 come first, more as the user scrolls down.
   - **Row:** the list's name and date (LIST-02), "3 Gerichte · 5 Artikel", and a round marker with the owner's initial, also on one's own lists; screen readers read the marker as the owner's name. Icons, and texts after the counts, mark the kind of list; a row can have several (a shared list being shopped shows both icons):
 
@@ -652,7 +652,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - colour is never the only signal;
   - contrast checked in light and dark mode;
   - tap targets ≥ 44 × 44 pt.
-- **A11Y-02** Text scales with the iPhone text-size setting (rem units). Only the pinned block (UI-01) stops growing at about the first accessibility size, so it leaves room for the content (D-29). Pinch-zoom stays enabled. "Reduce motion" is respected.
+- **A11Y-02** Text scales with the iPhone text-size setting (rem units). Only the pinned block and the detail strip (UI-01) stop growing at about the first accessibility size, so they leave room for the content (D-29). Pinch-zoom stays enabled. "Reduce motion" is respected.
 - **A11Y-03** An automated accessibility check (axe) runs on the main screens in E2E tests.
 
 ### 5.6 Maintainability and frontend handoff (MNT)

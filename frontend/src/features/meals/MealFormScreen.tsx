@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -64,7 +65,7 @@ function EditMeal({ id }: { id: string }) {
       <Screen
         title={t('meals.form.editTitle', { name: meal.data?.name ?? '' })}
         testId={testIds.screenMealForm}
-        back={meal.data ? mealBack(meal.data) : { to: '/meals', label: t('meals.detail.back') }}
+        back={meal.data ? mealBack(meal.data) : allMealsBack(t)}
       >
         {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
         <LoadError error={meal.error ?? forbidden} />
@@ -77,6 +78,11 @@ function EditMeal({ id }: { id: string }) {
 /** Editing goes back to the meal, by its name (D-46). */
 function mealBack(meal: Meal): BackLink {
   return { to: `/meals/${meal.id}`, label: meal.name };
+}
+
+/** A new meal, or one still loading or not found, goes back to the Meals tab. */
+function allMealsBack(t: TFunction): BackLink {
+  return { to: '/meals', label: t('meals.detail.back') };
 }
 
 /**
@@ -94,7 +100,7 @@ function useBackLink(meal: Meal | undefined, addToList: string): BackLink {
       label: list.data ? listDisplayName(list.data, t, language) : t('lists.defaultName'),
     };
   }
-  return { to: '/meals', label: t('meals.detail.back') };
+  return allMealsBack(t);
 }
 
 interface MealFormViewProps {
