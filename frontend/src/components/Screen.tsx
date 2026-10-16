@@ -7,10 +7,10 @@ interface ScreenProps {
   testId: TestId;
   /**
    * `pinned` for Lists, Meals and Ingredients: their pinned block shows the headline as its first
-   * element, so it stays put with the block (D-44). `tab` for the other tab screens, whose
-   * headline only screen readers get. Detail screens show theirs.
+   * element, so it stays put with the block (D-44). Otherwise the headline sits above the content
+   * and scrolls with it: on the detail screens and the Settings tab.
    */
-  variant?: 'pinned' | 'tab' | 'detail';
+  variant?: 'pinned' | 'detail';
   children: ReactNode;
 }
 
@@ -29,12 +29,7 @@ export function Screen({ title, testId, variant = 'detail', children }: ScreenPr
 
   return (
     <section aria-labelledby={headingId} data-testid={testId} className="flex flex-col gap-6">
-      <h1
-        id={headingId}
-        className={
-          variant === 'tab' ? 'sr-only' : 'text-3xl font-bold tracking-tight wrap-anywhere'
-        }
-      >
+      <h1 id={headingId} className="text-3xl font-bold tracking-tight wrap-anywhere">
         {title}
       </h1>
       {children}

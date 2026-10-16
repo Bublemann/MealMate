@@ -24,6 +24,18 @@ function patchMe(request: Request) {
 }
 
 describe('MeScreen', () => {
+  it('shows its headline above the cards, scrolling with them (D-44)', async () => {
+    mockApi();
+    renderApp('/me');
+
+    const settings = await screen.findByTestId(testIds.screenMe);
+    const headline = within(settings).getByRole('heading', { level: 1, name: 'Settings' });
+    expect(screen.getAllByRole('heading', { level: 1 })).toEqual([headline]);
+    expect(settings.firstElementChild).toBe(headline);
+    // The short page needs no pinned block to keep it in view.
+    expect(screen.queryByTestId(testIds.pinnedBlock)).not.toBeInTheDocument();
+  });
+
   it('shows the running version and links to its exact source revision', async () => {
     const fetchMock = mockApi();
     renderApp('/me');
