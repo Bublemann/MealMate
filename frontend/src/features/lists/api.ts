@@ -318,14 +318,25 @@ export function useSetListMealServings(listId: string) {
   );
 }
 
-/** Also removes detached meals ("no longer available", LIST-15). */
+/**
+ * Also removes detached meals ("no longer available", LIST-15). The row goes at once, the lines
+ * change when the server answered (LIST-04, D-40).
+ */
 export function useRemoveListMeal(listId: string) {
-  return useListChange(listId, (listMealId: string) =>
-    unwrap(
-      api.DELETE('/api/lists/{list_id}/meals/{list_meal_id}', {
-        params: { path: { list_id: listId, list_meal_id: listMealId } },
+  return useListChange(
+    listId,
+    (listMealId: string) =>
+      unwrap(
+        api.DELETE('/api/lists/{list_id}/meals/{list_meal_id}', {
+          params: { path: { list_id: listId, list_meal_id: listMealId } },
+        }),
+      ),
+    {
+      optimistic: (listMealId) => (list) => ({
+        ...list,
+        meals: list.meals.filter((meal) => meal.id !== listMealId),
       }),
-    ),
+    },
   );
 }
 

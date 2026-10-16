@@ -11,7 +11,11 @@ interface ServingsStepperProps {
   disabled?: boolean;
 }
 
-/** − and + around the servings of a meal on a list, 1–99 (LIST-04). */
+/**
+ * The compact "− 4 +" of a meal's servings, 1–99 (LIST-04, D-40): horizontal, each button 44 pt
+ * (A11Y-01). Only the number shows; screen readers read it as "4 servings", and again when it
+ * changes. Used in a meal's row on a list and wherever servings are chosen for one.
+ */
 export function ServingsStepper({ value, name, onChange, disabled = false }: ServingsStepperProps) {
   const { t } = useTranslation();
 
@@ -19,7 +23,7 @@ export function ServingsStepper({ value, name, onChange, disabled = false }: Ser
     <div
       role="group"
       aria-label={t('lists.meals.servingsOf', { name })}
-      className="flex items-center gap-1"
+      className="flex shrink-0 items-center"
     >
       <Button
         type="button"
@@ -31,8 +35,9 @@ export function ServingsStepper({ value, name, onChange, disabled = false }: Ser
       >
         <Minus aria-hidden="true" />
       </Button>
-      <span aria-live="polite" className="min-w-24 text-center font-medium tabular-nums">
-        {t('lists.meals.servings', { count: value })}
+      <span aria-live="polite" className="min-w-9 text-center font-medium tabular-nums">
+        <span aria-hidden="true">{value}</span>
+        <span className="sr-only">{t('lists.meals.servings', { count: value })}</span>
       </span>
       <Button
         type="button"

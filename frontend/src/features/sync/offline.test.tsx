@@ -365,8 +365,8 @@ describe('a draft offline (SYNC-03)', () => {
     expect(
       within(meals).getByRole('button', { name: 'Fewer servings of Pfannkuchen' }),
     ).toBeDisabled();
-    // Restoring a removed line needs the server too.
-    fireEvent.click(screen.getByText('Removed (1)'));
+    // Restoring a hidden line needs the server too.
+    fireEvent.click(screen.getByText('Hidden (1)'));
     expect(screen.getByRole('button', { name: 'Restore Eier' })).toBeDisabled();
   });
 });

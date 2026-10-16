@@ -22,7 +22,7 @@ def category_names(api: Api, account: Account, keys: set[str]) -> list[str]:
 
 
 def line(page: Page, name: str) -> Locator:
-    """The line of `name` among the list's (not removed) lines."""
+    """The line of `name` among the list's (not hidden) lines."""
     lines = page.get_by_test_id(TEST_IDS["listLines"])
     return lines.get_by_test_id(TEST_IDS["listLine"]).filter(
         has=page.get_by_role("button", name=re.compile(f"^{re.escape(name)}"))
@@ -41,7 +41,7 @@ def add_from_picker(picker: Locator, name: str, clicks: int, button: str) -> Non
 def test_member_builds_a_list_from_meals_and_extra_items(
     page: Page, api: Api, invite_user: Callable[..., Account]
 ) -> None:
-    """Journey 6: new list, meals with servings, merged lines by category, extras, remove."""
+    """Journey 6: new list, meals with servings, merged lines by category, extras, hide, remove."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     onions = api.create_ingredient(
@@ -99,7 +99,8 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     expect(meals.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(2)
     for meal, servings in ((tart, 4), (bread, 2)):
         group = meals.get_by_role("group", name=text("lists.meals.servingsOf", name=meal["name"]))
-        expect(group).to_contain_text(f"{servings} servings")
+        # The compact stepper shows the number; screen readers read "4 servings" (LIST-04).
+        expect(group.get_by_text(f"{servings} servings", exact=True)).to_have_count(1)
 
     # Flour: 200 g x 4/2 + 300 g x 2/4 = 400 g + 150 g = 550 g. Onions: 1 x 4/2 = 2 pieces.
     # Oil: 2 tbsp x 2/4 = 1 tbsp (a line of spoons only stays in tbsp, AGG-04).
@@ -147,24 +148,45 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     sources.get_by_role("button", name=text("common.close")).click()
     expect(sources).to_be_hidden()
 
-    # "Still have oil": removed for this list only, then restored (LIST-07).
+    # "Still have oil": hidden for this list only, then restored (LIST-07).
     line(page, oil["name"]).get_by_role("button").click()
     sources = page.get_by_role("dialog", name=oil["name"])
     sources.get_by_role("button", name=text("lists.lines.hideLabel", name=oil["name"])).click()
     expect(sources).to_be_hidden()
     expect(line(page, oil["name"])).to_have_count(0)
-    removed = page.get_by_test_id(TEST_IDS["hiddenLines"])
-    summary = removed.get_by_text(text("lists.lines.hidden", count="1"), exact=True)
+    hidden = page.get_by_test_id(TEST_IDS["hiddenLines"])
+    summary = hidden.get_by_text(text("lists.lines.hidden", count="1"), exact=True)
     summary.click()
-    removed.get_by_role("button", name=text("lists.lines.restoreLabel", name=oil["name"])).click()
+    hidden.get_by_role("button", name=text("lists.lines.restoreLabel", name=oil["name"])).click()
     expect(line(page, oil["name"])).to_contain_text("1 tbsp")
-    expect(removed).to_have_count(0)
+    expect(hidden).to_have_count(0)
 
     # Everything was saved on the server (LIST-09).
     page.reload()
     expect(line(page, flour["name"])).to_contain_text("1 kg")
     expect(line(page, candles)).to_be_visible()
     expect(page.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(2)
+
+    # Meal A down to 3 servings with the compact stepper: flour 200 g x 3/2 + 150 g + 450 g.
+    group = meals.get_by_role("group", name=text("lists.meals.servingsOf", name=tart["name"]))
+    group.get_by_role("button", name=text("lists.meals.fewer", name=tart["name"])).click()
+    expect(group.get_by_text("3 servings", exact=True)).to_have_count(1)
+    expect(line(page, flour["name"])).to_contain_text("900 g")
+
+    # Without swiping (no swipe gestures here), meal B goes with its "Remove", which shows on
+    # focus, at once and without a confirmation (LIST-04, D-40): the oil goes with it.
+    remove = meals.get_by_role(
+        "button", name=text("lists.meals.remove", name=bread["name"]), exact=True
+    )
+    expect(remove).to_have_text(text("lists.meals.removeAction"))
+    remove.focus()
+    remove.press("Enter")
+    expect(meals.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(1)
+    expect(line(page, flour["name"])).to_contain_text("750 g")
+    expect(line(page, oil["name"])).to_have_count(0)
+    draft = LIST_URL.search(page.url)
+    assert draft is not None
+    assert [meal["meal_id"] for meal in api.get_list(anna, draft[1])["meals"]] == [tart["id"]]
 
 
 def test_partner_edits_a_shared_draft(

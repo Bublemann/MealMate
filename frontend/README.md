@@ -177,6 +177,20 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   read it as the owner's full name. Meal rows put it after the name, so the meal is read first.
   Shopping mode's "checked by" uses the same marker, `decorative`, because its text names the
   person.
+- **List rows** (LIST-04, LIST-07, D-40): a meal on a list is one line, with the compact
+  `ServingsStepper` ("− 4 +", each button 44 pt, the number read as "4 Portionen") at the right,
+  or "4 Portionen" for those who can't change it. `SwipeRow` (`components/SwipeRow.tsx`) is the
+  one swipe of meal rows and of a draft's lines: a finger or pen swiping to the left reveals one
+  action at the right edge, a red "Entfernen" or a grey "Ausblenden"; the mouse doesn't swipe.
+  Let go with about the action's width revealed and the row stays open, before that it closes;
+  past half the row the action happens at once. Swiping back, scrolling, tapping elsewhere or
+  opening another row closes it, so one row is open at a time. A mostly vertical movement
+  scrolls (`touch-action: pan-y pinch-zoom`), a swipe never also counts as a tap on the row, and
+  under Reduce Motion the row snaps. The revealed action is hidden from screen readers and
+  keyboards, so each row also offers it without a swipe: a meal's "Entfernen" button, visually
+  hidden until the row has focus or hover, and "Ausblenden" in a line's pop-up. Offline and
+  without edit rights there is no swipe. Tests swipe with `swipe()` and `tap()` from
+  `test/swipe.ts` (pointer events; in jsdom a row counts as 1024 px wide, its action as 96 px).
 - **List feed** (UI-02): the Lists tab loads `GET /api/lists` page by page (`useListFeed`, 30 per
   page, `next_cursor`); the next page loads when the end of the feed comes near the screen
   (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
@@ -602,6 +616,7 @@ order.
 | `deleteList`             | `delete-list`              | "Delete" on the list view (owner)           |
 | `listMeals`              | `list-meals`               | Meals of the list with their servings       |
 | `listMeal`               | `list-meal`                | One meal on the list                        |
+| `removeListMeal`         | `remove-list-meal`         | "Remove" button of a meal on the list       |
 | `addMeals`               | `add-meals`                | "Add meals" (opens the meal picker)         |
 | `mealPicker`             | `meal-picker`              | Meal picker dialog                          |
 | `mealPickerRecent`       | `meal-picker-recent`       | "Recently used" meals in the picker         |
@@ -611,7 +626,7 @@ order.
 | `listLines`              | `list-lines`               | Aggregated lines grouped by category        |
 | `listLine`               | `list-line`                | One line (opens its sources)                |
 | `lineSources`            | `line-sources`             | Sources dialog of a line                    |
-| `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
+| `hiddenLines`            | `hidden-lines`             | Collapsed "Hidden (N)" section              |
 | `listReminder`           | `list-reminder`            | Reminder in the last row of a list          |
 | `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
 | `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
