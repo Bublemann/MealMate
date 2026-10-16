@@ -276,8 +276,8 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
   const more = line.needs_more ? needsMoreTexts(t, language, line.needs_more) : [];
   const checkedBy = line.checked ? line.checked_by : null;
   const extraId = line.sources.find((source) => source.kind === 'extra')?.extra_id ?? null;
-  const badges = line.new || more.length > 0;
-  const stacked = line.pending || badges;
+  const hasBadges = line.new || more.length > 0;
+  const stacked = line.pending || hasBadges;
 
   return (
     <li
@@ -293,7 +293,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
        * pending note and the badges go in the rows below, under the name. The box and the marker
        * count as one line high and overflow it, so what is stacked follows right under the name;
        * a stacked row's top padding makes room for the box. The minimum height keeps the box's
-       * own height plus padding, as for a row without badges.
+       * own height plus padding, as for a row with nothing stacked.
        */}
       <label
         className={cn(
@@ -356,7 +356,7 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
             {t('lists.sync.pending')}
           </span>
         )}
-        {badges && (
+        {hasBadges && (
           <span className="col-start-2 flex flex-wrap gap-1">
             {line.new && (
               <Badge data-testid={testIds.lineNew} variant="secondary">
