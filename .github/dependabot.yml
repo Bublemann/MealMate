@@ -1,7 +1,7 @@
 # Monthly dependency updates, minor and patch only, grouped per ecosystem (SEC-11, D-50). Majors
-# are skipped for every dependency; the quarterly chore(deps) ticket moves to the ones that are
-# ready. Security updates are not held back: the major ignores and the cooldown apply to version
-# updates only.
+# are skipped for every dependency, and so are new Python versions (D-52); the quarterly
+# chore(deps) ticket moves to the ones that are ready. Security updates are not held back: the
+# ignores and the cooldown apply to version updates only.
 version: 2
 updates:
   - package-ecosystem: uv
@@ -42,6 +42,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Dependabot reads python:3.14-slim as version 3.14, so Python 3.15 would be a minor update.
+      # 3.14 patch releases still arrive as new digests of the same tag.
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
 
   # The node image of compose.dev.yml (the same digest as the Dockerfile's).
   - package-ecosystem: docker-compose

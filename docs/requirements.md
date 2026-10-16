@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-15 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38; finding uncategorized ingredients, ING-03 and REF-01; backlog grilling, D-39..D-51) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-10-16 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38; finding uncategorized ingredients, ING-03 and REF-01; backlog grilling, D-39..D-51; new Python versions through the quarterly update ticket, D-52) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -569,7 +569,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
 
   The server does not log request paths with codes, or query strings.
 - **SEC-11** **Dependencies are kept current:**
-  - Dependabot **monthly**, minor and patch updates grouped per ecosystem, majors skipped; a quarterly update ticket moves to the majors that are ready (D-50). Dependabot security alerts and security updates stay on;
+  - Dependabot **monthly**, minor and patch updates grouped per ecosystem, majors and new Python versions skipped; a quarterly update ticket moves to the ones that are ready (D-50, D-52). Dependabot security alerts and security updates stay on;
   - CI fails on known high or critical vulnerabilities in runtime dependencies;
   - a weekly scheduled scan of the **published** image opens an issue when fixable vulnerabilities appear.
 
@@ -801,6 +801,7 @@ These are not in v2.0. The data model should not make them hard.
 | D-49 | When nobody else could be picked for a couple, the Paar page says why: admins get "Lade deine Partnerin oder deinen Partner ein" with the button "Zu den Einladungen", other users "Bitte einen Admin, deine Partnerin oder deinen Partner einzuladen". Inviting someone straight into a couple is postponed (§6) (2026-10-15) | the owner found the Paar section without any button and didn't know that the partner needs an invite first; an invite that also sends a couple request would change registration for a step each household takes once |
 | D-50 | Dependabot runs monthly instead of weekly, with only minor and patch updates, grouped per ecosystem; majors are skipped. Every quarter (January, April, July, October) a `chore(deps)` ticket moves to the majors whose ecosystem is ready and records what is held back and why. Security alerts and security updates stay on (2026-10-15) | of 15 Dependabot PRs, 9 were closed, nearly all majors that arrived before the tools around them supported them (TypeScript 7, ESLint 10, Vite 8); the grouped minor and patch PRs were the useful ones; one deliberate pass over the majors per quarter costs less than closing single PRs each week |
 | D-51 | The Settings tab icon carries a small count of what waits for the user to act on: incoming couple requests and unread notices. The matching row shows it too ("1 Anfrage", "1 Hinweis"), and screen readers hear it in the tab's name. The first notice: when an admin deletes an ingredient that someone has as a recurring item, each such user (both partners of a couple) finds "„Klopapier“ wurde von einem Admin gelöscht und ist nicht mehr regelmäßig." at the top of "Regelmäßige Artikel" until they dismiss it. Due recurring items don't count. No push notifications (§6) (2026-10-15) | a couple request moved one level deeper with the settings rows and would be missed; deleting an ingredient shouldn't silently drop someone's reminder; a count that only shows what needs doing stays meaningful, while due items already show on every draft |
+| D-52 | New Python versions (3.15 on) wait for the quarterly `chore(deps)` ticket like majors. Dependabot reads the `python:3.14-slim` image as version 3.14 and would offer 3.15 as a minor update, so the docker entry also ignores minor updates of `python`; 3.14 patch releases keep arriving as new digests of the same tag (2026-10-16) | a new Python version moves the whole backend at once: `requires-python`, ruff's and mypy's target, and wheels for linux/arm64 for every main dependency (O-8) must be ready, the same check a major needs |
 
 ## 8. Owner decisions
 
