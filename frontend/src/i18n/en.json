@@ -737,7 +737,7 @@
   "diag.storage.write": "Write marker",
   "diag.storage.persist": "Request persistent storage",
   "diag.offline.title": "Offline and lie-fi",
-  "diag.offline.steps": "Turn on airplane mode, close the app completely, open it again: MealMate must appear immediately. Then open Me → Diagnostics: “App start” shows whether the service worker served it.",
+  "diag.offline.steps": "Turn on airplane mode, close the app completely, open it again: MealMate must appear immediately. Then open Settings → Diagnostics: “App start” shows whether the service worker served it.",
   "diag.offline.lieFi": "Lie-fi: with airplane mode off and Tailscale on, unplug the Pi's network cable (or switch the Pi off), close and reopen the app: it must appear immediately and show your lists; after a few seconds it says it can't reach MealMate.",
   "diag.report.title": "Report",
   "diag.report.copy": "Copy report",
