@@ -765,6 +765,8 @@ describe('finish (SHOP-04)', () => {
 
     await user.click(await screen.findByTestId(testIds.finishShopping));
     const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
+    // Where the list stays: the Lists tab, by its name (D-44).
+    expect(dialog).toHaveTextContent('The list stays under Shopping lists, marked as done.');
     await user.click(within(dialog).getByRole('button', { name: 'Finish' }));
 
     expect(await screen.findByTestId(testIds.doneLines)).toBeVisible();

@@ -315,7 +315,7 @@
   "lists.shop.readOnly": "Abhaken können nur Leute, die diese Liste ändern dürfen.",
   "lists.shop.finish": "Einkauf beenden",
   "lists.shop.finishTitle": "Einkauf beenden?",
-  "lists.shop.finishText": "Die Liste bleibt unter „Listen“, als erledigt markiert. Du kannst sie wieder öffnen.",
+  "lists.shop.finishText": "Die Liste bleibt unter „Einkaufslisten“, als erledigt markiert. Du kannst sie wieder öffnen.",
   "lists.shop.unchecked_one": "{{count}} Artikel nicht abgehakt",
   "lists.shop.unchecked_other": "{{count}} Artikel nicht abgehakt",
   "lists.shop.finishConfirm": "Beenden",

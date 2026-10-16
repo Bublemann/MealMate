@@ -315,7 +315,7 @@
   "lists.shop.readOnly": "Only people who may change this list can check things off.",
   "lists.shop.finish": "Finish shopping",
   "lists.shop.finishTitle": "Finish shopping?",
-  "lists.shop.finishText": "The list stays under Lists, marked as done. You can reopen it.",
+  "lists.shop.finishText": "The list stays under Shopping lists, marked as done. You can reopen it.",
   "lists.shop.unchecked_one": "{{count}} item not checked",
   "lists.shop.unchecked_other": "{{count}} items not checked",
   "lists.shop.finishConfirm": "Finish",
