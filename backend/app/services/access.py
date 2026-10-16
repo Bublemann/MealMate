@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode, not_found
+from app.domain.owners import OwnerKey
 from app.models import Meal, ShoppingList
 from app.repositories import couples as couples_repo
 from app.repositories import lists as lists_repo
@@ -53,6 +54,16 @@ async def partner_id(session: AsyncSession, user_id: str) -> str | None:
     if couple is None:
         return None
     return couple.addressee_id if couple.requester_id == user_id else couple.requester_id
+
+
+async def owner_key(session: AsyncSession, user_id: str) -> OwnerKey:
+    """Who owns the user's per-household data now (recurring items D-42, walking order D-48):
+    their couple while they are in one (a deactivated partner included, CPL-07), else the
+    user."""
+    couple = await couples_repo.accepted_for(session, user_id)
+    if couple is None:
+        return OwnerKey(couple_id=None, user_id=user_id)
+    return OwnerKey(couple_id=couple.id, user_id=None)
 
 
 async def visible_owner_ids(
