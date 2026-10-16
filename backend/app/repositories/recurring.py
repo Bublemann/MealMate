@@ -29,7 +29,7 @@ async def of_owner(
         .where(_owned_by(key))
         .order_by(Ingredient.name_sort, func.coalesce(Ingredient.brand_sort, ""), Ingredient.id)
     )
-    return result.tuples().all()
+    return result.all()
 
 
 async def in_set(session: AsyncSession, key: OwnerKey, ingredient_id: str) -> RecurringItem | None:
