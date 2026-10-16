@@ -8,7 +8,6 @@ import {
   listDisplayName,
   needsMoreTexts,
   otherCategoryId,
-  reminderText,
   sourceAmount,
 } from './format';
 
@@ -101,14 +100,6 @@ describe('groupByCategory', () => {
   it('names a category it doesn’t know like Other', () => {
     const [group] = groupByCategory([{ ...LINES[0]!, category_id: 'cat-new' }], CATEGORIES, 'de');
     expect(group).toMatchObject({ categoryId: 'cat-new', name: 'Sonstiges' });
-  });
-});
-
-describe('reminderText (LIST-14)', () => {
-  it('picks one of the ten reminders by the list’s seed', () => {
-    expect(reminderText(en, 0)).toBe(en('reminder.1'));
-    expect(reminderText(en, 9)).toBe(en('reminder.10'));
-    expect(reminderText(de, 1234)).toBe(de('reminder.5'));
   });
 });
 

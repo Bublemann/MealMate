@@ -128,7 +128,6 @@ export const testIds = {
   listLine: 'list-line',
   lineSources: 'line-sources',
   hiddenLines: 'hidden-lines',
-  listReminder: 'list-reminder',
   startShopping: 'start-shopping',
   syncStatus: 'sync-status',
   offlineBanner: 'offline-banner',
