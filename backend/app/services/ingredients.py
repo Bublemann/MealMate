@@ -76,7 +76,7 @@ from app.services.off_fields import (
     set_field_value,
     set_name,
     set_pack_size,
-    unmark,
+    unmark_edited,
 )
 from app.services.principal import Principal
 from app.services.users import user_refs
@@ -433,7 +433,7 @@ async def apply_pending_update(
         proposed = pending_fields(row)
         for field, value in proposed.items():
             set_field_value(row, field, value)
-        unmark(row, proposed)
+        unmark_edited(row, proposed)
         row.pending_update = ignored_entries(row) or None
         row.updated_by = principal.user_id
         row.updated_at = now

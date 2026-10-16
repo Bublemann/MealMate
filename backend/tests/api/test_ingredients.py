@@ -452,6 +452,7 @@ async def test_create_from_open_food_facts(
         ("0.75 L", (750, "ml")),
         ("1kg", (1000, "g")),
         ("0,07 kg", (70, "g")),
+        ("0,125 kg", (125, "g")),
         ("250 ml", (250, "ml")),
         ("100 kg", (100_000, "g")),
         # Not a plain amount and unit: the text alone.
@@ -462,6 +463,9 @@ async def test_create_from_open_food_facts(
         ("75 cl", (None, None)),
         ("0 g", (None, None)),
         ("100,5 kg", (None, None)),
+        # A thousands separator or three decimals? Left empty rather than guessed.
+        ("1.000 g", (None, None)),
+        ("1,250 kg", (None, None)),
         ("\u0665\u0660\u0660 g", (None, None)),  # Arabic-Indic digits
     ],
 )

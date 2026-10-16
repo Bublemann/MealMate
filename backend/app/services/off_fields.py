@@ -47,7 +47,7 @@ def edited_fields(row: IngredientRow) -> list[str]:
     return [field for field in OFF_FIELDS if field in marks]
 
 
-def unmark(row: IngredientRow, fields: Iterable[str]) -> None:
+def unmark_edited(row: IngredientRow, fields: Iterable[str]) -> None:
     """These fields are Open Food Facts' again (an applied update): no longer user-edited, the
     pack size along with any mark on its amount from before D-38."""
     unmarked = set(fields)

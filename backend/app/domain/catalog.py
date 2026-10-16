@@ -41,7 +41,7 @@ OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand", "quantity_text")
 PACK_AMOUNT_FIELDS: tuple[str, ...] = ("pack_quantity", "pack_unit")
 
 # A plain amount and unit, such as "500 g" or "1,5 l"; ASCII digits only.
-_PACK_AMOUNT = re.compile(r"([0-9]+(?:[.,][0-9]+)?)\s*(kg|g|ml|l)", re.IGNORECASE)
+_PACK_AMOUNT = re.compile(r"([0-9]+)(?:[.,]([0-9]+))?\s*(kg|g|ml|l)", re.IGNORECASE)
 
 
 def nutrient_field(key: str) -> str:
@@ -58,13 +58,18 @@ OFF_FIELDS: tuple[str, ...] = (
 def pack_amount(text: str | None) -> tuple[float, BaseUnit] | None:
     """The amount of a pack size that is a plain amount and unit ("500 g", "1,5 l"), in the base
     unit of its kind: g for g and kg, ml for ml and l (D-47). None for any other text ("6 x 1,5
-    l", "4 Stück") and for an amount that is 0 or over `PACK_QUANTITY_MAX`."""
+    l", "4 Stück"), for an amount that is 0 or over `PACK_QUANTITY_MAX`, and where the separator
+    may be a thousands one ("1.000 g", "1,250 kg"): such an amount is not guessed."""
     match = None if text is None else _PACK_AMOUNT.fullmatch(text)
     if match is None:
         return None
-    unit = Unit(match[2].lower())
+    whole, fraction, unit_text = match.groups()
+    if fraction is not None and len(fraction) == 3 and int(whole) != 0:
+        return None
+    unit = Unit(unit_text.lower())
     # Decimal, so that "0,07 kg" is 70 g and not 70.00000000000001.
-    amount = float(Decimal(match[1].replace(",", ".")) * Decimal(UNIT_FACTOR[unit]))
+    number = Decimal(whole if fraction is None else f"{whole}.{fraction}")
+    amount = float(number * Decimal(UNIT_FACTOR[unit]))
     if not 0 < amount <= PACK_QUANTITY_MAX:
         return None
     return amount, BaseUnit.G if UNIT_KIND[unit] is UnitKind.MASS else BaseUnit.ML

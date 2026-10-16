@@ -233,7 +233,7 @@ async def test_a_pack_size_nobody_changed_updates_silently(
     assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
 
 
-async def corrected_gnocchi(
+async def corrected_pack_size(
     app: FastAPI, api: AsyncClient, anna: Account, off_api: respx.MockRouter, clock: FakeClock
 ) -> Any:
     """Saved as "500 g", corrected from Open Food Facts' "250 g"; Open Food Facts then says
@@ -252,7 +252,7 @@ async def test_a_pack_size_a_user_changed_becomes_a_pending_update(
     clock: FakeClock,
 ) -> None:
     """ "Packung 500 g → 450 g [Apply] [Ignore]" (BAR-04, BAR-06, D-47)."""
-    product = await corrected_gnocchi(app, api, anna, off_api, clock)
+    product = await corrected_pack_size(app, api, anna, off_api, clock)
 
     body = await get(api, anna, product["id"])
     assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("500 g", 500, "g")
@@ -280,7 +280,7 @@ async def test_an_ignored_pack_size_stays(
     off_api: respx.MockRouter,
     clock: FakeClock,
 ) -> None:
-    product = await corrected_gnocchi(app, api, anna, off_api, clock)
+    product = await corrected_pack_size(app, api, anna, off_api, clock)
 
     ignored = await api.post(
         f"/api/ingredients/{product['id']}/pending-update/ignore", headers=anna.headers

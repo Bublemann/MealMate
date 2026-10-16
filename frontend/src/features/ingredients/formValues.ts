@@ -85,8 +85,8 @@ export function fitName(name: string): string {
 /**
  * The form filled with an Open Food Facts proposal, its barcode included (BAR-03, BAR-11). What
  * the proposal has no value for (the piece weight, and a name, brand, pack size, category guess,
- * base unit or nutrient when it has none) stays as it was: a category the user chose is kept unless the
- * proposal guesses one.
+ * base unit or nutrient when it has none) stays as it was: a category the user chose is kept
+ * unless the proposal guesses one.
  */
 export function valuesFromProposal(
   proposal: OffProposal,

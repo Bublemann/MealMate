@@ -94,7 +94,7 @@ describe('IngredientDetailScreen', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
-  it('shows the package from its amount when there is no text (from before D-47)', async () => {
+  it('shows the pack size as its text, as the edit pop-up does, not from a stored amount (D-47)', async () => {
     renderDetail(
       { [`GET ${MILK_PATH}`]: { ...WEIDEHOF_MILK, quantity_text: null, pack_quantity: 1500 } },
       false,
@@ -102,7 +102,8 @@ describe('IngredientDetailScreen', () => {
     );
 
     const screenEl = await screen.findByTestId(testIds.screenIngredient);
-    await waitFor(() => expect(screenEl).toHaveTextContent('Package1,500 ml'));
+    await waitFor(() => expect(screenEl).toHaveTextContent('BrandWeidehof'));
+    expect(screenEl).toHaveTextContent('Packagenot set');
   });
 
   it('shows its own value per nutrient, unknown ones as "–" (NUT-02)', async () => {

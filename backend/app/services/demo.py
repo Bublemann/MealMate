@@ -95,7 +95,7 @@ class DemoIngredient:
     # A branded product as if scanned: brand, barcode and pack size.
     brand: str | None = None
     barcode: str | None = None
-    pack: str | None = None
+    pack_size: str | None = None
 
 
 DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
@@ -117,7 +117,7 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Eier", "dairy_eggs", "carl", base_unit="piece", piece_weight_g=60,
                    nutrients=_values(155, 13.0, 1.1, 1.1, 11.0)),
     DemoIngredient("Butter", "dairy_eggs", "ben", nutrients=_values(741, 0.6, 0.6, 0.6, 82.0),
-                   brand="Kerrygold", barcode="4061453007189", pack="250 g"),
+                   brand="Kerrygold", barcode="4061453007189", pack_size="250 g"),
     DemoIngredient("Joghurt", "dairy_eggs", "ben"),
     DemoIngredient("Gouda", "cheese", "anna"),
     DemoIngredient("Parmesan", "cheese", "carl", nutrients=_values(392, 35.8, 3.2, 0.9, 25.8)),
@@ -128,17 +128,17 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Tofu", "plant_based", "carl"),
     DemoIngredient("Spaghetti", "pasta_rice_grains", "anna",
                    nutrients=_values(359, 12.0, 71.0, 3.5, 2.0),
-                   brand="Barilla", barcode="8005516001475", pack="500 g"),
+                   brand="Barilla", barcode="8005516001475", pack_size="500 g"),
     DemoIngredient("Spaghetti", "pasta_rice_grains", "ben",
                    nutrients=_values(353, 13.0, 70.0, 3.5, 1.5),
-                   brand="De Cecco", barcode="8002331045820", pack="500 g"),
+                   brand="De Cecco", barcode="8002331045820", pack_size="500 g"),
     DemoIngredient("Reis", "pasta_rice_grains", "ben", nutrients=_values(350, 7.0, 78.0, 0.2, 0.6)),
     DemoIngredient("Passierte Tomaten", "canned_jars", "anna",
                    nutrients=_values(36, 1.6, 5.4, 4.8, 0.2),
-                   brand="Mutti", barcode="8004207009356", pack="700 g"),
+                   brand="Mutti", barcode="8004207009356", pack_size="700 g"),
     DemoIngredient("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml",
                    nutrients=_values(828, 0.0, 0.0, 0.0, 92.0),
-                   brand="Bertolli", barcode="4017952000633", pack="750 ml"),
+                   brand="Bertolli", barcode="4017952000633", pack_size="750 ml"),
     DemoIngredient("Salz", "sauces_spices_oils", "ben"),
     DemoIngredient("Pfeffer", "sauces_spices_oils", "carl"),
     DemoIngredient("Mehl", "baking", "carl"),
@@ -539,7 +539,7 @@ async def _insert_catalog(
         )
         set_name(ingredient, item.name)
         set_brand(ingredient, item.brand)
-        set_pack_size(ingredient, item.pack)
+        set_pack_size(ingredient, item.pack_size)
         ingredient.set_nutrients({key: item.nutrients.get(key) for key in NUTRIENT_KEYS})
         session.add(ingredient)
     await session.flush()
