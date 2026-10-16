@@ -9,10 +9,15 @@ name, so they stay similar (ING-03).
 
 import re
 
-from playwright.sync_api import Locator, Page, expect
+import pytest
+from playwright.sync_api import Locator, Page, ViewportSize, expect
 
 from support.api import Account, Api, new_barcode, sign_in, unique
 from support.frontend import TEST_IDS, ingredient_label, text
+
+# The whole screen of an iPhone SE (2nd and 3rd generation), as the app has it from the Home
+# Screen: shorter and narrower than the default device's visible area.
+IPHONE_SE_SCREEN: ViewportSize = {"width": 375, "height": 667}
 
 
 def nutrient_row(page: Page, key: str) -> Locator:
@@ -114,15 +119,29 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     expect(nutrient_row(page, "fat")).to_contain_text(text("ingredients.nutrition.noValue"))
 
 
-def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
+@pytest.mark.parametrize(
+    "viewport", [None, IPHONE_SE_SCREEN], ids=["default-device", "iphone-se-screen"]
+)
+def test_pinned_block_fits_the_largest_text_size(
+    member_page: Page, viewport: ViewportSize | None
+) -> None:
     """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
     shows its headline and wraps a long "Create …" tile without clipping them or widening the
     page, and leaves room for the content below it, as the tab opens and while the content
     scrolls, because its text stops growing at about the first accessibility size (D-29, D-44).
+    Also on the smaller screen of an iPhone SE, where the narrower tile takes more lines.
     test_lists.py has a headline that has to wrap."""
     page = member_page
+    if viewport is not None:
+        page.set_viewport_size(viewport)
     page.goto("/ingredients")
-    page.add_style_tag(content="html { font-size: 53px !important; }")
+    # How many lines the tile takes depends on the font. The browsers' default one differs by
+    # platform (wider on Linux than on a Mac), so the text is set in Arial, as wide as the
+    # iPhone's system font here (Liberation Sans has its metrics on Linux).
+    page.add_style_tag(
+        content="html { font-size: 53px !important;"
+        ' font-family: Arial, "Liberation Sans" !important; }'
+    )
     name = f"Quittengelee mit Zimt {unique('aus dem Garten')}"
     page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(name)
 
@@ -143,7 +162,9 @@ def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
         assert box["x"] + box["width"] <= viewport["width"]
     # The block leaves at least a quarter of the screen for the content, which a name this long
     # at full text size would cover: as the tab opens, below the space above the block, and while
-    # the content scrolls, when the block is stuck at the top with its headline.
+    # the content scrolls, when the block is stuck at the top with its headline. (A Home Screen
+    # app sticks it below the status bar, which is never taller than the space above it as the
+    # tab opens, so the first check covers that.)
     box = block.bounding_box()
     assert box is not None
     assert box["y"] + box["height"] < viewport["height"] * 0.75, box

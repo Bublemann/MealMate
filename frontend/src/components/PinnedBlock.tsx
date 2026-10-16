@@ -102,17 +102,21 @@ function SearchField({ label, placeholder, value, onChange, testId }: SearchFiel
   );
 }
 
-/** Shaped like a row of the tab's list, in the primary green; a long name wraps. */
+/**
+ * Shaped like a row of the tab's list, in the primary green; a long name wraps. Its lines sit
+ * closer than the button text's usual 1.5, with the difference in the padding, so a one-line tile
+ * keeps its height and a long name takes less of the screen (UI-01).
+ */
 function NewTile({ label, onClick, disabled = false, testId }: NewTileProps) {
   return (
     <Button
       data-testid={testId}
       onClick={onClick}
       disabled={disabled}
-      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.75em] text-left text-[1em]"
+      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em]"
     >
       <Plus aria-hidden="true" className="size-[1.25em]" />
-      <span className="min-w-0 wrap-anywhere">{label}</span>
+      <span className="min-w-0 leading-[1.25] wrap-anywhere">{label}</span>
     </Button>
   );
 }
