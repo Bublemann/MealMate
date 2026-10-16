@@ -116,9 +116,10 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
 
 def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
     """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
-    wraps its headline and a long "Create …" tile instead of clipping them or widening the page,
-    and leaves room for the content below it, because its text stops growing at about the first
-    accessibility size (D-29, D-44)."""
+    shows its headline and wraps a long "Create …" tile without clipping them or widening the
+    page, and leaves room for the content below it, as the tab opens and while the content
+    scrolls, because its text stops growing at about the first accessibility size (D-29, D-44).
+    test_lists.py has a headline that has to wrap."""
     page = member_page
     page.goto("/ingredients")
     page.add_style_tag(content="html { font-size: 53px !important; }")
@@ -140,9 +141,12 @@ def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
         box = element.bounding_box()
         assert box is not None
         assert box["x"] + box["width"] <= viewport["width"]
-    # While the content scrolls, the block stays at the top with its headline and leaves at least
-    # a quarter of the screen for the content, which a name this long at full text size would
-    # cover.
+    # The block leaves at least a quarter of the screen for the content, which a name this long
+    # at full text size would cover: as the tab opens, below the space above the block, and while
+    # the content scrolls, when the block is stuck at the top with its headline.
+    box = block.bounding_box()
+    assert box is not None
+    assert box["y"] + box["height"] < viewport["height"] * 0.75, box
     page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
     assert page.evaluate("window.scrollY") > 0
     box = block.bounding_box()

@@ -157,7 +157,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   text and its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens
   (about the first accessibility size, D-29), and its sizes and spacing are in `em` of that text:
   the headline is as large as a detail screen's title (`1.875em`, not `text-3xl`, which is in
-  `rem` and would escape the cap) and wraps hyphenated in the UI language.
+  `rem` and would escape the cap) up to 42 px, and wraps hyphenated in the UI language. The space
+  above the screen (the `main` in `Layout`) stops growing at 24 px or is the status bar's, so the
+  block leaves a quarter of the screen for the content as the tab opens too.
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in

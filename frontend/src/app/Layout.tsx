@@ -35,7 +35,10 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(var(--tab-bar-clearance)+1.5rem)]">
+      {/* The space above the screen stops growing at 24 px (or is the status bar's), so that at
+          the largest text sizes the pinned block still leaves a quarter of the screen for the
+          content as the tab opens (UI-01, D-29). */}
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(min(1.5rem,24px),env(safe-area-inset-top))] pb-[calc(var(--tab-bar-clearance)+1.5rem)]">
         <SyncBanners />
         <TabMemoryProvider>
           <Outlet />
