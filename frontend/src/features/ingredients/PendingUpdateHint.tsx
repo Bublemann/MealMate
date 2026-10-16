@@ -9,10 +9,10 @@ import { usePendingUpdate, type Ingredient, type PendingUpdateField } from './ap
 import { ingredientLabel } from './label';
 import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, type NutrientKey } from './nutrients';
 
-// The pack size is never user-edited, so it is never pending (BAR-06, D-38).
 const TEXT_FIELD_LABELS = {
   name: 'ingredients.field.name',
   brand: 'ingredients.field.brand',
+  quantity_text: 'ingredients.field.packSize',
 } as const;
 
 function nutrientKeyOf(field: string): NutrientKey | null {

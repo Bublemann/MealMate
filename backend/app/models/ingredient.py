@@ -53,7 +53,9 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
     fields a user changed (`name`, `nutrients.kcal`, ...), which a refresh never overwrites
     (BAR-04); `pending_update` holds newer Open Food Facts values for those (BAR-06), see
-    `services.off_fields`. `quantity_text`, `pack_quantity` and `pack_unit` are information only.
+    `services.off_fields`. The pack size `quantity_text` is information only; `pack_quantity` and
+    `pack_unit` are its amount in g or ml, taken from the text (D-47), for the postponed pack
+    rounding.
     """
 
     __tablename__ = "ingredients"

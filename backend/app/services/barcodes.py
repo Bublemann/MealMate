@@ -10,7 +10,7 @@ ingredient form prefilled with it, and the user may correct values before saving
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode
-from app.domain.units import BaseUnit, Unit
+from app.domain.units import BaseUnit
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, OffClient, OffProduct
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import users as users_repo
@@ -33,14 +33,11 @@ def _nutrition_basis_name(basis: BaseUnit | None) -> NutritionBasisName | None:
 
 def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
     """The API view of a product from Open Food Facts, named in `language` if possible."""
-    pack_quantity, pack_unit = found.pack
     return ProductProposal(
         barcode=barcode,
         name=found.name(language),
         brand=found.brands,
         quantity_text=found.quantity,
-        pack_quantity=pack_quantity,
-        pack_unit=None if pack_unit is None else Unit(pack_unit.value),
         nutrition_basis=_nutrition_basis_name(found.nutrition_basis),
         nutrients=NutrientValues.model_validate(found.nutrients),
         category_key=found.category_key,
