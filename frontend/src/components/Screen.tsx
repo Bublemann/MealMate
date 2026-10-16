@@ -19,20 +19,18 @@ export function Screen({ title, testId, variant = 'detail', children }: ScreenPr
   const headingId = useId();
   const heading = useMemo(() => ({ id: headingId, title }), [headingId, title]);
 
-  if (variant === 'pinned') {
-    return (
-      <section aria-labelledby={headingId} data-testid={testId} className="flex flex-col gap-6">
-        <ScreenHeadingContext value={heading}>{children}</ScreenHeadingContext>
-      </section>
-    );
-  }
-
   return (
     <section aria-labelledby={headingId} data-testid={testId} className="flex flex-col gap-6">
-      <h1 id={headingId} className="text-3xl font-bold tracking-tight wrap-anywhere">
-        {title}
-      </h1>
-      {children}
+      {variant === 'pinned' ? (
+        <ScreenHeadingContext value={heading}>{children}</ScreenHeadingContext>
+      ) : (
+        <>
+          <h1 id={headingId} className="text-3xl font-bold tracking-tight wrap-anywhere">
+            {title}
+          </h1>
+          {children}
+        </>
+      )}
     </section>
   );
 }
