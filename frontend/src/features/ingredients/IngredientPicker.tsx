@@ -49,11 +49,11 @@ export function IngredientPicker({
   const categories = useCategories();
   // Only the answer for the text in the field: an earlier text's results, kept while the debounce
   // runs or the search loads, would vanish under the finger when the answer lands (MEAL-03).
-  const answered =
-    searching && debounced === typed && results.isSuccess && !results.isPlaceholderData;
-  const matches = answered
-    ? results.data.filter((ingredient) => !excludeIds.includes(ingredient.id)).slice(0, MAX_RESULTS)
-    : [];
+  const answer =
+    searching && debounced === typed && !results.isPlaceholderData ? results.data : undefined;
+  const matches = (answer ?? [])
+    .filter((ingredient) => !excludeIds.includes(ingredient.id))
+    .slice(0, MAX_RESULTS);
 
   function options(): HTMLButtonElement[] {
     return Array.from(listRef.current?.querySelectorAll('button') ?? []);
@@ -131,7 +131,7 @@ export function IngredientPicker({
       )}
       <p aria-live="polite" className="text-sm text-muted-foreground">
         {!typed && t('ingredients.picker.typeToSearch')}
-        {typed && answered && matches.length === 0 && <>{t('ingredients.picker.noResults')}</>}
+        {answer && matches.length === 0 && t('ingredients.picker.noResults')}
       </p>
       <ErrorAlert error={results.error} />
       {allowCreate && (

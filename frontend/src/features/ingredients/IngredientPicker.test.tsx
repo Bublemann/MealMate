@@ -108,17 +108,18 @@ describe('IngredientPicker', () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(APPLES);
   });
 
-  it('keeps "Create" first while results arrive, change and go, hiding an earlier search’s (MEAL-03)', async () => {
+  it('keeps "Create" first while results arrive, change and go, hiding an earlier search’s results (MEAL-03)', async () => {
     const search = heldRoute();
-    const { user } = renderPicker({}, { 'GET /api/ingredients': search.route });
+    const { fetchMock, user } = renderPicker({}, { 'GET /api/ingredients': search.route });
     const picker = screen.getByTestId(testIds.ingredientPicker);
+    const input = screen.getByLabelText('Search ingredient');
     // The picker's buttons in DOM order: what a tap under the field lands on.
     const options = () =>
       within(picker)
         .getAllByRole('button')
         .map((button) => button.textContent);
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'apf');
+    await user.type(input, 'apf');
     expect(options()).toEqual(['Create “apf”']);
     await search.answer([APPLES, APPLE_JUICE]);
     await within(picker).findByRole('button', { name: /^Apfelsaft/ });
@@ -128,14 +129,17 @@ describe('IngredientPicker', () => {
       'Apfelsaft (Hofgut) with barcodeOther · ml',
     ]);
 
-    // While the longer text is searched, the shorter one's results are gone.
-    await user.type(screen.getByLabelText('Search ingredient'), 'els');
+    // While the longer text waits for the debounce and then for its answer, the shorter one's
+    // results are gone.
+    await user.type(input, 'els');
+    expect(options()).toEqual(['Create “apfels”']);
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/ingredients')).toHaveLength(2));
     expect(options()).toEqual(['Create “apfels”']);
     await search.answer([APPLE_JUICE]);
     await within(picker).findByRole('button', { name: /^Apfelsaft/ });
     expect(options()).toEqual(['Create “apfels”', 'Apfelsaft (Hofgut) with barcodeOther · ml']);
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'x');
+    await user.type(input, 'x');
     expect(options()).toEqual(['Create “apfelsx”']);
     await search.answer([]);
     const nothing = await screen.findByText('Nothing found.');

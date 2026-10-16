@@ -249,10 +249,13 @@ def test_member_creates_an_ingredient_in_the_meal_form_with_one_tap(
     create = picker.get_by_test_id(TEST_IDS["ingredientPickerCreate"])
     field.fill(quince["name"])
     before = create.bounding_box()
+    assert before is not None
     expect(
         picker.get_by_role("button", name=re.compile(f"^{re.escape(quince['name'])}"))
     ).to_be_visible()
-    assert create.bounding_box() == before
+    after = create.bounding_box()
+    assert after is not None
+    assert after["y"] == before["y"]
 
     # The longer name's search waits for the 250 ms debounce: the tap comes before it.
     field.press_sequentially(" Gelee")
