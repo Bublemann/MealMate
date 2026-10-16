@@ -106,7 +106,7 @@ def names(items: list[Any]) -> list[str | None]:
     return [item["name"] for item in items]
 
 
-# --- create and read (LIST-01, LIST-02) ----------------------------------------------------
+# --- create and read (LIST-01, LIST-02) -----------------------------------------------------
 
 
 async def test_create_an_empty_draft(api: AsyncClient, anna: Account) -> None:

@@ -235,9 +235,9 @@ export function emptyList(overrides: Partial<Schemas['ListDetail']> = {}): Schem
 }
 
 /**
- * The reminder the fixtures' lists showed before D-43 removed it: its screen-reader label
- * ("Reminder: …") and the text their seed picked (`reminder.1`). The screen tests
- * check that neither shows any more.
+ * The reminder the fixtures' lists showed before D-43 removed it, with the seed they had then:
+ * its screen-reader label ("Reminder: …") and its text (`reminder.1`). The screen tests check
+ * that neither shows any more.
  */
 export const FORMER_REMINDER = /Reminder:|Didn't forget anything/;
 
