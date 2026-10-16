@@ -184,8 +184,10 @@ export function SwipeRow({ action, disabled = false, children }: SwipeRowProps) 
   }
 
   function onPointerCancel() {
-    // The browser took over, e.g. to scroll: like iOS, scrolling closes the row.
+    // The browser took over, e.g. to scroll: like iOS, scrolling closes the row. No click follows.
     gesture.current = null;
+    swiped.current = false;
+    tappedOpen.current = false;
     setDrag(null);
     if (openRow === id) setOpenRow(null);
   }
