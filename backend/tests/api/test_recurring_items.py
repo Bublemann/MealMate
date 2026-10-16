@@ -43,6 +43,11 @@ async def carl(app: FastAPI, api: AsyncClient) -> Account:
 
 
 @pytest.fixture
+async def admin(app: FastAPI, api: AsyncClient) -> Account:
+    return await make_user(app, api, "admin", role="admin")
+
+
+@pytest.fixture
 async def toilet_paper(api: AsyncClient, anna: Account) -> Any:
     return await create_ingredient(api, anna, "Klopapier", base_unit="piece")
 
@@ -388,6 +393,94 @@ async def test_a_couple_shares_one_set(
     url = f"/api/recurring-items/{item['id']}"
     assert (await api.delete(url, headers=ben.headers)).status_code == 204
     assert (await recurring(api, anna))["items"] == []
+
+
+# --- couples form and end (D-42) -----------------------------------------------------------
+
+
+def by_id(body: Any) -> dict[str, Any]:
+    return {item["id"]: item for item in body["items"]}
+
+
+async def test_forming_a_couple_combines_both_sets(
+    api: AsyncClient, anna: Account, ben: Account
+) -> None:
+    """For an ingredient both keep, the one bought more recently stays with all its values; on
+    a tie the requester's (anna's). The others move as they are."""
+    toilet_paper, toothpaste, coffee, milk = [
+        (await create_ingredient(api, anna, name))["id"]
+        for name in ("Klopapier", "Zahnpasta", "Kaffee", "Milch")
+    ]
+    await make_recurring(api, anna, toilet_paper, weeks=4, last_purchased_on=date(2026, 9, 1))
+    later = await make_recurring(
+        api, ben, toilet_paper, weeks=2, last_purchased_on=date(2026, 9, 10)
+    )
+    tie = await make_recurring(api, anna, toothpaste, weeks=6, last_purchased_on=date(2026, 9, 20))
+    await make_recurring(api, ben, toothpaste, weeks=3, last_purchased_on=date(2026, 9, 20))
+    newer = await make_recurring(api, anna, coffee, weeks=1, last_purchased_on=date(2026, 9, 25))
+    await make_recurring(api, ben, coffee, weeks=5, last_purchased_on=date(2026, 9, 24))
+    only_ben = await make_recurring(api, ben, milk, weeks=1)
+
+    await make_couple(api, anna, ben)
+
+    combined = await recurring(api, anna)
+    assert by_id(combined) == {item["id"]: item for item in (later, tie, newer, only_ben)}
+    assert await recurring(api, ben) == combined
+
+
+def without_id(item: Any) -> Any:
+    return {key: value for key, value in item.items() if key != "id"}
+
+
+async def test_each_partner_keeps_a_copy_when_the_couple_ends(
+    app: FastAPI, api: AsyncClient, anna: Account, ben: Account, toilet_paper: Any
+) -> None:
+    """Each copy has all the values of the couple's item, and the two go separate ways."""
+    await make_couple(api, anna, ben)
+    item = await make_recurring(api, anna, toilet_paper["id"], weeks=4)
+    await store_purchases(
+        app, item["id"], last_amount=2, last_unit="piece", measured_intervals=[10, 12]
+    )
+    [item] = (await recurring(api, anna))["items"]
+
+    assert (await api.delete("/api/couple", headers=ben.headers)).status_code == 204
+
+    [annas] = (await recurring(api, anna))["items"]
+    [bens] = (await recurring(api, ben))["items"]
+    assert without_id(annas) == without_id(bens) == without_id(item)
+    assert len({item["id"], annas["id"], bens["id"]}) == 3
+    await updated(api, anna, annas["id"], interval_weeks=1)
+    assert (await recurring(api, ben))["items"] == [bens]
+
+
+async def test_the_partner_keeps_the_set_when_a_user_is_deleted(
+    api: AsyncClient, anna: Account, ben: Account, admin: Account, toilet_paper: Any
+) -> None:
+    """Deleting a user ends their couple (ADM-03): the partner keeps a copy."""
+    await make_couple(api, anna, ben)
+    item = await make_recurring(api, anna, toilet_paper["id"])
+
+    response = await api.delete(f"/api/admin/users/{anna.id}", headers=admin.headers)
+
+    assert response.status_code == 204
+    [bens] = (await recurring(api, ben))["items"]
+    assert without_id(bens) == without_id(item)
+
+
+async def test_a_deactivated_partner_changes_nothing(
+    api: AsyncClient, anna: Account, ben: Account, admin: Account, toilet_paper: Any
+) -> None:
+    """The couple stays while ben is deactivated (CPL-07), and so does its set."""
+    await make_couple(api, anna, ben)
+    item = await make_recurring(api, anna, toilet_paper["id"])
+
+    response = await api.patch(
+        f"/api/admin/users/{ben.id}", json={"is_active": False}, headers=admin.headers
+    )
+
+    assert response.status_code == 200
+    assert (await recurring(api, anna))["items"] == [item]
+    assert (await updated(api, anna, item["id"], interval_weeks=2))["interval_weeks"] == 2
 
 
 # --- due over time --------------------------------------------------------------------------

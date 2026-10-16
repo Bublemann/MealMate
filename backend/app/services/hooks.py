@@ -13,7 +13,8 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import ingredient_key
-from app.models import ListLineState
+from app.domain.recurring import preferred_stays
+from app.models import Couple, ListLineState, RecurringItem
 from app.repositories import couples as couples_repo
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
@@ -23,13 +24,28 @@ from app.repositories import users as users_repo
 from app.services import access, detach, notices
 
 
+async def on_couple_accepted(session: AsyncSession, couple: Couple, *, now: datetime) -> None:
+    """Runs when a couple forms (CPL-01), once both are members: their two sets of recurring
+    items become the couple's one set (D-42). For an ingredient both keep, the item bought more
+    recently stays with all its values, on a tie the requester's; the other goes."""
+    stays: dict[str, RecurringItem] = {}
+    for item in await recurring_repo.of_users(session, (couple.requester_id, couple.addressee_id)):
+        if (other := stays.get(item.ingredient_id)) is not None:
+            of_requester = item.user_id == couple.requester_id
+            item = await _one_stays(session, *((item, other) if of_requester else (other, item)))
+        stays[item.ingredient_id] = item
+    for item in stays.values():
+        item.couple_id, item.user_id, item.updated_at = couple.id, None, now
+
+
 async def on_couple_ended(
-    session: AsyncSession, user_a_id: str, user_b_id: str, *, now: datetime
+    session: AsyncSession, user_a_id: str, user_b_id: str, *, couple_id: str, now: datetime
 ) -> None:
     """Runs when a couple ends, before its rows are deleted (CPL-05): the share switch goes
     off on all lists of both users, so a later couple shares nothing automatically, and each
     one's meals are detached from the other's not-yet-frozen lists if they are no longer
-    visible there (*meals public* off; LIST-15)."""
+    visible there (*meals public* off; LIST-15). Each of them keeps a copy of the couple's
+    recurring items with all their values, and the couple's go (D-42)."""
     await lists_repo.unshare_all_of(session, (user_a_id, user_b_id), now)
     users = await users_repo.by_ids(session, (user_a_id, user_b_id))
     for meal_owner, list_owner in ((user_a_id, user_b_id), (user_b_id, user_a_id)):
@@ -38,6 +54,9 @@ async def on_couple_ended(
                 session, meal_owner, list_owner_ids=(list_owner,)
             )
             await detach.detach(session, list_meals, "unavailable", now=now)
+    for item in await recurring_repo.of_couple(session, couple_id):
+        session.add_all(_copy_for(item, user_id, now=now) for user_id in (user_a_id, user_b_id))
+        await session.delete(item)
 
 
 async def on_meals_made_private(session: AsyncSession, user_id: str, *, now: datetime) -> None:
@@ -212,3 +231,34 @@ def _copy_state(source: ListLineState, target: ListLineState) -> None:
     target.hidden, target.checked = source.hidden, source.checked
     target.checked_at, target.checked_by = source.checked_at, source.checked_by
     target.checked_op_id, target.checked_snapshot = source.checked_op_id, source.checked_snapshot
+
+
+def _copy_for(item: RecurringItem, user_id: str, *, now: datetime) -> RecurringItem:
+    """A copy of a couple's recurring item in the set of one of them."""
+    return RecurringItem(
+        user_id=user_id,
+        ingredient_id=item.ingredient_id,
+        interval_days=item.interval_days,
+        interval_manual=item.interval_manual,
+        last_purchased_on=item.last_purchased_on,
+        last_amount=item.last_amount,
+        last_unit=item.last_unit,
+        measured_intervals=list(item.measured_intervals),
+        last_list_id=item.last_list_id,
+        created_at=item.created_at,
+        updated_at=now,
+    )
+
+
+async def _one_stays(
+    session: AsyncSession, preferred: RecurringItem, other: RecurringItem
+) -> RecurringItem:
+    """Of two recurring items that would be in one set, the one bought more recently stays,
+    on a tie `preferred`; the other is deleted (D-42)."""
+    stays, goes = (
+        (preferred, other)
+        if preferred_stays(preferred.last_purchased_on, other.last_purchased_on)
+        else (other, preferred)
+    )
+    await session.delete(goes)
+    return stays
