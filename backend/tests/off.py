@@ -54,7 +54,6 @@ def oats(**changes: Any) -> dict[str, Any]:
         "generic_name": "Rolled oats",
         "brands": "MealMate Test Kitchen",
         "quantity": "500 g",
-        "product_quantity": 500,
         "product_quantity_unit": "g",
         "nutrition_data_per": "100g",
         "nutriments": {

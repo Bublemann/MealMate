@@ -6,10 +6,13 @@ Typed text with control, format, surrogate, private-use or unassigned characters
 (`check_text`); text from Open Food Facts is cleaned of them instead (`clean_text`).
 """
 
+import re
 import unicodedata
+from decimal import Decimal
 
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
+from app.domain.units import UNIT_FACTOR, UNIT_KIND, BaseUnit, Unit, UnitKind
 
 INGREDIENT_NAME_MAX_LENGTH = 60
 CATEGORY_NAME_MAX_LENGTH = 40
@@ -27,15 +30,18 @@ PACK_QUANTITY_MAX = 100_000.0
 NAME_NORM_FACTOR = 4
 
 # The fields of an ingredient that Open Food Facts provides and refreshes (BAR-04..06), other
-# than the nutrients and the pack size. Each one a user changes on an ingredient from Open Food
-# Facts is recorded as user-edited, nutrients as `nutrients.<key>`. The barcode, category, base
-# unit and piece weight are the user's alone: a refresh never touches them.
-OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand")
+# than the nutrients: the name, the brand and the pack size's text (`quantity_text`, D-47). Each
+# one a user changes on an ingredient from Open Food Facts is recorded as user-edited, nutrients
+# as `nutrients.<key>`. The barcode, category, base unit and piece weight are the user's alone: a
+# refresh never touches them.
+OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand", "quantity_text")
 
-# The pack size (ING-02, D-38): Open Food Facts' alone. It is never typed in or edited, so it is
-# never user-edited and a refresh always updates it; "user-edited" marks on it from before D-38
-# are ignored, not rewritten.
-PACK_FIELDS: tuple[str, ...] = ("quantity_text", "pack_quantity", "pack_unit")
+# The pack size's amount, always taken from its text (`pack_amount`, D-47). Before D-38 these
+# were marked user-edited on their own; such a mark counts as one on the pack size.
+PACK_AMOUNT_FIELDS: tuple[str, ...] = ("pack_quantity", "pack_unit")
+
+# A plain amount and unit, such as "500 g" or "1,5 l"; ASCII digits only.
+_PACK_AMOUNT = re.compile(r"([0-9]+(?:[.,][0-9]+)?)\s*(kg|g|ml|l)", re.IGNORECASE)
 
 
 def nutrient_field(key: str) -> str:
@@ -47,6 +53,21 @@ OFF_FIELDS: tuple[str, ...] = (
     *OFF_DATA_FIELDS,
     *(nutrient_field(key) for key in NUTRIENT_KEYS),
 )
+
+
+def pack_amount(text: str | None) -> tuple[float, BaseUnit] | None:
+    """The amount of a pack size that is a plain amount and unit ("500 g", "1,5 l"), in the base
+    unit of its kind: g for g and kg, ml for ml and l (D-47). None for any other text ("6 x 1,5
+    l", "4 Stück") and for an amount that is 0 or over `PACK_QUANTITY_MAX`."""
+    match = None if text is None else _PACK_AMOUNT.fullmatch(text)
+    if match is None:
+        return None
+    unit = Unit(match[2].lower())
+    # Decimal, so that "0,07 kg" is 70 g and not 70.00000000000001.
+    amount = float(Decimal(match[1].replace(",", ".")) * Decimal(UNIT_FACTOR[unit]))
+    if not 0 < amount <= PACK_QUANTITY_MAX:
+        return None
+    return amount, BaseUnit.G if UNIT_KIND[unit] is UnitKind.MASS else BaseUnit.ML
 
 
 # Control, format (including bidi overrides), surrogate, private-use and unassigned characters.

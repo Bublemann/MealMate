@@ -94,15 +94,15 @@ describe('IngredientDetailScreen', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
-  it('shows the package from its contents when there is no printed size', async () => {
+  it('shows the package from its amount when there is no text (from before D-47)', async () => {
     renderDetail(
-      { [`GET ${MILK_PATH}`]: { ...WEIDEHOF_MILK, quantity_text: null, pack_quantity: 1.5 } },
+      { [`GET ${MILK_PATH}`]: { ...WEIDEHOF_MILK, quantity_text: null, pack_quantity: 1500 } },
       false,
       WEIDEHOF_MILK.id,
     );
 
     const screenEl = await screen.findByTestId(testIds.screenIngredient);
-    await waitFor(() => expect(screenEl).toHaveTextContent('Package1.5 l'));
+    await waitFor(() => expect(screenEl).toHaveTextContent('Package1,500 ml'));
   });
 
   it('shows its own value per nutrient, unknown ones as "–" (NUT-02)', async () => {
@@ -226,6 +226,25 @@ describe('IngredientDetailScreen', () => {
         'There are no newer values for this ingredient (any more).',
       );
       expect(requestsTo(fetchMock, `POST ${MILK_PATH}/pending-update/ignore`)).toHaveLength(1);
+    });
+
+    it('offers a pack size from Open Food Facts as “Packung” (BAR-06, D-47)', async () => {
+      await i18n.changeLanguage('de');
+      const pack = {
+        ...WEIDEHOF_MILK,
+        quantity_text: '250 g',
+        user_edited_fields: ['quantity_text'],
+        pending_update: {
+          fields: [{ field: 'quantity_text', current: '250 g', proposed: '500 g' }],
+          off_last_modified_at: '2026-09-25T10:00:00Z',
+        },
+      } satisfies typeof WEIDEHOF_MILK;
+      renderDetail({ [`GET ${MILK_PATH}`]: pack }, false, WEIDEHOF_MILK.id);
+
+      const hint = await screen.findByTestId(testIds.pendingUpdate);
+      expect(within(hint).getByRole('listitem')).toHaveTextContent(/^Packung: 250 g → 500 g$/);
+      expect(within(hint).getByRole('button', { name: /übernehmen/ })).toBeVisible();
+      expect(within(hint).getByRole('button', { name: /ignorieren/ })).toBeVisible();
     });
 
     it('formats them in German', async () => {
@@ -396,7 +415,7 @@ describe('IngredientDetailScreen', () => {
     await i18n.changeLanguage('de');
     const edited: typeof WEIDEHOF_MILK = {
       ...WEIDEHOF_MILK,
-      user_edited_fields: ['name', 'nutrients.fat'],
+      user_edited_fields: ['name', 'quantity_text', 'nutrients.fat'],
     };
     const { user } = renderDetail({ [`GET ${MILK_PATH}`]: edited }, false, WEIDEHOF_MILK.id);
 
@@ -407,6 +426,7 @@ describe('IngredientDetailScreen', () => {
     expect(dialog).not.toHaveAccessibleDescription();
     const form = within(dialog).getByTestId(testIds.ingredientForm);
     const name = within(form).getByLabelText('Name');
+    const pack = within(form).getByLabelText('Packung');
     const baseUnit = within(form).getByRole('group', { name: 'Basiseinheit' });
     expectInPageOrder([
       within(form).getByTestId(testIds.offAttribution),
@@ -414,6 +434,7 @@ describe('IngredientDetailScreen', () => {
       within(form).getByRole('button', { name: 'Barcode scannen' }),
       within(form).getByLabelText('Barcode'),
       within(form).getByLabelText('Marke'),
+      pack,
       within(form).getByLabelText('Kategorie'),
       baseUnit,
       within(form).getByRole('group', { name: 'Nährwerte pro 100 ml (optional)' }),
@@ -425,12 +446,36 @@ describe('IngredientDetailScreen', () => {
     ).not.toBeInTheDocument();
     // Each field changed in MealMate is marked briefly (BAR-04); the base unit has no warning.
     expect(name).toHaveAccessibleDescription('In MealMate geändert');
+    expect(pack).toHaveValue('1 l');
+    expect(pack).toHaveAccessibleDescription('In MealMate geändert');
     expect(within(form).getByLabelText('Fett')).toHaveAccessibleDescription('In MealMate geändert');
     expect(within(form).getByLabelText('Kalorien')).not.toHaveAccessibleDescription();
     expect(within(form).getByLabelText('Marke')).not.toHaveAccessibleDescription();
     expect(baseUnit).toHaveTextContent(/^BasiseinheitGramm \(g\)Milliliter \(ml\)Stück \(Stk\.\)$/);
-    // The pack size is shown on the detail page only, never edited (D-38).
-    expect(within(form).queryByText(/Packung/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['corrects', ' 1,5 l ', '1,5 l'],
+    ['clears', '', null],
+  ])('%s the pack size (ING-02, D-47)', async (_, typed, sent) => {
+    const { fetchMock, user } = renderDetail(
+      { [`PATCH ${MILK_PATH}`]: { ...WEIDEHOF_MILK, quantity_text: sent } },
+      false,
+      WEIDEHOF_MILK.id,
+    );
+
+    await user.click(await screen.findByTestId(testIds.editIngredient));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
+    const pack = within(dialog).getByLabelText('Package');
+    expect(pack).toHaveAttribute('placeholder', 'optional, e.g. 500 g');
+    await user.clear(pack);
+    if (typed) await user.type(pack, typed);
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(requestsTo(fetchMock, `PATCH ${MILK_PATH}`)[0]?.json()).resolves.toEqual({
+      quantity_text: sent,
+    });
   });
 
   it('clears the barcode of an Open Food Facts ingredient, warning only once it is changed', async () => {

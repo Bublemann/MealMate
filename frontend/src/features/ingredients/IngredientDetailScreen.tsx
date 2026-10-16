@@ -165,9 +165,9 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
 }
 
 /**
- * The pack size as Open Food Facts gave it (D-38): the printed text ("6 × 1,5 l"), else the
- * contents with their unit; null when neither is known. Information only (nothing is computed
- * from it).
+ * The pack size (D-47): its text ("6 × 1,5 l"), else its amount with the unit, which only an
+ * ingredient from before D-47 has without a text; null when neither is known. Information only
+ * (nothing is computed from it).
  */
 function packText(t: TFunction, language: Language, ingredient: Ingredient): string | null {
   if (ingredient.quantity_text) return ingredient.quantity_text;
