@@ -40,8 +40,9 @@ OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand", "quantity_text")
 # were marked user-edited on their own; such a mark counts as one on the pack size.
 PACK_AMOUNT_FIELDS: tuple[str, ...] = ("pack_quantity", "pack_unit")
 
-# A plain amount and unit, such as "500 g" or "1,5 l"; ASCII digits only.
-_PACK_AMOUNT = re.compile(r"([0-9]+)(?:[.,]([0-9]+))?\s*(kg|g|ml|l)", re.IGNORECASE)
+# A plain amount and unit, such as "500 g" or "1,5 l"; ASCII digits only. Anchored at both
+# ends, so that a long run of digits is tried from one start only (no polynomial backtracking).
+_PACK_AMOUNT = re.compile(r"^([0-9]+)(?:[.,]([0-9]+))?\s*(kg|g|ml|l)\Z", re.IGNORECASE)
 
 
 def nutrient_field(key: str) -> str:
@@ -60,7 +61,7 @@ def pack_amount(text: str | None) -> tuple[float, BaseUnit] | None:
     unit of its kind: g for g and kg, ml for ml and l (D-47). None for any other text ("6 x 1,5
     l", "4 Stück"), for an amount that is 0 or over `PACK_QUANTITY_MAX`, and where the separator
     may be a thousands one ("1.000 g", "1,250 kg"): such an amount is not guessed."""
-    match = None if text is None else _PACK_AMOUNT.fullmatch(text)
+    match = None if text is None else _PACK_AMOUNT.match(text)
     if match is None:
         return None
     whole, fraction, unit_text = match.groups()
