@@ -231,16 +231,16 @@ export function emptyList(overrides: Partial<Schemas['ListDetail']> = {}): Schem
     meals: [],
     lines: [],
     extra_items: [],
-    reminder_seed: 4,
     ...overrides,
   });
 }
 
 /**
- * The reminder lists showed before D-43 removed it: its screen-reader label and its texts for
- * "Wochenende" and the empty list. The screen tests check that none of it shows any more.
+ * The reminder the fixtures' lists showed before D-43 removed it: its screen-reader label
+ * ("Reminder: …") and its text (`reminder.1`, picked by `reminder_seed` 1230). The screen tests
+ * check that neither shows any more.
  */
-export const FORMER_REMINDER = /Reminder|Didn't forget anything|Got your shopping bags/;
+export const FORMER_REMINDER = /Reminder:|Didn't forget anything/;
 
 export function listSummary(
   overrides: Partial<Schemas['ListSummary']> = {},

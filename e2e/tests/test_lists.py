@@ -1,8 +1,8 @@
 """Draft lists: build a list from meals and extra items (QA-04 journey 6), partners, copies.
 
-LIST-01..08, AGG, CPL-02/03, VIS-03/06 (plan § 12, M5a). All tests of a run share one
-database, so names get a unique tag, and the category order is read from the app (another test
-reorders the categories).
+LIST-01..08, AGG, CPL-02/03, VIS-03/06 (plan § 12, M5a). All tests of a run share one database, so
+names get a unique tag, and the category order is read from the app (another test reorders the
+categories).
 """
 
 import re
