@@ -25,7 +25,7 @@ _Avoid_: spouse, co-owner
 ### Food
 
 **Ingredient**:
-A food item shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
+A food or household item shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
 _Avoid_: product, food, article
 
 **Base unit**:
@@ -37,7 +37,7 @@ What one piece of an ingredient counted in pieces weighs (e.g. one egg = 60 g). 
 _Avoid_: unit weight, piece size
 
 **Pack size**:
-The amount printed on a package ("500 g", "6 × 1,5 l"), as OFF reports it. Information only, never typed in and never used in a calculation; not the same as a piece weight.
+The amount printed on a package ("500 g", "6 × 1,5 l"), as OFF reports it or as a user corrects or types it; it may be unknown. Information only, never used in a calculation; not the same as a piece weight.
 _Avoid_: package, quantity, content
 
 **Brand**:
@@ -51,6 +51,10 @@ _Avoid_: EAN, code, product
 **Category**:
 The supermarket section an ingredient belongs to (e.g. "Obst & Gemüse"), with a German and an English name. Admins add, rename and delete categories and put them in the store's walking order.
 _Avoid_: aisle, section, department
+
+**Walking order**:
+The order in which categories come on a shopping list, following the way through the store. Admins set the default; a couple, or a user without one, can keep its own.
+_Avoid_: sort order
 
 **Other**:
 The category for things that belong in no other section ("Sonstiges"), and the default for new ingredients and free-text extra items.
@@ -136,3 +140,11 @@ _Avoid_: snapshot, locked meal
 **Detached meal**:
 A meal on a draft that was deleted or stopped being visible to the list's owner. Its ingredients were frozen into the list and it is marked "no longer available".
 _Avoid_: orphaned meal, removed meal
+
+**Recurring item**:
+An ingredient that a user, or a couple together, buys again and again at a roughly steady interval (toilet paper, toothpaste).
+_Avoid_: staple, pantry item, regular item
+
+**Due** (recurring item):
+The state of a recurring item whose interval has passed since it was last bought, until it is bought again.
+_Avoid_: overdue, expired
