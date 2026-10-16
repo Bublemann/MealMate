@@ -20,7 +20,7 @@ interface AdminScreenProps {
   children: ReactNode;
 }
 
-/** An admin screen (ADM-01): back to Me, the section switcher, then the content. */
+/** An admin screen (ADM-01): back to the Settings tab, the section switcher, then the content. */
 export function AdminScreen({ title, testId, children }: AdminScreenProps) {
   const { t } = useTranslation();
 
