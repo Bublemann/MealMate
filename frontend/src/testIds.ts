@@ -15,6 +15,8 @@ export const testIds = {
   appVersion: 'app-version',
   sourceLink: 'source-link',
   updatePrompt: 'update-prompt',
+  detailStrip: 'detail-strip',
+  backLink: 'back-link',
   screenLogin: 'screen-login',
   loginReason: 'login-reason',
   screenJoin: 'screen-join',

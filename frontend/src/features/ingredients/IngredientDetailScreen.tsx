@@ -1,7 +1,7 @@
-import { ChevronLeft, Pencil } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
@@ -40,14 +40,8 @@ export function IngredientDetailScreen() {
           : t('nav.ingredients')
       }
       testId={testIds.screenIngredient}
+      back={{ to: '/ingredients', label: t('ingredients.detail.back') }}
     >
-      <Link
-        to="/ingredients"
-        className="-mt-3 inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
-      >
-        <ChevronLeft aria-hidden="true" className="size-5" />
-        {t('ingredients.detail.back')}
-      </Link>
       {ingredient.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={ingredient.error} />
       {ingredient.data && (
