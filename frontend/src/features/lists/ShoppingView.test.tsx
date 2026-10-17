@@ -2,7 +2,7 @@ import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { BEN, errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
+import { BEN, errorResponse, goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
 import {
   CANDLES_EXTRA_ID,
   checkedBy,
@@ -14,6 +14,8 @@ import {
   LIST_ROUTES,
   listDetail,
   listMeal,
+  PRIVATE_MEAL,
+  DETACHED_MEAL,
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
@@ -26,6 +28,7 @@ import {
 import { ME } from '@/test/meals';
 import { chooseFromMenu, openMoreMenu } from '@/test/menu';
 import { renderApp } from '@/test/render';
+import { swipe, tap } from '@/test/swipe';
 import { KEYBOARD_HEIGHT, stubVisualViewport, VIEWPORT_HEIGHT } from '@/test/viewport';
 import { SyncEngine } from '@/features/sync/engine';
 import { testIds } from '@/testIds';
@@ -457,6 +460,34 @@ describe('shopping view (SHOP-01)', () => {
     expect(within(meals).getByTestId(testIds.addMeals)).toBeVisible();
   });
 
+  it('removes a meal with a swipe or its "Remove" button, as on a draft (LIST-12, D-40)', async () => {
+    const { fetchMock, user } = renderList({
+      [`DELETE ${BASE}/meals/lm-pancakes`]: shoppingList({ meals: [PRIVATE_MEAL, DETACHED_MEAL] }),
+      [`DELETE ${BASE}/meals/lm-detached`]: shoppingList({ meals: [PRIVATE_MEAL] }),
+      [`DELETE ${BASE}/meals/lm-private`]: shoppingList({ meals: [] }),
+    });
+    const meals = await screen.findByTestId(testIds.shoppingMeals);
+    await user.click(within(meals).getByText('Meals (3)'));
+    const pancakes = within(meals).getByRole('listitem', { name: 'Pfannkuchen' });
+
+    swipe(within(pancakes).getByRole('link', { name: 'Pfannkuchen' }), { from: 600, to: 450 });
+    tap(within(pancakes).getByRole('button', { name: 'Remove', hidden: true }));
+
+    await waitFor(() => expect(within(meals).getByText('Meals (2)')).toBeVisible());
+    expect(requestsTo(fetchMock, `DELETE ${BASE}/meals/lm-pancakes`)).toHaveLength(1);
+    const detached = within(meals).getByRole('listitem', { name: 'Alter Eintopf' });
+    expect(
+      within(detached).getByRole('group', { name: 'Servings of Alter Eintopf' }),
+    ).toBeVisible();
+    await user.click(within(detached).getByTestId(testIds.removeListMeal));
+    await waitFor(() => expect(within(meals).getByText('Meals (1)')).toBeVisible());
+    // A full swipe removes at once.
+    const other = within(meals).getByRole('listitem', { name: 'Private meal (3 servings)' });
+    swipe(within(other).getByText('Private meal (3 servings)'), { from: 900, to: 300 });
+    await waitFor(() => expect(within(meals).getByText('Meals (0)')).toBeVisible());
+    expect(requestsTo(fetchMock, `DELETE ${BASE}/meals/lm-private`)).toHaveLength(1);
+  });
+
   it('is read-only for someone who may not change the list', async () => {
     renderList({ [`GET ${BASE}`]: shoppingList({ is_owner: false, can_edit: false }) });
 
@@ -464,6 +495,14 @@ describe('shopping view (SHOP-01)', () => {
     expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.editShoppingItem)).not.toBeInTheDocument();
+    // The meals show their servings, without stepper, "Remove" or swipe (D-40).
+    const meals = screen.getByTestId(testIds.shoppingMeals);
+    const pancakes = within(meals).getByRole('listitem', { name: 'Pfannkuchen' });
+    expect(within(pancakes).getByText('4 servings')).toBeInTheDocument();
+    expect(within(meals).queryByRole('group')).not.toBeInTheDocument();
+    expect(within(meals).queryByTestId(testIds.removeListMeal)).not.toBeInTheDocument();
+    swipe(within(pancakes).getByRole('link', { name: 'Pfannkuchen' }), { from: 600, to: 450 });
+    expect(within(pancakes).queryByRole('button', { hidden: true })).not.toBeInTheDocument();
   });
 
   it('stamps each check-off when it is tapped, not when it is sent (SYNC-06)', async () => {
@@ -683,14 +722,6 @@ describe('extra items while shopping (LIST-12)', () => {
 });
 
 describe('offline (SYNC-03)', () => {
-  function goOffline(fetchMock: ReturnType<typeof mockApi>) {
-    fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
-    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-    act(() => {
-      window.dispatchEvent(new Event('offline'));
-    });
-  }
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -721,6 +752,11 @@ describe('offline (SYNC-03)', () => {
     expect(
       within(meals).getByRole('button', { name: 'More servings of Pfannkuchen' }),
     ).toBeDisabled();
+    const pancakes = within(meals).getByRole('listitem', { name: 'Pfannkuchen' });
+    expect(within(pancakes).getByTestId(testIds.removeListMeal)).toBeDisabled();
+    swipe(within(pancakes).getByRole('link', { name: 'Pfannkuchen' }), { from: 900, to: 300 });
+    expect(within(pancakes).queryByRole('button', { name: 'Remove', hidden: true })).toBeNull();
+    expect(requestsTo(fetchMock, `DELETE ${BASE}/meals/lm-pancakes`)).toHaveLength(0);
     expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(0);
 
     // Finishing goes through the outbox from the floating bar (D-10, D-39).
@@ -1106,6 +1142,11 @@ describe('done list (SHOP-05/06)', () => {
     expect(screen.queryByTestId(testIds.renameList)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /servings/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.removeListMeal)).not.toBeInTheDocument();
+    const pancakes = within(screen.getByTestId(testIds.listMeals)).getByRole('listitem', {
+      name: 'Pfannkuchen',
+    });
+    expect(within(pancakes).getByText('4 servings')).toBeVisible();
     // The note stands on its own; its actions are in the ⋯ menu (D-39).
     expect(within(screen.getByTestId(testIds.listDone)).queryByRole('button')).toBeNull();
     expect(screen.queryByTestId(testIds.shopAgain)).not.toBeInTheDocument();
