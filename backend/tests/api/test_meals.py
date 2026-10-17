@@ -977,6 +977,7 @@ async def test_list(
         "servings": 2,
         "thumb_url": None,
         "updated_at": "2026-09-27T12:00:00Z",
+        "exact": False,
     }
 
 
@@ -1002,6 +1003,34 @@ async def test_search(api: AsyncClient, anna: Account, cuisines: dict[str, str])
         "Schäufele",
     ]
     assert await list_meals(api, anna, q="nichts") == []
+
+
+async def exact_marks(api: AsyncClient, user: Account, **params: Any) -> list[tuple[str, bool]]:
+    response = await api.get("/api/meals", params=params, headers=user.headers)
+    assert response.status_code == 200, response.text
+    return [(item["name"], item["exact"]) for item in response.json()]
+
+
+async def test_search_marks_exact_names(api: AsyncClient, anna: Account, ben: Account) -> None:
+    """D-41: the meals whose name is the query, ignoring case, umlaut spelling and accents
+    (ING-03), are marked; one's own and the partner's "Lasagne" both are."""
+    await create_meal(api, anna, "Lasagne")
+    await create_meal(api, ben, "lasagne", tags=["Pasta"])
+    await create_meal(api, anna, "Lasagne al forno")
+    await create_meal(api, anna, "Schäufele")
+    await create_meal(api, anna, "Pasta", tags=["Lasagne"])
+
+    assert await exact_marks(api, anna, q="LASAGNE") == [
+        ("Lasagne", True),
+        ("lasagne", True),
+        ("Lasagne al forno", False),
+        # Found by its tag, not by its name.
+        ("Pasta", False),
+    ]
+    assert await exact_marks(api, anna, q="schaeufele") == [("Schäufele", True)]
+    assert await exact_marks(api, anna, q="schaufele") == [("Schäufele", True)]
+    assert await exact_marks(api, anna, q="schäuf") == [("Schäufele", False)]
+    assert {exact for _, exact in await exact_marks(api, anna)} == {False}
 
 
 async def test_dictionary_order(api: AsyncClient, anna: Account) -> None:

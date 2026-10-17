@@ -725,6 +725,51 @@ async def test_search_by_brand(api: AsyncClient, anna: Account) -> None:
     ]
 
 
+def label(item: dict[str, Any]) -> str:
+    return item["name"] if item["brand"] is None else f"{item['name']} ({item['brand']})"
+
+
+async def exact_marks(api: AsyncClient, user: Account, q: str) -> list[tuple[str, bool]]:
+    """Each label found for `q` with its exact-match mark."""
+    response = await api.get("/api/ingredients", params={"q": q}, headers=user.headers)
+    assert response.status_code == 200, response.text
+    return [(label(item), item["exact"]) for item in response.json()]
+
+
+async def test_search_marks_exact_names(api: AsyncClient, anna: Account) -> None:
+    """D-41: the results whose name is the query, by the rule the search sorts by (ignoring
+    case, umlaut spelling and accents, ING-03), are marked; the brand doesn't count."""
+    await create_ingredient(api, anna, "Äpfel")
+    await create_ingredient(api, anna, "Apfelmus")
+    await create_ingredient(api, anna, "Crème fraîche")
+
+    assert await exact_marks(api, anna, "äpfel") == [("Äpfel", True), ("Apfelmus", False)]
+    assert await exact_marks(api, anna, "Aepfel") == [("Äpfel", True), ("Apfelmus", False)]
+    assert await exact_marks(api, anna, "apfel") == [("Äpfel", True), ("Apfelmus", False)]
+    assert await exact_marks(api, anna, "CREME FRAICHE") == [("Crème fraîche", True)]
+    assert await exact_marks(api, anna, "apf") == [("Äpfel", False), ("Apfelmus", False)]
+    # Without a query nothing is exact.
+    assert {exact for _, exact in await exact_marks(api, anna, "")} == {False}
+
+
+async def test_search_marks_every_brand_of_an_exact_name(api: AsyncClient, anna: Account) -> None:
+    """D-41: a single branded "Milch" is an exact match for "milch"; with several brands each is
+    marked, and the list leaves the choice to the user."""
+    await create_ingredient(api, anna, "Milch", brand="REWE")
+    await create_ingredient(api, anna, "Milchreis")
+
+    assert await exact_marks(api, anna, "milch") == [("Milch (REWE)", True), ("Milchreis", False)]
+
+    await create_ingredient(api, anna, "Milch", brand="Weihenstephan")
+    assert await exact_marks(api, anna, "Milch") == [
+        ("Milch (REWE)", True),
+        ("Milch (Weihenstephan)", True),
+        ("Milchreis", False),
+    ]
+    # The brand is not part of the name: "milch rewe" finds it, but not exactly.
+    assert await exact_marks(api, anna, "milch rewe") == [("Milch (REWE)", False)]
+
+
 async def test_list_in_dictionary_order(api: AsyncClient, anna: Account) -> None:
     """ING-03, D-27: by name, then brand, whatever the category. Ä sorts as A, ß as ss and è as
     e; real letter pairs keep their place ("Paella" before "Pak", "Sauer" before "Saure")."""
@@ -861,6 +906,7 @@ async def test_summaries(api: AsyncClient, anna: Account) -> None:
             "source": "off",
             "category_id": milk["category_id"],
             "base_unit": "ml",
+            "exact": True,
         }
     ]
 
