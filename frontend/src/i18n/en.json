@@ -91,6 +91,8 @@
   "couple.pickPlaceholder": "Choose a person",
   "couple.send": "Send request",
   "couple.nobody": "There is nobody else here yet.",
+  "couple.requests_one": "{{count}} request",
+  "couple.requests_other": "{{count}} requests",
   "admin.title": "Administration",
   "admin.users.title": "Users",
   "admin.users.roleAdmin": "Admin",

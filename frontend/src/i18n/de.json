@@ -91,6 +91,8 @@
   "couple.pickPlaceholder": "Person auswählen",
   "couple.send": "Anfrage senden",
   "couple.nobody": "Außer dir ist hier noch niemand.",
+  "couple.requests_one": "{{count}} Anfrage",
+  "couple.requests_other": "{{count}} Anfragen",
   "admin.title": "Verwaltung",
   "admin.users.title": "Benutzer",
   "admin.users.roleAdmin": "Admin",

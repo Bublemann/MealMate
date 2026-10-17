@@ -1,6 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { mockApi, requestsTo, TEST_ADMIN, TEST_USER } from '@/test/api';
+import {
+  BEN,
+  CARL,
+  errorResponse,
+  mockApi,
+  NO_COUPLE,
+  requestsTo,
+  TEST_ADMIN,
+  TEST_USER,
+  userRef,
+  VERSION_INFO,
+} from '@/test/api';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -165,5 +176,94 @@ describe('SettingsScreen', () => {
 
     expect(await screen.findByText("Can't reach MealMate. Are you online?")).toBeVisible();
     expect(screen.getByTestId(testIds.screenMe)).toBeVisible();
+  });
+});
+
+/** An incoming couple request from `from`. */
+function requestFrom(from: ReturnType<typeof userRef>, id = `r-${from.id}`) {
+  return {
+    id,
+    from_user: from,
+    to_user: userRef('Anna', TEST_USER.id),
+    created_at: '2026-09-26T10:00:00Z',
+  };
+}
+
+/** The Settings row whose accessible name starts with `label`. */
+function row(label: string) {
+  return screen.getByRole('link', { name: new RegExp(`^${label}`) });
+}
+
+describe('SettingsScreen row values (D-45)', () => {
+  it('shows the display name, refreshed as the tab opens, and the version', async () => {
+    const fetchMock = mockApi({ 'GET /api/me': { ...TEST_USER, display_name: 'Annie' } });
+    renderApp('/me');
+
+    await waitFor(() => expect(row('Profile')).toHaveAccessibleName('Profile Annie'));
+    expect(requestsTo(fetchMock, 'GET /api/me')).toHaveLength(1);
+    await waitFor(() =>
+      expect(row('About MealMate')).toHaveAccessibleName(`About MealMate ${VERSION_INFO.version}`),
+    );
+    // Without a partner or a request, Paar has no value; nor have these rows.
+    expect(row('Couple')).toHaveAccessibleName('Couple');
+    expect(row('Privacy')).toHaveAccessibleName('Privacy');
+    expect(row('Security')).toHaveAccessibleName('Security');
+  });
+
+  it('shows no value on the Verwaltung rows', async () => {
+    mockApi({ 'GET /api/me': TEST_ADMIN });
+    renderApp('/me', { user: TEST_ADMIN });
+
+    const group = await screen.findByTestId(testIds.adminEntry);
+    const names = ['Users', 'Invites', 'Categories', 'Activity log', 'System'];
+    const links = within(group).getAllByRole('link');
+    expect(links).toHaveLength(names.length);
+    links.forEach((link, index) => expect(link).toHaveAccessibleName(names[index]));
+  });
+
+  it('shows the partner on Paar, marked when deactivated (ADM-02)', async () => {
+    let partner = BEN;
+    mockApi({
+      'GET /api/couple': () => ({ ...NO_COUPLE, partner, since: '2026-09-26T11:00:00Z' }),
+    });
+    const first = renderApp('/me');
+
+    await waitFor(() => expect(row('Couple')).toHaveAccessibleName('Couple Ben'));
+    first.unmount();
+
+    partner = userRef('Ben', BEN.id, true);
+    renderApp('/me');
+    await waitFor(() => expect(row('Couple')).toHaveAccessibleName('Couple Ben (deactivated)'));
+  });
+
+  it('shows waiting couple requests on Paar, one or several (D-51)', async () => {
+    let incoming = [requestFrom(BEN)];
+    mockApi({ 'GET /api/couple': () => ({ ...NO_COUPLE, incoming }) });
+    const first = renderApp('/me');
+
+    await waitFor(() => expect(row('Couple')).toHaveAccessibleName('Couple 1 request'));
+    first.unmount();
+
+    incoming = [requestFrom(BEN), requestFrom(CARL)];
+    renderApp('/me');
+    await waitFor(() => expect(row('Couple')).toHaveAccessibleName('Couple 2 requests'));
+  });
+
+  it('leaves a row without its value, but tappable, when the value fails to load', async () => {
+    const fetchMock = mockApi({
+      'GET /api/couple': errorResponse(500, 'common.internal'),
+      'GET /api/version': errorResponse(500, 'common.internal'),
+    });
+    const { router, user } = renderApp('/me');
+
+    const settings = await screen.findByTestId(testIds.screenMe);
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/version')).toHaveLength(1));
+    expect(row('Couple')).toHaveAccessibleName('Couple');
+    expect(row('About MealMate')).toHaveAccessibleName('About MealMate');
+    expect(within(settings).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(settings).queryByText('Something went wrong. Please try again.')).toBeNull();
+
+    await user.click(row('About MealMate'));
+    expect(router.state.location.pathname).toBe('/me/about');
   });
 });
