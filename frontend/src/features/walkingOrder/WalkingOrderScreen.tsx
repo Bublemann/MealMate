@@ -222,28 +222,31 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
                 dragging === id && 'bg-accent',
               )}
             >
-              {/* Dragging is for touch and the mouse; screen readers and keyboards use the
-                  buttons. The handle doesn't scroll the page. */}
-              <span
-                aria-hidden="true"
-                data-testid={testIds.walkingOrderHandle}
-                className={cn(
-                  'flex size-(--tap-target) shrink-0 touch-none items-center justify-center text-muted-foreground select-none',
-                  connected ? 'cursor-grab' : 'opacity-50',
-                )}
-                onPointerDown={(event) => onHandleDown(event, id)}
-              >
-                <GripVertical className="size-5" />
-              </span>
-              <span className="min-w-0 flex-[1_1_8rem] py-2 wrap-anywhere">
-                {name}
-                {category.new && (
-                  <>
-                    {' '}
-                    <Badge variant="secondary">{t('walkingOrder.new')}</Badge>
-                  </>
-                )}
-              </span>
+              {/* The handle stays next to the name, which wraps. */}
+              <div className="flex min-w-0 flex-[1_1_8rem] items-center gap-x-1">
+                {/* Dragging is for touch and the mouse; screen readers and keyboards use the
+                    buttons. The handle doesn't scroll the page. */}
+                <span
+                  aria-hidden="true"
+                  data-testid={testIds.walkingOrderHandle}
+                  className={cn(
+                    'flex size-(--tap-target) shrink-0 touch-none items-center justify-center text-muted-foreground select-none',
+                    connected ? 'cursor-grab' : 'opacity-50',
+                  )}
+                  onPointerDown={(event) => onHandleDown(event, id)}
+                >
+                  <GripVertical className="size-5" />
+                </span>
+                <span className="min-w-0 flex-1 py-2 wrap-anywhere">
+                  {name}
+                  {category.new && (
+                    <>
+                      {' '}
+                      <Badge variant="secondary">{t('walkingOrder.new')}</Badge>
+                    </>
+                  )}
+                </span>
+              </div>
               <div className="ml-auto flex flex-wrap justify-end">
                 <Button
                   id={buttonId(id, 'up')}
