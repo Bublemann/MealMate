@@ -83,6 +83,18 @@ describe('WalkingOrderScreen (REF-01, D-48)', () => {
     expect(screen.getByRole('button', { name: 'Move Uncategorized down' })).toBeDisabled();
   });
 
+  it('loads the order again each time the page opens', async () => {
+    // The partner, or forming a couple, may have changed it meanwhile (D-48).
+    const { fetchMock, user } = renderPage();
+    await rows();
+
+    await user.click(screen.getByTestId(testIds.backLink));
+    await user.click(await screen.findByRole('link', { name: /^Order in the store/ }));
+
+    await rows();
+    expect(requestsTo(fetchMock, 'GET /api/walking-order')).toHaveLength(2);
+  });
+
   it('keeps the order as the own one once a category is moved; the switch goes off', async () => {
     const { fetchMock, user } = renderPage();
 

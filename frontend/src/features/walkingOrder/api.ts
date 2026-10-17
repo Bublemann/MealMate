@@ -1,7 +1,7 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
-import { LISTS_KEY } from '@/features/lists/keys';
+import { DETAILS_KEY } from '@/features/lists/keys';
 
 export type WalkingOrder = components['schemas']['WalkingOrder'];
 export type WalkingOrderCategory = components['schemas']['WalkingOrderCategory'];
@@ -19,14 +19,23 @@ export const walkingOrderQuery = queryOptions({
   queryFn: ({ signal }) => unwrap(api.GET('/api/walking-order', { signal })),
 });
 
+/**
+ * Loaded again whenever the page opens or the app returns to the foreground: the partner, or a
+ * couple forming or ending, may have changed the order meanwhile, and a move saves the whole
+ * order as the page shows it.
+ */
 export function useWalkingOrder() {
-  return useQuery(walkingOrderQuery);
+  return useQuery({
+    ...walkingOrderQuery,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+  });
 }
 
 /** The lists are grouped in the viewer's order: the ones in the cache load again. */
 function useRefreshLists() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: [...LISTS_KEY, 'detail'] });
+  return () => queryClient.invalidateQueries({ queryKey: DETAILS_KEY });
 }
 
 interface OrderSave {

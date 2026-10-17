@@ -9,7 +9,9 @@ import type { components } from '@/api/generated/schema';
 export const LISTS_KEY = ['lists'] as const;
 /** The list feed on the Lists tab (UI-02), loaded page by page. */
 export const FEED_KEY = [...LISTS_KEY, 'feed'] as const;
-export const detailKey = (id: string) => [...LISTS_KEY, 'detail', id] as const;
+/** Every list detail in the cache. */
+export const DETAILS_KEY = [...LISTS_KEY, 'detail'] as const;
+export const detailKey = (id: string) => [...DETAILS_KEY, id] as const;
 
 /**
  * When the local copy in the feed's cache counts as loaded: never, so the feed is asked for anyway

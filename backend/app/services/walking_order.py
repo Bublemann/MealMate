@@ -35,7 +35,7 @@ def _order(entries: Sequence[WalkingOrderEntry]) -> WalkingOrder:
 def _view(categories: Sequence[Category], entries: Sequence[WalkingOrderEntry]) -> WalkingOrderOut:
     """The categories that aren't deleted, in the owner's order."""
     order, new = _order(entries), {entry.category_id for entry in entries if entry.is_new}
-    shown = sorted(
+    not_deleted = sorted(
         (row for row in categories if row.deleted_at is None),
         key=lambda row: order.sort_key(row.id, row.sort_order, deleted=False),
     )
@@ -48,7 +48,7 @@ def _view(categories: Sequence[Category], entries: Sequence[WalkingOrderEntry]) 
                 names=CategoryNames(de=row.name_de, en=row.name_en),
                 new=row.id in new,
             )
-            for row in shown
+            for row in not_deleted
         ],
     )
 
@@ -78,10 +78,10 @@ async def save_order(
     category is no longer new; the positions of deleted categories stay."""
     async with session.begin():
         categories = await reference_repo.categories_in_order(session)
-        shown = {row.id for row in categories if row.deleted_at is None}
-        if len(body.category_ids) != len(shown) or set(body.category_ids) != shown:
+        not_deleted = {row.id for row in categories if row.deleted_at is None}
+        if len(body.category_ids) != len(not_deleted) or set(body.category_ids) != not_deleted:
             raise validation_error([_field("category_ids", FieldErrorCode.INVALID)])
-        if body.moved_id is not None and body.moved_id not in shown:
+        if body.moved_id is not None and body.moved_id not in not_deleted:
             raise validation_error([_field("moved_id", FieldErrorCode.INVALID)])
         key = await access.owner_key(session, principal.user_id)
         entries = {
@@ -121,7 +121,7 @@ async def on_category_added(session: AsyncSession, category_id: str, *, now: dat
     """Runs when an admin adds a category, once its row is flushed: it goes to the end of every
     own order, marked new until it is moved (D-48). Orders that follow the admins' one get it
     there, last."""
-    for key, size in (await walking_order_repo.sizes(session)).items():
+    for key, size in (await walking_order_repo.not_deleted_counts(session)).items():
         session.add(
             WalkingOrderEntry(
                 couple_id=key.couple_id,
@@ -141,8 +141,8 @@ async def on_category_deleted(session: AsyncSession, category_id: str, *, now: d
     right after the category that takes over its place (D-30, D-48). The categories that aren't
     deleted close the gap."""
     for key in await walking_order_repo.owners_with(session, category_id):
-        shown = await walking_order_repo.of_owner(session, key, shown_only=True)
-        for position, entry in enumerate(shown):
+        not_deleted = await walking_order_repo.of_owner(session, key, without_deleted=True)
+        for position, entry in enumerate(not_deleted):
             if entry.position != position:
                 entry.position, entry.updated_at = position, now
 

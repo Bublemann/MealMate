@@ -508,7 +508,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
 
 - **Routing** (react-router):
   - tabs `/lists`, `/meals`, `/ingredients`, `/me` (Settings);
-  - the pages the Settings rows open (D-45): `/me/profile`, `/me/privacy`, `/me/couple`, `/me/security`, `/me/about`; an unknown `/me/…` address leads to Lists like any unknown address;
+  - the pages the Settings rows open (D-45): `/me/profile`, `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/walking-order`, `/me/about`; an unknown `/me/…` address leads to Lists like any unknown address;
   - `/lists/:id` (draft view / shopping view), `/meals/new` (the "Neues Gericht" tile can pass a name to prefill, MEAL-09), `/meals/:id`, `/meals/:id/edit`, `/ingredients/:id`;
   - there is no `/scan` route: the former scan page's address redirects to the Ingredients tab (BAR-01, D-37);
   - the former history route `/lists/history` redirects to the Lists tab (UI-02);

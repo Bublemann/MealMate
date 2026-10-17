@@ -16,16 +16,16 @@ def _owned_by(key: OwnerKey) -> ColumnElement[bool]:
 
 
 async def of_owner(
-    session: AsyncSession, key: OwnerKey, *, shown_only: bool = False
+    session: AsyncSession, key: OwnerKey, *, without_deleted: bool = False
 ) -> Sequence[WalkingOrderEntry]:
     """The owner's own order, by position; empty while it follows the admins' order. With
-    `shown_only`, without the categories that are deleted."""
+    `without_deleted`, only the categories that aren't deleted."""
     query = (
         select(WalkingOrderEntry)
         .where(_owned_by(key))
         .order_by(WalkingOrderEntry.position, WalkingOrderEntry.category_id)
     )
-    if shown_only:
+    if without_deleted:
         query = query.join(Category, Category.id == WalkingOrderEntry.category_id).where(
             Category.deleted_at.is_(None)
         )
@@ -48,7 +48,7 @@ async def delete_of_owner(session: AsyncSession, key: OwnerKey) -> None:
     await session.execute(delete(WalkingOrderEntry).where(_owned_by(key)))
 
 
-async def sizes(session: AsyncSession) -> dict[OwnerKey, int]:
+async def not_deleted_counts(session: AsyncSession) -> dict[OwnerKey, int]:
     """Every own order, with how many categories that aren't deleted it holds."""
     result = await session.execute(
         select(WalkingOrderEntry.couple_id, WalkingOrderEntry.user_id, func.count())

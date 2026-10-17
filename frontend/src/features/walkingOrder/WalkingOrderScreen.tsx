@@ -82,7 +82,7 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
   );
   const byId = new Map(order.categories.map((category) => [category.id, category]));
   // The switch shows what was asked for while it is being saved.
-  const follows = follow.isPending || (!save.isPending && moved === null && order.follows_admin);
+  const switchedOn = follow.isPending || (!save.isPending && moved === null && order.follows_admin);
   const [confirming, setConfirming] = useState(false);
   // After a move by its buttons the focus follows the category (its button may be disabled now).
   const [focus, setFocus] = useState<{ id: string; direction: Direction } | null>(null);
@@ -197,7 +197,7 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
           id={switchId}
           data-testid={testIds.walkingOrderSwitch}
           aria-describedby={hintId}
-          checked={follows}
+          checked={switchedOn}
           disabled={!connected || follow.isPending}
           onCheckedChange={onSwitch}
         />
