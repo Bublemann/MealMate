@@ -3464,7 +3464,7 @@ export interface components {
         };
         /**
          * SecurityInfo
-         * @description What *Me → Security* shows, e.g. "Password reset by X on <date>" (ACC-10).
+         * @description What *Einstellungen → Sicherheit* shows, e.g. "Password reset by X on <date>" (ACC-10).
          *
          *     `password_reset_by` is null for a reset link from the command line or a deleted admin.
          */

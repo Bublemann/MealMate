@@ -4612,7 +4612,7 @@
         "type": "object"
       },
       "SecurityInfo": {
-        "description": "What *Me → Security* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
+        "description": "What *Einstellungen → Sicherheit* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
         "properties": {
           "password_changed_at": {
             "anyOf": [

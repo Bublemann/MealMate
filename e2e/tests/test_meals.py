@@ -364,12 +364,13 @@ def test_private_meals_are_hidden_except_from_the_partner(
     expect(cards).to_have_count(2)
     expect(cards.filter(has_text=meal["name"])).to_have_count(1)
 
-    # Anna switches "meals public" off in Settings, on her own device.
+    # Anna switches "meals public" off in Settings → Privatsphäre, on her own device.
     anna_context = new_context()
     sign_in(anna_context, anna)
     anna_page = anna_context.new_page()
-    anna_page.goto("/me")
-    switch = anna_page.get_by_test_id(TEST_IDS["mealsPublicSwitch"])
+    anna_page.goto("/me/privacy")
+    privacy = anna_page.get_by_test_id(TEST_IDS["screenPrivacy"])
+    switch = privacy.get_by_test_id(TEST_IDS["mealsPublicSwitch"])
     expect(switch).to_be_checked()
     switch.click()
     expect(switch).not_to_be_checked()

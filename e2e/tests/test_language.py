@@ -6,7 +6,7 @@ from playwright.sync_api import BrowserContext, Page, expect
 
 from support.api import Account, Api, sign_in
 from support.frontend import TEST_IDS, text, translations
-from support.ui import log_in, log_out
+from support.ui import log_in, log_out, open_settings_page, settings_row
 
 
 def expect_language(page: Page, language: str) -> None:
@@ -23,7 +23,7 @@ def expect_language(page: Page, language: str) -> None:
 
 
 def switch_language(page: Page, label: str) -> None:
-    """Picks `label` on the Settings tab and waits until the server has stored it."""
+    """Picks `label` on Settings → Profil and waits until the server has stored it."""
     with page.expect_response(
         lambda response: response.url.endswith("/api/me") and response.request.method == "PATCH"
     ) as saved:
@@ -40,13 +40,18 @@ def test_language_is_kept_by_the_account(
     user = invite_user(language="en")
     sign_in(page.context, user)
     page.goto("/me")
-    select = page.get_by_test_id(TEST_IDS["languageSelect"])
     expect_language(page, "en")
+    # One translation per tab: its name and its screen's headline (D-44).
+    expect(page.get_by_role("heading", level=1)).to_have_text(text("nav.me"))
+    settings_row(page, "me.profile.title").click()
+    select = page.get_by_test_id(TEST_IDS["screenProfile"]).get_by_test_id(
+        TEST_IDS["languageSelect"]
+    )
 
     switch_language(page, "Deutsch")
     expect_language(page, "de")
-    # One translation per tab: its name and its screen's headline (D-44).
-    expect(page.get_by_role("heading", level=1)).to_have_text(text("nav.me", "de"))
+    expect(page.get_by_role("heading", level=1)).to_have_text(text("me.profile.title", "de"))
+    expect(page.get_by_test_id(TEST_IDS["backLink"])).to_have_text(text("nav.me", "de"))
     page.reload()
     expect_language(page, "de")
     expect(select).to_have_value("de")
@@ -59,7 +64,7 @@ def test_language_is_kept_by_the_account(
     expect(other.locator("html")).to_have_attribute("lang", "en")
     log_in(other, user)
     expect_language(other, "de")
-    other.get_by_test_id(TEST_IDS["tabMe"]).click()
+    open_settings_page(other, "me.profile.title", "screenProfile", language="de")
     expect(other.get_by_test_id(TEST_IDS["languageSelect"])).to_have_value("de")
 
     switch_language(other, "English")

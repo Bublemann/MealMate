@@ -28,6 +28,8 @@ class Screen:
     visitor: Visitor
     # Shown once the screen's data has loaded, so the whole screen is checked.
     ready: tuple[str, ...]
+    # The test's name, where one path is checked for several visitors.
+    name: str = ""
 
 
 SCREENS = [
@@ -85,7 +87,14 @@ SCREENS = [
         "member",
         (TEST_IDS["mealPhoto"], TEST_IDS["mealNutrition"], TEST_IDS["mealIngredients"]),
     ),
-    Screen("/me", "member", (TEST_IDS["appVersion"], TEST_IDS["sessionList"])),
+    # The Settings tab, with the Verwaltung group for admins, and the pages its rows open.
+    Screen("/me", "member", (TEST_IDS["screenMe"], TEST_IDS["logoutButton"])),
+    Screen("/me", "admin", (TEST_IDS["adminEntry"], TEST_IDS["logoutButton"]), name="/me (admin)"),
+    Screen("/me/profile", "member", (TEST_IDS["screenProfile"], TEST_IDS["displayNameInput"])),
+    Screen("/me/privacy", "member", (TEST_IDS["screenPrivacy"], TEST_IDS["mealsPublicSwitch"])),
+    Screen("/me/couple", "member", (TEST_IDS["screenCouple"], TEST_IDS["coupleSection"])),
+    Screen("/me/security", "member", (TEST_IDS["screenSecurity"], TEST_IDS["sessionList"])),
+    Screen("/me/about", "admin", (TEST_IDS["appVersion"], TEST_IDS["diagnosticsLink"])),
     Screen("/me/admin/users", "admin", (TEST_IDS["adminUserList"],)),
     Screen("/me/admin/invites", "admin", (TEST_IDS["inviteList"], TEST_IDS["shareLinkUrl"])),
     Screen("/me/admin/categories", "admin", (TEST_IDS["adminCategoryList"],)),
@@ -100,7 +109,7 @@ SCREENS = [
 
 
 @pytest.mark.parametrize("color_scheme", ["light", "dark"])
-@pytest.mark.parametrize("screen", SCREENS, ids=lambda screen: screen.path)
+@pytest.mark.parametrize("screen", SCREENS, ids=lambda screen: screen.name or screen.path)
 def test_no_serious_violations(
     page: Page,
     request: pytest.FixtureRequest,
