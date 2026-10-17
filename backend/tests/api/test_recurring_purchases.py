@@ -99,12 +99,12 @@ async def test_a_finish_sent_days_later_keeps_the_day_of_the_check_off(
     api: AsyncClient, anna: Account, toilet_paper: Any, clock: FakeClock
 ) -> None:
     """A list finished offline reaches the server three days later from the outbox (SYNC-04);
-    the purchase still counts on the day of the tap in Berlin."""
+    the purchase still counts on the day of the tap in Berlin, not on its UTC date."""
     await make_recurring(
         api, anna, toilet_paper["id"], weeks=4, last_purchased_on=date(2026, 8, 23)
     )
     shopping_list = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
-    tap = START + timedelta(hours=8, minutes=30)  # 22:30 in Berlin on 2026-09-27
+    tap = START + timedelta(hours=10, minutes=30)  # 00:30 in Berlin on 09-28, 22:30Z on 09-27
     clock.advance(days=3)
     await login(api, anna)
     await applied(
@@ -116,7 +116,7 @@ async def test_a_finish_sent_days_later_keeps_the_day_of_the_check_off(
     )
 
     item = await item_of(api, anna, toilet_paper)
-    assert item["last_purchased_on"] == "2026-09-27"
+    assert item["last_purchased_on"] == "2026-09-28"
 
 
 async def finished(api: AsyncClient, user: Account, list_id: str, *checked: Any, at: Any) -> Any:

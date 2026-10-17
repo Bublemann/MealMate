@@ -239,6 +239,7 @@ All permission checks live in one module, `services/access.py`:
 | List | owner · partner (while in a couple; read-only if not `shared_with_partner`) · everyone (read-only) if owner.lists_public | owner · partner if `shared_with_partner` (not delete/share switch) |
 | Meal *embedded in a list* (VIS-06) | if the viewer may view the meal itself (rule above): full details; otherwise "Private meal (N servings)" without name, photo, link or sources | n/a |
 | Ingredient | everyone | everyone; delete/merge: admin |
+| Due item on a list (LIST-16) | list editors, on a draft only | hide: list editors, on a draft; the hide holds for every viewer |
 | Recurring item (LIST-16) | the user's current set: the couple's while in one, else their own | same (either partner) |
 | Notice (D-51) | the user it is for | dismiss: same, each partner their own |
 | Photo | same as its meal (checked when the signed URL is issued) | owner |

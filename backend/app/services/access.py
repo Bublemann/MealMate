@@ -9,6 +9,7 @@
 | Shopping (M5b) | shop again: whoever sees the done list | start, ops, reopen: list editors |
 | Meal on a list (M5a) | details if its meal is visible, else "Private meal" (VIS-06) | n/a |
 | Ingredient (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
+| Due item (LIST-16) | list editors, on drafts | hide: list editors, on drafts; holds for all |
 | Recurring item (LIST-16) | own set; the couple's set while in a couple | same (either partner) |
 | Notice (D-51) | the user it is for | dismiss: same |
 | Reference data (M3) | everyone | add a cuisine: everyone; reorder categories: admin |
