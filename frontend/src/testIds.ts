@@ -50,6 +50,7 @@ export const testIds = {
   newIngredient: 'new-ingredient',
   ingredientList: 'ingredient-list',
   ingredientRow: 'ingredient-row',
+  pinnedBlock: 'pinned-block',
   filterButton: 'filter-button',
   filterPanel: 'filter-panel',
   filterGroup: 'filter-group',

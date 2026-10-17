@@ -12,6 +12,7 @@ import {
 } from '@/test/api';
 import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { CUISINES, ME, meal, MEAL_ROUTES, mealSummary, TAGS } from '@/test/meals';
+import { expectPinnedHeadline } from '@/test/pinned';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -76,6 +77,7 @@ describe('MealsScreen', () => {
     renderMeals({ 'GET /api/meals': meals.route });
 
     expect(await screen.findByText('Loading…')).toBeVisible();
+    const headline = expectPinnedHeadline('Meals');
     expect(screen.getByLabelText('Search meals')).toBeVisible();
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
     expect(screen.getByTestId(testIds.newMeal)).toHaveAccessibleName('New meal');
@@ -83,6 +85,7 @@ describe('MealsScreen', () => {
     await meals.answer([]);
     expect(await screen.findByText('No meals yet')).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
+    expect(expectPinnedHeadline('Meals')).toBe(headline);
     expect(screen.getByLabelText('Search meals')).toBeVisible();
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
     expect(screen.getByTestId(testIds.newMeal)).toHaveAccessibleName('New meal');
@@ -92,7 +95,9 @@ describe('MealsScreen', () => {
     const meals = heldRoute();
     renderMeals({ 'GET /api/meals': meals.route });
     await screen.findByTestId(testIds.loadingState);
+    expectPinnedHeadline('Meals');
     const pinned = [
+      screen.getByRole('heading', { level: 1, name: 'Meals' }),
       screen.getByLabelText('Search meals'),
       screen.getByTestId(testIds.filterButton),
       screen.getByTestId(testIds.newMeal),
@@ -103,7 +108,9 @@ describe('MealsScreen', () => {
     expect(await screen.findByTestId(testIds.mealList)).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
     // The very same elements: nothing above the list was rebuilt or moved.
+    expectPinnedHeadline('Meals');
     expect([
+      screen.getByRole('heading', { level: 1, name: 'Meals' }),
       screen.getByLabelText('Search meals'),
       screen.getByTestId(testIds.filterButton),
       screen.getByTestId(testIds.newMeal),
@@ -382,6 +389,7 @@ describe('MealsScreen', () => {
     await user.type(search, 'Quitten');
 
     expect(await screen.findByText('No matches')).toBeVisible();
+    expectPinnedHeadline('Meals');
     expect(screen.queryByText('No meals yet')).toBeNull();
     // The tile offers to create it; there is no other "Create" button.
     expect(screen.getAllByRole('button', { name: 'Create “Quitten”' })).toEqual([

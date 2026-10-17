@@ -58,7 +58,7 @@ frontend/
     ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt, viewport
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
-    │   ├── me/ couple/     # Me tab: profile, privacy, security, sessions; couple section
+    │   ├── me/ couple/     # Settings tab: profile, privacy, security, sessions; couple section
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
@@ -125,31 +125,45 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `--tap-target` and `--control-font-size` tokens keep a px floor under touch targets and form
   text. Colour is never the only signal (e.g. the active tab has a lighter pill and a thicker icon
   stroke besides its green icon). `prefers-reduced-motion` turns animations off.
-- **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only;
-  the tab names stay as visually hidden text (not `aria-label`s), so screen readers and tests still
-  read them. The tab screens (Lists, Meals, Ingredients, Me) have a level-1 heading only screen
-  readers see (`<Screen variant="tab">`); detail screens keep a visible one. The frosted look is
-  the `frosted` utility (`index.css`) with the `--frosted*` tokens; the bar's size and position
-  are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it leaves room
-  for the content at the largest text sizes), and `--tab-bar-clearance` keeps the content's end
-  and the update prompt above it. While the on-screen keyboard is open, the tab bar and the update
-  prompt hide and pop-ups fit into the space above the keyboard. iOS doesn't resize the page for
-  the keyboard, so `app/viewport.ts` (started in `AppProviders`) watches `visualViewport`
-  (`resize`, `scroll`): `useKeyboardOpen()` hides the two, and `--visible-top` and
+- **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only
+  (D-28), the fourth a gear; the tab names stay as visually hidden text (not `aria-label`s), so
+  screen readers and tests still read them. A tab's name is its screen's headline, from one
+  translation per tab (`nav.*`, D-44): "Einkaufslisten", "Gerichte", "Zutaten", "Einstellungen".
+  Every screen shows its headline as its one level-1 heading, which labels the screen's section
+  (`Screen`): on Lists, Meals and Ingredients as the first element of the pinned block
+  (`<Screen variant="pinned">`), elsewhere above the content, scrolling with it (the default
+  `scrolling` variant: the Settings tab and the detail screens). The Settings tab keeps the
+  address `/me` and the test IDs `tabMe` and `screenMe` from when it was called "Me". The frosted
+  look is the `frosted` utility (`index.css`) with the `--frosted*` tokens; the bar's size and
+  position are the `--tab-bar-*` tokens (in px or capped, so its tabs keep their 44 pt and it
+  leaves room for the content at the largest text sizes), and `--tab-bar-clearance` keeps the
+  content's end and the update prompt above it. While the on-screen keyboard is open, the tab bar
+  and the update prompt hide and pop-ups fit into the space above the keyboard. iOS doesn't resize
+  the page for the keyboard, so `app/viewport.ts` (started in `AppProviders`) watches
+  `visualViewport` (`resize`, `scroll`): `useKeyboardOpen()` hides the two, and `--visible-top` and
   `--keyboard-inset` on `<html>` give the dialogs their `--visible-height` (`tokens.css`).
   Pinch-zoom (`scale` ≠ 1) doesn't count as a keyboard (A11Y-02); without the API (as in jsdom)
   nothing changes. Tests stub `visualViewport` and fire its events (`app/viewport.test.tsx`).
 - **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
   same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
-  it. It holds the search field (its label only for screen readers), the filter button and the
-  green, row-shaped "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is
-  present and opens the new form with that name. A tab renders it at once and puts its state
-  below it: `LoadingState` until the first answer, then the content, `EmptyLine` ("Noch keine
-  Zutaten") on an empty tab, or `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which
-  clears the search and the filters) when they hide everything. Like the tab bar, the block must
+  it. It holds the tab's headline (D-44, handed over by its `<Screen variant="pinned">`), the
+  search field (its label only for screen readers), the filter button and the green, row-shaped
+  "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is present and opens the new
+  form with that name. A tab renders it at once and puts its state below it: `LoadingState` until
+  the first answer, then the content, `EmptyLine` ("Noch keine Zutaten") on an empty tab, or
+  `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which clears the search and the
+  filters) when they hide everything. Like the tab bar, the block must
   not crowd out the content at the largest text sizes: the `pinned` utility (`index.css`) caps its
   text and its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens
-  (about the first accessibility size, D-29), and its spacing is in `em` of that text.
+  (about the first accessibility size, D-29), and its sizes and spacing are in `em` of that text:
+  the headline is as large as a detail screen's title (`1.875em`, not `text-3xl`, which is in
+  `rem` and would escape the cap), but no larger than 1.5 times the capped text
+  (`--pinned-headline-size`), and wraps hyphenated in the UI language. A long
+  name in the tile wraps with its lines closer together than a one-line tile's (the difference
+  goes into its padding, so a one-line tile keeps its height). The space above the screen (the
+  `main` in `Layout`) stops growing at 24 px or is the status bar's, so the block leaves a quarter
+  of the screen for the content as the tab opens too, also on an iPhone SE's smaller screen
+  (`e2e/tests/test_ingredients.py`).
 - **Detail strip** (UI-01, D-46): every detail screen (a shopping list, a meal, the meal form, an
   ingredient, the admin pages, the diagnostics) starts with `DetailStrip`, which `Screen` renders
   above the visible title when it gets `back`; the title follows below and scrolls with the page.
@@ -256,7 +270,8 @@ How the app stays signed in (plan § 5.4, § 8):
   checked with `POST /api/auth/codes/check` before the form appears. Only submitting the form
   consumes it.
 - **Language.** Before login the device language (or the stored choice) is used; the join form
-  sends it. When signed in, the server's `language` wins, and changing it on Me saves it there.
+  sends it. When signed in, the server's `language` wins, and changing it on the Settings tab
+  saves it there.
 
 ## Sharing links
 
@@ -344,7 +359,7 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   copy, whatever the saved user filter and state filter say, and disables the filter button and
   the "New list" tile (UI-02); read-only and done lists need a connection.
 - **Lifecycle** (SYNC-05/10), from the session's end events: logging out (after a confirmation
-  when changes wait, on Me and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
+  when changes wait, on the Settings tab and for "log out everywhere"; the outbox is read before asking) deletes the user's copy, values and outbox; a revoked session deletes the copy
   and keeps only this user's outbox; an expired one keeps both until the same user is back; a
   different user signing in removes the previous copy, and the previous user's ops are never sent
   with the new session.
@@ -503,172 +518,173 @@ order.
 
 <!-- test-ids:start -->
 
-| Key in `testIds`         | `data-testid`              | Element                                     |
-| ------------------------ | -------------------------- | ------------------------------------------- |
-| `tabLists`               | `tab-lists`                | Tab bar link to Lists                       |
-| `tabMeals`               | `tab-meals`                | Tab bar link to Meals                       |
-| `tabIngredients`         | `tab-ingredients`          | Tab bar link to Ingredients                 |
-| `tabMe`                  | `tab-me`                   | Tab bar link to Me                          |
-| `screenLists`            | `screen-lists`             | Lists screen                                |
-| `screenMeals`            | `screen-meals`             | Meals screen                                |
-| `screenIngredients`      | `screen-ingredients`       | Ingredients screen                          |
-| `screenMe`               | `screen-me`                | Me screen                                   |
-| `languageSelect`         | `language-select`          | Language select on Me                       |
-| `appVersion`             | `app-version`              | Running version on Me (once loaded)         |
-| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Me         |
-| `updatePrompt`           | `update-prompt`            | "New version available" prompt              |
-| `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen         |
-| `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip       |
-| `screenLogin`            | `screen-login`             | Login screen                                |
-| `loginReason`            | `login-reason`             | Why the user was logged out (on Login)      |
-| `screenJoin`             | `screen-join`              | Registration screen (invite link)           |
-| `screenReset`            | `screen-reset`             | New password screen (reset link)            |
-| `linkInvalid`            | `link-invalid`             | "Link invalid or expired" on Join/Reset     |
-| `displayNameInput`       | `display-name-input`       | Display name field on Me                    |
-| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Me                 |
-| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Me                 |
-| `coupleSection`          | `couple-section`           | Couple card on Me                           |
-| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Me         |
-| `couplePicker`           | `couple-picker`            | User picker for a couple request            |
-| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Me          |
-| `changePasswordButton`   | `change-password-button`   | Opens the change-password dialog            |
-| `sessionList`            | `session-list`             | List of the user's sessions on Me           |
-| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Me              |
-| `adminEntry`             | `admin-entry`              | Administration card on Me (admins)          |
-| `logoutButton`           | `logout-button`            | "Log out" on Me                             |
-| `screenAdminUsers`       | `screen-admin-users`       | Admin: users screen                         |
-| `adminUserList`          | `admin-user-list`          | Admin: list of users                        |
-| `screenAdminInvites`     | `screen-admin-invites`     | Admin: invites screen                       |
-| `createInviteButton`     | `create-invite-button`     | Admin: "Create invite"                      |
-| `inviteList`             | `invite-list`              | Admin: list of invites                      |
-| `screenAdminEvents`      | `screen-admin-events`      | Admin: activity log screen                  |
-| `eventList`              | `event-list`               | Admin: activity log entries                 |
-| `shareLinkUrl`           | `share-link-url`           | Created invite/reset link (read-only field) |
-| `shareButton`            | `share-button`             | Share (or Copy) for a created link          |
-| `hintHomeScreen`         | `hint-home-screen`         | First-login hint "Add to Home Screen"       |
-| `hintTailscale`          | `hint-tailscale`           | First-login hint "Keep Tailscale on"        |
-| `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                    |
-| `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                 |
-| `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients        |
-| `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                   |
-| `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)           |
-| `filterButton`           | `filter-button`            | Filter button in a tab's pinned block       |
-| `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)    |
-| `filterGroup`            | `filter-group`             | One checkbox group in the filter panel      |
-| `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                 |
-| `ingredientFormScan`     | `ingredient-form-scan`     | Scan icon next to the name in the form      |
-| `ingredientFormFooter`   | `ingredient-form-footer`   | The form's pinned footer with "Save"        |
-| `ingredientScanNotice`   | `ingredient-scan-notice`   | The scan's notice below the barcode         |
-| `ingredientScanOpen`     | `ingredient-scan-open`     | "open" the ingredient a scan belongs to     |
-| `ingredientScanTake`     | `ingredient-scan-take`     | "use" it instead, in the picker             |
-| `ingredientScanRetry`    | `ingredient-scan-retry`    | "Try again" when Open Food Facts is slow    |
-| `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint            |
-| `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail             |
-| `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient            |
-| `baseUnitConfirm`        | `base-unit-confirm`        | "Change anyway?" when amounts won't fit     |
-| `offSearchButton`        | `off-search-button`        | Magnifier next to the name in the form      |
-| `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name              |
-| `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search      |
-| `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts        |
-| `offSearchMore`          | `off-search-more`          | "More results" (next page)                  |
-| `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search               |
-| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner (scan icon, meal form's scan)       |
-| `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient          |
-| `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge |
-| `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                 |
-| `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)         |
-| `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                   |
-| `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                    |
-| `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order            |
-| `newCategory`            | `new-category`             | Admin: "New category" below the categories  |
-| `categoryDialog`         | `category-dialog`          | Admin: a category's names (new or edit)     |
-| `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                         |
-| `systemVersion`          | `system-version`           | Admin: running version (once loaded)        |
-| `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"      |
-| `backupNow`              | `backup-now`               | Admin: "Back up now"                        |
-| `diskStatus`             | `disk-status`              | Admin: free disk space, or "no check yet"   |
-| `mealSearch`             | `meal-search`              | Search field on Meals                       |
-| `newMeal`                | `new-meal`                 | "New meal" tile on Meals                    |
-| `mealList`               | `meal-list`                | List of meals on Meals                      |
-| `mealCard`               | `meal-card`                | One meal in the list (link)                 |
-| `screenMealForm`         | `screen-meal-form`         | Create/edit meal screen                     |
-| `mealForm`               | `meal-form`                | Create/edit meal form                       |
-| `mealIngredientRow`      | `meal-ingredient-row`      | One ingredient row in the meal form         |
-| `mealPhotoInput`         | `meal-photo-input`         | Photo file input in the meal form           |
-| `screenMeal`             | `screen-meal`              | Meal detail screen                          |
-| `mealPhoto`              | `meal-photo`               | Photo on the meal detail                    |
-| `mealBasedOn`            | `meal-based-on`            | "Based on X by Y" on the meal detail        |
-| `mealNutrition`          | `meal-nutrition`           | Nutrition table of a meal                   |
-| `mealIncomplete`         | `meal-incomplete`          | "Incomplete" marker with what is missing    |
-| `mealEstimate`           | `meal-estimate`            | "Estimate" marker of the nutrition          |
-| `mealIngredients`        | `meal-ingredients`         | Ingredient list on the meal detail          |
-| `mealInstructions`       | `meal-instructions`        | Instructions on the meal detail             |
-| `mealSourceLink`         | `meal-source-link`         | Source link button on the meal detail       |
-| `editMeal`               | `edit-meal`                | "Edit" on the meal detail (owner)           |
-| `deleteMeal`             | `delete-meal`              | "Delete" on the meal detail (owner)         |
-| `copyMeal`               | `copy-meal`                | "Copy to my meals" on the meal detail       |
-| `newList`                | `new-list`                 | "New list" tile on Lists                    |
-| `listFeed`               | `list-feed`                | The list feed on Lists                      |
-| `listCard`               | `list-card`                | One list in the feed (link)                 |
-| `screenList`             | `screen-list`              | List view screen                            |
-| `listReadOnly`           | `list-read-only`           | Read-only note on someone else's list       |
-| `copyList`               | `copy-list`                | "Copy to my lists" on a read-only list      |
-| `listLeftOut`            | `list-left-out`            | "N meals were left out" after a copy        |
-| `renameList`             | `rename-list`              | "Rename" on the list view                   |
-| `shareListSwitch`        | `share-list-switch`        | "Shared with <partner>" switch (owner)      |
-| `exportList`             | `export-list`              | Share the list as text (export)             |
-| `deleteList`             | `delete-list`              | "Delete" on the list view (owner)           |
-| `listMeals`              | `list-meals`               | Meals of the list with their servings       |
-| `listMeal`               | `list-meal`                | One meal on the list                        |
-| `addMeals`               | `add-meals`                | "Add meals" (opens the meal picker)         |
-| `mealPicker`             | `meal-picker`              | Meal picker dialog                          |
-| `mealPickerRecent`       | `meal-picker-recent`       | "Recently used" meals in the picker         |
-| `mealPickerResults`      | `meal-picker-results`      | Search results (or all meals) in the picker |
-| `mealPickerCreate`       | `meal-picker-create`       | "Create new meal" in the picker             |
-| `extraItemInput`         | `extra-item-input`         | Input for extra items (with autocomplete)   |
-| `listLines`              | `list-lines`               | Aggregated lines grouped by category        |
-| `listLine`               | `list-line`                | One line (opens its sources)                |
-| `lineSources`            | `line-sources`             | Sources dialog of a line                    |
-| `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
-| `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
-| `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
-| `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |
-| `offlineNotice`          | `offline-notice`           | "This page needs a connection" message      |
-| `loadingState`           | `loading-state`            | Placeholder while a tab's first load runs   |
-| `waitingBanner`          | `waiting-banner`           | "Waiting for more than an hour" banner      |
-| `noStorageBanner`        | `no-storage-banner`        | "Can't store anything on this device" note  |
-| `syncToast`              | `sync-toast`               | Message about changes that weren't saved    |
-| `linePending`            | `line-pending`             | "not sent yet" hint of a waiting line       |
-| `refreshList`            | `refresh-list`             | "Refresh" on the shopping view              |
-| `shoppingMeals`          | `shopping-meals`           | Collapsed meals section while shopping      |
-| `shoppingLines`          | `shopping-lines`           | Lines still to buy, by category             |
-| `shoppingLine`           | `shopping-line`            | One line with its check box                 |
-| `lineNew`                | `line-new`                 | "new" badge of a line                       |
-| `lineNeedsMore`          | `line-needs-more`          | "+300 g" / "changed" badges of a line       |
-| `inTheCart`              | `in-the-cart`              | Collapsed "In the cart (N)" section         |
-| `lineCheckedBy`          | `line-checked-by`          | Initial of who checked a line               |
-| `editShoppingItem`       | `edit-shopping-item`       | Edit button of an extra item while shopping |
-| `shoppingAnnouncement`   | `shopping-announcement`    | Live region: "Mehl is in the cart"          |
-| `finishShopping`         | `finish-shopping`          | "Finish shopping" button                    |
-| `finishDialog`           | `finish-dialog`            | Finish dialog ("N items not checked")       |
-| `listDone`               | `list-done`                | "Bought on …" note of a done list           |
-| `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)     |
-| `shopAgain`              | `shop-again`               | "Shop again" on a done list                 |
-| `reopenList`             | `reopen-list`              | "Reopen" on a done list                     |
-| `scanBarcode`            | `scan-barcode`             | "Scan barcode" in the meal form             |
-| `scannerVideo`           | `scanner-video`            | Live camera image of the scanner            |
-| `scannerTorch`           | `scanner-torch`            | Light toggle (when the camera has one)      |
-| `scannerCameraMessage`   | `scanner-camera-message`   | "No camera / access denied" message         |
-| `scannerCameraRetry`     | `scanner-camera-retry`     | "Try again" after the camera went away      |
-| `barcodeInput`           | `barcode-input`            | Manual barcode input                        |
-| `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode             |
-| `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"    |
-| `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint     |
-| `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint            |
-| `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint           |
-| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Me, admins only (M1–M9)  |
-| `screenDiagnostics`      | `screen-diagnostics`       | Diagnostics screen `/diag` (M1–M9)          |
-| `diagResult`             | `diag-result`              | One result line on the diagnostics screen   |
-| `diagReport`             | `diag-report`              | Plain-text report on the diagnostics screen |
+| Key in `testIds`         | `data-testid`              | Element                                          |
+| ------------------------ | -------------------------- | ------------------------------------------------ |
+| `tabLists`               | `tab-lists`                | Tab bar link to Lists                            |
+| `tabMeals`               | `tab-meals`                | Tab bar link to Meals                            |
+| `tabIngredients`         | `tab-ingredients`          | Tab bar link to Ingredients                      |
+| `tabMe`                  | `tab-me`                   | Tab bar link to Settings (the gear)              |
+| `screenLists`            | `screen-lists`             | Lists screen                                     |
+| `screenMeals`            | `screen-meals`             | Meals screen                                     |
+| `screenIngredients`      | `screen-ingredients`       | Ingredients screen                               |
+| `screenMe`               | `screen-me`                | Settings screen                                  |
+| `languageSelect`         | `language-select`          | Language select on Settings                      |
+| `appVersion`             | `app-version`              | Running version on Settings (once loaded)        |
+| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Settings        |
+| `updatePrompt`           | `update-prompt`            | "New version available" prompt                   |
+| `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen              |
+| `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip            |
+| `screenLogin`            | `screen-login`             | Login screen                                     |
+| `loginReason`            | `login-reason`             | Why the user was logged out (on Login)           |
+| `screenJoin`             | `screen-join`              | Registration screen (invite link)                |
+| `screenReset`            | `screen-reset`             | New password screen (reset link)                 |
+| `linkInvalid`            | `link-invalid`             | "Link invalid or expired" on Join/Reset          |
+| `displayNameInput`       | `display-name-input`       | Display name field on Settings                   |
+| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Settings                |
+| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Settings                |
+| `coupleSection`          | `couple-section`           | Couple card on Settings                          |
+| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Settings        |
+| `couplePicker`           | `couple-picker`            | User picker for a couple request                 |
+| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Settings         |
+| `changePasswordButton`   | `change-password-button`   | Opens the change-password dialog                 |
+| `sessionList`            | `session-list`             | List of the user's sessions on Settings          |
+| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Settings             |
+| `adminEntry`             | `admin-entry`              | Administration card on Settings (admins)         |
+| `logoutButton`           | `logout-button`            | "Log out" on Settings                            |
+| `screenAdminUsers`       | `screen-admin-users`       | Admin: users screen                              |
+| `adminUserList`          | `admin-user-list`          | Admin: list of users                             |
+| `screenAdminInvites`     | `screen-admin-invites`     | Admin: invites screen                            |
+| `createInviteButton`     | `create-invite-button`     | Admin: "Create invite"                           |
+| `inviteList`             | `invite-list`              | Admin: list of invites                           |
+| `screenAdminEvents`      | `screen-admin-events`      | Admin: activity log screen                       |
+| `eventList`              | `event-list`               | Admin: activity log entries                      |
+| `shareLinkUrl`           | `share-link-url`           | Created invite/reset link (read-only field)      |
+| `shareButton`            | `share-button`             | Share (or Copy) for a created link               |
+| `hintHomeScreen`         | `hint-home-screen`         | First-login hint "Add to Home Screen"            |
+| `hintTailscale`          | `hint-tailscale`           | First-login hint "Keep Tailscale on"             |
+| `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                         |
+| `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                      |
+| `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients             |
+| `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                        |
+| `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)                |
+| `pinnedBlock`            | `pinned-block`             | A tab's pinned block, its headline first         |
+| `filterButton`           | `filter-button`            | Filter button in a tab's pinned block            |
+| `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)         |
+| `filterGroup`            | `filter-group`             | One checkbox group in the filter panel           |
+| `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                      |
+| `ingredientFormScan`     | `ingredient-form-scan`     | Scan icon next to the name in the form           |
+| `ingredientFormFooter`   | `ingredient-form-footer`   | The form's pinned footer with "Save"             |
+| `ingredientScanNotice`   | `ingredient-scan-notice`   | The scan's notice below the barcode              |
+| `ingredientScanOpen`     | `ingredient-scan-open`     | "open" the ingredient a scan belongs to          |
+| `ingredientScanTake`     | `ingredient-scan-take`     | "use" it instead, in the picker                  |
+| `ingredientScanRetry`    | `ingredient-scan-retry`    | "Try again" when Open Food Facts is slow         |
+| `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint                 |
+| `editIngredient`         | `edit-ingredient`          | "Edit" on the ingredient detail                  |
+| `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient                 |
+| `baseUnitConfirm`        | `base-unit-confirm`        | "Change anyway?" when amounts won't fit          |
+| `offSearchButton`        | `off-search-button`        | Magnifier next to the name in the form           |
+| `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name                   |
+| `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search           |
+| `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts             |
+| `offSearchMore`          | `off-search-more`          | "More results" (next page)                       |
+| `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search                    |
+| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner (scan icon, meal form's scan)            |
+| `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge into…" an ingredient               |
+| `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge      |
+| `deleteIngredient`       | `delete-ingredient`        | Admin: delete an ingredient                      |
+| `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)              |
+| `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                        |
+| `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                         |
+| `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order                 |
+| `newCategory`            | `new-category`             | Admin: "New category" below the categories       |
+| `categoryDialog`         | `category-dialog`          | Admin: a category's names (new or edit)          |
+| `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                              |
+| `systemVersion`          | `system-version`           | Admin: running version (once loaded)             |
+| `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"           |
+| `backupNow`              | `backup-now`               | Admin: "Back up now"                             |
+| `diskStatus`             | `disk-status`              | Admin: free disk space, or "no check yet"        |
+| `mealSearch`             | `meal-search`              | Search field on Meals                            |
+| `newMeal`                | `new-meal`                 | "New meal" tile on Meals                         |
+| `mealList`               | `meal-list`                | List of meals on Meals                           |
+| `mealCard`               | `meal-card`                | One meal in the list (link)                      |
+| `screenMealForm`         | `screen-meal-form`         | Create/edit meal screen                          |
+| `mealForm`               | `meal-form`                | Create/edit meal form                            |
+| `mealIngredientRow`      | `meal-ingredient-row`      | One ingredient row in the meal form              |
+| `mealPhotoInput`         | `meal-photo-input`         | Photo file input in the meal form                |
+| `screenMeal`             | `screen-meal`              | Meal detail screen                               |
+| `mealPhoto`              | `meal-photo`               | Photo on the meal detail                         |
+| `mealBasedOn`            | `meal-based-on`            | "Based on X by Y" on the meal detail             |
+| `mealNutrition`          | `meal-nutrition`           | Nutrition table of a meal                        |
+| `mealIncomplete`         | `meal-incomplete`          | "Incomplete" marker with what is missing         |
+| `mealEstimate`           | `meal-estimate`            | "Estimate" marker of the nutrition               |
+| `mealIngredients`        | `meal-ingredients`         | Ingredient list on the meal detail               |
+| `mealInstructions`       | `meal-instructions`        | Instructions on the meal detail                  |
+| `mealSourceLink`         | `meal-source-link`         | Source link button on the meal detail            |
+| `editMeal`               | `edit-meal`                | "Edit" on the meal detail (owner)                |
+| `deleteMeal`             | `delete-meal`              | "Delete" on the meal detail (owner)              |
+| `copyMeal`               | `copy-meal`                | "Copy to my meals" on the meal detail            |
+| `newList`                | `new-list`                 | "New list" tile on Lists                         |
+| `listFeed`               | `list-feed`                | The list feed on Lists                           |
+| `listCard`               | `list-card`                | One list in the feed (link)                      |
+| `screenList`             | `screen-list`              | List view screen                                 |
+| `listReadOnly`           | `list-read-only`           | Read-only note on someone else's list            |
+| `copyList`               | `copy-list`                | "Copy to my lists" on a read-only list           |
+| `listLeftOut`            | `list-left-out`            | "N meals were left out" after a copy             |
+| `renameList`             | `rename-list`              | "Rename" on the list view                        |
+| `shareListSwitch`        | `share-list-switch`        | "Shared with <partner>" switch (owner)           |
+| `exportList`             | `export-list`              | Share the list as text (export)                  |
+| `deleteList`             | `delete-list`              | "Delete" on the list view (owner)                |
+| `listMeals`              | `list-meals`               | Meals of the list with their servings            |
+| `listMeal`               | `list-meal`                | One meal on the list                             |
+| `addMeals`               | `add-meals`                | "Add meals" (opens the meal picker)              |
+| `mealPicker`             | `meal-picker`              | Meal picker dialog                               |
+| `mealPickerRecent`       | `meal-picker-recent`       | "Recently used" meals in the picker              |
+| `mealPickerResults`      | `meal-picker-results`      | Search results (or all meals) in the picker      |
+| `mealPickerCreate`       | `meal-picker-create`       | "Create new meal" in the picker                  |
+| `extraItemInput`         | `extra-item-input`         | Input for extra items (with autocomplete)        |
+| `listLines`              | `list-lines`               | Aggregated lines grouped by category             |
+| `listLine`               | `list-line`                | One line (opens its sources)                     |
+| `lineSources`            | `line-sources`             | Sources dialog of a line                         |
+| `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section                  |
+| `startShopping`          | `start-shopping`           | "Start shopping" on a draft                      |
+| `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")          |
+| `offlineBanner`          | `offline-banner`           | Offline banner on a list view                    |
+| `offlineNotice`          | `offline-notice`           | "This page needs a connection" message           |
+| `loadingState`           | `loading-state`            | Placeholder while a tab's first load runs        |
+| `waitingBanner`          | `waiting-banner`           | "Waiting for more than an hour" banner           |
+| `noStorageBanner`        | `no-storage-banner`        | "Can't store anything on this device" note       |
+| `syncToast`              | `sync-toast`               | Message about changes that weren't saved         |
+| `linePending`            | `line-pending`             | "not sent yet" hint of a waiting line            |
+| `refreshList`            | `refresh-list`             | "Refresh" on the shopping view                   |
+| `shoppingMeals`          | `shopping-meals`           | Collapsed meals section while shopping           |
+| `shoppingLines`          | `shopping-lines`           | Lines still to buy, by category                  |
+| `shoppingLine`           | `shopping-line`            | One line with its check box                      |
+| `lineNew`                | `line-new`                 | "new" badge of a line                            |
+| `lineNeedsMore`          | `line-needs-more`          | "+300 g" / "changed" badges of a line            |
+| `inTheCart`              | `in-the-cart`              | Collapsed "In the cart (N)" section              |
+| `lineCheckedBy`          | `line-checked-by`          | Initial of who checked a line                    |
+| `editShoppingItem`       | `edit-shopping-item`       | Edit button of an extra item while shopping      |
+| `shoppingAnnouncement`   | `shopping-announcement`    | Live region: "Mehl is in the cart"               |
+| `finishShopping`         | `finish-shopping`          | "Finish shopping" button                         |
+| `finishDialog`           | `finish-dialog`            | Finish dialog ("N items not checked")            |
+| `listDone`               | `list-done`                | "Bought on …" note of a done list                |
+| `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)          |
+| `shopAgain`              | `shop-again`               | "Shop again" on a done list                      |
+| `reopenList`             | `reopen-list`              | "Reopen" on a done list                          |
+| `scanBarcode`            | `scan-barcode`             | "Scan barcode" in the meal form                  |
+| `scannerVideo`           | `scanner-video`            | Live camera image of the scanner                 |
+| `scannerTorch`           | `scanner-torch`            | Light toggle (when the camera has one)           |
+| `scannerCameraMessage`   | `scanner-camera-message`   | "No camera / access denied" message              |
+| `scannerCameraRetry`     | `scanner-camera-retry`     | "Try again" after the camera went away           |
+| `barcodeInput`           | `barcode-input`            | Manual barcode input                             |
+| `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode                  |
+| `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"         |
+| `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint          |
+| `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint                 |
+| `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint                |
+| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Settings, admins only (M1–M9) |
+| `screenDiagnostics`      | `screen-diagnostics`       | Diagnostics screen `/diag` (M1–M9)               |
+| `diagResult`             | `diag-result`              | One result line on the diagnostics screen        |
+| `diagReport`             | `diag-report`              | Plain-text report on the diagnostics screen      |
 
 <!-- test-ids:end -->
