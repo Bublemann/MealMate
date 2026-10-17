@@ -6,17 +6,12 @@ import { ExternalLink } from '@/components/ExternalLink';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSystemInfo, type SystemInfo } from '@/features/me/api';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatBytes, formatDateTime, formatNumber } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
-import {
-  useRequestBackup,
-  useSystemInfo,
-  type BackupStatus,
-  type DiskStatus,
-  type SystemInfo,
-} from './api';
+import { useRequestBackup, type BackupStatus, type DiskStatus } from './api';
 
 // The host's disk check alerts below this share of free space (plan § 11.4).
 const LOW_DISK_PERCENT = 20;
@@ -33,7 +28,7 @@ export function AdminSystemScreen() {
   const system = useSystemInfo();
 
   return (
-    <AdminScreen title={t('admin.system.title')} testId={testIds.screenAdminSystem}>
+    <SettingsPage title={t('admin.system.title')} testId={testIds.screenAdminSystem}>
       {system.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <ErrorAlert error={system.error} />
       {system.data && (
@@ -43,7 +38,7 @@ export function AdminSystemScreen() {
           <DiskCard disk={system.data.disk} />
         </>
       )}
-    </AdminScreen>
+    </SettingsPage>
   );
 }
 

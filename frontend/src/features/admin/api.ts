@@ -3,6 +3,7 @@ import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { INGREDIENTS_KEY } from '@/features/ingredients/api';
 import { LISTS_KEY } from '@/features/lists/keys';
+import { SYSTEM_KEY } from '@/features/me/api';
 import { CATEGORIES_KEY, type Category } from '@/features/reference/api';
 import { notDeletedCategories } from '@/features/reference/categories';
 
@@ -10,7 +11,6 @@ export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
 export type Invite = components['schemas']['Invite'];
 export type AdminEvent = components['schemas']['AdminEvent'];
-export type SystemInfo = components['schemas']['SystemInfo'];
 export type BackupStatus = components['schemas']['BackupStatus'];
 export type DiskStatus = components['schemas']['DiskStatus'];
 export type CategoryNames = components['schemas']['CategoryNames'];
@@ -18,7 +18,6 @@ export type CategoryNames = components['schemas']['CategoryNames'];
 const USERS_KEY = ['admin', 'users'] as const;
 const INVITES_KEY = ['admin', 'invites'] as const;
 const EVENTS_KEY = ['admin', 'events'] as const;
-const SYSTEM_KEY = ['admin', 'system'] as const;
 // Changes to the categories are sent one after another, in the order they were made, also after
 // the screen has closed (ADM-01): no change overtakes another, so a new category never arrives
 // before an order that doesn't name it yet.
@@ -238,14 +237,6 @@ export function useDeleteCategory(categoryId: string) {
         void queryClient.invalidateQueries({ queryKey });
       }
     },
-  });
-}
-
-/** ADM-01: version, and the last backup and free disk space as the server last reported them. */
-export function useSystemInfo() {
-  return useQuery({
-    queryKey: SYSTEM_KEY,
-    queryFn: ({ signal }) => unwrap(api.GET('/api/admin/system', { signal })),
   });
 }
 

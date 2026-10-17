@@ -10,6 +10,14 @@ export const VERSION_INFO = {
   source_url: 'https://github.com/Bublemann/MealMate/tree/0123456789abcdef0123456789abcdef01234567',
 };
 
+/** The admin system info before the host has written any status (ADM-01). */
+export const SYSTEM_NO_STATUS: Schemas['SystemInfo'] = {
+  ...VERSION_INFO,
+  image_digest: null,
+  backup: null,
+  disk: null,
+};
+
 export const TEST_USER: Schemas['Me'] = {
   id: '0190c0de-0000-7000-8000-000000000001',
   username: 'anna',
