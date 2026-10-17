@@ -193,13 +193,19 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the label. Values load on their own and never hold the rows back: while one loads, fails or
   can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
   name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
-  (`waitingRequests`) or else the partner (`userLabel`), Über MealMate the version. Only their
-  addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03). Abmelden is
-  a red, centred button: with changes still waiting it asks first with their count (SYNC-05).
+  (`waitingRequests`) or else the partner (`userLabel`), System (admins) when the last backup
+  ran, or "Fehlgeschlagen" in words after a failed run, and Über MealMate the version. Only their
+  addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03); the System
+  value's query (`useSystemInfo`) sits in `features/me/api.ts` for that reason, shared with the
+  System page. Abmelden is a red, centred button: with changes still waiting it asks first with
+  their count (SYNC-05).
 - **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
   `/me/privacy`, `/me/couple`, `/me/security`, `/me/about`), framed by `SettingsPage`: the strip
   with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
-  held, without the card's heading. The admin pages stay under `/me/admin/…`.
+  held, without the card's heading. The admin pages share the frame and stay under
+  `/me/admin/…` (`/me/admin` opens Benutzer); they have no switcher of their own, admins go back
+  and tap the next Verwaltung row. When nobody else can be picked for a couple, the Paar page
+  shows admins the way to the invites and asks everyone else to turn to an admin (D-49).
 - **Count on the gear** (UI-07, D-51): while something waits for the user to act on, the Settings
   tab's gear carries a small red count ("9+" above nine), sized by the capped
   `--tab-bar-badge*` tokens so it doesn't grow beyond the bar. It is hidden from screen readers,
