@@ -4,6 +4,7 @@ import {
   BEN,
   CARL,
   errorResponse,
+  heldRoute,
   mockApi,
   NO_COUPLE,
   requestsTo,
@@ -14,6 +15,7 @@ import {
 } from '@/test/api';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
+import type { SystemInfo } from './api';
 
 /** The addresses of the Settings tab's rows, in order. */
 function rowAddresses() {
@@ -189,6 +191,27 @@ function requestFrom(from: ReturnType<typeof userRef>, id = `r-${from.id}`) {
   };
 }
 
+const SYSTEM_NO_STATUS: SystemInfo = {
+  ...VERSION_INFO,
+  image_digest: null,
+  backup: null,
+  disk: null,
+};
+
+/** The system info after a backup run that succeeded or failed. */
+function systemWithBackup(ok: boolean): SystemInfo {
+  return {
+    ...SYSTEM_NO_STATUS,
+    backup: {
+      finished_at: '2026-09-27T12:15:04Z',
+      label: 'regular',
+      ok,
+      size_bytes: ok ? 4_200_000 : null,
+      message: null,
+    },
+  };
+}
+
 /** The Settings row whose accessible name starts with `label`. */
 function row(label: string) {
   return screen.getByRole('link', { name: new RegExp(`^${label}`) });
@@ -210,8 +233,8 @@ describe('SettingsScreen row values (D-45)', () => {
     expect(row('Security')).toHaveAccessibleName('Security');
   });
 
-  it('shows no value on the Verwaltung rows', async () => {
-    mockApi({ 'GET /api/me': TEST_ADMIN });
+  it('shows no value on the Verwaltung rows but System', async () => {
+    mockApi({ 'GET /api/me': TEST_ADMIN, 'GET /api/admin/system': SYSTEM_NO_STATUS });
     renderApp('/me', { user: TEST_ADMIN });
 
     const group = await screen.findByTestId(testIds.adminEntry);
@@ -219,6 +242,50 @@ describe('SettingsScreen row values (D-45)', () => {
     const links = within(group).getAllByRole('link');
     expect(links).toHaveLength(names.length);
     links.forEach((link, index) => expect(link).toHaveAccessibleName(names[index]));
+  });
+
+  it('shows admins when the last backup ran on System (ADM-01)', async () => {
+    const fetchMock = mockApi({
+      'GET /api/me': TEST_ADMIN,
+      'GET /api/admin/system': systemWithBackup(true),
+    });
+    renderApp('/me', { user: TEST_ADMIN });
+
+    await waitFor(() =>
+      expect(row('System')).toHaveAccessibleName(/^System 27\/09\/2026, \d\d:\d\d$/),
+    );
+    expect(within(row('System')).getByText(/27\/09\/2026/)).toHaveAttribute(
+      'datetime',
+      '2026-09-27T12:15:04Z',
+    );
+    expect(row('System')).toHaveAttribute('href', '/me/admin/system');
+    expect(requestsTo(fetchMock, 'GET /api/admin/system')).toHaveLength(1);
+  });
+
+  it('says in words when the last backup failed (A11Y-01)', async () => {
+    mockApi({ 'GET /api/me': TEST_ADMIN, 'GET /api/admin/system': systemWithBackup(false) });
+    renderApp('/me', { user: TEST_ADMIN });
+
+    await waitFor(() => expect(row('System')).toHaveAccessibleName('System Failed'));
+  });
+
+  it('shows no backup on System while the host has written none, or while it loads', async () => {
+    const system = heldRoute();
+    const fetchMock = mockApi({ 'GET /api/me': TEST_ADMIN, 'GET /api/admin/system': system.route });
+    renderApp('/me', { user: TEST_ADMIN });
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/admin/system')).toHaveLength(1));
+    expect(row('System')).toHaveAccessibleName('System');
+    await system.answer(SYSTEM_NO_STATUS);
+    expect(row('System')).toHaveAccessibleName('System');
+  });
+
+  it('asks only admins for the system info', async () => {
+    const fetchMock = mockApi();
+    renderApp('/me');
+
+    await waitFor(() => expect(row('About MealMate')).toHaveAccessibleName(/^About MealMate /));
+    expect(requestsTo(fetchMock, 'GET /api/admin/system')).toHaveLength(0);
   });
 
   it('shows the partner on Paar, marked when deactivated (ADM-02)', async () => {
@@ -253,13 +320,17 @@ describe('SettingsScreen row values (D-45)', () => {
     const fetchMock = mockApi({
       'GET /api/couple': errorResponse(500, 'common.internal'),
       'GET /api/version': errorResponse(500, 'common.internal'),
+      'GET /api/me': TEST_ADMIN,
+      'GET /api/admin/system': errorResponse(503, 'common.internal'),
     });
-    const { router, user } = renderApp('/me');
+    const { router, user } = renderApp('/me', { user: TEST_ADMIN });
 
     const settings = await screen.findByTestId(testIds.screenMe);
     await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/version')).toHaveLength(1));
     expect(row('Couple')).toHaveAccessibleName('Couple');
     expect(row('About MealMate')).toHaveAccessibleName('About MealMate');
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/admin/system')).toHaveLength(1));
+    expect(row('System')).toHaveAccessibleName('System');
     expect(within(settings).queryByRole('alert')).not.toBeInTheDocument();
     expect(within(settings).queryByText('Something went wrong. Please try again.')).toBeNull();
 

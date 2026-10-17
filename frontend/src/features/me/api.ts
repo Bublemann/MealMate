@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { useAuthSession } from '@/features/auth/context';
@@ -6,6 +6,7 @@ import { useAuthSession } from '@/features/auth/context';
 type MeUpdate = components['schemas']['MeUpdate'];
 type PasswordChange = components['schemas']['PasswordChange'];
 export type SessionInfo = components['schemas']['SessionInfo'];
+export type SystemInfo = components['schemas']['SystemInfo'];
 
 const SESSIONS_KEY = ['me', 'sessions'] as const;
 
@@ -18,6 +19,19 @@ export function useVersionInfo() {
     staleTime: Infinity,
   });
 }
+
+/** The admin system info's key, which a requested backup refreshes. */
+export const SYSTEM_KEY = ['admin', 'system'] as const;
+
+/**
+ * ADM-01: version, and the last backup and free disk space as the server last reported them,
+ * for admins only. Here rather than in the admin api, so that the System row on the Settings tab
+ * shares the System page's cache entry without loading the admin chunk (PERF-03).
+ */
+export const systemInfoQuery = queryOptions({
+  queryKey: SYSTEM_KEY,
+  queryFn: ({ signal }) => unwrap(api.GET('/api/admin/system', { signal })),
+});
 
 /** Loads the profile when the Settings tab opens, so changes made on another device show up. */
 export function useMeRefresh() {
