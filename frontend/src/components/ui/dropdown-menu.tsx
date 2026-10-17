@@ -4,10 +4,11 @@ import type * as React from 'react';
 import { cn } from '@/lib/utils';
 
 // From the shadcn/ui registry (dropdown-menu, on Radix), adapted: every item is a 44 pt tap
-// target (A11Y-01) whose text wraps at large text sizes, the menu scrolls within the space the
-// screen leaves it, colours come from the tokens, the highlighted item shows the full focus ring,
-// and there is no animation (none under Reduce Motion either, A11Y-02). Only the parts the app
-// uses: plain items, a destructive one, a checkbox item drawn as a switch, and the separator.
+// target (A11Y-01) whose text wraps at large text sizes; the menu stays within the width and
+// scrolls within the height the screen leaves it (16 px from its edges); colours come from the
+// tokens; the highlighted item shows the full focus ring; and there is no animation (none under
+// Reduce Motion either, A11Y-02). Only the parts the app uses: plain items, a destructive one, a
+// checkbox item drawn as a switch, and the separator.
 
 function DropdownMenu(props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -30,7 +31,7 @@ function DropdownMenuContent({
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
         className={cn(
-          'z-50 flex max-h-(--radix-dropdown-menu-content-available-height) w-max max-w-[min(20rem,calc(100vw-2rem))] min-w-[12rem] flex-col overflow-x-hidden overflow-y-auto rounded-xl border bg-card p-1 text-card-foreground shadow-lg outline-none',
+          'z-50 flex max-h-(--radix-dropdown-menu-content-available-height) w-max max-w-[min(20rem,var(--radix-dropdown-menu-content-available-width))] min-w-[min(12rem,var(--radix-dropdown-menu-content-available-width))] flex-col overflow-x-hidden overflow-y-auto rounded-xl border bg-card p-1 text-card-foreground shadow-lg outline-none',
           className,
         )}
         {...props}
