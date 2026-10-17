@@ -877,6 +877,18 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
     expect(within(dialog).getByTestId(testIds.recurringRemove)).toBeVisible();
   });
 
+  it('is disabled while the set failed to load: it couldn’t tell adding from editing', async () => {
+    const { fetchMock, user } = renderDetail({
+      'GET /api/recurring-items': errorResponse(500, 'common.internal'),
+    });
+    await screen.findByTestId(testIds.ingredientNutrition);
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(1));
+
+    const menu = await openMoreMenu(user);
+
+    expect(within(menu).getByTestId(testIds.buyRegularly)).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('is disabled offline, not hidden (SYNC-03)', async () => {
     const { fetchMock, user } = renderDetail();
     await screen.findByTestId(testIds.ingredientNutrition);

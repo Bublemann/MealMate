@@ -68,7 +68,7 @@ frontend/
     │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
-    ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
+    ├── components/ui/      # shadcn/ui building blocks, plus the sheet, the native checkbox and the field error
     ├── components/         # shared app components (Screen, PinnedBlock, DetailStrip, FilterPanel, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
     ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
@@ -223,11 +223,12 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   "Alle n Wochen", "Automatisch anpassen" and "Zuletzt gekauft" (today, left to the server unless
   changed), then "Hinzufügen", or "Speichern" and the red "Nicht mehr regelmäßig" (asks first)
   for an ingredient that is recurring already. Editing sends only what changed; a new interval
-  turns "Automatisch anpassen" off, and the switch is then always sent. A new item adapts unless
-  switched off, which takes a second request (the create has no such field). The page's
-  `RecurringIngredientField` looks like the item field (D-41) but offers only ingredients and
-  "„X“ als neue Zutat" (`IngredientFormDialog`, then the pop-up). `format.ts` words the server's
-  display values ("alle ~4 Wochen · zuletzt 02.10. · fällig in 5 Tagen") without counting days.
+  turns "Automatisch anpassen" off (typed back, the switch is as it was, unless switched by hand),
+  and the switch is then always sent. A new item adapts unless switched off, which takes a second
+  request (the create has no such field). The page's `RecurringIngredientField` looks like the
+  item field (D-41) but offers only ingredients and "„X“ als neue Zutat" (`IngredientFormDialog`,
+  then the pop-up). `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
+  02.10. · fällig in 5 Tagen") without counting days.
 - **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
   buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `IngredientMenu` pass

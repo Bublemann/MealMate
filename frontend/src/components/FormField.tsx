@@ -1,5 +1,5 @@
-import { CircleAlert } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
+import { FieldError } from '@/components/ui/field-error';
 import { Label } from '@/components/ui/label';
 
 export interface FieldControlProps {
@@ -32,12 +32,7 @@ export function FormField({ label, hint, error, children }: FormFieldProps) {
         'aria-describedby': describedBy || undefined,
         'aria-invalid': error ? true : undefined,
       })}
-      {error && (
-        <p id={errorId} className="flex items-start gap-1.5 text-sm font-medium text-destructive">
-          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          {error}
-        </p>
-      )}
+      {error && <FieldError id={errorId}>{error}</FieldError>}
       {hint && (
         <p id={hintId} className="text-sm text-muted-foreground">
           {hint}

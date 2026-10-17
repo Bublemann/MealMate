@@ -1,4 +1,3 @@
-import { CircleAlert } from 'lucide-react';
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -6,6 +5,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FieldError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -203,7 +203,10 @@ function EditForm({
 
 interface RecurringFormProps {
   initial: Values;
-  /** Editing: a changed interval turns "Automatisch anpassen" off; it can be turned on again. */
+  /**
+   * Editing: "Automatisch anpassen" is off while the interval differs from the item's, and as it
+   * was once the interval is typed back. Switched by hand, the interval no longer moves it.
+   */
   followsInterval: boolean;
   submitLabel: string;
   pending: boolean;
@@ -232,6 +235,7 @@ function RecurringForm({
   const switchHintId = `${switchId}-hint`;
   const [weeks, setWeeks] = useState(initial.weeks);
   const [automatic, setAutomatic] = useState(initial.automatic);
+  const [switchedByHand, setSwitchedByHand] = useState(false);
   const [lastBought, setLastBought] = useState(initial.lastBought);
   const [weeksInvalid, setWeeksInvalid] = useState(false);
   const fields = fieldErrorMessages(t, error);
@@ -246,12 +250,7 @@ function RecurringForm({
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      {fields.ingredient_id && (
-        <p className="flex items-start gap-1.5 text-sm font-medium text-destructive">
-          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          {fields.ingredient_id}
-        </p>
-      )}
+      {fields.ingredient_id && <FieldError>{fields.ingredient_id}</FieldError>}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span id={everyId} className="text-sm font-medium">
@@ -269,24 +268,20 @@ function RecurringForm({
             aria-invalid={weeksError ? true : undefined}
             value={weeks}
             onChange={(event) => {
-              setWeeks(event.target.value);
+              const next = event.target.value;
+              setWeeks(next);
               setWeeksInvalid(false);
-              if (followsInterval) setAutomatic(false);
+              if (followsInterval && !switchedByHand) {
+                const unchanged = parseWeeks(next) === parseWeeks(initial.weeks);
+                setAutomatic(unchanged ? initial.automatic : false);
+              }
             }}
           />
           <span id={weeksUnitId} className="text-sm font-medium">
             {t('recurring.dialog.weeks')}
           </span>
         </div>
-        {weeksError && (
-          <p
-            id={weeksErrorId}
-            className="flex items-start gap-1.5 text-sm font-medium text-destructive"
-          >
-            <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            {weeksError}
-          </p>
-        )}
+        {weeksError && <FieldError id={weeksErrorId}>{weeksError}</FieldError>}
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-4">
@@ -295,7 +290,10 @@ function RecurringForm({
             id={switchId}
             aria-describedby={switchHintId}
             checked={automatic}
-            onCheckedChange={setAutomatic}
+            onCheckedChange={(checked) => {
+              setAutomatic(checked);
+              setSwitchedByHand(true);
+            }}
           />
         </div>
         <p id={switchHintId} className="text-sm text-muted-foreground">

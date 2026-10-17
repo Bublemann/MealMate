@@ -3,9 +3,11 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { Button } from '@/components/ui/button';
 import { IngredientName } from '@/features/ingredients/IngredientName';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { SettingsPage } from '@/features/me/SettingsPage';
+import { SETTINGS_PANEL, SETTINGS_ROW_FOCUS } from '@/features/me/settingsPanel';
 import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
@@ -20,11 +22,6 @@ import {
 import { recurringLine } from './format';
 import { RecurringDialog, type RecurringTarget } from './RecurringDialog';
 import { RecurringIngredientField } from './RecurringIngredientField';
-
-/** The grouped panel the rows sit in, as on the Settings tab. */
-const PANEL = 'flex flex-col divide-y overflow-hidden rounded-xl border bg-card';
-const ROW_FOCUS =
-  'outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset';
 
 /**
  * Settings → Regelmäßige Artikel (UI-07, D-45, LIST-16): unread notices first (D-51), then the
@@ -97,14 +94,18 @@ function ItemList({
   const language = useLanguage();
 
   return (
-    <ul aria-label={t('recurring.items')} data-testid={testIds.recurringList} className={PANEL}>
+    <ul
+      aria-label={t('recurring.items')}
+      data-testid={testIds.recurringList}
+      className={SETTINGS_PANEL}
+    >
       {items.map((item) => (
         <li key={item.id}>
           <button
             type="button"
             data-testid={testIds.recurringItem}
             onClick={() => onOpen(item)}
-            className={`flex min-h-(--tap-target) w-full flex-col items-start px-4 py-3 text-left ${ROW_FOCUS}`}
+            className={`flex min-h-(--tap-target) w-full flex-col items-start px-4 py-3 text-left ${SETTINGS_ROW_FOCUS}`}
           >
             <IngredientName ingredient={item.ingredient} />
             <span className="text-sm text-muted-foreground">
@@ -137,16 +138,18 @@ function NoticeList({ notices }: { notices: readonly Notice[] }) {
             >
               <Info aria-hidden="true" className="mt-3 size-5 shrink-0 text-primary" />
               <p className="flex-1 py-2.5">{t('recurring.noticeDeleted', { name })}</p>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 data-testid={testIds.dismissNotice}
                 aria-label={t('recurring.dismissNotice', { name })}
                 disabled={dismiss.isPending}
                 onClick={() => dismiss.mutate(notice.id)}
-                className="flex size-(--tap-target) shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring disabled:opacity-50"
+                className="text-muted-foreground"
               >
-                <X aria-hidden="true" className="size-5" />
-              </button>
+                <X aria-hidden="true" />
+              </Button>
             </li>
           );
         })}

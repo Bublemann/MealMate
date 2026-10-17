@@ -126,7 +126,6 @@ export function RecurringIngredientField({
             <Button
               type="submit"
               size="icon"
-              className="size-(--tap-target) shrink-0"
               disabled={!typed}
               aria-label={
                 typed ? t('recurring.field.addNamed', { name: typed }) : t('recurring.field.add')

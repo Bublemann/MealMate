@@ -8,7 +8,8 @@ const CHECK_INTERVAL_MS = 60_000;
 /**
  * The sources of the count on the Settings tab's gear (UI-07, D-51): what waits for the user to
  * act on. Each is one entry: what to load (the query its page and row use, so they share one cache
- * entry) and how to count it (`select`). A spec adds a source here; the tab bar stays as it is. Due recurring items are no source: every draft shows them already.
+ * entry) and how to count it (`select`). A spec adds a source here; the tab bar stays as it is.
+ * Due recurring items are no source: every draft shows them already.
  */
 const COUNT_SOURCES = [
   { ...coupleQuery, select: waitingRequests },

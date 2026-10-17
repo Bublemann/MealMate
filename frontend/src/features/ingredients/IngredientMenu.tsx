@@ -61,8 +61,8 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
   const merge = useMergeIngredient(ingredient.id);
   const remove = useDeleteIngredient(ingredient.id);
   const [editing, setEditing] = useState(false);
-  const [recurring, setRecurring] = useState(false);
-  const set = useRecurringItems();
+  const [recurringOpen, setRecurringOpen] = useState(false);
+  const recurringItems = useRecurringItems();
   const [picking, setPicking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [target, setTarget] = useState<IngredientSummary | null>(null);
@@ -133,11 +133,12 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
           testId={testIds.buyRegularly}
           icon={<Repeat aria-hidden="true" />}
           dialog
-          // Until the set is known, the pop-up wouldn't know whether to add or edit.
-          disabled={offline || set.isPending}
+          // Until the set is known (loading, or it failed to load), the pop-up wouldn't know
+          // whether to add or edit.
+          disabled={offline || !recurringItems.data}
           onSelect={() => {
             onError(null);
-            setRecurring(true);
+            setRecurringOpen(true);
           }}
         >
           {t('recurring.buyRegularly')}
@@ -166,8 +167,10 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
       />
 
       <RecurringDialog
-        target={recurring ? { ingredient, item: itemOf(set.data, ingredient.id) } : null}
-        onClose={() => setRecurring(false)}
+        target={
+          recurringOpen ? { ingredient, item: itemOf(recurringItems.data, ingredient.id) } : null
+        }
+        onClose={() => setRecurringOpen(false)}
         onCloseAutoFocus={focusMenu}
       />
 

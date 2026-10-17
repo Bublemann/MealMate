@@ -42,9 +42,15 @@ export function formatBytes(bytes: number, language: Language): string {
   });
 }
 
-/** `26.09.2026` (de) or `26/09/2026` (en), in the device's time zone. */
-export function formatDate(date: Date | number | string, language: Language): string {
-  return new Intl.DateTimeFormat(LOCALES[language], DATE_OPTIONS).format(new Date(date));
+/** `26.09.2026` (de) or `26/09/2026` (en), in the device's time zone unless `timeZone` is given. */
+export function formatDate(
+  date: Date | number | string,
+  language: Language,
+  timeZone?: string,
+): string {
+  return new Intl.DateTimeFormat(LOCALES[language], { ...DATE_OPTIONS, timeZone }).format(
+    new Date(date),
+  );
 }
 
 /**
@@ -70,10 +76,8 @@ export function formatDayMonth(
  */
 export function formatCalendarDay(date: string, language: Language): string {
   const sameYear = date.slice(0, 4) === String(new Date().getFullYear());
-  return new Intl.DateTimeFormat(LOCALES[language], {
-    ...(sameYear ? { day: '2-digit', month: '2-digit' } : DATE_OPTIONS),
-    timeZone: 'UTC',
-  }).format(new Date(date));
+  // `Date` reads the day as midnight UTC, so it is shown in UTC to stay that day everywhere.
+  return sameYear ? formatDayMonth(date, language, 'UTC') : formatDate(date, language, 'UTC');
 }
 
 const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {

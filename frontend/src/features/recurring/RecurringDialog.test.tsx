@@ -78,6 +78,38 @@ describe('the recurring pop-up, editing (LIST-16, D-42)', () => {
     await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(2));
   });
 
+  it('turns it on again when the interval is typed back, and then sends nothing', async () => {
+    const { fetchMock, user } = renderPage();
+    const dialog = await openItem(user);
+
+    await user.clear(weeks(dialog));
+    await user.type(weeks(dialog), '6');
+    expect(automatic(dialog)).not.toBeChecked();
+    await user.clear(weeks(dialog));
+    await user.type(weeks(dialog), '4');
+    expect(automatic(dialog)).toBeChecked();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(requestsTo(fetchMock, `PATCH ${ITEM_PATH}`)).toHaveLength(0);
+  });
+
+  it('leaves the switch as switched by hand when the interval is typed back', async () => {
+    const { fetchMock, user } = renderPage();
+    const dialog = await openItem(user);
+
+    await user.click(automatic(dialog));
+    await user.clear(weeks(dialog));
+    await user.type(weeks(dialog), '6');
+    await user.clear(weeks(dialog));
+    await user.type(weeks(dialog), '4');
+    expect(automatic(dialog)).not.toBeChecked();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(await patchBodies(fetchMock)).toEqual([{ automatic: false }]);
+  });
+
   it('can turn it back on after changing the interval', async () => {
     const { fetchMock, user } = renderPage();
     const dialog = await openItem(user);
