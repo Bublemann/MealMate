@@ -16,6 +16,7 @@ from app.models.recurring_item import RecurringItem
 from app.models.reference import Category, Cuisine, Tag
 from app.models.shopping_list import (
     ListExtraItem,
+    ListHiddenDueItem,
     ListLineState,
     ListMeal,
     ListMealIngredient,
@@ -35,6 +36,7 @@ __all__ = [
     "Cuisine",
     "Ingredient",
     "ListExtraItem",
+    "ListHiddenDueItem",
     "ListLineState",
     "ListMeal",
     "ListMealIngredient",

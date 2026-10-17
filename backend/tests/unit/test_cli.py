@@ -121,6 +121,7 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "delete_extra_item",
         "hide_list_line",
         "unhide_list_line",
+        "hide_due_item",
         "list_recurring_items",
         "create_recurring_item",
         "update_recurring_item",
