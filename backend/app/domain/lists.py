@@ -20,7 +20,7 @@ AMOUNT_TEXT_MAX_LENGTH = 30
 LINE_KEY_MAX_LENGTH = 80
 # `reminder_seed` picks the reminder (LIST-14); the frontend shows `reminder.<seed % 10 + 1>`.
 REMINDER_SEED_MAX = 9_999
-# The meal picker shows this many "recently used" meals first (MEAL-09).
+# The meal field shows this many "recently used" meals first (MEAL-09).
 RECENT_MEALS_LIMIT = 10
 # At most this many ops per request (plan § 5.8).
 OPS_MAX = 100

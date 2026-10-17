@@ -39,7 +39,7 @@ export function DoneView({ list, categories }: DoneViewProps) {
           <p>{t('lists.done.note', { date: formatDayMonth(list.finished_at, language) })}</p>
         </Card>
       )}
-      <ListMeals list={list} editable={false} onAddMeals={() => undefined} />
+      <ListMeals list={list} editable={false} />
       <section aria-labelledby={headingId} className="flex flex-col gap-4">
         <h2 id={headingId} className="text-xl font-semibold">
           {t('lists.lines.title')}

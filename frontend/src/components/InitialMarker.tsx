@@ -13,6 +13,8 @@ interface InitialMarkerProps {
    * checked a line, SHOP-01). Otherwise screen readers read the marker as the user's name.
    */
   decorative?: boolean;
+  /** E.g. to name a row with it (`aria-labelledby`). */
+  id?: string;
   testId?: TestId;
 }
 
@@ -20,12 +22,13 @@ interface InitialMarkerProps {
  * A user's initial in a small round marker: who checked a line in shopping mode (SHOP-01) and
  * whose list or meal a row is (UI-02, MEAL-09), one's own included.
  */
-export function InitialMarker({ user, decorative = false, testId }: InitialMarkerProps) {
+export function InitialMarker({ user, decorative = false, id, testId }: InitialMarkerProps) {
   const { t } = useTranslation();
   const name = userLabel(t, user);
 
   return (
     <span
+      id={id}
       data-testid={testId}
       {...(decorative ? { 'aria-hidden': true, title: name } : { role: 'img', 'aria-label': name })}
       className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground"

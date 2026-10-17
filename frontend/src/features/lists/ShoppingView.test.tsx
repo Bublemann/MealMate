@@ -24,8 +24,10 @@ import {
   CATEGORIES_AFTER_DELETE,
   CHEESE_COUNTER,
   expectInPageOrder,
+  found,
+  UNITS,
 } from '@/test/ingredients';
-import { ME } from '@/test/meals';
+import { FLOUR, ME } from '@/test/meals';
 import { chooseFromMenu, openMoreMenu } from '@/test/menu';
 import { renderApp } from '@/test/render';
 import { swipe, tap } from '@/test/swipe';
@@ -96,6 +98,21 @@ async function sentOps(fetchMock: ReturnType<typeof mockApi>) {
   return bodies.flatMap((body) => body.ops);
 }
 
+/**
+ * Types `text` into the item field, takes it as free text with ＋ (Enter) and adds it from the
+ * free-text pop-up, choosing `category` (an option's value) if given.
+ */
+async function addFreeText(
+  user: ReturnType<typeof renderApp>['user'],
+  text: string,
+  category?: string,
+) {
+  await user.type(screen.getByTestId(testIds.extraItemInput), `${text}{Enter}`);
+  const dialog = await screen.findByTestId(testIds.freeTextDialog);
+  if (category) await user.selectOptions(within(dialog).getByLabelText('Category'), category);
+  await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+}
+
 /** A list of Ben's that he shares with me, his partner: I may change it, not delete it. */
 const SHARED_BY_BEN = { owner: BEN, is_owner: false, shared_with_partner: true };
 
@@ -161,7 +178,7 @@ describe('start shopping (LIST-11)', () => {
     renderList({ [`GET ${BASE}`]: list });
 
     await screen.findByTestId(testIds.screenList);
-    await screen.findByRole('heading', { level: 2, name: 'Shopping list' });
+    await screen.findByRole('heading', { level: 2, name: 'Items' });
     expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.startShopping)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.finishShopping)).not.toBeInTheDocument();
@@ -428,7 +445,7 @@ describe('shopping view (SHOP-01)', () => {
     });
     const input = await screen.findByTestId(testIds.extraItemInput);
 
-    await user.type(input, 'Servietten{Enter}');
+    await addFreeText(user, 'Servietten');
 
     await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
     await expect(bodyOf(fetchMock, `POST ${BASE}/ops`)).resolves.toEqual({
@@ -445,6 +462,43 @@ describe('shopping view (SHOP-01)', () => {
     expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(0);
   });
 
+  it('shows Items first with the item field, then the collapsed meals with the meal field (LIST-05, D-41)', async () => {
+    const { user } = renderList();
+
+    const items = await screen.findByRole('region', { name: 'Items' });
+    const field = within(items).getByTestId(testIds.extraItemInput);
+    expectInPageOrder([field, within(items).getByTestId(testIds.shoppingLines)]);
+    const meals = screen.getByTestId(testIds.shoppingMeals);
+    expectInPageOrder([items, meals]);
+    expect(within(meals).getByTestId(testIds.mealField)).not.toBeVisible();
+    await user.click(within(meals).getByText('Meals (3)'));
+    expectInPageOrder([
+      within(meals).getByTestId(testIds.mealField),
+      within(meals).getByTestId(testIds.listMeals),
+    ]);
+  });
+
+  it('adds a linked item with its amount while shopping online (LIST-12)', async () => {
+    const { fetchMock, user } = renderList({
+      'GET /api/ingredients': [found(FLOUR, true)],
+      'GET /api/units': UNITS,
+      [`POST ${BASE}/extra-items`]: Response.json(shoppingList(), { status: 201 }),
+    });
+
+    await user.type(await screen.findByTestId(testIds.extraItemInput), 'Mehl{Enter}');
+    const dialog = await screen.findByTestId(testIds.amountDialog);
+    await user.type(within(dialog).getByLabelText('Amount (optional)'), '1{Enter}');
+
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1));
+    await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
+      id: A_UUID_V7,
+      ingredient_id: FLOUR.id,
+      amount: 1,
+      unit: 'g',
+    });
+    expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(0);
+  });
+
   it('lets me change servings while shopping (LIST-12)', async () => {
     const { fetchMock, user } = renderList({
       [`PATCH ${BASE}/meals/lm-pancakes`]: shoppingList({ meals: [listMeal({ servings: 5 })] }),
@@ -457,7 +511,7 @@ describe('shopping view (SHOP-01)', () => {
     await waitFor(() =>
       expect(requestsTo(fetchMock, `PATCH ${BASE}/meals/lm-pancakes`)).toHaveLength(1),
     );
-    expect(within(meals).getByTestId(testIds.addMeals)).toBeVisible();
+    expect(within(meals).getByTestId(testIds.mealField)).toBeVisible();
   });
 
   it('removes a meal with a swipe or its "Remove" button, as on a draft (LIST-12, D-40)', async () => {
@@ -691,7 +745,7 @@ describe('extra items while shopping (LIST-12)', () => {
         fail ? errorResponse(500, 'common.internal') : opsAnswer(shoppingList({ version: 6 })),
     });
     const input = await screen.findByTestId(testIds.extraItemInput);
-    await user.type(input, 'Servietten{Enter}');
+    await addFreeText(user, 'Servietten');
 
     // Cleared at once and shown as a new line, waiting to be sent.
     expect(input).toHaveValue('');
@@ -709,15 +763,19 @@ describe('extra items while shopping (LIST-12)', () => {
     expect(again).toEqual(first);
   });
 
-  it('keeps what was typed when the item could not be queued', async () => {
+  it('opens the pop-up again with what was typed when the item could not be queued', async () => {
     const enqueue = vi.spyOn(SyncEngine.prototype, 'enqueue').mockResolvedValue(false);
     const { user } = renderList();
-    const input = await screen.findByTestId(testIds.extraItemInput);
+    await screen.findByTestId(testIds.extraItemInput);
 
-    await user.type(input, 'Servietten{Enter}');
+    await user.type(screen.getByTestId(testIds.extraItemInput), 'Servietten{Enter}');
+    let dialog = await screen.findByTestId(testIds.freeTextDialog);
+    await user.type(within(dialog).getByLabelText('Amount (optional)'), '2 Packungen{Enter}');
 
     expect(enqueue).toHaveBeenCalledOnce();
-    expect(input).toHaveValue('Servietten');
+    dialog = await screen.findByTestId(testIds.freeTextDialog);
+    expect(dialog).toHaveAccessibleName('Servietten');
+    expect(within(dialog).getByLabelText('Amount (optional)')).toHaveValue('2 Packungen');
   });
 });
 
@@ -732,7 +790,7 @@ describe('offline (SYNC-03)', () => {
     goOffline(fetchMock);
 
     await user.click(screen.getByRole('checkbox', { name: 'Check off Zwiebeln' }));
-    await user.type(screen.getByTestId(testIds.extraItemInput), 'Servietten{Enter}');
+    await addFreeText(user, 'Servietten');
 
     const status = screen.getByTestId(testIds.syncStatus);
     await waitFor(() => expect(status).toHaveTextContent('Offline – 2 changes waiting'));
@@ -748,7 +806,8 @@ describe('offline (SYNC-03)', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     const meals = screen.getByTestId(testIds.shoppingMeals);
-    expect(within(meals).getByTestId(testIds.addMeals)).toBeDisabled();
+    // The meal field stays, inactive (SYNC-03).
+    expect(within(meals).getByTestId(testIds.mealField)).toBeDisabled();
     expect(
       within(meals).getByRole('button', { name: 'More servings of Pfannkuchen' }),
     ).toBeDisabled();
@@ -783,7 +842,11 @@ describe('offline (SYNC-03)', () => {
     goOffline(fetchMock);
 
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
-    const form = screen.getByRole('form', { name: 'Add an item' });
+    // Offline it searches nothing and offers only free text (SYNC-03).
+    expect(screen.getByTestId(testIds.itemFreeText)).toHaveTextContent('“Feta” as an item');
+    expect(screen.queryByTestId(testIds.itemNewIngredient)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add “Feta”' }));
+    const form = await screen.findByTestId(testIds.freeTextDialog);
     const category = within(form).getByLabelText('Category');
     // In walking order, where it is last.
     expect(
@@ -792,7 +855,8 @@ describe('offline (SYNC-03)', () => {
         .map((option) => option.textContent),
     ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other', 'Cheese counter']);
     await user.selectOptions(category, 'cat-cheese-counter');
-    await user.click(within(form).getByRole('button', { name: 'Add Feta' }));
+    await user.click(within(form).getByRole('button', { name: 'Add' }));
+    expect(requestsTo(fetchMock, 'GET /api/ingredients')).toHaveLength(0);
 
     const lines = screen.getByTestId(testIds.shoppingLines);
     expect(await within(lines).findByRole('list', { name: 'Cheese counter' })).toHaveTextContent(
@@ -825,7 +889,8 @@ describe('offline (SYNC-03)', () => {
     await screen.findByTestId(testIds.shoppingLines);
 
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
-    const form = screen.getByRole('form', { name: 'Add an item' });
+    await user.click(screen.getByTestId(testIds.itemFreeText));
+    const form = await screen.findByTestId(testIds.freeTextDialog);
     expect(
       within(within(form).getByLabelText('Category'))
         .getAllByRole('option')

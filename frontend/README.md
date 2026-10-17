@@ -266,10 +266,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   "Erledigt". They are saved on the server in the profile's `filter_hidden` (`useSaveFilter`,
   saves one after another): each change is saved at once and loads the narrowed query again, and
   the screen hides the rows it hides right away. Tests share the panel helpers in
-  `test/filters.ts`. The meal picker ignores the user filter on Meals: `usePickerMeals` asks for
-  the meals of everyone visible, under a query key of its own (MEAL-09). On
-  Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
-  counts nothing then. At the largest text sizes the options and buttons wrap and the panel
+  `test/filters.ts`. The meal field on a list ignores the user filter on Meals:
+  `useMealFieldMeals` asks for the meals of everyone visible, under a query key of its own
+  (MEAL-09). On Lists, `disabled` turns the button off while offline, where the filters don't
+  apply, and it counts nothing then. At the largest text sizes the options and buttons wrap and the panel
   scrolls, its buttons staying in view.
 - **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
   `InitialMarker`, a round marker with the owner's initial, one's own rows included; screen readers
@@ -290,6 +290,20 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   hidden until the row has focus or hover, and "Ausblenden" in a line's pop-up. Offline and
   without edit rights there is no swipe. Tests swipe with `swipe()` and `tap()` from
   `test/swipe.ts` (pointer events; in jsdom a row counts as 1024 px wide, its action as 96 px).
+- **Add fields** (LIST-03, LIST-06, D-41): a list's Gerichte and Artikel sections each start with
+  `AddField` (`features/lists/AddField.tsx`): a search input with a screen-reader label and a
+  placeholder, a ＋, and below them a panel with the create options for the typed text first,
+  then the results. `MealField` and `ItemField` use it. Results answered for an earlier text are
+  never shown (the meal search keeps no previous data, the ingredient search's placeholder data is
+  ignored), so a late answer only grows below the options. ＋ and Enter go through `usePlus`: it
+  waits for the results of the text in the field, then takes the one result the server marked
+  `exact` (one's own of two meals), does nothing with several brands of one ingredient, and
+  otherwise does what the first option does. The pop-ups (`ServingsDialog` in `MealField`,
+  `AmountDialog` and `FreeTextDialog` in `AddDialogs.tsx`) close on "Hinzufügen" with
+  `flushSync` and give the emptied field the focus in the same tap, so iOS keeps the keyboard; the
+  request is sent after that, and when it fails the pop-up opens again with what was entered and
+  why. `AmountDialog` can open with a given amount and unit. Offline both fields are disabled on a
+  draft; while shopping the item field searches nothing and offers only free text (outbox).
 - **List feed** (UI-02): the Lists tab loads `GET /api/lists` page by page (`useListFeed`, 30 per
   page, `next_cursor`); the next page loads when the end of the feed comes near the screen
   (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
@@ -743,12 +757,15 @@ order.
 | `listMeals`              | `list-meals`               | Meals of the list with their servings            |
 | `listMeal`               | `list-meal`                | One meal on the list                             |
 | `removeListMeal`         | `remove-list-meal`         | "Remove" button of a meal on the list            |
-| `addMeals`               | `add-meals`                | "Add meals" (opens the meal picker)              |
-| `mealPicker`             | `meal-picker`              | Meal picker dialog                               |
-| `mealPickerRecent`       | `meal-picker-recent`       | "Recently used" meals in the picker              |
-| `mealPickerResults`      | `meal-picker-results`      | Search results (or all meals) in the picker      |
-| `mealPickerCreate`       | `meal-picker-create`       | "Create new meal" in the picker                  |
-| `extraItemInput`         | `extra-item-input`         | Input for extra items (with autocomplete)        |
+| `mealField`              | `meal-field`               | Meal field's input, top of "Meals"               |
+| `mealFieldPanel`         | `meal-field-panel`         | Meal field's panel: create option, meals         |
+| `mealFieldCreate`        | `meal-field-create`        | "“X” as a new meal" under the meal field         |
+| `servingsDialog`         | `servings-dialog`          | Servings pop-up of a meal being added            |
+| `extraItemInput`         | `extra-item-input`         | Item field's input, top of "Items"               |
+| `itemFreeText`           | `item-free-text`           | "“X” as an item" under the item field            |
+| `itemNewIngredient`      | `item-new-ingredient`      | "“X” as a new ingredient" under it               |
+| `amountDialog`           | `amount-dialog`            | Amount pop-up of an ingredient being added       |
+| `freeTextDialog`         | `free-text-dialog`         | Free-text pop-up of an item being added          |
 | `listLines`              | `list-lines`               | Aggregated lines grouped by category             |
 | `listLine`               | `list-line`                | One line (opens its sources)                     |
 | `lineSources`            | `line-sources`             | Sources dialog of a line                         |

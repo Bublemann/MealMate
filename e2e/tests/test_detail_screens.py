@@ -151,3 +151,48 @@ def test_menu_fits_the_screen_at_the_largest_text_size(
     assert bar_box is not None
     assert nav_box is not None
     assert bar_box["y"] + bar_box["height"] <= nav_box["y"]
+
+
+def test_add_fields_fit_the_screen_at_the_largest_text_size(
+    page: Page, api: Api, member: Account
+) -> None:
+    """D-41, UI-01: at the largest text size the list's two add fields, their options and their
+    pop-ups stay within the screen's width; nothing makes the page scroll sideways."""
+    tag = unique("fields")
+    meal = api.create_meal(member, f"Omas sonntägliche Gemüselasagne {tag}", servings=4)
+    draft = api.create_list(member, f"Wochenende {tag}")
+    sign_in(page.context, member)
+    page.goto(f"/lists/{draft['id']}")
+    meal_field = page.get_by_test_id(TEST_IDS["mealField"])
+    expect(meal_field).to_be_visible()
+    page.add_style_tag(content=LARGEST_TEXT)
+    viewport = page.viewport_size
+    assert viewport is not None
+
+    def fits(locator: Locator) -> None:
+        box = locator.bounding_box()
+        assert box is not None
+        assert box["x"] >= 0
+        assert box["x"] + box["width"] <= viewport["width"] + 0.5
+        no_sideways = "document.documentElement.scrollWidth <= window.innerWidth"
+        assert page.evaluate(no_sideways), "the page scrolls sideways"
+
+    meal_field.fill(meal["name"])
+    create = page.get_by_test_id(TEST_IDS["mealFieldCreate"])
+    expect(create).to_be_visible()
+    fits(page.get_by_test_id(TEST_IDS["mealFieldPanel"]))
+    fits(meal_field)
+    page.get_by_role("button", name=text("lists.addField.plus", name=meal["name"])).click()
+    servings = page.get_by_test_id(TEST_IDS["servingsDialog"])
+    expect(servings).to_be_visible()
+    fits(servings)
+    page.keyboard.press("Escape")
+    expect(servings).to_be_hidden()
+
+    item_field = page.get_by_test_id(TEST_IDS["extraItemInput"])
+    item_field.fill(f"Geburtstagskerzen {tag}")
+    fits(page.get_by_test_id(TEST_IDS["itemNewIngredient"]))
+    item_field.press("Enter")
+    free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
+    expect(free_text).to_be_visible()
+    fits(free_text)

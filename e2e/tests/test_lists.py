@@ -33,19 +33,34 @@ def line(page: Page, name: str) -> Locator:
     )
 
 
-def add_from_picker(picker: Locator, name: str, clicks: int, button: str) -> None:
-    """Adds meal `name` in the open meal picker after `clicks` taps on + or - (`button`)."""
-    row = picker.get_by_role("listitem", name=name, exact=True)
+def add_meal(page: Page, name: str, clicks: int, button: str, *, pick: bool) -> None:
+    """Adds meal `name` through the meal field (D-41): typed, then picked from the results
+    (`pick`) or taken by "+" as the exact name; in the servings pop-up `clicks` taps on + or -
+    (`button`), then "Add". The field is empty and focused again, ready for the next meal."""
+    field = page.get_by_test_id(TEST_IDS["mealField"])
+    field.fill(name)
+    if pick:
+        results = page.get_by_test_id(TEST_IDS["mealFieldPanel"]).get_by_role(
+            "list", name=text("lists.mealField.results")
+        )
+        results.get_by_role("button", name=re.compile(f"^{re.escape(name)}")).click()
+    else:
+        page.get_by_role("button", name=text("lists.addField.plus", name=name)).click()
+    dialog = page.get_by_test_id(TEST_IDS["servingsDialog"])
+    expect(dialog).to_have_accessible_name(name)
     for _ in range(clicks):
-        row.get_by_role("button", name=text(button, name=name), exact=True).click()
-    row.get_by_role("button", name=text("lists.picker.addLabel", name=name), exact=True).click()
-    expect(row).to_contain_text(text("lists.picker.added", name=name))
+        dialog.get_by_role("button", name=text(button, name=name), exact=True).click()
+    dialog.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
+    expect(dialog).to_be_hidden()
+    expect(field).to_have_value("")
+    expect(field).to_be_focused()
 
 
 def test_member_builds_a_list_from_meals_and_extra_items(
     page: Page, api: Api, invite_user: Callable[..., Account]
 ) -> None:
-    """Journey 6: new list, meals with servings, merged lines by category, extras, hide, remove."""
+    """Journey 6: new list, meals and extras through the two add fields (D-41), merged lines by
+    category, hide, remove, a new meal from the list."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     onions = api.create_ingredient(
@@ -82,22 +97,17 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     sign_in(page.context, anna)
     page.goto("/lists")
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
-    # The pinned block's "New list" tile creates a draft and opens the picker.
+    # The pinned block's "New list" tile creates a draft and opens it with the meal field's list
+    # of meals showing, the keyboard closed (LIST-01, MEAL-09).
     page.get_by_test_id(TEST_IDS["newList"]).click()
     expect(page).to_have_url(LIST_URL)
-    picker = page.get_by_role("dialog", name=text("lists.picker.title"))
-    expect(picker).to_be_visible()
+    meal_field = page.get_by_test_id(TEST_IDS["mealField"])
+    expect(page.get_by_test_id(TEST_IDS["mealFieldPanel"])).to_be_visible()
+    expect(meal_field).not_to_be_focused()
 
-    picker.get_by_label(text("lists.picker.search"), exact=True).fill(tag)
-    # The search applies after a short pause; until then the picker lists all meals, which may be
-    # just these two. A meal added from there moves into "Recently used", so wait for the search.
-    results = picker.get_by_role("list", name=text("lists.picker.results"), exact=True)
-    expect(results.get_by_role("listitem")).to_have_count(2)
-    # Meal A with 4 servings (2 + 2), meal B with 2 servings (4 - 2).
-    add_from_picker(picker, tart["name"], 2, "lists.meals.more")
-    add_from_picker(picker, bread["name"], 2, "lists.meals.fewer")
-    picker.get_by_role("button", name=text("lists.picker.done"), exact=True).click()
-    expect(picker).to_be_hidden()
+    # Meal A with 4 servings (2 + 2), picked; meal B with 2 servings (4 - 2), by its exact name.
+    add_meal(page, tart["name"], 2, "lists.meals.more", pick=True)
+    add_meal(page, bread["name"], 2, "lists.meals.fewer", pick=False)
 
     meals = page.get_by_test_id(TEST_IDS["listMeals"])
     expect(meals.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(2)
@@ -117,21 +127,32 @@ def test_member_builds_a_list_from_meals_and_extra_items(
         category_names(api, anna, {"fruit_vegetables", "baking", "sauces_spices_oils"})
     )
 
-    # A linked extra item merges with the flour of the meals: 550 g + 450 g = 1 kg (LIST-06).
-    form = page.get_by_role("form", name=text("lists.extra.label"))
-    page.get_by_test_id(TEST_IDS["extraItemInput"]).fill(flour["name"])
-    suggestions = form.get_by_role("list", name=text("lists.extra.suggestions"))
-    suggestions.get_by_role("button", name=re.compile(f"^{re.escape(flour['name'])}")).click()
-    form.get_by_label(text("lists.extra.amount"), exact=True).fill("450")
-    expect(form.get_by_label(text("lists.extra.unit"), exact=True)).to_have_value("g")
-    form.get_by_role("button", name=text("lists.extra.addLabel", name=flour["name"])).click()
+    # A linked extra item, picked in the item field, merges with the flour of the meals:
+    # 550 g + 450 g = 1 kg (LIST-06, D-41).
+    item_field = page.get_by_test_id(TEST_IDS["extraItemInput"])
+    item_field.fill(flour["name"])
+    results = page.get_by_role("list", name=text("lists.itemField.results"))
+    results.get_by_role("button", name=re.compile(f"^{re.escape(flour['name'])}")).click()
+    amount_dialog = page.get_by_test_id(TEST_IDS["amountDialog"])
+    amount = amount_dialog.get_by_label(text("lists.extra.amount"), exact=True)
+    expect(amount).to_be_focused()
+    expect(amount_dialog.get_by_label(text("lists.extra.unit"), exact=True)).to_have_value("g")
+    amount.fill("450")
+    amount_dialog.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
+    expect(amount_dialog).to_be_hidden()
+    expect(item_field).to_have_value("")
+    expect(item_field).to_be_focused()
     expect(line(page, flour["name"])).to_contain_text("1 kg")
 
-    # Anything else becomes a free-text item in Other.
+    # Anything else becomes a free-text item in Other: Enter without an exact match.
     candles = f"Geburtstagskerzen {tag}"
-    page.get_by_test_id(TEST_IDS["extraItemInput"]).fill(candles)
-    form.get_by_label(text("lists.extra.amountText"), exact=True).fill("2 Packungen")
-    page.get_by_test_id(TEST_IDS["extraItemInput"]).press("Enter")
+    item_field.fill(candles)
+    item_field.press("Enter")
+    free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
+    expect(free_text).to_have_accessible_name(candles)
+    free_text.get_by_label(text("lists.extra.amountText"), exact=True).fill("2 Packungen")
+    free_text.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
+    expect(free_text).to_be_hidden()
     expect(line(page, candles)).to_contain_text("2 Packungen")
     expect(lines.get_by_role("heading", level=3)).to_have_text(
         category_names(api, anna, {"fruit_vegetables", "baking", "sauces_spices_oils", "other"})
@@ -192,6 +213,18 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     draft = LIST_URL.search(page.url)
     assert draft is not None
     assert [meal["meal_id"] for meal in api.get_list(anna, draft[1])["meals"]] == [tart["id"]]
+
+    # A meal that doesn't exist yet: "+" without an exact match opens the meal form with the typed
+    # name; saving puts the meal on this list and comes back here (LIST-03).
+    quiche = f"Quiche {tag}"
+    meal_field.fill(quiche)
+    page.get_by_role("button", name=text("lists.addField.plus", name=quiche)).click()
+    form = page.get_by_test_id(TEST_IDS["mealForm"])
+    expect(form.get_by_label(text("meals.field.name"), exact=True)).to_have_value(quiche)
+    form.get_by_role("button", name=text("meals.form.create"), exact=True).click()
+    expect(page).to_have_url(re.compile(f"/lists/{draft[1]}$"))
+    expect(meals.get_by_test_id(TEST_IDS["listMeal"]).filter(has_text=quiche)).to_be_visible()
+    assert len(api.get_list(anna, draft[1])["meals"]) == 2
 
     # Renaming and deleting go through the ⋯ menu (D-39, LIST-02, LIST-13).
     new_name = f"Grillabend {tag}"
@@ -314,7 +347,7 @@ def test_others_list_is_read_only_and_copies_what_i_can_see(
     expect(meals).to_have_count(2)
     expect(meals.nth(0)).to_contain_text(soup["name"])
     expect(meals.nth(1)).to_have_text(text("lists.meals.privateServings_other", count="2"))
-    expect(page.get_by_test_id(TEST_IDS["addMeals"])).to_have_count(0)
+    expect(page.get_by_test_id(TEST_IDS["mealField"])).to_have_count(0)
     expect(page.get_by_test_id(TEST_IDS["extraItemInput"])).to_have_count(0)
     expect(page.get_by_text(curry["name"])).to_have_count(0)
 
@@ -330,7 +363,7 @@ def test_others_list_is_read_only_and_copies_what_i_can_see(
     copied = page.get_by_test_id(TEST_IDS["listMeals"]).get_by_test_id(TEST_IDS["listMeal"])
     expect(copied).to_have_count(1)
     expect(copied).to_contain_text(soup["name"])
-    expect(page.get_by_test_id(TEST_IDS["addMeals"])).to_be_visible()
+    expect(page.get_by_test_id(TEST_IDS["mealField"])).to_be_visible()
 
 
 def test_pinned_headline_wraps_on_a_narrow_screen(

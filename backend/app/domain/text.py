@@ -43,3 +43,10 @@ def fold_umlauts(text_norm: str) -> str:
     for spelled, plain in UMLAUT_SPELLINGS:
         text_norm = text_norm.replace(spelled, plain)
     return text_norm
+
+
+def same_name(name_norm: str, query_norm: str) -> bool:
+    """Whether a normalised name is exactly the normalised query, also with umlaut spellings
+    folded ("aepfel" is "Äpfel"): the exact match the searches rank first and mark (ING-03,
+    D-41). An empty query matches nothing."""
+    return query_norm != "" and fold_umlauts(name_norm) == fold_umlauts(query_norm)

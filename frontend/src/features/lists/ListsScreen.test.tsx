@@ -12,7 +12,7 @@ import {
 } from '@/test/api';
 import { checkboxNames, filterSaves, group, openPanel, savedFilters } from '@/test/filters';
 import { emptyList, FEED_LISTS, feedPage, LIST_ID, LIST_ROUTES, listSummary } from '@/test/lists';
-import { ME } from '@/test/meals';
+import { foundMeal, ME, mealSummary } from '@/test/meals';
 import { expectPinnedHeadline } from '@/test/pinned';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -254,23 +254,29 @@ describe('ListsScreen', () => {
     expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length);
   });
 
-  it('creates a draft with the "New list" tile and opens it with the meal picker (LIST-01)', async () => {
+  it('creates a draft with the "New list" tile and opens it with its meals showing (LIST-01)', async () => {
     const created = emptyList();
     const { fetchMock, user, router } = renderLists({
       'POST /api/lists': Response.json(created, { status: 201 }),
       'GET /api/lists/list-new': created,
-      'GET /api/meals': [],
+      'GET /api/meals': [foundMeal(mealSummary('Lasagne'))],
+      'GET /api/meals/recent': [],
     });
 
     await user.click(await screen.findByTestId(testIds.newList));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-new'));
-    expect(await screen.findByRole('dialog', { name: 'Add meals' })).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Shopping list (26/09/2026)' }),
+    ).toBeVisible();
     await expect(requestsTo(fetchMock, 'POST /api/lists')[0]?.json()).resolves.toEqual({});
-    // Behind the (modal) picker.
-    expect(screen.getByRole('heading', { level: 1, hidden: true })).toHaveTextContent(
-      'Shopping list (26/09/2026)',
-    );
+    // The meal field's list shows, a recently used meal one tap away, the keyboard closed
+    // (MEAL-09).
+    const panel = await screen.findByTestId(testIds.mealFieldPanel);
+    const all = await within(panel).findByRole('list', { name: 'All meals' });
+    expect(within(all).getByRole('button', { name: 'Lasagne Anna' })).toBeVisible();
+    expect(screen.getByTestId(testIds.mealField)).not.toHaveFocus();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('creates a list from an empty tab too', async () => {

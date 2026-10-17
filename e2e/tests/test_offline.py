@@ -151,8 +151,13 @@ def test_offline_check_off_and_reconnect(
     context.set_offline(True)
     for name in (onions, flour):
         page.get_by_role("checkbox", name=text("lists.shop.check", name=name)).click()
+    # The item field searches nothing offline and offers only free text (SYNC-03, D-41).
     page.get_by_test_id(TEST_IDS["extraItemInput"]).fill(napkins)
-    page.get_by_role("button", name=text("lists.extra.addLabel", name=napkins)).click()
+    expect(page.get_by_test_id(TEST_IDS["itemNewIngredient"])).to_have_count(0)
+    page.get_by_role("button", name=text("lists.addField.plus", name=napkins)).click()
+    free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
+    free_text.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
+    expect(free_text).to_be_hidden()
 
     expect(sync_status(page)).to_have_text(waiting(3))
     expect(page.get_by_test_id(TEST_IDS["offlineBanner"])).to_have_text(

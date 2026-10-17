@@ -14,6 +14,7 @@ import { CATEGORIES_KEY } from '@/features/reference/api';
 
 export type Ingredient = components['schemas']['Ingredient'];
 export type IngredientSummary = components['schemas']['IngredientSummary'];
+export type IngredientSearchResult = components['schemas']['IngredientSearchResult'];
 export type IngredientCreate = components['schemas']['IngredientCreate'];
 export type IngredientUpdate = components['schemas']['IngredientUpdate'];
 export type IngredientMerge = components['schemas']['IngredientMerge'];

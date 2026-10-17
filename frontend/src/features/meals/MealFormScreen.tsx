@@ -46,8 +46,8 @@ export function MealFormScreen() {
   if (id) return <EditMeal key={id} id={id} />;
   // From the "New meal" tile while searching (MEAL-09): the searched name is filled in.
   const name = params.get('name')?.trim() ?? '';
-  // From the meal picker (LIST-03): the new meal goes onto that list, and back there. Only a list
-  // id goes into the paths; anything else in the URL is ignored.
+  // From a list's meal field (LIST-03): the new meal goes onto that list, and back there. Only a
+  // list id goes into the paths; anything else in the URL is ignored.
   return <MealFormView addToList={addToList && isUuid(addToList) ? addToList : ''} name={name} />;
 }
 

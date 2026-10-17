@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import { EyeOff, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { SwipeRow } from '@/components/SwipeRow';
@@ -33,15 +33,18 @@ interface ListLinesProps {
   categories: readonly Category[];
   /** Lines can be removed and restored, and extra items changed (editors of a draft). */
   editable: boolean;
+  /** What comes first under the heading: the item field (D-41). */
+  top?: ReactNode;
 }
 
 /**
- * The aggregated lines under their category headings, in the order the server sorted them
+ * The Artikel section of a draft or a read-only list: what `top` holds (the item field), then
+ * the aggregated lines under their category headings, in the order the server sorted them
  * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be hidden for
  * this list by swiping it to the left (D-40) or with the button in that dialog, and comes back
  * from the collapsed "Hidden" section (LIST-07). Offline these changes are disabled (SYNC-03).
  */
-export function ListLines({ list, categories, editable }: ListLinesProps) {
+export function ListLines({ list, categories, editable, top }: ListLinesProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const offline = !useConnected();
@@ -67,6 +70,7 @@ export function ListLines({ list, categories, editable }: ListLinesProps) {
       <h2 id={headingId} className="text-xl font-semibold">
         {t('lists.lines.title')}
       </h2>
+      {top}
       <ErrorAlert error={setHidden.error} />
       {shown.length === 0 && hidden.length === 0 && (
         <p className="text-muted-foreground">{t('lists.lines.empty')}</p>
