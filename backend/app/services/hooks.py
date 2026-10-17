@@ -4,7 +4,8 @@ The account, ingredient and meal rules call these hooks at the right point of th
 transaction: meals (M4) fill in the ingredient references, shopping lists (M5a) detach meals
 that go away or become invisible (LIST-15), move shared lists on user deletion (ADM-03) and
 follow ingredient merges. Recurring items (LIST-16, D-42) follow couples as they form and end
-and ingredients as they are merged, and an ingredient's deletion leaves notices (D-51). Each
+and ingredients as they are merged, and an ingredient's deletion leaves notices (D-51). Own
+walking orders (D-48) follow couples as they form and end. Each
 hook runs inside the caller's transaction and must not commit; `now` is the time of the
 triggering request.
 
@@ -27,13 +28,14 @@ from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import recurring as recurring_repo
 from app.repositories import users as users_repo
-from app.services import access, detach, notices
+from app.services import access, detach, notices, walking_order
 
 
 async def on_couple_accepted(session: AsyncSession, couple: Couple, *, now: datetime) -> None:
     """Runs when a couple forms (CPL-01), once both are members: their two sets of recurring
     items become the couple's one set (D-42). For an ingredient both keep, the item bought more
-    recently stays with all its values, on a tie the requester's; the other goes."""
+    recently stays with all its values, on a tie the requester's; the other goes. Their own
+    walking orders become the couple's one (D-48)."""
     stays: dict[str, RecurringItem] = {}
     for item in await recurring_repo.of_users(session, (couple.requester_id, couple.addressee_id)):
         if (other := stays.get(item.ingredient_id)) is not None:
@@ -42,6 +44,9 @@ async def on_couple_accepted(session: AsyncSession, couple: Couple, *, now: date
         stays[item.ingredient_id] = item
     for item in stays.values():
         item.couple_id, item.user_id, item.updated_at = couple.id, None, now
+    await walking_order.on_couple_accepted(
+        session, couple.requester_id, couple.addressee_id, couple_id=couple.id, now=now
+    )
 
 
 async def on_couple_ended(
@@ -51,7 +56,8 @@ async def on_couple_ended(
     off on all lists of both users, so a later couple shares nothing automatically, and each
     one's meals are detached from the other's not-yet-frozen lists if they are no longer
     visible there (*meals public* off; LIST-15). Each of them keeps a copy of the couple's
-    recurring items with all their values, and the couple's go (D-42)."""
+    recurring items with all their values, and the couple's go (D-42); the same goes for its
+    own walking order (D-48)."""
     await lists_repo.unshare_all_of(session, (user_a_id, user_b_id), now)
     users = await users_repo.by_ids(session, (user_a_id, user_b_id))
     for meal_owner, list_owner in ((user_a_id, user_b_id), (user_b_id, user_a_id)):
@@ -63,6 +69,9 @@ async def on_couple_ended(
     for item in await recurring_repo.of_couple(session, couple_id):
         session.add_all(_copy_for(item, user_id, now=now) for user_id in (user_a_id, user_b_id))
         await session.delete(item)
+    await walking_order.on_couple_ended(
+        session, (user_a_id, user_b_id), couple_id=couple_id, now=now
+    )
 
 
 async def on_meals_made_private(session: AsyncSession, user_id: str, *, now: datetime) -> None:

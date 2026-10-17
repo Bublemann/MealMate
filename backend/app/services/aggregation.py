@@ -21,8 +21,10 @@ the frontend (AGG-01).
    items), so ingredient edits no longer change the list (LIST-11).
    Two brands of the same thing are two ingredients and so two lines. A free-text line shows
    its text and category. Lines are sorted by category order, then normalised name and brand,
-   then key (AGG-05), and carry their hidden state (LIST-07). A deleted category keeps its last
-   `sort_order` (D-30), so a tie goes to the category that isn't deleted, then by category id.
+   then key (AGG-05), and carry their hidden state (LIST-07). The category order is the
+   viewer's walking order (REF-01, D-48): the admins' or their couple's own. A deleted category
+   keeps its last position in it (D-30), so a tie goes to the category that isn't deleted, then
+   by category id.
 4. Outside a draft, lines carry their check state (plan § 5.7): a line without a stored state
    is `new` while shopping; a checked line that needs more since it was checked (or a free-text
    item that was edited) is reported unchecked, with the reason (LIST-12). Nothing is stored
@@ -54,6 +56,7 @@ from app.domain.lists import INGREDIENT_KEY_PREFIX, TEXT_KEY_PREFIX, ingredient_
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.text import normalize
 from app.domain.units import BaseUnit, IngredientAttrs, Unit
+from app.domain.walking_order import WalkingOrder
 from app.models import (
     Category,
     Ingredient,
@@ -408,12 +411,13 @@ def lines(
     content: ListContent,
     shopping_list: ShoppingList,
     *,
+    order: WalkingOrder,
     private_meals: Collection[str],
     refs: Mapping[str, UserRef],
 ) -> list[ListLine]:
-    """The aggregated lines of a list, sorted (AGG-05), with their check state. Sources from
-    the list meals in `private_meals` (ids) show no meal name (VIS-06); `refs` has the users
-    who checked lines off."""
+    """The aggregated lines of a list, sorted by the viewer's walking `order`, then name and
+    brand (AGG-05), with their check state. Sources from the list meals in `private_meals` (ids)
+    show no meal name (VIS-06); `refs` has the users who checked lines off."""
     list_meals = {row.id: row for row in content.meals.get(shopping_list.id, [])}
     extras = {row.id: row for row in content.extras.get(shopping_list.id, [])}
     states = content.states.get(shopping_list.id, {})
@@ -436,13 +440,11 @@ def lines(
         extra = extras[line_key.removeprefix(TEXT_KEY_PREFIX)]
         return _Label(extra.text or "", None, extra.category_id or other_category_id)
 
-    def order(line_key: str) -> tuple[int, bool, str, str, str]:
+    def sort_key(line_key: str) -> tuple[int, bool, str, str, str]:
         label = describe(line_key)
         category = content.categories[label.category_id]
         return (
-            category.sort_order,
-            category.deleted_at is not None,
-            category.id,
+            *order.sort_key(category.id, category.sort_order, category.deleted_at is not None),
             normalize(label.name),
             normalize(label.brand or ""),
         )
@@ -477,7 +479,7 @@ def lines(
 
     hidden = _hidden_keys(content, shopping_list)
     result = []
-    for line in aggregate(parts(content, shopping_list), order):
+    for line in aggregate(parts(content, shopping_list), sort_key):
         label = describe(line.line_key)
         is_ingredient = line.line_key.startswith(INGREDIENT_KEY_PREFIX)
         text_extra = None if is_ingredient else extras[line.line_key.removeprefix(TEXT_KEY_PREFIX)]

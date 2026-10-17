@@ -19,6 +19,7 @@ from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain import recurring
 from app.domain.owners import OwnerKey
 from app.domain.units import counted_unit, fits
+from app.domain.walking_order import ADMINS_ORDER
 from app.models import Ingredient as IngredientRow
 from app.models import RecurringItem as RecurringItemRow
 from app.models import ShoppingList
@@ -250,7 +251,8 @@ async def record_purchases(
     if not items:
         return
     content = await aggregation.load(session, [shopping_list])
-    for line in aggregation.lines(content, shopping_list, private_meals=(), refs={}):
+    lines = aggregation.lines(content, shopping_list, order=ADMINS_ORDER, private_meals=(), refs={})
+    for line in lines:
         item = None if line.ingredient_id is None else items.get(line.ingredient_id)
         if item is None or not line.checked:
             continue
