@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { useAuthSession } from '@/features/auth/context';
@@ -28,10 +28,12 @@ export const SYSTEM_KEY = ['admin', 'system'] as const;
  * for admins only. Here rather than in the admin api, so that the System row on the Settings tab
  * shares the System page's cache entry without loading the admin chunk (PERF-03).
  */
-export const systemInfoQuery = queryOptions({
-  queryKey: SYSTEM_KEY,
-  queryFn: ({ signal }) => unwrap(api.GET('/api/admin/system', { signal })),
-});
+export function useSystemInfo() {
+  return useQuery({
+    queryKey: SYSTEM_KEY,
+    queryFn: ({ signal }) => unwrap(api.GET('/api/admin/system', { signal })),
+  });
+}
 
 /** Loads the profile when the Settings tab opens, so changes made on another device show up. */
 export function useMeRefresh() {

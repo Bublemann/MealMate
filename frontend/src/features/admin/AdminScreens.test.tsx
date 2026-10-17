@@ -1,7 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
-import { errorResponse, mockApi, requestsTo, TEST_ADMIN, userRef, VERSION_INFO } from '@/test/api';
+import {
+  errorResponse,
+  mockApi,
+  requestsTo,
+  SYSTEM_NO_STATUS,
+  TEST_ADMIN,
+  userRef,
+} from '@/test/api';
 import { CATEGORIES } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -71,7 +78,7 @@ const PAGE_ROUTES = {
   'GET /api/admin/invites': [],
   'GET /api/categories': CATEGORIES,
   'GET /api/admin/events': [],
-  'GET /api/admin/system': { ...VERSION_INFO, image_digest: null, backup: null, disk: null },
+  'GET /api/admin/system': SYSTEM_NO_STATUS,
 };
 
 describe('Admin pages', () => {

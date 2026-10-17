@@ -8,6 +8,7 @@ import {
   mockApi,
   NO_COUPLE,
   requestsTo,
+  SYSTEM_NO_STATUS,
   TEST_ADMIN,
   TEST_USER,
   userRef,
@@ -190,13 +191,6 @@ function requestFrom(from: ReturnType<typeof userRef>, id = `r-${from.id}`) {
     created_at: '2026-09-26T10:00:00Z',
   };
 }
-
-const SYSTEM_NO_STATUS: SystemInfo = {
-  ...VERSION_INFO,
-  image_digest: null,
-  backup: null,
-  disk: null,
-};
 
 /** The system info after a backup run that succeeded or failed. */
 function systemWithBackup(ok: boolean): SystemInfo {

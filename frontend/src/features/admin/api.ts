@@ -3,7 +3,7 @@ import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { INGREDIENTS_KEY } from '@/features/ingredients/api';
 import { LISTS_KEY } from '@/features/lists/keys';
-import { SYSTEM_KEY, systemInfoQuery } from '@/features/me/api';
+import { SYSTEM_KEY } from '@/features/me/api';
 import { CATEGORIES_KEY, type Category } from '@/features/reference/api';
 import { notDeletedCategories } from '@/features/reference/categories';
 
@@ -11,7 +11,6 @@ export type AdminUser = components['schemas']['AdminUser'];
 export type AdminUserUpdate = components['schemas']['AdminUserUpdate'];
 export type Invite = components['schemas']['Invite'];
 export type AdminEvent = components['schemas']['AdminEvent'];
-export type SystemInfo = components['schemas']['SystemInfo'];
 export type BackupStatus = components['schemas']['BackupStatus'];
 export type DiskStatus = components['schemas']['DiskStatus'];
 export type CategoryNames = components['schemas']['CategoryNames'];
@@ -239,11 +238,6 @@ export function useDeleteCategory(categoryId: string) {
       }
     },
   });
-}
-
-/** ADM-01: version, and the last backup and free disk space as the server last reported them. */
-export function useSystemInfo() {
-  return useQuery(systemInfoQuery);
 }
 
 /** OPS-08: asks the server for a backup now; it starts within a minute. */

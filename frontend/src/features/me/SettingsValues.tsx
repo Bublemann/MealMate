@@ -1,11 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useCurrentUser } from '@/features/auth/context';
 import { useCouple, waitingRequests } from '@/features/couple/api';
 import { useLanguage } from '@/i18n';
 import { formatDateTime } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
-import { systemInfoQuery, useVersionInfo } from './api';
+import { useSystemInfo, useVersionInfo } from './api';
 
 // The values of the Settings rows (D-45), each loading on its own: nothing while it loads or
 // when it fails, so the row shows at once and stays tappable.
@@ -37,7 +36,7 @@ export function VersionValue() {
 export function SystemValue() {
   const { t } = useTranslation();
   const language = useLanguage();
-  const backup = useQuery(systemInfoQuery).data?.backup;
+  const backup = useSystemInfo().data?.backup;
   if (!backup) return null;
   if (!backup.ok) return <span className="text-destructive">{t('admin.system.backupFailed')}</span>;
   return <time dateTime={backup.finished_at}>{formatDateTime(backup.finished_at, language)}</time>;
