@@ -24,8 +24,8 @@ import { PasswordDialog } from './PasswordDialog';
 import { SettingsPage } from './SettingsPage';
 
 /**
- * Settings → Sicherheit: security notice, password change, sessions and "log out on all devices" (ACC-09, ACC-10). The
- * latter logs out here too: with changes still waiting it says they will be lost (SYNC-05). The
+ * Settings → Sicherheit: security notice, password change, sessions and "log out on all devices"
+ * (ACC-09, ACC-10). The latter logs out here too: with changes still waiting it says they will be lost (SYNC-05). The
  * outbox is read before the question is asked, so a tap right after the start (before the
  * waiting count has loaded) can't leave that out.
  */

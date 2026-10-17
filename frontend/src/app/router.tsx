@@ -28,8 +28,9 @@ export const routes: RouteObject[] = [
   { path: '/reset', element: <ResetScreen /> },
   // The temporary diagnostics screen of the M1 platform spike (removed in M9); a separate chunk
   // with the scanner. Public, so Safari can open it before any login. A Home Screen app has no
-  // address bar and reaches it only through Settings → Diagnostics, i.e. signed in; signing in
-  // doesn't touch the mm_diag cookie, so the cookie test (O-10) still works after it.
+  // address bar and reaches it only through Einstellungen → Über MealMate → Diagnose, i.e.
+  // signed in; signing in doesn't touch the mm_diag cookie, so the cookie test (O-10) still
+  // works after it.
   {
     path: '/diag',
     lazy: async () => ({

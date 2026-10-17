@@ -19,6 +19,9 @@ import {
 
 /** The grouped panel the rows sit in, separated by lines. */
 const PANEL = 'flex flex-col divide-y overflow-hidden rounded-xl border bg-card';
+/** A row's hover and keyboard focus, inside the panel's rounded edge. */
+const ROW_FOCUS =
+  'outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset';
 
 /**
  * The Settings tab (UI-07, D-45): its headline, then rows that each open their own page, in
@@ -73,10 +76,7 @@ function RowLink({ row: { label, to, value: Value } }: { row: SettingsRow }) {
   const { t } = useTranslation();
 
   return (
-    <Link
-      to={to}
-      className="flex min-h-(--tap-target) items-center gap-3 px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
-    >
+    <Link to={to} className={`flex min-h-(--tap-target) items-center gap-3 px-4 py-3 ${ROW_FOCUS}`}>
       {/* The label first, so the accessible name starts with it; at large text sizes the value
           wraps below it. The space between them is for screen readers only. */}
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -117,7 +117,7 @@ function LogoutRow() {
           data-testid={testIds.logoutButton}
           disabled={logout.isPending}
           onClick={() => void onLogout()}
-          className="min-h-(--tap-target) px-4 py-3 text-center font-medium text-destructive outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset disabled:opacity-50"
+          className={`min-h-(--tap-target) px-4 py-3 text-center font-medium text-destructive disabled:opacity-50 ${ROW_FOCUS}`}
         >
           {t('me.logout')}
         </button>

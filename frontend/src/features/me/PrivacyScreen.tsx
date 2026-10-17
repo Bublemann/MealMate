@@ -10,7 +10,10 @@ import { SettingsPage } from './SettingsPage';
 
 type PrivacyField = 'meals_public' | 'lists_public';
 
-/** Settings → Privatsphäre: the two switches (VIS-02); the partner always sees everything (CPL-04). */
+/**
+ * Settings → Privatsphäre: the two switches (VIS-02); the partner always sees everything
+ * (CPL-04).
+ */
 export function PrivacyScreen() {
   const { t } = useTranslation();
 

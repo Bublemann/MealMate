@@ -22,12 +22,9 @@ export function useCouple() {
   return useQuery(coupleQuery);
 }
 
-/**
- * The incoming requests that wait for the user's answer. With a partner there are none to answer
- * (the Paar page doesn't show them; the server drops them as a couple forms).
- */
+/** The incoming requests that wait for the user's answer (D-51). */
 export function waitingRequests(state: CoupleState): number {
-  return state.partner ? 0 : state.incoming.length;
+  return state.incoming.length;
 }
 
 /** All active users except me, by display name (CPL-01 picker). */
