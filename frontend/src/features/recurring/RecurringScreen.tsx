@@ -37,7 +37,8 @@ export function RecurringScreen() {
   const connected = useConnected();
   const items = useRecurringItems();
   const notices = useNotices();
-  const empty = items.data?.items.length === 0 && notices.data?.count === 0;
+  // The hint waits for the notices too, but not on them: one that failed to load hides nothing.
+  const empty = items.data?.items.length === 0 && !notices.isPending && !notices.data?.count;
   const [query, setQuery] = useState('');
   const fieldRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState<RecurringTarget | null>(null);
