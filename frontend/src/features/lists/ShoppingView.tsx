@@ -1,7 +1,7 @@
 import { Check, CircleCheck, Pencil, ShoppingBasket } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FloatingBar } from '@/components/FloatingBar';
+import { FloatingBar, FloatingBarButton } from '@/components/FloatingBar';
 import { InitialMarker } from '@/components/InitialMarker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -167,14 +167,13 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
       {editable && (
         // Above the tab bar, under the thumb (D-39); finishing works offline too.
         <FloatingBar>
-          <Button
+          <FloatingBarButton
             data-testid={testIds.finishShopping}
             onClick={() => setFinishOpen(true)}
-            className="w-full"
           >
             <ShoppingBasket aria-hidden="true" />
             {t('lists.shop.finish')}
-          </Button>
+          </FloatingBarButton>
         </FloatingBar>
       )}
       {editable && (

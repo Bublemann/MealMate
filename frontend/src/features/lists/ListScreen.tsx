@@ -3,11 +3,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
-import { FloatingBar } from '@/components/FloatingBar';
+import { FloatingBar, FloatingBarButton } from '@/components/FloatingBar';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useCategories, type Category } from '@/features/reference/api';
 import type { PendingList } from '@/features/sync/applyPending';
@@ -182,15 +181,14 @@ function ListContent({ list, categories, openPicker, onRefresh }: ListContentPro
         // Inactive offline and while starting; its error shows here, where it was tapped (D-39).
         <FloatingBar>
           <ErrorAlert error={start.error} />
-          <Button
+          <FloatingBarButton
             data-testid={testIds.startShopping}
             disabled={start.isPending || !connected}
             onClick={() => start.mutate()}
-            className="w-full"
           >
             <ShoppingCart aria-hidden="true" />
             {t('lists.shop.start')}
-          </Button>
+          </FloatingBarButton>
         </FloatingBar>
       )}
     </>

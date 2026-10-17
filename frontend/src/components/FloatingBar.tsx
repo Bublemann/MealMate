@@ -1,4 +1,6 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useKeyboardOpen } from '@/app/viewport';
 import { testIds } from '@/testIds';
 
@@ -41,9 +43,25 @@ export function FloatingBar({ children }: { children: ReactNode }) {
       ref={bar}
       data-testid={testIds.floatingBar}
       hidden={keyboardOpen}
-      className="frosted pinned fixed inset-x-(--tab-bar-margin) bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-10 mx-auto flex max-w-[calc(var(--container-2xl)-2rem)] flex-col gap-2 rounded-2xl border border-frosted-border p-2 shadow-frosted"
+      className="frosted pinned fixed inset-x-(--tab-bar-margin) bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-10 mx-auto flex max-w-[calc(var(--container-2xl)-2rem)] flex-col gap-[0.5em] rounded-[1em] border border-frosted-border p-[0.5em] shadow-frosted"
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * The bar's full-width button. Like everything in the bar, its text, icon and spacing are in em
+ * of the bar's capped text (the `pinned` utility, D-29), so it stops growing with the text size.
+ */
+export function FloatingBarButton({ className, ...props }: ComponentProps<typeof Button>) {
+  return (
+    <Button
+      className={cn(
+        'w-full px-[1em] py-[0.5em] text-[1em] [&_svg:not([class*=size-])]:size-[1.25em]',
+        className,
+      )}
+      {...props}
+    />
   );
 }

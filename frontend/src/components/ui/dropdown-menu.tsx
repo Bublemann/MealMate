@@ -40,9 +40,12 @@ function DropdownMenuContent({
   );
 }
 
-/** Shared by every kind of item: a full-width row of at least 44 pt, its text wrapping. */
+/**
+ * Shared by every kind of item: a full-width row of at least 44 pt, its text wrapping (hyphenated
+ * in the UI language) with spacing that stops growing at 12 px, so the text keeps the room.
+ */
 const itemClasses =
-  "relative flex min-h-(--tap-target) cursor-default items-center gap-3 rounded-md px-3 py-2 text-left text-base wrap-anywhere outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5";
+  "relative flex min-h-(--tap-target) cursor-default items-center gap-[min(0.75rem,12px)] rounded-md px-[min(0.75rem,12px)] py-2 text-left text-base wrap-break-word hyphens-auto outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5";
 
 function DropdownMenuItem({
   className,
