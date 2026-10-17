@@ -41,7 +41,10 @@ export function MoreMenu({ trigger, children, danger }: MoreMenuProps) {
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    // Not modal: the page keeps its scroll position and stays in the accessibility tree, as
+    // under a pop-up menu on iOS; a tap outside closes the menu (axe also flags a modal menu's
+    // hidden page, A11Y-03).
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           ref={trigger}
