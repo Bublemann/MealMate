@@ -16,7 +16,7 @@ from support.api import Account, Api, new_barcode, sign_in, unique
 from support.frontend import TEST_IDS, ingredient_label, text
 
 # The whole screen of an iPhone SE (2nd and 3rd generation), as the app has it from the Home
-# Screen: shorter and narrower than the default device's visible area.
+# Screen: narrower than the default device's visible area (393 by 659 px), and a little taller.
 IPHONE_SE_SCREEN: ViewportSize = {"width": 375, "height": 667}
 
 
