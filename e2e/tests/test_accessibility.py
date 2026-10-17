@@ -96,6 +96,7 @@ SCREENS = [
     Screen("/me/privacy", "member", (TEST_IDS["screenPrivacy"], TEST_IDS["mealsPublicSwitch"])),
     Screen("/me/couple", "member", (TEST_IDS["screenCouple"], TEST_IDS["coupleSection"])),
     Screen("/me/security", "member", (TEST_IDS["screenSecurity"], TEST_IDS["sessionList"])),
+    Screen("/me/walking-order", "member", (TEST_IDS["walkingOrderList"],)),
     Screen("/me/about", "admin", (TEST_IDS["appVersion"], TEST_IDS["diagnosticsLink"])),
     Screen("/me/admin/users", "admin", (TEST_IDS["adminUserList"],)),
     Screen("/me/admin/invites", "admin", (TEST_IDS["inviteList"], TEST_IDS["shareLinkUrl"])),

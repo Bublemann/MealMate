@@ -177,6 +177,46 @@ describe('WalkingOrderScreen (REF-01, D-48)', () => {
     );
   });
 
+  it('drags a category down, past the rows below it', async () => {
+    stubRowGeometry();
+    const { fetchMock } = renderPage();
+    await rows();
+
+    // From the first row (Fruit & vegetables) to the fourth.
+    drag(screen.getAllByTestId(testIds.walkingOrderHandle)[0] as Element, 20, 3.5 * ROW_HEIGHT);
+
+    expect(await rows()).toEqual([
+      'Dairy & eggs',
+      'Cheese',
+      'Other',
+      'Fruit & vegetables',
+      'Uncategorized',
+    ]);
+    await waitFor(() => expect(requestsTo(fetchMock, 'PUT /api/walking-order')).toHaveLength(1));
+  });
+
+  it('puts the order back when the browser cancels a drag', async () => {
+    stubRowGeometry();
+    const { fetchMock } = renderPage();
+    await rows();
+    const handle = screen.getAllByTestId(testIds.walkingOrderHandle)[2] as Element;
+    const pointer = { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 10 };
+
+    fireEvent.pointerDown(handle, { ...pointer, clientY: 125 });
+    fireEvent.pointerMove(handle, { ...pointer, clientY: 10 });
+    expect(await rows()).toEqual([
+      'Cheese',
+      'Fruit & vegetables',
+      'Dairy & eggs',
+      'Other',
+      'Uncategorized',
+    ]);
+    fireEvent.pointerCancel(handle, { ...pointer, clientY: 10 });
+
+    expect(await rows()).toEqual(IN_ORDER);
+    expect(requestsTo(fetchMock, 'PUT /api/walking-order')).toHaveLength(0);
+  });
+
   it('saves nothing when a drag ends where it started', async () => {
     stubRowGeometry();
     const { fetchMock } = renderPage();

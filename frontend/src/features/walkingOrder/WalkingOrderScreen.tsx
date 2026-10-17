@@ -24,7 +24,7 @@ import {
 
 type Direction = 'up' | 'down';
 
-/** A drag by a row's handle, from the pointer going down until it is let go. */
+/** A drag by a row's handle, from the pointer going down until it is let go or cancelled. */
 interface Drag {
   pointer: number;
   id: string;
@@ -87,7 +87,8 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
   // After a move by its buttons the focus follows the category (its button may be disabled now).
   const [focus, setFocus] = useState<{ id: string; direction: Direction } | null>(null);
   const list = useRef<HTMLOListElement>(null);
-  const drag = useRef<Drag | null>(null);
+  // Ends the drag under way, if there is one: it stops listening and forgets it.
+  const endDrag = useRef<(() => void) | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const baseId = useId();
   const switchId = `${baseId}-follow`;
@@ -95,6 +96,8 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
   const buttonId = (id: string, direction: Direction) => `${baseId}-${id}-${direction}`;
   // The order as text, so the focus moves when the order does, not when the server confirms it.
   const orderKey = ids.join(' ');
+
+  useEffect(() => () => endDrag.current?.(), []);
 
   useEffect(() => {
     if (!focus) return;
@@ -133,10 +136,15 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
     else save.mutate({ categoryIds: ids });
   }
 
+  /**
+   * A drag by a row's handle. The pointer's moves and its letting go are followed on the window:
+   * while the order changes, React moves the rows, the dragged one too, and a moved element may
+   * lose the pointer capture.
+   */
   function onHandleDown(event: PointerEvent<HTMLElement>, id: string) {
-    if (!connected || !event.isPrimary || drag.current) return;
+    if (!connected || !event.isPrimary || endDrag.current) return;
     const rows = [...(list.current?.children ?? [])];
-    drag.current = {
+    const drag: Drag = {
       pointer: event.pointerId,
       id,
       start: ids,
@@ -146,33 +154,32 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
         return { top, bottom };
       }),
     };
-    // The handle keeps getting the pointer's moves while the finger is over other rows.
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const onMove = (move: globalThis.PointerEvent) => {
+      if (move.pointerId !== drag.pointer) return;
+      setMoved(movedTo(drag.start, drag.id, slotAt(drag.slots, move.clientY)));
+    };
+    const onEnd = (end: globalThis.PointerEvent) => {
+      if (end.pointerId !== drag.pointer) return;
+      stop();
+      const index = slotAt(drag.slots, end.clientY);
+      if (end.type === 'pointercancel' || index === drag.start.indexOf(drag.id)) {
+        setMoved(drag.before);
+      } else {
+        saveMove(movedTo(drag.start, drag.id, index), drag.id);
+      }
+    };
+    function stop() {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      endDrag.current = null;
+      setDragging(null);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+    endDrag.current = stop;
     setDragging(id);
-  }
-
-  function onHandleMove(event: PointerEvent<HTMLElement>) {
-    const current = drag.current;
-    if (!current || event.pointerId !== current.pointer) return;
-    setMoved(movedTo(current.start, current.id, slotAt(current.slots, event.clientY)));
-  }
-
-  function onHandleUp(event: PointerEvent<HTMLElement>) {
-    const current = drag.current;
-    if (!current || event.pointerId !== current.pointer) return;
-    drag.current = null;
-    setDragging(null);
-    const index = slotAt(current.slots, event.clientY);
-    if (index === current.start.indexOf(current.id)) setMoved(current.before);
-    else saveMove(movedTo(current.start, current.id, index), current.id);
-  }
-
-  function onHandleCancel(event: PointerEvent<HTMLElement>) {
-    const current = drag.current;
-    if (!current || event.pointerId !== current.pointer) return;
-    drag.current = null;
-    setDragging(null);
-    setMoved(current.before);
   }
 
   return (
@@ -225,9 +232,6 @@ function OrderEditor({ order }: { order: WalkingOrder }) {
                   connected ? 'cursor-grab' : 'opacity-50',
                 )}
                 onPointerDown={(event) => onHandleDown(event, id)}
-                onPointerMove={onHandleMove}
-                onPointerUp={onHandleUp}
-                onPointerCancel={onHandleCancel}
               >
                 <GripVertical className="size-5" />
               </span>
