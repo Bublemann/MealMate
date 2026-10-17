@@ -1,14 +1,16 @@
 import { Info, X } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { IngredientName } from '@/features/ingredients/IngredientName';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { SettingsPage } from '@/features/me/SettingsPage';
+import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
 import {
+  itemOf,
   useDismissNotice,
   useNotices,
   useRecurringItems,
@@ -17,35 +19,68 @@ import {
 } from './api';
 import { recurringLine } from './format';
 import { RecurringDialog, type RecurringTarget } from './RecurringDialog';
+import { RecurringIngredientField } from './RecurringIngredientField';
 
 /** The grouped panel the rows sit in, as on the Settings tab. */
 const PANEL = 'flex flex-col divide-y overflow-hidden rounded-xl border bg-card';
 const ROW_FOCUS =
   'outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset';
 
-/** Settings → Regelmäßige Artikel (UI-07, D-45, LIST-16). */
+/**
+ * Settings → Regelmäßige Artikel (UI-07, D-45, LIST-16): unread notices first (D-51), then the
+ * ingredient field, then the set in the server's order, due first. A picked ingredient, or a
+ * tapped row, opens the recurring pop-up; one that is recurring already opens for editing. The
+ * page needs a connection (SYNC-09).
+ */
 export function RecurringScreen() {
   const { t } = useTranslation();
+  const connected = useConnected();
   const items = useRecurringItems();
   const notices = useNotices();
   const empty = items.data?.items.length === 0 && notices.data?.count === 0;
+  const [query, setQuery] = useState('');
+  const fieldRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState<RecurringTarget | null>(null);
+  /** The pop-up was opened from the field, which gets the focus back when it closes. */
+  const [fromField, setFromField] = useState(false);
+
+  function open(next: RecurringTarget, field: boolean) {
+    setFromField(field);
+    setTarget(next);
+  }
 
   return (
     <SettingsPage title={t('recurring.title')} testId={testIds.screenRecurring}>
       {notices.data && notices.data.notices.length > 0 && (
         <NoticeList notices={notices.data.notices} />
       )}
+      <RecurringIngredientField
+        value={query}
+        onValueChange={setQuery}
+        onPick={(ingredient) => open({ ingredient, item: itemOf(items.data, ingredient.id) }, true)}
+        disabled={!connected || !items.data}
+        inputRef={fieldRef}
+      />
       {items.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={items.error} />
       {items.data && items.data.items.length > 0 && (
         <ItemList
           items={items.data.items}
-          onOpen={(item) => setTarget({ ingredient: item.ingredient, item })}
+          onOpen={(item) => open({ ingredient: item.ingredient, item }, false)}
         />
       )}
       {empty && <p className="text-muted-foreground">{t('recurring.empty')}</p>}
-      <RecurringDialog target={target} onClose={() => setTarget(null)} />
+      <RecurringDialog
+        target={target}
+        onClose={() => setTarget(null)}
+        // Added from the field: it empties for the next one (D-41).
+        onDone={() => fromField && setQuery('')}
+        onCloseAutoFocus={(event) => {
+          if (!fromField) return;
+          event.preventDefault();
+          fieldRef.current?.focus();
+        }}
+      />
     </SettingsPage>
   );
 }

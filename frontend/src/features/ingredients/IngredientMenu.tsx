@@ -1,4 +1,4 @@
-import { CircleAlert, Merge, Pencil, Trash2 } from 'lucide-react';
+import { CircleAlert, Merge, Pencil, Repeat, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useCurrentUser } from '@/features/auth/context';
+import { itemOf, useRecurringItems } from '@/features/recurring/api';
+import { RecurringDialog } from '@/features/recurring/RecurringDialog';
 import { useConnected } from '@/features/sync/context';
 import { testIds } from '@/testIds';
 import {
@@ -46,7 +48,8 @@ interface IngredientMenuProps {
 }
 
 /**
- * The ingredient's ⋯ menu (D-39): "Edit" (ING-04), and for admins "Merge…" and, red and last,
+ * The ingredient's ⋯ menu (D-39): "Edit" (ING-04), "Regelmäßig kaufen…" (LIST-16: the recurring
+ * pop-up, for editing when the ingredient is recurring already), and for admins "Merge…" and, red and last,
  * "Delete" (ING-05). Each needs a connection (SYNC-03). A merge that would leave amounts not
  * fitting the ingredient that stays asks once more, naming how many (D-33).
  */
@@ -58,6 +61,8 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
   const merge = useMergeIngredient(ingredient.id);
   const remove = useDeleteIngredient(ingredient.id);
   const [editing, setEditing] = useState(false);
+  const [recurring, setRecurring] = useState(false);
+  const set = useRecurringItems();
   const [picking, setPicking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [target, setTarget] = useState<IngredientSummary | null>(null);
@@ -124,6 +129,19 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
         >
           {t('ingredients.detail.edit')}
         </MoreMenuItem>
+        <MoreMenuItem
+          testId={testIds.buyRegularly}
+          icon={<Repeat aria-hidden="true" />}
+          dialog
+          // Until the set is known, the pop-up wouldn't know whether to add or edit.
+          disabled={offline || set.isPending}
+          onSelect={() => {
+            onError(null);
+            setRecurring(true);
+          }}
+        >
+          {t('recurring.buyRegularly')}
+        </MoreMenuItem>
         {admin && (
           <MoreMenuItem
             testId={testIds.mergeIngredient}
@@ -145,6 +163,12 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
         onOpenChange={setEditing}
         onCloseAutoFocus={focusMenu}
         ingredient={ingredient}
+      />
+
+      <RecurringDialog
+        target={recurring ? { ingredient, item: itemOf(set.data, ingredient.id) } : null}
+        onClose={() => setRecurring(false)}
+        onCloseAutoFocus={focusMenu}
       />
 
       {admin && (

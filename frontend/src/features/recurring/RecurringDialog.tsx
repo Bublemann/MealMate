@@ -41,6 +41,8 @@ interface RecurringDialogProps {
   /** What the pop-up is for; null closes it. */
   target: RecurringTarget | null;
   onClose: () => void;
+  /** After "Hinzufügen", "Speichern" or "Nicht mehr regelmäßig" went through; then it closes. */
+  onDone?: () => void;
   /** Where the focus goes when it closes (default: back to its trigger). */
   onCloseAutoFocus?: (event: Event) => void;
 }
@@ -51,8 +53,18 @@ interface RecurringDialogProps {
  * "Zuletzt gekauft", then "Hinzufügen", or "Speichern" and the red "Nicht mehr regelmäßig" when
  * the ingredient is recurring already. Its fields start afresh each time it opens.
  */
-export function RecurringDialog({ target, onClose, onCloseAutoFocus }: RecurringDialogProps) {
+export function RecurringDialog({
+  target,
+  onClose,
+  onDone,
+  onCloseAutoFocus,
+}: RecurringDialogProps) {
   const name = target ? ingredientLabel(target.ingredient.name, target.ingredient.brand) : '';
+
+  function done() {
+    onDone?.();
+    onClose();
+  }
 
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
@@ -66,9 +78,9 @@ export function RecurringDialog({ target, onClose, onCloseAutoFocus }: Recurring
         </DialogHeader>
         {target &&
           (target.item ? (
-            <EditForm item={target.item} name={name} onDone={onClose} />
+            <EditForm item={target.item} name={name} onDone={done} />
           ) : (
-            <CreateForm ingredientId={target.ingredient.id} onDone={onClose} />
+            <CreateForm ingredientId={target.ingredient.id} onDone={done} />
           ))}
       </DialogContent>
     </Dialog>

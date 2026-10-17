@@ -63,6 +63,7 @@ frontend/
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
+    │   ├── recurring/      # Regelmäßige Artikel: the set, its notices, the recurring pop-up, the field
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
     │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
@@ -193,12 +194,13 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the label. Values load on their own and never hold the rows back: while one loads, fails or
   can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
   name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
-  (`waitingRequests`) or else the partner (`userLabel`), Über MealMate the version. Only their
+  (`waitingRequests`) or else the partner (`userLabel`), Regelmäßige Artikel "1 Hinweis" and
+  "2 fällig" (`RecurringValue`), Über MealMate the version. Only their
   addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03). Abmelden is
   a red, centred button: with changes still waiting it asks first with their count (SYNC-05).
 - **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
-  `/me/privacy`, `/me/couple`, `/me/security`, `/me/about`), framed by `SettingsPage`: the strip
-  with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
+  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/about`), framed by
+  `SettingsPage`: the strip with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
   held, without the card's heading. The admin pages stay under `/me/admin/…`.
 - **Count on the gear** (UI-07, D-51): while something waits for the user to act on, the Settings
   tab's gear carries a small red count ("9+" above nine), sized by the capped
@@ -206,11 +208,26 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   which hear it in the tab's name ("Einstellungen, 1 neu", `nav.meCount`). `useSettingsCount`
   (`features/me/settingsCount.ts`) sums `COUNT_SOURCES`; a source is one entry, the query its
   page uses (so they share one cache entry) and how to count it (`select`). The first source is
-  the incoming couple requests (`coupleQuery`). A spec adds a source as one more entry, without
-  touching the tab bar. The `Layout` keeps the count loaded once signed in: it is loaded again on
+  the incoming couple requests (`coupleQuery`), the second the unread notices (`noticesQuery`).
+  A spec adds a source as one more entry, without touching the tab bar. The `Layout` keeps the count loaded once signed in: it is loaded again on
   returning to the foreground with data older than the usual 30 s and every 60 s while the app is
   visible, never in the background; an answer to a request updates it at once, and a failed
   refresh keeps the last count without showing an error.
+- **Recurring items** (LIST-16, D-42, D-51): `features/recurring/api.ts` holds the one query of
+  the set (`recurringQuery`, `GET /api/recurring-items`) and the one of the notices
+  (`noticesQuery`, `GET /api/me/notices`), shared by the page "Regelmäßige Artikel", its row
+  (`RecurringValue`: "1 Hinweis · 2 fällig") and the gear's count. Every change loads the set
+  again: the pop-up's, a merge or delete of an ingredient, and an ops batch after which its list
+  is done (the server records the purchases then). `RecurringDialog` is the recurring pop-up, used
+  by the page and by "Regelmäßig kaufen…" in `IngredientMenu`: the ingredient as its title,
+  "Alle n Wochen", "Automatisch anpassen" and "Zuletzt gekauft" (today, left to the server unless
+  changed), then "Hinzufügen", or "Speichern" and the red "Nicht mehr regelmäßig" (asks first)
+  for an ingredient that is recurring already. Editing sends only what changed; a new interval
+  turns "Automatisch anpassen" off, and the switch is then always sent. A new item adapts unless
+  switched off, which takes a second request (the create has no such field). The page's
+  `RecurringIngredientField` looks like the item field (D-41) but offers only ingredients and
+  "„X“ als neue Zutat" (`IngredientFormDialog`, then the pop-up). `format.ts` words the server's
+  display values ("alle ~4 Wochen · zuletzt 02.10. · fällig in 5 Tagen") without counting days.
 - **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
   buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `IngredientMenu` pass
@@ -665,11 +682,14 @@ order.
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge…" in the ingredient's ⋯ menu       |
 | `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge      |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: "Delete" in the ingredient's ⋯ menu       |
+| `buyRegularly`           | `buy-regularly`            | "Buy regularly…" in the ingredient's ⋯ menu      |
 | `recurringList`          | `recurring-list`           | The recurring items on Regelmäßige Artikel       |
 | `recurringItem`          | `recurring-item`           | One recurring item (opens its pop-up)            |
 | `recurringNotices`       | `recurring-notices`        | Unread notices at the top of the page            |
 | `dismissNotice`          | `dismiss-notice`           | ✕ that dismisses one notice                      |
 | `recurringDialog`        | `recurring-dialog`         | Recurring pop-up (new or edit)                   |
+| `recurringInput`         | `recurring-input`          | Ingredient field on Regelmäßige Artikel          |
+| `recurringNewIngredient` | `recurring-new-ingredient` | "„X“ als neue Zutat" under that field            |
 | `recurringRemove`        | `recurring-remove`         | "No longer recurring" in the recurring pop-up    |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)              |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                        |
