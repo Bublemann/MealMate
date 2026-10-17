@@ -54,7 +54,7 @@ export function errorResponse(status: number, code: string, fields: unknown[] = 
 
 type Handler = (request: Request) => unknown;
 
-/** Answers for the calls the signed-in app shell and the Me screen make. */
+/** Answers for the calls the signed-in app shell and the Settings screen make. */
 export const DEFAULT_ROUTES: Record<string, unknown> = {
   'GET /api/version': VERSION_INFO,
   'GET /api/me': TEST_USER,
@@ -142,6 +142,18 @@ export function heldRoute() {
     });
   };
   return { route, answer };
+}
+
+/**
+ * No signal (SYNC-03): every request of `fetchMock` fails, the browser says it is offline and
+ * fires `offline`.
+ */
+export function goOffline(fetchMock: ReturnType<typeof mockApi>) {
+  fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  act(() => {
+    window.dispatchEvent(new Event('offline'));
+  });
 }
 
 interface NodeProcess {

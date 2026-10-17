@@ -130,6 +130,7 @@ async def test_create_an_empty_draft(api: AsyncClient, anna: Account) -> None:
         "meals": [],
         "lines": [],
         "extra_items": [],
+        "due_items": [],
     }
     assert await detail(api, anna, body["id"]) == body
 
@@ -215,6 +216,7 @@ async def test_list_routes_need_a_token(api: AsyncClient) -> None:
         ("DELETE", "/api/lists/x/extra-items/y"),
         ("POST", f"/api/lists/x/lines/i:{uuid.uuid4()}/hide"),
         ("POST", f"/api/lists/x/lines/i:{uuid.uuid4()}/unhide"),
+        ("POST", f"/api/lists/x/due-items/{uuid.uuid4()}/hide"),
         ("GET", "/api/meals/recent"),
     ):
         response = await api.request(method, path)

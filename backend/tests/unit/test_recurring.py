@@ -7,6 +7,8 @@ import pytest
 
 from app.domain.recurring import (
     DisplayInterval,
+    LastPurchase,
+    Purchase,
     Schedule,
     add_measured,
     display_interval,
@@ -15,6 +17,8 @@ from app.domain.recurring import (
     last_purchase_in_range,
     local_date,
     preferred_stays,
+    purchase_date,
+    record_purchase,
     schedule,
     weeks_to_days,
 )
@@ -211,3 +215,60 @@ def test_preferred_stays_unless_the_other_was_bought_later(
     preferred: date, other: date, expected: bool
 ) -> None:
     assert preferred_stays(preferred, other) is expected
+
+
+@pytest.mark.parametrize(
+    ("checked_at", "now", "expected"),
+    [
+        # The day of the tap in Berlin, not of the request (an offline finish sent days later).
+        (datetime(2026, 9, 27, 12, 0, tzinfo=UTC), datetime(2026, 9, 30, 9, 0, tzinfo=UTC),
+         date(2026, 9, 27)),
+        (datetime(2026, 9, 27, 22, 30, tzinfo=UTC), datetime(2026, 9, 30, 9, 0, tzinfo=UTC),
+         date(2026, 9, 28)),
+        # A tap up to five minutes ahead of the server near midnight is still today.
+        (datetime(2026, 9, 27, 22, 3, tzinfo=UTC), datetime(2026, 9, 27, 21, 59, tzinfo=UTC),
+         date(2026, 9, 27)),
+    ],
+)  # fmt: skip
+def test_purchase_date_is_the_day_of_the_check_off_at_most_today(
+    checked_at: datetime, now: datetime, expected: date
+) -> None:
+    assert purchase_date(checked_at, now=now, zone=BERLIN) == expected
+
+
+LAST = LastPurchase(on=date(2026, 9, 27), measured=(28,), amount=12, unit="piece", list_id="list-a")
+
+
+@pytest.mark.parametrize(
+    ("purchase", "expected"),
+    [
+        # A later purchase measures the days since the last one and stores its amount.
+        (Purchase(on=date(2026, 10, 20), list_id="list-b", amount=1.5, unit="kg"),
+         LastPurchase(on=date(2026, 10, 20), measured=(28, 23), amount=1.5, unit="kg",
+                      list_id="list-b")),
+        # Without one amount the previous amount stays.
+        (Purchase(on=date(2026, 10, 20), list_id="list-b", amount=None, unit=None),
+         LastPurchase(on=date(2026, 10, 20), measured=(28, 23), amount=12, unit="piece",
+                      list_id="list-b")),
+        # The same day: the amount changes, no interval is added.
+        (Purchase(on=date(2026, 9, 27), list_id="list-b", amount=6, unit="piece"),
+         LastPurchase(on=date(2026, 9, 27), measured=(28,), amount=6, unit="piece",
+                      list_id="list-b")),
+        # Before the last purchase: nothing changes (a list finished offline, sent late).
+        (Purchase(on=date(2026, 9, 26), list_id="list-b", amount=6, unit="piece"), None),
+        # The list of the last purchase counts once (Reopen and finish again, a resent batch).
+        (Purchase(on=date(2026, 10, 20), list_id="list-a", amount=6, unit="piece"), None),
+    ],
+)  # fmt: skip
+def test_record_purchase(purchase: Purchase, expected: LastPurchase | None) -> None:
+    assert record_purchase(LAST, purchase) == expected
+
+
+def test_record_purchase_keeps_only_three_intervals() -> None:
+    last = LastPurchase(
+        on=date(2026, 9, 27), measured=(28, 31, 27), amount=None, unit=None, list_id=None
+    )
+    purchase = Purchase(on=date(2026, 10, 4), list_id="list-b", amount=None, unit=None)
+    result = record_purchase(last, purchase)
+    assert result is not None
+    assert result.measured == (31, 27, 7)

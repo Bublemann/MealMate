@@ -1,7 +1,16 @@
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BEN, CARL, errorResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import {
+  BEN,
+  CARL,
+  errorResponse,
+  goOffline,
+  heldRoute,
+  mockApi,
+  requestsTo,
+  TEST_USER,
+} from '@/test/api';
 import {
   emptyList,
   FORMER_REMINDER,
@@ -18,6 +27,7 @@ import {
 import { CATEGORIES, unitOptions, UNITS } from '@/test/ingredients';
 import { EGGS, FLOUR, MILK, mealSummary } from '@/test/meals';
 import { renderApp } from '@/test/render';
+import { swipe, tap } from '@/test/swipe';
 import { testIds } from '@/testIds';
 
 const BASE = `/api/lists/${LIST_ID}`;
@@ -100,8 +110,8 @@ describe('ListScreen', () => {
       'Salz',
     ]);
     expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
-    // Removed lines are collapsed below (LIST-07); no reminder follows them (D-43).
-    expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Removed (1)');
+    // Hidden lines are collapsed below (LIST-07); no reminder follows them (D-43).
+    expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Hidden (1)');
     expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
   });
 
@@ -191,19 +201,241 @@ describe('ListScreen', () => {
     ).toBeDisabled();
   });
 
-  it('removes a meal from the list', async () => {
-    const { fetchMock, user } = renderList({
-      [`DELETE ${BASE}/meals/lm-detached`]: listDetail({ meals: [listMeal(), PRIVATE_MEAL] }),
+  describe('meal rows (LIST-04, D-40)', () => {
+    const REMOVE_PANCAKES = `DELETE ${BASE}/meals/lm-pancakes`;
+
+    function mealRow(name: string) {
+      return within(screen.getByTestId(testIds.listMeals)).getByRole('listitem', { name });
+    }
+
+    it('removes a meal at once with its "Remove" button, without asking', async () => {
+      const held = heldRoute();
+      const { fetchMock, user } = renderList({ [REMOVE_PANCAKES]: held.route });
+      await screen.findByTestId(testIds.listMeals);
+
+      // Shown on focus and hover, always there for screen readers.
+      const remove = within(mealRow('Pfannkuchen')).getByTestId(testIds.removeListMeal);
+      expect(remove).toHaveAccessibleName('Remove Pfannkuchen');
+      expect(remove).toHaveTextContent('Remove');
+      await user.click(remove);
+
+      // Gone before the server answered; no confirmation.
+      expect(screen.queryByRole('listitem', { name: 'Pfannkuchen' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      await held.answer(listDetail({ meals: [PRIVATE_MEAL, DETACHED_MEAL] }));
+      expect(requestsTo(fetchMock, REMOVE_PANCAKES)).toHaveLength(1);
+      expect(screen.getAllByTestId(testIds.listMeal)).toHaveLength(2);
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Remove Alter Eintopf' }));
+    it('has the compact stepper, its number read as "99 servings", up to 99 (A11Y-01)', async () => {
+      renderList({ [`GET ${BASE}`]: listDetail({ meals: [listMeal({ servings: 99 })] }) });
 
-    await waitFor(() =>
+      const group = await screen.findByRole('group', { name: 'Servings of Pfannkuchen' });
+      expect(within(group).getByText('99 servings')).toBeInTheDocument();
       expect(
-        screen.getAllByTestId(testIds.listMeal).map((entry) => entry.textContent),
-      ).not.toContain(expect.stringContaining('Alter Eintopf')),
-    );
-    expect(requestsTo(fetchMock, `DELETE ${BASE}/meals/lm-detached`)).toHaveLength(1);
+        within(group).getByRole('button', { name: 'More servings of Pfannkuchen' }),
+      ).toBeDisabled();
+      expect(
+        within(group).getByRole('button', { name: 'Fewer servings of Pfannkuchen' }),
+      ).toBeEnabled();
+    });
+
+    it('names the stepper and "Entfernen" in German', async () => {
+      const { authSession } = renderList();
+      authSession.setUser({ ...authSession.getState().user!, language: 'de' });
+      const { changeLanguage } = await import('@/i18n');
+      await changeLanguage('de');
+
+      const group = await screen.findByRole('group', { name: 'Portionen: Pfannkuchen' });
+      expect(within(group).getByText('4 Portionen')).toBeInTheDocument();
+      expect(within(group).getByRole('button', { name: 'Weniger Portionen: Pfannkuchen' })).toBe(
+        within(group).getAllByRole('button')[0],
+      );
+      expect(
+        within(group).getByRole('button', { name: 'Mehr Portionen: Pfannkuchen' }),
+      ).toBeVisible();
+      const remove = within(mealRow('Pfannkuchen')).getByTestId(testIds.removeListMeal);
+      expect(remove).toHaveAccessibleName('Pfannkuchen entfernen');
+      expect(remove).toHaveTextContent('Entfernen');
+    });
+
+    it('shows the servings instead of the stepper, without swiping, on a read-only list', async () => {
+      renderList({
+        [`GET ${BASE}`]: listDetail({ owner: CARL, is_owner: false, can_edit: false }),
+      });
+      await screen.findByTestId(testIds.listMeals);
+
+      const pancakes = mealRow('Pfannkuchen');
+      expect(within(pancakes).getByText('4 servings')).toBeVisible();
+      expect(within(pancakes).queryByRole('group')).not.toBeInTheDocument();
+      expect(within(pancakes).queryByRole('button')).not.toBeInTheDocument();
+      // A meal I can't see says its servings in its name (VIS-06).
+      expect(mealRow('Private meal (3 servings)')).toHaveTextContent(
+        /^Private meal \(3 servings\)$/,
+      );
+      swipe(within(pancakes).getByRole('link'), { from: 600, to: 450 });
+      expect(within(pancakes).queryByRole('button', { hidden: true })).not.toBeInTheDocument();
+    });
+
+    it('turns off the swipe, "Remove" and the stepper offline (SYNC-03)', async () => {
+      const { fetchMock } = renderList();
+      await screen.findByTestId(testIds.listMeals);
+      goOffline(fetchMock);
+
+      const pancakes = mealRow('Pfannkuchen');
+      await waitFor(() =>
+        expect(within(pancakes).getByTestId(testIds.removeListMeal)).toBeDisabled(),
+      );
+      for (const button of within(pancakes).getAllByRole('button', { name: /servings of/ })) {
+        expect(button).toBeDisabled();
+      }
+      swipe(within(pancakes).getByRole('link'), { from: 900, to: 300 });
+      expect(
+        within(pancakes).queryByRole('button', { name: 'Remove', hidden: true }),
+      ).not.toBeInTheDocument();
+      expect(requestsTo(fetchMock, REMOVE_PANCAKES)).toHaveLength(0);
+    });
+
+    it('brings a meal back when removing it failed', async () => {
+      const { user } = renderList({
+        [REMOVE_PANCAKES]: errorResponse(500, 'common.internal'),
+      });
+      await screen.findByTestId(testIds.listMeals);
+
+      await user.click(within(mealRow('Pfannkuchen')).getByTestId(testIds.removeListMeal));
+
+      expect(await screen.findByRole('listitem', { name: 'Pfannkuchen' })).toBeVisible();
+      expect(screen.getByRole('alert')).toBeVisible();
+    });
+
+    describe('swiping', () => {
+      /** The action a swipe reveals; screen readers use the row's own buttons instead. */
+      function swipeAction(name: string) {
+        return within(mealRow(name)).queryByRole('button', { name: 'Remove', hidden: true });
+      }
+
+      it('reveals a "Remove" that removes the meal without asking', async () => {
+        const { fetchMock, router } = renderList({
+          [REMOVE_PANCAKES]: listDetail({ meals: [PRIVATE_MEAL, DETACHED_MEAL] }),
+        });
+        await screen.findByTestId(testIds.listMeals);
+        const link = within(mealRow('Pfannkuchen')).getByRole('link', { name: 'Pfannkuchen' });
+
+        swipe(link, { from: 600, to: 450 });
+        // The browser's click after the swipe doesn't open the meal.
+        fireEvent.click(link);
+
+        expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`);
+        const action = swipeAction('Pfannkuchen');
+        expect(action).toBeInTheDocument();
+        expect(requestsTo(fetchMock, REMOVE_PANCAKES)).toHaveLength(0);
+        tap(action!);
+
+        await waitFor(() =>
+          expect(screen.queryByRole('listitem', { name: 'Pfannkuchen' })).not.toBeInTheDocument(),
+        );
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+        expect(requestsTo(fetchMock, REMOVE_PANCAKES)).toHaveLength(1);
+      });
+
+      it('removes the meal at once when swiped all the way through', async () => {
+        const { fetchMock, router } = renderList({
+          [REMOVE_PANCAKES]: listDetail({ meals: [PRIVATE_MEAL, DETACHED_MEAL] }),
+        });
+        await screen.findByTestId(testIds.listMeals);
+        const link = within(mealRow('Pfannkuchen')).getByRole('link', { name: 'Pfannkuchen' });
+
+        // Past half the row (jsdom's rows are as wide as the window, 1024 px).
+        swipe(link, { from: 900, to: 300 });
+
+        await waitFor(() =>
+          expect(screen.queryByRole('listitem', { name: 'Pfannkuchen' })).not.toBeInTheDocument(),
+        );
+        expect(requestsTo(fetchMock, REMOVE_PANCAKES)).toHaveLength(1);
+        expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`);
+      });
+
+      it('stays closed after a small or a mostly vertical movement, and for the mouse', async () => {
+        const { fetchMock } = renderList();
+        await screen.findByTestId(testIds.listMeals);
+        const link = within(mealRow('Pfannkuchen')).getByRole('link', { name: 'Pfannkuchen' });
+
+        swipe(link, { from: 600, to: 560 });
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+        // Scrolling the list.
+        swipe(link, { from: 600, to: 450, dy: 200 });
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+        swipe(link, { from: 900, to: 300, pointerType: 'mouse' });
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+        expect(requestsTo(fetchMock, REMOVE_PANCAKES)).toHaveLength(0);
+      });
+
+      it('works with a pen as with a finger', async () => {
+        renderList();
+        await screen.findByTestId(testIds.listMeals);
+
+        swipe(within(mealRow('Pfannkuchen')).getByRole('link'), {
+          from: 600,
+          to: 450,
+          pointerType: 'pen',
+        });
+
+        expect(swipeAction('Pfannkuchen')).toBeInTheDocument();
+      });
+
+      it('closes when swiped back, scrolled or tapped, without opening the meal', async () => {
+        const { router } = renderList();
+        await screen.findByTestId(testIds.listMeals);
+        const link = within(mealRow('Pfannkuchen')).getByRole('link', { name: 'Pfannkuchen' });
+
+        swipe(link, { from: 600, to: 450 });
+        swipe(link, { from: 450, to: 600 });
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+
+        swipe(link, { from: 600, to: 450 });
+        // The browser takes over to scroll.
+        swipe(link, { from: 450, to: 450, dy: 100, cancel: true });
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+
+        swipe(link, { from: 600, to: 450 });
+        tap(link);
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+        expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`);
+      });
+
+      it('lets a later click through, e.g. from a keyboard, after a swipe', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { fetchMock } = renderList({ [`PATCH ${BASE}/meals/lm-pancakes`]: listDetail() });
+        await screen.findByTestId(testIds.listMeals);
+        const row = mealRow('Pfannkuchen');
+
+        // No click follows this short swipe, as on a phone.
+        swipe(within(row).getByRole('link'), { from: 600, to: 580 });
+        vi.advanceTimersByTime(1000);
+        fireEvent.click(within(row).getByRole('button', { name: 'More servings of Pfannkuchen' }));
+
+        await waitFor(() =>
+          expect(requestsTo(fetchMock, `PATCH ${BASE}/meals/lm-pancakes`)).toHaveLength(1),
+        );
+        vi.useRealTimers();
+      });
+
+      it('keeps one row open at a time, and closes it on a tap elsewhere', async () => {
+        renderList();
+        await screen.findByTestId(testIds.listMeals);
+
+        swipe(within(mealRow('Pfannkuchen')).getByRole('link'), { from: 600, to: 450 });
+        swipe(within(mealRow('Alter Eintopf')).getByText('Alter Eintopf'), {
+          from: 600,
+          to: 450,
+        });
+
+        expect(swipeAction('Pfannkuchen')).not.toBeInTheDocument();
+        expect(swipeAction('Alter Eintopf')).toBeInTheDocument();
+        tap(screen.getByRole('heading', { level: 1 }));
+        expect(swipeAction('Alter Eintopf')).not.toBeInTheDocument();
+      });
+    });
   });
 
   describe('meal picker', () => {
@@ -578,60 +810,107 @@ describe('ListScreen', () => {
       ).toEqual(['Pfannkuchen (4 servings)', 'Private meal (3 servings)']);
     });
 
-    it('removes a line for this list from its sources and restores it', async () => {
+    it('hides a line for this list from its sources and restores it', async () => {
       const { fetchMock, user } = renderList({ [HIDE]: milkHidden, [UNHIDE]: listDetail() });
 
       const lines = await screen.findByTestId(testIds.listLines);
       await user.click(within(lines).getByRole('button', { name: /^Milch/ }));
       const dialog = await screen.findByRole('dialog', { name: 'Milch' });
-      await user.click(within(dialog).getByRole('button', { name: 'Remove Milch for this list' }));
+      const hide = within(dialog).getByRole('button', { name: 'Hide Milch' });
+      expect(hide).toHaveTextContent('Hide');
+      await user.click(hide);
 
       expect(dialog).not.toBeInTheDocument();
       expect(lineTexts(lines)).not.toContain('Milch1.5 l');
-      const removed = screen.getByTestId(testIds.hiddenLines);
-      expect(removed).toHaveTextContent('Removed (2)');
+      const hidden = screen.getByTestId(testIds.hiddenLines);
+      expect(hidden).toHaveTextContent('Hidden (2)');
       await waitFor(() => expect(requestsTo(fetchMock, HIDE)).toHaveLength(1));
 
-      await user.click(within(removed).getByText('Removed (2)'));
-      await user.click(within(removed).getByRole('button', { name: 'Restore Milch' }));
+      await user.click(within(hidden).getByText('Hidden (2)'));
+      await user.click(within(hidden).getByRole('button', { name: 'Restore Milch' }));
 
       await waitFor(() => expect(lineTexts(lines)).toContain('Milch1.5 l'));
       expect(requestsTo(fetchMock, UNHIDE)).toHaveLength(1);
-      expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Removed (1)');
+      expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Hidden (1)');
     });
 
-    it('removes a line when it is swiped to the left', async () => {
-      const { fetchMock } = renderList({ [HIDE]: milkHidden });
+    describe('swiping (D-40)', () => {
+      function milk() {
+        return within(screen.getByTestId(testIds.listLines)).getByRole('button', {
+          name: /^Milch/,
+        });
+      }
 
-      const lines = await screen.findByTestId(testIds.listLines);
-      const button = within(lines).getByRole('button', { name: /^Milch/ });
-      const row = button.parentElement as HTMLElement;
-      fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 10 });
-      fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: 250, clientY: 12 });
-      fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 12 });
-      fireEvent.pointerUp(row, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 12 });
-      fireEvent.click(button);
+      function hideAction() {
+        const row = within(screen.getByTestId(testIds.listLines))
+          .getAllByTestId(testIds.listLine)
+          .find((line) => within(line).queryByRole('button', { name: /^Milch/ }));
+        return within(row!).queryByRole('button', { name: 'Hide', hidden: true });
+      }
 
-      await waitFor(() => expect(requestsTo(fetchMock, HIDE)).toHaveLength(1));
-      // The swipe did not also open the line's sources.
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+      it('reveals a "Hide" that hides the line, without opening its sources', async () => {
+        const { fetchMock } = renderList({ [HIDE]: milkHidden });
+        await screen.findByTestId(testIds.listLines);
 
-    it('keeps a line that was swiped only a little, and ignores the mouse', async () => {
-      const { fetchMock } = renderList({ [HIDE]: milkHidden });
+        swipe(milk(), { from: 600, to: 450 });
+        fireEvent.click(milk());
 
-      const lines = await screen.findByTestId(testIds.listLines);
-      const row = within(lines).getByRole('button', { name: /^Milch/ })
-        .parentElement as HTMLElement;
-      fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 10 });
-      fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: 260, clientY: 10 });
-      fireEvent.pointerUp(row, { pointerId: 1, pointerType: 'touch', clientX: 260, clientY: 10 });
-      fireEvent.pointerDown(row, { pointerId: 2, pointerType: 'mouse', clientX: 300, clientY: 10 });
-      fireEvent.pointerMove(row, { pointerId: 2, pointerType: 'mouse', clientX: 100, clientY: 10 });
-      fireEvent.pointerUp(row, { pointerId: 2, pointerType: 'mouse', clientX: 100, clientY: 10 });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(requestsTo(fetchMock, HIDE)).toHaveLength(0);
+        tap(hideAction()!);
 
-      expect(lineTexts(lines)).toContain('Milch1.5 l');
-      expect(requestsTo(fetchMock, HIDE)).toHaveLength(0);
+        await waitFor(() => expect(requestsTo(fetchMock, HIDE)).toHaveLength(1));
+        expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Hidden (2)');
+      });
+
+      it('hides a line at once when swiped all the way through', async () => {
+        const { fetchMock } = renderList({ [HIDE]: milkHidden });
+        await screen.findByTestId(testIds.listLines);
+
+        swipe(milk(), { from: 900, to: 300 });
+
+        await waitFor(() => expect(requestsTo(fetchMock, HIDE)).toHaveLength(1));
+        expect(screen.getByTestId(testIds.hiddenLines)).toHaveTextContent('Hidden (2)');
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+
+      it('keeps a line that was swiped only a little or scrolled past, and ignores the mouse', async () => {
+        const { fetchMock } = renderList({ [HIDE]: milkHidden });
+        await screen.findByTestId(testIds.listLines);
+
+        swipe(milk(), { from: 600, to: 560 });
+        expect(hideAction()).not.toBeInTheDocument();
+        swipe(milk(), { from: 600, to: 450, dy: 200 });
+        expect(hideAction()).not.toBeInTheDocument();
+        swipe(milk(), { from: 900, to: 300, pointerType: 'mouse' });
+        expect(hideAction()).not.toBeInTheDocument();
+        expect(lineTexts(screen.getByTestId(testIds.listLines))).toContain('Milch1.5 l');
+        expect(requestsTo(fetchMock, HIDE)).toHaveLength(0);
+      });
+
+      it('closes an open meal when a line is swiped: one row open at a time', async () => {
+        renderList();
+        await screen.findByTestId(testIds.listLines);
+        const meals = screen.getByTestId(testIds.listMeals);
+
+        swipe(within(meals).getByRole('link', { name: 'Pfannkuchen' }), { from: 600, to: 450 });
+        swipe(milk(), { from: 600, to: 450 });
+
+        expect(within(meals).queryByRole('button', { name: 'Remove', hidden: true })).toBeNull();
+        expect(hideAction()).toBeInTheDocument();
+      });
+
+      it('doesn’t swipe offline (SYNC-03)', async () => {
+        const { fetchMock } = renderList();
+        await screen.findByTestId(testIds.listLines);
+        goOffline(fetchMock);
+        await waitFor(() => expect(screen.getByTestId(testIds.offlineBanner)).toBeVisible());
+
+        swipe(milk(), { from: 900, to: 300 });
+
+        expect(hideAction()).not.toBeInTheDocument();
+        expect(requestsTo(fetchMock, HIDE)).toHaveLength(0);
+      });
     });
 
     it('edits and removes an extra item from its line', async () => {

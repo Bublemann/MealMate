@@ -30,7 +30,7 @@ TEST_IDS = _load_test_ids()
 
 @cache
 def translations(language: str) -> Mapping[str, str]:
-    """The flat i18n resource of `language` (e.g. "de": {"nav.lists": "Listen", …})."""
+    """The flat i18n resource of `language` (e.g. "de": {"nav.lists": "Einkaufslisten", …})."""
     path = FRONTEND_SRC / "i18n" / f"{language}.json"
     return MappingProxyType(json.loads(path.read_text(encoding="utf-8")))
 

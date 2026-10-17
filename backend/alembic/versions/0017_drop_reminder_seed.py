@@ -8,8 +8,8 @@ The seeds were decoration only, so the downgrade doesn't need the old ones back:
 column again with its check constraint and gives every list a new random seed in the old range
 (0 to 9999), as creating a list did.
 
-Revision ID: 0016
-Revises: 0015
+Revision ID: 0017
+Revises: 0016
 Create Date: 2026-10-17 00:00:00+00:00
 """
 
@@ -18,8 +18,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0016"
-down_revision: str | None = "0015"
+revision: str = "0017"
+down_revision: str | None = "0016"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -983,6 +983,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lists/{list_id}/due-items/{ingredient_id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide Due Item
+         * @description Hide a due recurring item ("Fällig" box) on this list for everyone who sees it (drafts;
+         *     409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an
+         *     extra item.
+         */
+        post: operations["hide_due_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lists/{list_id}/extra-items": {
         parameters: {
             query?: never;
@@ -1975,6 +1997,29 @@ export interface components {
             value: number;
         };
         /**
+         * DueItem
+         * @description A due recurring item of the viewer's set, offered in a draft's "Fällig" box (LIST-16):
+         *     due since `due_on`, `days_until_due` from today (0 "fällig heute", -3 "fällig seit 3
+         *     Tagen"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,
+         *     only while its unit fits the ingredient's base unit (REF-02), for the amount pop-up.
+         */
+        DueItem: {
+            /** Days Until Due */
+            days_until_due: number;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            ingredient: components["schemas"]["IngredientSummary"];
+            last_amount: components["schemas"]["DisplayAmountOut"] | null;
+            /**
+             * Last Purchased On
+             * Format: date
+             */
+            last_purchased_on: string;
+        };
+        /**
          * ErrorCode
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
@@ -2605,6 +2650,10 @@ export interface components {
          *     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
          *     `<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`
          *     and `finished_at` are set once shopping started and while the list is done (LIST-10).
+         *
+         *     `due_items` fill the "Fällig" box (LIST-16), only on a draft the viewer can edit, else
+         *     empty: the due recurring items of the viewer's set whose ingredient has no line on the list
+         *     (a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.
          */
         ListDetail: {
             /** Can Edit */
@@ -2614,6 +2663,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Due Items */
+            due_items: components["schemas"]["DueItem"][];
             /** Extra Items */
             extra_items: components["schemas"]["ExtraItem"][];
             /** Finished At */
@@ -5228,6 +5279,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListCopyResult"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    hide_due_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
                 };
             };
             /** @description Error envelope; `code` names the error */

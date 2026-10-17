@@ -218,6 +218,7 @@ export function listDetail(overrides: Partial<Schemas['ListDetail']> = {}): Sche
     meals: [listMeal(), PRIVATE_MEAL, DETACHED_MEAL],
     lines: LINES,
     extra_items: EXTRA_ITEMS,
+    due_items: [],
     ...overrides,
   };
 }

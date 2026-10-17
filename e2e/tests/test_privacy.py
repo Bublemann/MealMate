@@ -13,7 +13,7 @@ LOCAL_SCHEMES = frozenset({"data", "blob"})
 
 
 def test_no_request_leaves_the_origin(page: Page, base_url: str, api: Api, admin: Account) -> None:
-    """Every screen so far: join, the four tabs, Me, login and the admin screens."""
+    """Every screen so far: join, the four tabs, login and the admin screens."""
     origin = urlsplit(base_url)
     requested: list[str] = []
 

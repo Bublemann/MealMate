@@ -27,7 +27,7 @@ export function AdminScreen({ title, testId, children }: AdminScreenProps) {
   const { t } = useTranslation();
 
   return (
-    <Screen title={title} testId={testId} back={{ to: '/me', label: t('nav.backToSettings') }}>
+    <Screen title={title} testId={testId} back={{ to: '/me', label: t('nav.me') }}>
       <nav aria-label={t('admin.title')} className="-mt-3">
         <ul className="flex flex-wrap gap-2">
           {SECTIONS.map(({ to, label }) => (

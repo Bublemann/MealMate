@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +36,7 @@ from app.schemas.lists import (
     OpsRequest,
     OpsResponse,
 )
-from app.services import access, aggregation, lists, shopping
+from app.services import access, aggregation, lists, recurring, shopping
 from app.services.principal import Principal
 
 # What an op did: changed the list, took effect without a change, or had been done before.
@@ -226,6 +227,7 @@ async def apply_ops(
     body: OpsRequest,
     *,
     now: datetime,
+    zone: ZoneInfo,
     expected_user_id: str | None = None,
 ) -> OpsResponse:
     """Apply the ops in order, in one transaction, on a list the principal may edit (404 or
@@ -243,7 +245,7 @@ async def apply_ops(
         )
         batch = _Batch(session, shopping_list, principal.user_id, now)
         results: list[OpResult] = []
-        changed = False
+        changed = purchases = False
         for item in body.ops:
             op = item.root
             if op.op_id in processed:
@@ -258,6 +260,9 @@ async def apply_ops(
                 results.append(OpResult(op_id=op.op_id, status="duplicate", code=None))
                 continue
             changed = changed or outcome == "changed"
+            purchases = purchases or (
+                outcome == "changed" and isinstance(op, LineCheckOp | ListFinishOp)
+            )
             processed.add(op.op_id)
             session.add(
                 ProcessedOp(
@@ -265,9 +270,11 @@ async def apply_ops(
                 )
             )
             results.append(OpResult(op_id=op.op_id, status="applied", code=None))
+        if purchases and shopping_list.status == "done":
+            await recurring.record_purchases(session, shopping_list, now=now, zone=zone)
         if changed:
             await lists.touch(session, shopping_list, now)
         detail = await lists.list_detail(
-            session, media, principal.user_id, shopping_list, rights, now=now
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )
         return OpsResponse(results=results, list=detail)

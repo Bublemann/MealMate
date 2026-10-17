@@ -18,3 +18,10 @@ class OwnerKey:
     def __post_init__(self) -> None:
         if (self.couple_id is None) == (self.user_id is None):
             raise ValueError("an owner is exactly one of a couple and a user")
+
+
+def owner_key_of(user_id: str, couple_id: str | None) -> OwnerKey:
+    """The owner for a user who is in the couple `couple_id`, or in none."""
+    if couple_id is None:
+        return OwnerKey(couple_id=None, user_id=user_id)
+    return OwnerKey(couple_id=couple_id, user_id=None)

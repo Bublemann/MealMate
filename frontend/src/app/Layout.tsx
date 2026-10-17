@@ -1,4 +1,4 @@
-import { CircleUserRound, CookingPot, Carrot, ListChecks, type LucideIcon } from 'lucide-react';
+import { CookingPot, Carrot, ListChecks, Settings, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
 import { SyncBanners } from '@/features/sync/SyncBanners';
@@ -20,7 +20,8 @@ const TABS: readonly Tab[] = [
   { to: '/lists', label: 'nav.lists', icon: ListChecks, testId: testIds.tabLists },
   { to: '/meals', label: 'nav.meals', icon: CookingPot, testId: testIds.tabMeals },
   { to: '/ingredients', label: 'nav.ingredients', icon: Carrot, testId: testIds.tabIngredients },
-  { to: '/me', label: 'nav.me', icon: CircleUserRound, testId: testIds.tabMe },
+  // The Settings tab keeps the address and test ID it had as "Me" (D-44).
+  { to: '/me', label: 'nav.me', icon: Settings, testId: testIds.tabMe },
 ];
 
 /**
@@ -34,7 +35,10 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[calc(var(--tab-bar-clearance)+1.5rem)]">
+      {/* The space above the screen stops growing at 24 px (or is the status bar's), so that at
+          the largest text sizes the pinned block still leaves a quarter of the screen for the
+          content as the tab opens (UI-01, D-29). */}
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-[max(min(1.5rem,24px),env(safe-area-inset-top))] pb-[calc(var(--tab-bar-clearance)+1.5rem)]">
         <SyncBanners />
         <TabMemoryProvider>
           <Outlet />
