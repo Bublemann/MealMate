@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useCategories, type Category } from '@/features/reference/api';
 import {
   notDeletedCategories,
@@ -44,7 +45,6 @@ import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
 import { useTabMemory } from '@/lib/tabMemory';
 import { testIds } from '@/testIds';
-import { SettingsPage } from '@/features/me/SettingsPage';
 import {
   useCategoryUsage,
   useCreateCategory,

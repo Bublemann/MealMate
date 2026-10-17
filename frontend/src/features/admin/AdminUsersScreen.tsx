@@ -7,10 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrentUser } from '@/features/auth/context';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatDate } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { SettingsPage } from '@/features/me/SettingsPage';
 import {
   useAdminUsers,
   useCreateResetLink,

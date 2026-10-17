@@ -6,10 +6,10 @@ import { ExternalLink } from '@/components/ExternalLink';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatBytes, formatDateTime, formatNumber } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { SettingsPage } from '@/features/me/SettingsPage';
 import {
   useRequestBackup,
   useSystemInfo,

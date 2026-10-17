@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatDateTime } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { SettingsPage } from '@/features/me/SettingsPage';
 import { useAdminEvents } from './api';
 import { describeEvent } from './events';
 import { LoadError } from '@/components/LoadError';
