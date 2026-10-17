@@ -83,9 +83,7 @@ async def test_cleanup_removes_what_is_no_longer_needed(app: FastAPI, api: Async
                 token(expired_recently, "of-expired-recently", expires=-29 * DAY),
             ]
         )
-        shopping_list = ShoppingList(
-            owner_id=anna.id, reminder_seed=1, created_at=NOW, updated_at=NOW
-        )
+        shopping_list = ShoppingList(owner_id=anna.id, created_at=NOW, updated_at=NOW)
         session.add(shopping_list)
         await session.flush()
         session.add_all(

@@ -33,15 +33,14 @@ class ShoppingList(IdMixin, TimestampMixin, Base):
     `name` null shows the translated default name (LIST-02). `version` is incremented in SQL
     (`version + 1`) on every change of the list or anything in it, together with `updated_at`
     (the local copy's order, SYNC-02). The list feed orders by `created_at`, so a list keeps
-    its place (UI-02). `reminder_seed` picks the reminder (LIST-14). `shopping_started_at` and
-    `finished_at` belong to shopping mode and done lists (M5b, SHOP-05).
+    its place (UI-02). `shopping_started_at` and `finished_at` belong to shopping mode and done
+    lists (M5b, SHOP-05).
     """
 
     __tablename__ = "shopping_lists"
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'shopping', 'done')", name="status"),
         CheckConstraint("version >= 0", name="version"),
-        CheckConstraint("reminder_seed >= 0 AND reminder_seed <= 9999", name="reminder_seed"),
     )
 
     owner_id: Mapped[str] = mapped_column(
@@ -51,7 +50,6 @@ class ShoppingList(IdMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(10), default="draft")
     shared_with_partner: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=0)
-    reminder_seed: Mapped[int] = mapped_column(Integer)
     shopping_started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 

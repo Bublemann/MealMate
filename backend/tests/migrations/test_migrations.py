@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Iterator
@@ -37,7 +38,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0016"
+HEAD = "0017"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -62,7 +63,7 @@ LIST_TABLES = {
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
-# one.
+# one. 0015 and 0016 add tables; 0017 drops a column.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 HEAD_TABLES = TABLES_0015 | {"list_hidden_due_items"}
@@ -150,6 +151,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0015")
     assert tables(database_path) == TABLES_0015
     command.upgrade(config, "0016")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0017")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0016")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0015")
     assert tables(database_path) == TABLES_0015
@@ -1477,11 +1482,108 @@ def test_the_0016_downgrade_refuses_while_there_are_rows(tmp_path: Path) -> None
     ):
         command.downgrade(config, "0015")
 
-    assert current_revision(path) == HEAD
+    assert current_revision(path) == "0016"
     assert dump_without(path) == before
     execute(path, "DELETE FROM list_hidden_due_items")
     command.downgrade(config, "0015")
     assert dump_without(path) == at_0015
+
+
+# --- 0017 -----------------------------------------------------------------------------------
+
+REMINDER_SEED_COLUMN = ("reminder_seed", "INTEGER", 1, None, 0)
+REMINDER_SEED_CONSTRAINT = "ck_shopping_lists_reminder_seed"
+
+
+def shopping_lists_shape(path: Path) -> tuple[set[tuple[object, ...]], set[str]]:
+    """The shopping lists' columns (name, type, NOT NULL, default, primary key) and the names
+    of their constraints. Autogenerate doesn't compare check constraints, so this does."""
+    columns = query(
+        path,
+        "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('shopping_lists')",
+    )
+    [(sql,)] = query(path, "SELECT sql FROM sqlite_master WHERE name = 'shopping_lists'")
+    return set(columns), set(re.findall(r"CONSTRAINT (\w+)", str(sql)))
+
+
+def dump_without_shopping_lists(path: Path) -> list[str]:
+    """The database as SQL, without the shopping lists' table, index and rows."""
+    schema = (
+        'CREATE TABLE "shopping_lists"',
+        "CREATE TABLE shopping_lists",
+        "CREATE INDEX ix_shopping_lists_",
+    )
+    return [
+        line
+        for line in dump_without(path, "shopping_lists", "alembic_version")
+        if not line.startswith(schema)
+    ]
+
+
+def lists_without_seeds(path: Path) -> list[dict[str, object]]:
+    return [
+        {column: value for column, value in row.items() if column != "reminder_seed"}
+        for row in rows_of(path, "shopping_lists")
+    ]
+
+
+def test_0017_drops_the_reminder_seed_and_changes_nothing_else(tmp_path: Path) -> None:
+    """D-43: the seed of the removed reminder goes from shopping lists, with its check
+    constraint. Every list keeps everything else (`version` and `updated_at` included: this is
+    nobody's edit), and no other row, reference, column or constraint changes."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0016")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    columns, constraints = shopping_lists_shape(path)
+    lists = lists_without_seeds(path)
+    rest = dump_without_shopping_lists(path)
+    assert REMINDER_SEED_COLUMN in columns
+    assert REMINDER_SEED_CONSTRAINT in constraints
+
+    command.upgrade(config, "0017")
+
+    assert shopping_lists_shape(path) == (
+        columns - {REMINDER_SEED_COLUMN},
+        constraints - {REMINDER_SEED_CONSTRAINT},
+    )
+    assert rows_of(path, "shopping_lists") == lists
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_shopping_lists(path) == rest
+    assert_clean(path)
+
+
+def test_the_0017_downgrade_gives_every_list_a_new_seed(tmp_path: Path) -> None:
+    """The seeds only picked the reminder, so the downgrade doesn't need the old ones back: it
+    adds the column again with its check constraint, gives every list a random seed in the old
+    range (0 to 9999), and changes nothing else."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0016")
+    shape = shopping_lists_shape(path)
+    command.upgrade(config, "0017")
+    counts, lists = row_counts(path), rows_of(path, "shopping_lists")
+    rest = dump_without_shopping_lists(path)
+
+    command.downgrade(config, "0016")
+
+    assert shopping_lists_shape(path) == shape
+    assert lists_without_seeds(path) == lists
+    seeds = [row["reminder_seed"] for row in rows_of(path, "shopping_lists")]
+    assert len(seeds) == 6
+    assert all(isinstance(seed, int) and 0 <= seed <= 9999 for seed in seeds)
+    assert len(set(seeds)) > 1  # one per list, not the same for all
+    assert row_counts(path) == counts
+    assert dump_without_shopping_lists(path) == rest
+    assert_clean(path)
+    with pytest.raises(sqlite3.IntegrityError, match=REMINDER_SEED_CONSTRAINT):
+        execute(path, "UPDATE shopping_lists SET reminder_seed = 10000")
+
+    command.upgrade(config, "0017")
+    assert rows_of(path, "shopping_lists") == lists
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

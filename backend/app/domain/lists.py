@@ -1,5 +1,5 @@
-"""Input rules and line keys of shopping lists (LIST-01..08, LIST-14, plan §§ 5.6 and 5.7), and
-the pages of the list feed (UI-02).
+"""Input rules and line keys of shopping lists (LIST-01..08, plan §§ 5.6 and 5.7), and the
+pages of the list feed (UI-02).
 
 A line is identified by its key: `i:<ingredient_id>` for an ingredient (all its parts from
 meals and linked extra items merge into it, AGG-02), `x:<extra_item_id>` for a free-text extra
@@ -18,8 +18,6 @@ LIST_NAME_MAX_LENGTH = 60
 EXTRA_TEXT_MAX_LENGTH = 80
 AMOUNT_TEXT_MAX_LENGTH = 30
 LINE_KEY_MAX_LENGTH = 80
-# `reminder_seed` picks the reminder (LIST-14); the frontend shows `reminder.<seed % 10 + 1>`.
-REMINDER_SEED_MAX = 9_999
 # The meal field shows this many "recently used" meals first (MEAL-09).
 RECENT_MEALS_LIMIT = 10
 # At most this many ops per request (plan § 5.8).

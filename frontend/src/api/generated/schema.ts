@@ -2680,9 +2680,8 @@ export interface components {
          * @description A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:
          *     editors change the name, meals, servings, extra items and hidden lines; only the owner
          *     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
-         *     `<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is
-         *     `reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`
-         *     are set once shopping started and while the list is done (LIST-10).
+         *     `<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`
+         *     and `finished_at` are set once shopping started and while the list is done (LIST-10).
          *
          *     `due_items` fill the "Fällig" box (LIST-16), only on a draft the viewer can edit, else
          *     empty: the due recurring items of the viewer's set whose ingredient has no line on the list
@@ -2713,8 +2712,6 @@ export interface components {
             /** Name */
             name: string | null;
             owner: components["schemas"]["UserRef"];
-            /** Reminder Seed */
-            reminder_seed: number;
             /** Shared With Partner */
             shared_with_partner: boolean;
             /** Shopping Started At */
