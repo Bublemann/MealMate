@@ -2,7 +2,7 @@ import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { BEN, errorResponse, mockApi, requestsTo } from '@/test/api';
+import { BEN, errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import {
   CANDLES_EXTRA_ID,
   checkedBy,
@@ -17,9 +17,16 @@ import {
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
-import { CATEGORIES, CATEGORIES_AFTER_DELETE, CHEESE_COUNTER } from '@/test/ingredients';
+import {
+  CATEGORIES,
+  CATEGORIES_AFTER_DELETE,
+  CHEESE_COUNTER,
+  expectInPageOrder,
+} from '@/test/ingredients';
 import { ME } from '@/test/meals';
+import { chooseFromMenu, openMoreMenu } from '@/test/menu';
 import { renderApp } from '@/test/render';
+import { KEYBOARD_HEIGHT, stubVisualViewport, VIEWPORT_HEIGHT } from '@/test/viewport';
 import { SyncEngine } from '@/features/sync/engine';
 import { testIds } from '@/testIds';
 import { POLL_INTERVAL_MS } from './api';
@@ -86,6 +93,9 @@ async function sentOps(fetchMock: ReturnType<typeof mockApi>) {
   return bodies.flatMap((body) => body.ops);
 }
 
+/** A list of Ben's that he shares with me, his partner: I may change it, not delete it. */
+const SHARED_BY_BEN = { owner: BEN, is_owner: false, shared_with_partner: true };
+
 describe('start shopping (LIST-11)', () => {
   it('starts shopping from a draft and shows the shopping view', async () => {
     const { fetchMock, user } = renderList({
@@ -93,19 +103,94 @@ describe('start shopping (LIST-11)', () => {
       [`POST ${BASE}/start-shopping`]: shoppingList(),
     });
 
-    await user.click(await screen.findByTestId(testIds.startShopping));
+    const bar = await screen.findByTestId(testIds.floatingBar);
+    await user.click(within(bar).getByRole('button', { name: 'Start shopping' }));
 
     expect(await screen.findByRole('checkbox', { name: 'Check off Zwiebeln' })).toBeVisible();
     expect(requestsTo(fetchMock, `POST ${BASE}/start-shopping`)).toHaveLength(1);
     expect(screen.queryByTestId(testIds.startShopping)).not.toBeInTheDocument();
+    // The same place now finishes (D-39).
+    expect(
+      within(screen.getByTestId(testIds.floatingBar)).getByTestId(testIds.finishShopping),
+    ).toBeVisible();
     expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent('Saved');
   });
 
-  it('is not offered on someone else’s draft', async () => {
-    renderList({ [`GET ${BASE}`]: listDetail({ is_owner: false, can_edit: false }) });
+  it('shows why starting failed inside the bar, above the button (D-39)', async () => {
+    const { user } = renderList({
+      [`GET ${BASE}`]: listDetail(),
+      [`POST ${BASE}/start-shopping`]: errorResponse(403, 'common.forbidden'),
+    });
 
-    await screen.findByTestId(testIds.listLines);
+    const button = await screen.findByTestId(testIds.startShopping);
+    await user.click(button);
+
+    const bar = screen.getByTestId(testIds.floatingBar);
+    const alert = await within(bar).findByRole('alert');
+    expect(alert).toHaveTextContent("You're not allowed to do that.");
+    expectInPageOrder([alert, button]);
+    expect(button).toBeEnabled();
+  });
+
+  it('is inactive while starting', async () => {
+    const started = heldRoute();
+    const { user } = renderList({
+      [`GET ${BASE}`]: listDetail(),
+      [`POST ${BASE}/start-shopping`]: started.route,
+    });
+
+    const button = await screen.findByTestId(testIds.startShopping);
+    await user.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    await started.answer(shoppingList());
+    expect(await screen.findByTestId(testIds.finishShopping)).toBeEnabled();
+  });
+
+  it.each([
+    { name: 'someone else’s draft', list: listDetail({ is_owner: false, can_edit: false }) },
+    {
+      name: 'someone else’s list being shopped',
+      list: shoppingList({ is_owner: false, can_edit: false }),
+    },
+    { name: 'a done list', list: doneList() },
+  ])('is not shown on $name (D-39)', async ({ list }) => {
+    renderList({ [`GET ${BASE}`]: list });
+
+    await screen.findByTestId(testIds.screenList);
+    await screen.findByRole('heading', { level: 2, name: 'Shopping list' });
+    expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.startShopping)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.finishShopping)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: 'a shared draft', list: listDetail(SHARED_BY_BEN), button: testIds.startShopping },
+    {
+      name: 'a shared list being shopped',
+      list: shoppingList(SHARED_BY_BEN),
+      button: testIds.finishShopping,
+    },
+  ])('is shown to the partner on $name (CPL-03)', async ({ list, button }) => {
+    renderList({ [`GET ${BASE}`]: list });
+
+    const bar = await screen.findByTestId(testIds.floatingBar);
+    expect(within(bar).getByTestId(button)).toBeEnabled();
+  });
+
+  it('hides with the tab bar while the keyboard is open (UI-01)', async () => {
+    const viewport = stubVisualViewport();
+    renderList({ [`GET ${BASE}`]: listDetail() });
+    const bar = await screen.findByTestId(testIds.floatingBar);
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+    expect(bar).toBeVisible();
+
+    viewport.change({ height: VIEWPORT_HEIGHT - KEYBOARD_HEIGHT });
+    expect(bar).not.toBeVisible();
+    expect(nav).not.toBeVisible();
+
+    viewport.change({ height: VIEWPORT_HEIGHT });
+    expect(bar).toBeVisible();
   });
 });
 
@@ -376,7 +461,7 @@ describe('shopping view (SHOP-01)', () => {
     renderList({ [`GET ${BASE}`]: shoppingList({ is_owner: false, can_edit: false }) });
 
     expect(await screen.findByRole('checkbox', { name: 'Check off Zwiebeln' })).toBeDisabled();
-    expect(screen.queryByTestId(testIds.finishShopping)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.editShoppingItem)).not.toBeInTheDocument();
   });
@@ -624,18 +709,24 @@ describe('offline (SYNC-03)', () => {
     expect(await screen.findByRole('checkbox', { name: 'Check off Servietten' })).toBeVisible();
     expect(screen.getByTestId(testIds.offlineBanner)).toBeVisible();
     // Disabled, not hidden: everything that needs a connection.
-    expect(screen.getByTestId(testIds.renameList)).toBeDisabled();
-    expect(screen.getByTestId(testIds.deleteList)).toBeDisabled();
+    let menu = await openMoreMenu(user);
+    expect(within(menu).getByTestId(testIds.renameList)).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByTestId(testIds.deleteList)).toHaveAttribute('aria-disabled', 'true');
+    // Export works from what is on screen (EXP-03).
+    expect(within(menu).getByTestId(testIds.exportList)).not.toHaveAttribute('aria-disabled');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     const meals = screen.getByTestId(testIds.shoppingMeals);
     expect(within(meals).getByTestId(testIds.addMeals)).toBeDisabled();
     expect(
       within(meals).getByRole('button', { name: 'More servings of Pfannkuchen' }),
     ).toBeDisabled();
-    // Export works from what is on screen (EXP-03).
-    expect(screen.getByTestId(testIds.exportList)).toBeEnabled();
     expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(0);
 
-    await user.click(screen.getByTestId(testIds.finishShopping));
+    // Finishing goes through the outbox from the floating bar (D-10, D-39).
+    await user.click(
+      within(screen.getByTestId(testIds.floatingBar)).getByTestId(testIds.finishShopping),
+    );
     const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
     await user.click(within(dialog).getByRole('button', { name: 'Finish' }));
 
@@ -643,8 +734,10 @@ describe('offline (SYNC-03)', () => {
     expect(await screen.findByTestId(testIds.doneLines)).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => expect(status).toHaveTextContent('Offline – 3 changes waiting'));
-    expect(screen.getByTestId(testIds.reopenList)).toBeDisabled();
-    expect(screen.getByTestId(testIds.shopAgain)).toBeDisabled();
+    expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
+    menu = await openMoreMenu(user);
+    expect(within(menu).getByTestId(testIds.reopenList)).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByTestId(testIds.shopAgain)).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('adds a free-text item offline in a category an admin just added (REF-01)', async () => {
@@ -1013,7 +1106,9 @@ describe('done list (SHOP-05/06)', () => {
     expect(screen.queryByTestId(testIds.renameList)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /servings/ })).not.toBeInTheDocument();
-    expect(screen.getByTestId(testIds.deleteList)).toBeVisible();
+    // The note stands on its own; its actions are in the ⋯ menu (D-39).
+    expect(within(screen.getByTestId(testIds.listDone)).queryByRole('button')).toBeNull();
+    expect(screen.queryByTestId(testIds.shopAgain)).not.toBeInTheDocument();
   });
 
   it('heads the lines with the categories’ current names, after a rename (REF-01)', async () => {
@@ -1052,7 +1147,7 @@ describe('done list (SHOP-05/06)', () => {
       'GET /api/lists/list-again': created,
     });
 
-    await user.click(await screen.findByTestId(testIds.shopAgain));
+    await chooseFromMenu(user, testIds.shopAgain);
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-again'));
     expect(await screen.findByTestId(testIds.listLeftOut)).toHaveTextContent(
@@ -1067,25 +1162,21 @@ describe('done list (SHOP-05/06)', () => {
       [`POST ${BASE}/reopen`]: shoppingList({ version: 10 }),
     });
 
-    await user.click(await screen.findByTestId(testIds.reopenList));
+    await chooseFromMenu(user, testIds.reopenList);
 
     expect(await screen.findByRole('checkbox', { name: 'Check off Zwiebeln' })).toBeVisible();
     expect(requestsTo(fetchMock, `POST ${BASE}/reopen`)).toHaveLength(1);
   });
 
-  it('offers only "Shop again" to someone who may not change the list', async () => {
-    renderList({ [`GET ${BASE}`]: doneList({ is_owner: false, can_edit: false }) });
-
-    expect(await screen.findByTestId(testIds.shopAgain)).toBeVisible();
-    expect(screen.queryByTestId(testIds.reopenList)).not.toBeInTheDocument();
-  });
-
   it('exports unchecked lines first and marks what was bought (EXP-02)', async () => {
     const share = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'share', { value: share, configurable: true });
-    renderList({ [`GET ${BASE}`]: doneList() });
+    const { user } = renderList({ [`GET ${BASE}`]: doneList() });
+    await screen.findByTestId(testIds.doneLines);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Share as text' }));
+    fireEvent.click(
+      within(await openMoreMenu(user)).getByRole('menuitem', { name: 'Share as text' }),
+    );
 
     const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
     expect(text).toContain(

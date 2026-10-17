@@ -29,6 +29,8 @@ interface DetailScreen {
   to: string;
   /** The screen the back link opens. */
   parent: TestId;
+  /** It has actions, so its strip ends with the ⋯ button (D-39). */
+  actions?: true;
 }
 
 const SCREENS: DetailScreen[] = [
@@ -40,6 +42,7 @@ const SCREENS: DetailScreen[] = [
     back: 'All lists',
     to: '/lists',
     parent: testIds.screenLists,
+    actions: true,
   },
   {
     name: 'a meal',
@@ -49,6 +52,7 @@ const SCREENS: DetailScreen[] = [
     back: 'All meals',
     to: '/meals',
     parent: testIds.screenMeals,
+    actions: true,
   },
   {
     name: 'the meal form, editing',
@@ -89,6 +93,7 @@ const SCREENS: DetailScreen[] = [
     back: 'All ingredients',
     to: '/ingredients',
     parent: testIds.screenIngredients,
+    actions: true,
   },
   {
     name: 'an admin page (ADM-01)',
@@ -138,7 +143,26 @@ describe('DetailStrip', () => {
     },
   );
 
-  it.each(SCREENS)(
+  it.each(SCREENS.filter(({ actions }) => actions))(
+    'ends with the ⋯ button after the back link on $name (D-39)',
+    async ({ path, routes, user: signedIn, title }) => {
+      mockApi(routes);
+      const { user } = renderApp(path, signedIn ? { user: signedIn } : {});
+      await screen.findByRole('heading', { level: 1, name: title });
+      const strip = screen.getByTestId(testIds.detailStrip);
+      const more = await within(strip).findByRole('button', { name: 'More actions' });
+
+      expect(more).toHaveAttribute('data-testid', testIds.moreActions);
+      expect(more).toBeEnabled();
+      await user.tab();
+      expect(within(strip).getByTestId(testIds.backLink)).toHaveFocus();
+      await user.tab();
+      expect(more).toHaveFocus();
+    },
+  );
+
+  // No ⋯ on screens without actions: nothing that does nothing.
+  it.each(SCREENS.filter(({ actions }) => !actions))(
     'has nothing visible or focusable in its right-hand slot on $name',
     async ({ path, routes, user: signedIn, title }) => {
       mockApi(routes);

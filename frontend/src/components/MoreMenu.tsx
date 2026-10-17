@@ -15,20 +15,6 @@ import { testIds, type TestId } from '@/testIds';
 /** Runs an item's action once the menu has closed and the focus is back on ⋯. */
 const AfterCloseContext = createContext<(action: () => void) => void>((action) => action());
 
-/**
- * The ⋯ button of a screen's menu, for the dialogs its items open: `focusMenu`, as their
- * `onCloseAutoFocus`, puts the focus back on ⋯ when they close (Radix would look for a trigger of
- * their own, and the dialogs have none).
- */
-export function useMoreMenuFocus() {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const focusMenu = (event: Event) => {
-    event.preventDefault();
-    trigger.current?.focus();
-  };
-  return { trigger, focusMenu };
-}
-
 interface MoreMenuProps {
   /** From `useMoreMenuFocus`, which gives the dialogs the way back to ⋯. */
   trigger: RefObject<HTMLButtonElement | null>;

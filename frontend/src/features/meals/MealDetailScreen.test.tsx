@@ -182,7 +182,7 @@ describe('MealDetailScreen', () => {
     expect(requestsTo(fetchMock, 'DELETE /api/meals/meal-pancakes')).toHaveLength(1);
   });
 
-  it("shows the owner and only \"Copy\" on someone else's meal (VIS-04, MEAL-08)", async () => {
+  it('shows the owner and only "Copy" on someone else\'s meal (VIS-04, MEAL-08)', async () => {
     const { user } = renderDetail(meal({ owner: BEN, is_owner: false }));
 
     expect(await screen.findByText('by Ben')).toBeVisible();

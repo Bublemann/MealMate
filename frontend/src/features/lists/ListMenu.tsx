@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
-import { MoreMenu, MoreMenuItem, MoreMenuSwitch, useMoreMenuFocus } from '@/components/MoreMenu';
+import { MoreMenu, MoreMenuItem, MoreMenuSwitch } from '@/components/MoreMenu';
+import { useMoreMenuFocus } from '@/components/useMoreMenuFocus';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -112,7 +113,11 @@ export function ListMenu({ list, categories, onNotice }: ListMenuProps) {
     </MoreMenuItem>
   );
   const exportItem = (
-    <MoreMenuItem testId={testIds.exportList} icon={<Share aria-hidden="true" />} onSelect={onExport}>
+    <MoreMenuItem
+      testId={testIds.exportList}
+      icon={<Share aria-hidden="true" />}
+      onSelect={onExport}
+    >
       {canShare() ? t('lists.detail.export') : t('lists.detail.exportCopy')}
     </MoreMenuItem>
   );
@@ -203,11 +208,7 @@ export function ListMenu({ list, categories, onNotice }: ListMenuProps) {
         )}
       </MoreMenu>
       {renaming && (
-        <RenameDialog
-          list={list}
-          onClose={() => setRenaming(false)}
-          onCloseAutoFocus={focusMenu}
-        />
+        <RenameDialog list={list} onClose={() => setRenaming(false)} onCloseAutoFocus={focusMenu} />
       )}
       {list.is_owner && (
         <ConfirmDialog

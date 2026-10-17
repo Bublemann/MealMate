@@ -975,7 +975,9 @@ describe('ListScreen', () => {
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent("You're not allowed to do that.");
       const heading = screen.getByRole('heading', { level: 1 });
-      expect(heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(
+        heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
     describe('share switch (CPL-02)', () => {
@@ -1150,9 +1152,9 @@ describe('ListScreen', () => {
 
         expect(share).toHaveBeenCalledTimes(1);
         const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
-        expect(
-          text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen\n3× Private meal'),
-        ).toBe(true);
+        expect(text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen\n3× Private meal')).toBe(
+          true,
+        );
         expect(text).toContain('Dairy & eggs\n- Milch: 1.5 l');
         expect(text).not.toContain('Eier');
         // It ends with the lines (D-43).

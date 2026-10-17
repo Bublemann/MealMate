@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { MoreMenu, MoreMenuItem, useMoreMenuFocus } from '@/components/MoreMenu';
+import { MoreMenu, MoreMenuItem } from '@/components/MoreMenu';
+import { useMoreMenuFocus } from '@/components/useMoreMenuFocus';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
