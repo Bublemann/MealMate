@@ -166,12 +166,12 @@ async def update_item(
     (404 for any other)."""
     today = recurring.local_date(now, zone)
     last_purchased_on = body.last_purchased_on
-    if last_purchased_on is not None and (
-        problems := _last_purchase_problems(last_purchased_on, today=today)
-    ):
-        raise validation_error(problems)
     async with session.begin():
         item = await access.require_recurring_item(session, principal, item_id)
+        if last_purchased_on is not None and (
+            problems := _last_purchase_problems(last_purchased_on, today=today)
+        ):
+            raise validation_error(problems)
         before = (item.interval_days, item.interval_manual, item.last_purchased_on)
         _set_interval(item, body)
         if last_purchased_on is not None:

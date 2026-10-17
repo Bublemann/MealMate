@@ -414,6 +414,7 @@ async def test_another_users_item_is_not_found(
     assert await recurring(api, carl) == {"items": [], "due_count": 0}
     for response in (
         await api.patch(url, json={"interval_weeks": 1}, headers=carl.headers),
+        await api.patch(url, json={"last_purchased_on": "2026-09-28"}, headers=carl.headers),
         await api.delete(url, headers=carl.headers),
         await api.patch(
             "/api/recurring-items/0190c0de-0000-7000-8000-000000000000",
