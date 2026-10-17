@@ -1,19 +1,25 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
-import { ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import type { components } from '@/api/generated/schema';
+import { found, ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
 import { recurringItem, recurringList, stubResizeObserver } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
+
+type Schemas = components['schemas'];
 
 const KLOPAPIER = summary('Klopapier', 'other', { base_unit: 'piece' });
 const KLOPAPIER_HALTER = summary('Klopapierhalter', 'other', { base_unit: 'piece' });
 const ZAHNPASTA = summary('Zahnpasta', 'other', { base_unit: 'piece' });
 const ZAHNPASTA_DM = summary('Zahnpasta', 'other', { id: 'ing-zahnpasta-dm', brand: 'dm' });
 
-/** The ingredient search: what each typed text finds. */
-function search(results: Record<string, unknown[]>) {
-  return (request: Request) => results[new URL(request.url).searchParams.get('q') ?? ''] ?? [];
+/** The ingredient search: what each typed text finds, an equal name exact whatever its brand. */
+function search(results: Record<string, Schemas['IngredientSummary'][]>) {
+  return (request: Request) => {
+    const q = new URL(request.url).searchParams.get('q') ?? '';
+    return (results[q] ?? []).map((result) => found(result, result.name.toLowerCase() === q));
+  };
 }
 
 function renderPage(routes: Record<string, unknown> = {}) {
@@ -35,6 +41,13 @@ function field() {
   return screen.getByTestId(testIds.recurringInput);
 }
 
+/** The field once it takes input: it is inactive until the set has loaded. */
+async function readyField() {
+  const input = await screen.findByRole('searchbox', { name: 'Search ingredient' });
+  await waitFor(() => expect(input).toBeEnabled());
+  return input;
+}
+
 async function postBodies(fetchMock: ReturnType<typeof mockApi>, route: string) {
   return Promise.all(requestsTo(fetchMock, route).map((request) => request.json()));
 }
@@ -53,7 +66,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
   it('offers “as a new ingredient” right under the field, then the ingredients, no free text', async () => {
     const { user } = renderPage();
 
-    await user.type(await screen.findByRole('searchbox', { name: 'Search ingredient' }), 'klo');
+    await user.type(await readyField(), 'klo');
 
     const results = await screen.findByRole('list', { name: 'Matching ingredients' });
     await waitFor(() =>
@@ -83,7 +96,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
       },
     });
 
-    await user.type(await screen.findByRole('searchbox', { name: 'Search ingredient' }), 'klo');
+    await user.type(await readyField(), 'klo');
     await user.click(await screen.findByRole('button', { name: /^Klopapier ?Other/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Klopapier' });
     expect(within(dialog).getByRole('spinbutton', { name: 'Every weeks' })).toHaveValue(4);
@@ -107,7 +120,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
       [`PATCH /api/recurring-items/${created.id}`]: created,
     });
 
-    await user.type(await screen.findByRole('searchbox', { name: 'Search ingredient' }), 'klo');
+    await user.type(await readyField(), 'klo');
     await user.click(await screen.findByRole('button', { name: /^Klopapier ?Other/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Klopapier' });
     const weeks = within(dialog).getByRole('spinbutton', { name: 'Every weeks' });
@@ -135,10 +148,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
   it('opens the pop-up with ＋ or Enter when one ingredient has exactly that name', async () => {
     const { user } = renderPage();
 
-    await user.type(
-      await screen.findByRole('searchbox', { name: 'Search ingredient' }),
-      'klopapier',
-    );
+    await user.type(await readyField(), 'klopapier');
     await user.click(screen.getByRole('button', { name: 'Add “klopapier”' }));
     expect(await screen.findByRole('dialog', { name: 'Klopapier' })).toBeVisible();
     await user.keyboard('{Escape}');
@@ -152,24 +162,18 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
     const search = heldRoute();
     const { user } = renderPage({ 'GET /api/ingredients': search.route });
 
-    await user.type(
-      await screen.findByRole('searchbox', { name: 'Search ingredient' }),
-      'klopapier',
-    );
+    await user.type(await readyField(), 'klopapier');
     await user.click(screen.getByRole('button', { name: 'Add “klopapier”' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-    await search.answer([KLOPAPIER, KLOPAPIER_HALTER]);
+    await search.answer([found(KLOPAPIER, true), found(KLOPAPIER_HALTER)]);
     expect(await screen.findByRole('dialog', { name: 'Klopapier' })).toBeVisible();
   });
 
   it('leaves the choice to the results when several brands have that name', async () => {
     const { user } = renderPage();
 
-    await user.type(
-      await screen.findByRole('searchbox', { name: 'Search ingredient' }),
-      'zahnpasta',
-    );
+    await user.type(await readyField(), 'zahnpasta');
     await screen.findByRole('button', { name: /^Zahnpasta \(dm\)/ });
     await user.click(screen.getByRole('button', { name: 'Add “zahnpasta”' }));
 
@@ -182,7 +186,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
       'GET /api/recurring-items': recurringList([recurringItem({ interval_weeks: 3 })]),
     });
 
-    await user.type(await screen.findByRole('searchbox', { name: 'Search ingredient' }), 'klo');
+    await user.type(await readyField(), 'klo');
     const results = await screen.findByRole('list', { name: 'Matching ingredients' });
     await user.click(await within(results).findByRole('button', { name: /^Klopapier ?Other/ }));
 
@@ -198,10 +202,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
       'POST /api/ingredients': Response.json(created, { status: 201 }),
     });
 
-    await user.type(
-      await screen.findByRole('searchbox', { name: 'Search ingredient' }),
-      'Duschgel',
-    );
+    await user.type(await readyField(), 'Duschgel');
     await user.click(await screen.findByTestId(testIds.recurringNewIngredient));
     const form = await screen.findByRole('dialog', { name: 'New ingredient' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Duschgel');
@@ -220,10 +221,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
   it('opens “New ingredient” with ＋ when no ingredient has that name', async () => {
     const { user } = renderPage();
 
-    await user.type(
-      await screen.findByRole('searchbox', { name: 'Search ingredient' }),
-      'Duschgel',
-    );
+    await user.type(await readyField(), 'Duschgel');
     await user.click(screen.getByRole('button', { name: 'Add “Duschgel”' }));
 
     const form = await screen.findByRole('dialog', { name: 'New ingredient' });

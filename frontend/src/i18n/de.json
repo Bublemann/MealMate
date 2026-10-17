@@ -125,8 +125,6 @@
   "recurring.due.since_other": "fällig seit {{count}} Tagen",
   "recurring.field.label": "Zutat suchen",
   "recurring.field.placeholder": "Zutat suchen",
-  "recurring.field.add": "Hinzufügen",
-  "recurring.field.addNamed": "„{{name}}“ hinzufügen",
   "recurring.field.newIngredient": "„{{name}}“ als neue Zutat",
   "recurring.field.results": "Passende Zutaten",
   "recurring.dialog.every": "Alle",

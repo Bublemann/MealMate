@@ -231,9 +231,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   for an ingredient that is recurring already. Editing sends only what changed; a new interval
   turns "Automatisch anpassen" off (typed back, the switch is as it was, unless switched by hand),
   and the switch is then always sent. A new item adapts unless switched off, which takes a second
-  request (the create has no such field). The page's `RecurringIngredientField` looks like the
-  item field (D-41) but offers only ingredients and "„X“ als neue Zutat" (`IngredientFormDialog`,
-  then the pop-up). `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
+  request (the create has no such field). The page's `RecurringIngredientField` is the item
+  field's `AddField` with `usePlus` (D-41), but offers only ingredients and "„X“ als neue Zutat"
+  (`IngredientFormDialog`, then the pop-up); ＋ goes by the server's `exact` marks. `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
   02.10. · fällig in 5 Tagen") without counting days. On a draft the viewer can edit, the item
   field shows the list detail's `due_items` in the "Fällig" box below it (`DueBox`, LIST-16):
   name, "fällig seit 3 Tagen · zuletzt 02.10.", ＋ ("Klopapier hinzufügen") opens the item
@@ -302,7 +302,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Add fields** (LIST-03, LIST-06, D-41): a list's Gerichte and Artikel sections each start with
   `AddField` (`features/lists/AddField.tsx`): a search input with a screen-reader label and a
   placeholder, a ＋, and below them a panel with the create options for the typed text first,
-  then the results. `MealField` and `ItemField` use it. Results answered for an earlier text are
+  then the results. `MealField` and `ItemField` use it, and so does the ingredient field on
+  "Regelmäßige Artikel". Results answered for an earlier text are
   never shown (the meal search keeps no previous data, the ingredient search's placeholder data is
   ignored), so a late answer only grows below the options. ＋ and Enter go through `usePlus`: it
   waits for the results of the text in the field, then takes the one result the server marked

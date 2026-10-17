@@ -125,8 +125,6 @@
   "recurring.due.since_other": "due for {{count}} days",
   "recurring.field.label": "Search ingredient",
   "recurring.field.placeholder": "Search ingredient",
-  "recurring.field.add": "Add",
-  "recurring.field.addNamed": "Add “{{name}}”",
   "recurring.field.newIngredient": "“{{name}}” as a new ingredient",
   "recurring.field.results": "Matching ingredients",
   "recurring.dialog.every": "Every",
