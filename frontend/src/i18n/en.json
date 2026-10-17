@@ -474,6 +474,8 @@
   "ingredients.field.weightPerPiece": "Weight per piece (g)",
   "ingredients.field.brand": "Brand",
   "ingredients.field.brandPlaceholder": "optional, e.g. REWE",
+  "ingredients.field.packSize": "Package",
+  "ingredients.field.packSizePlaceholder": "optional, e.g. 500 g",
   "ingredients.field.barcode": "Barcode",
   "ingredients.field.barcodePlaceholder": "8, 12 or 13 digits",
   "ingredients.field.barcodeOffHint": "With the barcode changed, this ingredient no longer gets updates from Open Food Facts.",

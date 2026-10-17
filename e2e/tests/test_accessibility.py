@@ -118,7 +118,7 @@ def test_no_serious_violations(
         path = f"/join#{code_from_link(link)}"
     if path == "/ingredients/:id":
         api = request.getfixturevalue("api")
-        # From Open Food Facts, so the page also shows the pack size and the attribution (D-38).
+        # From Open Food Facts, so the page also shows the pack size and the attribution (D-47).
         ingredient = api.create_ingredient(
             account,
             unique("A11y"),
