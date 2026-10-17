@@ -519,6 +519,8 @@ order.
 | `updatePrompt`           | `update-prompt`            | "New version available" prompt              |
 | `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen         |
 | `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip       |
+| `moreActions`            | `more-actions`             | ⋯ "More actions" in a detail screen's strip |
+| `moreMenu`               | `more-menu`                | The ⋯ pull-down menu (while open)           |
 | `screenLogin`            | `screen-login`             | Login screen                                |
 | `loginReason`            | `login-reason`             | Why the user was logged out (on Login)      |
 | `screenJoin`             | `screen-join`              | Registration screen (invite link)           |
@@ -630,6 +632,7 @@ order.
 | `listLine`               | `list-line`                | One line (opens its sources)                |
 | `lineSources`            | `line-sources`             | Sources dialog of a line                    |
 | `hiddenLines`            | `hidden-lines`             | Collapsed "Removed (N)" section             |
+| `floatingBar`            | `floating-bar`             | Bar above the tab bar: start/finish         |
 | `startShopping`          | `start-shopping`           | "Start shopping" on a draft                 |
 | `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")     |
 | `offlineBanner`          | `offline-banner`           | Offline banner on a list view               |

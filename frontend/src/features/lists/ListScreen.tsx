@@ -3,24 +3,27 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { FloatingBar } from '@/components/FloatingBar';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useCategories, type Category } from '@/features/reference/api';
 import type { PendingList } from '@/features/sync/applyPending';
 import { useConnected, usePendingList, useSyncEngine } from '@/features/sync/context';
 import { ListOfflineBanner } from '@/features/sync/ListOfflineBanner';
 import { SyncIndicator } from '@/features/sync/SyncIndicator';
 import { useLanguage } from '@/i18n';
+import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
 import { isUnreachable, useList, useStartShopping } from './api';
 import { DoneView } from './DoneView';
 import { ExtraItemInput } from './ExtraItemInput';
 import { listDisplayName } from './format';
-import { ListActions } from './ListActions';
 import { ListLines } from './ListLines';
 import { ListMeals } from './ListMeals';
+import { ListMenu, ListNotices, type ListNotice } from './ListMenu';
 import { MealPicker } from './MealPicker';
 import { ShoppingView } from './ShoppingView';
 
@@ -69,6 +72,7 @@ function ListView({ id }: { id: string }) {
   const engine = useSyncEngine();
   // Read once: the state is removed from the history entry, so a reload doesn't repeat it.
   const [initial] = useState(() => viewState(location.state));
+  const [notice, setNotice] = useState<ListNotice>(null);
   const title = list.data ? listDisplayName(list.data, t, language) : t('nav.lists');
   // With the list on screen, not reaching the server is what the sync indicator and the offline
   // banner say; anything else (e.g. the list was deleted) is shown here. Without the list (not in
@@ -87,7 +91,14 @@ function ListView({ id }: { id: string }) {
       title={title}
       testId={testIds.screenList}
       back={{ to: '/lists', label: t('lists.detail.back') }}
+      action={
+        shown &&
+        categories.data && (
+          <ListMenu list={shown} categories={categories.data} onNotice={setNotice} />
+        )
+      }
     >
+      <ListNotices notice={notice} />
       {initial.leftOut !== undefined && initial.leftOut > 0 && (
         <Alert data-testid={testIds.listLeftOut}>
           <AlertDescription>
@@ -150,20 +161,10 @@ function ListContent({ list, categories, openPicker, onRefresh }: ListContentPro
       {/* SYNC-07, SHOP-03; "Refresh" while shopping, when the partner's changes matter most. */}
       <SyncIndicator onRefresh={list.status === 'shopping' ? onRefresh : undefined} />
       <ListOfflineBanner shopping={list.status === 'shopping' && list.can_edit} />
-      <ListActions list={list} categories={categories} />
-      {draft && list.can_edit && (
-        <div className="flex flex-col gap-3">
-          <Button
-            data-testid={testIds.startShopping}
-            disabled={start.isPending || !connected}
-            onClick={() => start.mutate()}
-            className="self-start"
-          >
-            <ShoppingCart aria-hidden="true" />
-            {t('lists.shop.start')}
-          </Button>
-          <ErrorAlert error={start.error} />
-        </div>
+      {!list.can_edit && (
+        <Card data-testid={testIds.listReadOnly} className="px-5 py-4">
+          <p>{t('lists.detail.readOnly', { name: userLabel(t, list.owner) })}</p>
+        </Card>
       )}
       {draft && (
         <>
@@ -177,6 +178,21 @@ function ListContent({ list, categories, openPicker, onRefresh }: ListContentPro
       )}
       {list.status === 'done' && <DoneView list={list} categories={categories} />}
       {editable && <MealPicker listId={list.id} open={pickerOpen} onOpenChange={setPickerOpen} />}
+      {draft && list.can_edit && (
+        // Inactive offline and while starting; its error shows here, where it was tapped (D-39).
+        <FloatingBar>
+          <ErrorAlert error={start.error} />
+          <Button
+            data-testid={testIds.startShopping}
+            disabled={start.isPending || !connected}
+            onClick={() => start.mutate()}
+            className="w-full"
+          >
+            <ShoppingCart aria-hidden="true" />
+            {t('lists.shop.start')}
+          </Button>
+        </FloatingBar>
+      )}
     </>
   );
 }

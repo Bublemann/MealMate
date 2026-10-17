@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
 import { BEN, CARL, errorResponse, mockApi, requestsTo } from '@/test/api';
 import { bareMeal, EGGS, FLOUR, meal, MEAL_ROUTES } from '@/test/meals';
+import { chooseFromMenu, menuItemNames, openMoreMenu } from '@/test/menu';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -24,6 +25,10 @@ function nutrientRow(name: string): HTMLElement {
 }
 
 describe('MealDetailScreen', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('shows the photo, facts, ingredients and instructions as plain text (MEAL-06)', async () => {
     const withMarkup = meal({ instructions: '<b>Nicht fett</b>\nZweite Zeile' });
     renderDetail(withMarkup);
@@ -140,16 +145,36 @@ describe('MealDetailScreen', () => {
     expect(screen.getByTestId(testIds.mealEstimate)).toHaveTextContent('Schätzung');
   });
 
-  it('offers Edit and Delete to the owner and deletes after asking', async () => {
+  it('offers the owner "Edit", "Copy" and, red and last, "Delete" in the ⋯ menu (MEAL-07, D-39)', async () => {
+    const { user } = renderDetail();
+    await screen.findByTestId(testIds.mealIngredients);
+
+    const menu = await openMoreMenu(user);
+
+    expect(menuItemNames(menu)).toEqual(['Edit', 'Copy', 'Delete']);
+    const remove = within(menu).getByTestId(testIds.deleteMeal);
+    expect(menu.lastElementChild).toBe(remove);
+    expect(remove.previousElementSibling).toHaveAttribute('role', 'separator');
+    // No buttons of their own on the screen.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(screen.queryByTestId(testIds.copyMeal)).not.toBeInTheDocument();
+  });
+
+  it('opens the meal form from "Edit"', async () => {
+    const { user, router } = renderDetail();
+
+    await chooseFromMenu(user, testIds.editMeal);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/meals/meal-pancakes/edit'));
+  });
+
+  it('deletes after asking, and goes back to Meals', async () => {
     const { fetchMock, user, router } = renderDetail(meal(), {
       'DELETE /api/meals/meal-pancakes': null,
     });
 
-    expect(await screen.findByTestId(testIds.editMeal)).toHaveAttribute(
-      'href',
-      '/meals/meal-pancakes/edit',
-    );
-    await user.click(screen.getByTestId(testIds.deleteMeal));
+    await chooseFromMenu(user, testIds.deleteMeal);
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete Pfannkuchen?' });
     await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
 
@@ -157,16 +182,14 @@ describe('MealDetailScreen', () => {
     expect(requestsTo(fetchMock, 'DELETE /api/meals/meal-pancakes')).toHaveLength(1);
   });
 
-  it("shows the owner and no Edit or Delete on someone else's meal (VIS-04)", async () => {
-    renderDetail(meal({ owner: BEN, is_owner: false }));
+  it("shows the owner and only \"Copy\" on someone else's meal (VIS-04, MEAL-08)", async () => {
+    const { user } = renderDetail(meal({ owner: BEN, is_owner: false }));
 
     expect(await screen.findByText('by Ben')).toBeVisible();
-    expect(screen.getByTestId(testIds.copyMeal)).toBeVisible();
-    expect(screen.queryByTestId(testIds.editMeal)).not.toBeInTheDocument();
-    expect(screen.queryByTestId(testIds.deleteMeal)).not.toBeInTheDocument();
+    expect(menuItemNames(await openMoreMenu(user))).toEqual(['Copy']);
   });
 
-  it('copies the meal with one tap and opens the copy (MEAL-08)', async () => {
+  it('copies the meal and opens the copy (MEAL-08)', async () => {
     const copy = meal({
       id: 'meal-copy',
       based_on: { meal_id: 'meal-pancakes', name: 'Pfannkuchen', owner: BEN },
@@ -175,7 +198,7 @@ describe('MealDetailScreen', () => {
       'POST /api/meals/meal-pancakes/copy': Response.json(copy, { status: 201 }),
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Copy to my meals' }));
+    await chooseFromMenu(user, testIds.copyMeal);
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/meals/meal-copy'));
     expect(await screen.findByTestId(testIds.mealBasedOn)).toHaveTextContent(
@@ -184,6 +207,35 @@ describe('MealDetailScreen', () => {
     expect(requestsTo(fetchMock, 'POST /api/meals/meal-pancakes/copy')).toHaveLength(1);
     // The copy is loaded from the cache the copy request filled.
     expect(requestsTo(fetchMock, 'GET /api/meals/meal-copy')).toHaveLength(0);
+  });
+
+  it('shows why a copy failed in an alert below the title', async () => {
+    const { user } = renderDetail(meal({ owner: BEN, is_owner: false }), {
+      'POST /api/meals/meal-pancakes/copy': errorResponse(404, 'common.not_found'),
+    });
+
+    await chooseFromMenu(user, testIds.copyMeal);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("This doesn't exist (any more).");
+    const heading = screen.getByRole('heading', { level: 1, name: 'Pfannkuchen' });
+    expect(heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('disables its items offline, while ⋯ still opens (SYNC-03)', async () => {
+    const { fetchMock, user } = renderDetail();
+    await screen.findByTestId(testIds.mealIngredients);
+    fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+
+    const menu = await openMoreMenu(user);
+
+    for (const id of [testIds.editMeal, testIds.copyMeal, testIds.deleteMeal]) {
+      expect(within(menu).getByTestId(id)).toHaveAttribute('aria-disabled', 'true');
+    }
   });
 
   it('links "based on" to the original and renders its names as text', async () => {

@@ -1,17 +1,20 @@
 import { Copy, ExternalLink as ExternalLinkIcon, Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
 import { LoadError } from '@/components/LoadError';
+import { MoreMenu, MoreMenuItem, useMoreMenuFocus } from '@/components/MoreMenu';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ingredientLabel } from '@/features/ingredients/label';
 import { cuisineName, unitLabel } from '@/features/reference/labels';
+import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { formatNumber } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
@@ -32,21 +35,29 @@ function photoError(state: unknown): string | undefined {
 
 /**
  * One meal (MEAL-06): photo, owner and origin, facts, source, nutrition, ingredients and
- * instructions; Edit and Delete for the owner (MEAL-07), Copy for everyone (MEAL-08).
+ * instructions; its actions are in the ⋯ menu (`MealMenu`), their errors below the title.
  */
 export function MealDetailScreen() {
-  const { t } = useTranslation();
   const { id = '' } = useParams();
+  // A fresh screen per meal, so an error of one meal's menu doesn't stay on the next.
+  return <MealDetail key={id} id={id} />;
+}
+
+function MealDetail({ id }: { id: string }) {
+  const { t } = useTranslation();
   const location = useLocation();
   const meal = useMeal(id);
   const failedPhoto = photoError(location.state);
+  const [actionError, setActionError] = useState<unknown>(null);
 
   return (
     <Screen
       title={meal.data?.name ?? t('nav.meals')}
       testId={testIds.screenMeal}
       back={{ to: '/meals', label: t('meals.detail.back') }}
+      action={meal.data && <MealMenu meal={meal.data} onError={setActionError} />}
     >
+      <ErrorAlert error={actionError} />
       {failedPhoto && (
         <Alert variant="destructive">
           <AlertDescription>
@@ -86,7 +97,6 @@ function MealContent({ meal }: { meal: Meal }) {
         </ExternalLink>
       )}
       <Facts meal={meal} />
-      <Actions meal={meal} />
       <MealNutritionCard meal={meal} />
       <IngredientsCard meal={meal} />
       {meal.instructions && (
@@ -178,68 +188,89 @@ function Facts({ meal }: { meal: Meal }) {
   );
 }
 
-function Actions({ meal }: { meal: Meal }) {
+interface MealMenuProps {
+  meal: Meal;
+  /** Shows an error of an action below the title; `null` clears it when the next one starts. */
+  onError: (error: unknown) => void;
+}
+
+/**
+ * The meal's ⋯ menu (D-39): "Edit", "Copy" and, red and last, "Delete" for the owner (MEAL-07);
+ * only "Copy" on someone else's meal (MEAL-08). Each needs a connection (SYNC-03).
+ */
+function MealMenu({ meal, onError }: MealMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const offline = !useConnected();
   const copy = useCopyMeal(meal.id);
   const remove = useDeleteMeal(meal.id);
-  const busy = copy.isPending || remove.isPending;
+  const [deleting, setDeleting] = useState(false);
+  const { trigger, focusMenu } = useMoreMenuFocus();
+  const busy = copy.isPending || remove.isPending || offline;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={meal.is_owner ? 'outline' : 'default'}
-          data-testid={testIds.copyMeal}
+    <>
+      <MoreMenu
+        trigger={trigger}
+        danger={
+          meal.is_owner && (
+            <MoreMenuItem
+              testId={testIds.deleteMeal}
+              icon={<Trash2 aria-hidden="true" />}
+              destructive
+              dialog
+              disabled={busy}
+              onSelect={() => setDeleting(true)}
+            >
+              {t('meals.detail.delete')}
+            </MoreMenuItem>
+          )
+        }
+      >
+        {meal.is_owner && (
+          <MoreMenuItem
+            testId={testIds.editMeal}
+            icon={<Pencil aria-hidden="true" />}
+            disabled={offline}
+            onSelect={() => void navigate(`/meals/${meal.id}/edit`)}
+          >
+            {t('meals.detail.edit')}
+          </MoreMenuItem>
+        )}
+        <MoreMenuItem
+          testId={testIds.copyMeal}
+          icon={<Copy aria-hidden="true" />}
           disabled={busy}
-          onClick={() =>
+          onSelect={() => {
+            onError(null);
             copy.mutate(undefined, {
               onSuccess: (created) => void navigate(`/meals/${created.id}`),
-            })
-          }
+              onError,
+            });
+          }}
         >
-          <Copy aria-hidden="true" />
           {t('meals.detail.copy')}
-        </Button>
-        {meal.is_owner && (
-          <>
-            <Button variant="outline" asChild>
-              <Link
-                to={`/meals/${meal.id}/edit`}
-                data-testid={testIds.editMeal}
-                aria-label={t('meals.detail.editLabel', { name: meal.name })}
-              >
-                <Pencil aria-hidden="true" />
-                {t('meals.detail.edit')}
-              </Link>
-            </Button>
-            <ConfirmDialog
-              trigger={
-                <Button
-                  variant="outline"
-                  data-testid={testIds.deleteMeal}
-                  aria-label={t('meals.detail.deleteLabel', { name: meal.name })}
-                  disabled={busy}
-                >
-                  <Trash2 aria-hidden="true" />
-                  {t('meals.detail.delete')}
-                </Button>
-              }
-              title={t('meals.detail.deleteTitle', { name: meal.name })}
-              description={t('meals.detail.deleteText')}
-              confirmLabel={t('meals.detail.deleteConfirm')}
-              destructive
-              onConfirm={() =>
-                remove.mutate(undefined, {
-                  onSuccess: () => void navigate('/meals', { replace: true }),
-                })
-              }
-            />
-          </>
-        )}
-      </div>
-      <ErrorAlert error={copy.error ?? remove.error} />
-    </div>
+        </MoreMenuItem>
+      </MoreMenu>
+      {meal.is_owner && (
+        <ConfirmDialog
+          open={deleting}
+          onOpenChange={setDeleting}
+          onCloseAutoFocus={focusMenu}
+          title={t('meals.detail.deleteTitle', { name: meal.name })}
+          description={t('meals.detail.deleteText')}
+          confirmLabel={t('meals.detail.deleteConfirm')}
+          destructive
+          onConfirm={() => {
+            onError(null);
+            remove.mutate(undefined, {
+              onSuccess: () => void navigate('/meals', { replace: true }),
+              onError,
+            });
+          }}
+        />
+      )}
+    </>
   );
 }
 
