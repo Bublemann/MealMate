@@ -402,6 +402,36 @@ async def repoint_ingredient(session: AsyncSession, from_id: str, into_id: str) 
     )
 
 
+async def move_hidden_due_items(session: AsyncSession, from_id: str, into_id: str) -> set[str]:
+    """Due items hidden as one ingredient are hidden as another (merge, ING-05); on a list
+    that hid both, one stays. The ids of the lists whose hides moved."""
+    moved = set(
+        (
+            await session.scalars(
+                select(ListHiddenDueItem.list_id).where(ListHiddenDueItem.ingredient_id == from_id)
+            )
+        ).all()
+    )
+    if not moved:
+        return moved
+    into = (
+        select(ListHiddenDueItem.list_id)
+        .where(ListHiddenDueItem.ingredient_id == into_id)
+        .scalar_subquery()
+    )
+    await session.execute(
+        delete(ListHiddenDueItem).where(
+            ListHiddenDueItem.ingredient_id == from_id, ListHiddenDueItem.list_id.in_(into)
+        )
+    )
+    await session.execute(
+        update(ListHiddenDueItem)
+        .where(ListHiddenDueItem.ingredient_id == from_id)
+        .values(ingredient_id=into_id)
+    )
+    return moved
+
+
 async def states_with_key(
     session: AsyncSession, line_key: str, *, list_ids: Collection[str] | None = None
 ) -> Sequence[ListLineState]:

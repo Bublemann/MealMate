@@ -4,19 +4,33 @@ on a list (LIST-16, D-42, LIST-05, LIST-07, SYNC-08).
 The fake clock starts at 2026-09-27 12:00 UTC, 14:00 in Berlin, so "today" is 2026-09-27.
 """
 
+import shutil
 import uuid
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from tests.accounts import START, Account, error, make_couple, make_user, set_privacy
+from app.main import create_app
+from app.services.list_cache import ListCache
+from tests.accounts import (
+    START,
+    Account,
+    FakeClock,
+    error,
+    login,
+    make_couple,
+    make_user,
+    set_privacy,
+)
 from tests.catalog import create_ingredient, summary
 from tests.lists import added, applied, by_key, create_list, detail, extra_added, op, start_shopping
 from tests.meals import create_meal
 from tests.recurring import make_recurring, store_purchases
+from tests.support import ClientFactory, SettingsFactory
 
 # Last bought five weeks ago, every four weeks: due since a week.
 FIVE_WEEKS_AGO = date(2026, 8, 23)
@@ -203,3 +217,103 @@ async def test_hiding_is_refused_where_nothing_is_offered(
     await start_shopping(api, anna, draft["id"])
     response = await hide(api, anna, draft["id"], toilet_paper["id"])
     assert (response.status_code, error(response)) == (409, "list.not_draft")
+
+
+# --- ingredients merged and deleted (ING-05) ------------------------------------------------
+
+
+@pytest.fixture
+async def admin(app: FastAPI, api: AsyncClient) -> Account:
+    return await make_user(app, api, "admin", role="admin")
+
+
+async def test_a_merge_moves_hidden_due_items_to_the_surviving_ingredient(
+    api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any
+) -> None:
+    """anna's "WC-Papier" is recurring and hidden on two drafts, on one of them together with
+    "Klopapier". After merging it into "Klopapier", her item is "Klopapier", hidden on both
+    drafts (the two hides collapse into one) and offered on a third."""
+    duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
+    await make_recurring(api, anna, duplicate["id"], 4, FIVE_WEEKS_AGO)
+    one, both, other = [await create_list(api, anna) for _ in range(3)]
+    for draft in (one, both):
+        assert (await hide(api, anna, draft["id"], duplicate["id"])).status_code == 200
+    assert (await hide(api, anna, both["id"], toilet_paper["id"])).status_code == 200
+
+    response = await api.post(
+        f"/api/admin/ingredients/{duplicate['id']}/merge",
+        json={"into_id": toilet_paper["id"]},
+        headers=admin.headers,
+    )
+    assert response.status_code == 200, response.text
+
+    assert offered(await detail(api, anna, one["id"])) == []
+    assert offered(await detail(api, anna, both["id"])) == []
+    assert offered(await detail(api, anna, other["id"])) == ["Klopapier"]
+
+
+async def test_deleting_an_ingredient_removes_its_hidden_due_items(
+    api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any
+) -> None:
+    """Hidden due items are no references (ING-05): they never block the delete and go with
+    the ingredient."""
+    await make_recurring(api, anna, toilet_paper["id"], 4, FIVE_WEEKS_AGO)
+    draft = await create_list(api, anna)
+    assert (await hide(api, anna, draft["id"], toilet_paper["id"])).status_code == 200
+
+    response = await api.delete(
+        f"/api/admin/ingredients/{toilet_paper['id']}", headers=admin.headers
+    )
+    assert response.status_code == 204, response.text
+    assert offered(await detail(api, anna, draft["id"])) == []
+
+
+# --- the offline copy, ops and polling (SYNC-02, SYNC-08) -----------------------------------
+
+
+async def test_the_offline_copy_and_the_ops_response_carry_due_items(
+    api: AsyncClient, anna: Account, toilet_paper: Any
+) -> None:
+    """They are list details too: the local copy has the box of a stored draft (SYNC-02),
+    and an op on a draft answers with it."""
+    await make_recurring(api, anna, toilet_paper["id"], 4, FIVE_WEEKS_AGO)
+    draft = await create_list(api, anna)
+
+    response = await api.get("/api/lists/sync", headers=anna.headers)
+    assert response.status_code == 200, response.text
+    [stored] = response.json()["lists"]
+    assert offered(stored) == ["Klopapier"]
+    after_op = await applied(
+        api, anna, draft["id"], op("extra.add", extra_id=str(uuid.uuid4()), text="Kerzen")
+    )
+    assert offered(after_op) == ["Klopapier"]
+    assert after_op["due_items"] == stored["due_items"]
+
+
+async def test_a_poll_after_midnight_shows_a_newly_due_item_within_a_minute(
+    make_settings: SettingsFactory, client_for: ClientFactory, migrated_database: Path
+) -> None:
+    """Polls are answered from the list cache (PERF-02), which nothing invalidates at midnight;
+    its age limit of a minute does (SYNC-08). In Kolkata (UTC+5:30) midnight is 18:30 UTC, not
+    on the hour, so the photo URLs' hour, also part of the cache key, doesn't change with it."""
+    settings = make_settings(time_zone="Asia/Kolkata")
+    settings.data_dir.mkdir(parents=True)
+    shutil.copyfile(migrated_database, settings.database_path)
+    app = create_app(settings)
+    clock = app.state.clock = FakeClock()
+    app.state.list_cache = ListCache(clock=clock.monotonic)
+    async with client_for(app) as api:
+        anna = await make_user(app, api, "anna")
+        toilet_paper = await create_ingredient(api, anna, "Klopapier", base_unit="piece")
+        # Bought a week ago, every week: due on 28 September, Kolkata time.
+        await make_recurring(api, anna, toilet_paper["id"], 1, date(2026, 9, 21))
+        draft = await create_list(api, anna)
+        clock.advance(hours=6, minutes=29, seconds=30)  # 23:59:30 in Kolkata
+        await login(api, anna)
+        assert offered(await detail(api, anna, draft["id"])) == []
+
+        clock.advance(seconds=31)  # 00:00:01: the poll still gets the cached list
+        assert offered(await detail(api, anna, draft["id"])) == []
+        clock.advance(seconds=29)  # a minute after it was built
+        [due] = (await detail(api, anna, draft["id"]))["due_items"]
+        assert (due["due_on"], due["days_until_due"]) == ("2026-09-28", 0)
