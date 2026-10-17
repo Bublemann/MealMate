@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Header, Path, Query, Response, status
 from pydantic_core import to_json
 
-from app.api.deps import CurrentUser, Db, ListResponses, Media, Now
+from app.api.deps import CurrentUser, Db, ListResponses, Media, Now, TimeZone
 from app.core import etags
 from app.db.session import ReadSession, WriteSession
 from app.domain.lists import FEED_CURSOR_MAX_LENGTH, LINE_KEY_MAX_LENGTH, LINE_KEY_PATTERN
@@ -192,6 +192,7 @@ async def apply_list_ops(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
     user: Annotated[
         str | None,
         Header(
@@ -210,7 +211,7 @@ async def apply_list_ops(
     `X-MealMate-User` guards against a phone sending one user's queued ops with another user's
     session (SYNC-10): a mismatch is refused before anything else (409 `auth.user_mismatch`)."""
     return await ops.apply_ops(
-        session, media, principal, list_id, body, now=now, expected_user_id=user
+        session, media, principal, list_id, body, now=now, zone=zone, expected_user_id=user
     )
 
 
