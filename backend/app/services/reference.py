@@ -32,7 +32,7 @@ from app.schemas.reference import (
     Tag,
     UnitInfo,
 )
-from app.services import events
+from app.services import events, walking_order
 from app.services.principal import Principal
 
 TAGS_LIMIT = 20
@@ -217,7 +217,7 @@ async def create_category(
     session: AsyncSession, actor: Principal, names: CategoryNames, *, now: datetime
 ) -> Category:
     """Admins add a category with both names (REF-01); it has no key and goes last in the
-    walking order."""
+    walking order, in the admins' one and in every own one (D-48)."""
     async with session.begin():
         rows = await reference_repo.categories_in_order(session)
         taken = _taken_names(rows, names)
@@ -228,6 +228,8 @@ async def create_category(
         )
         _set_names(row, names)
         session.add(row)
+        await session.flush()
+        await walking_order.on_category_added(session, row.id, now=now)
         events.record(
             session,
             actor_id=actor.user_id,
@@ -295,7 +297,8 @@ async def delete_category(
     1. its ingredients move to *Uncategorized*, which isn't an edit of theirs;
     2. its free-text items on drafts that aren't deleted move to *Other*;
     3. nothing on lists being shopped or done lists changes: they keep showing it (D-30);
-    4. it is marked deleted, and the others close the gap in the walking order;
+    4. it is marked deleted, and the others close the gap in the walking order, the admins' one
+       and every own one (D-48);
     5. `category.delete` records its names and what moved.
     """
     async with session.begin():
@@ -317,6 +320,8 @@ async def delete_category(
             if kept.sort_order != position:
                 kept.sort_order = position
                 kept.updated_at = now
+        await session.flush()
+        await walking_order.on_category_deleted(session, row.id, now=now)
         events.record(
             session,
             actor_id=actor.user_id,

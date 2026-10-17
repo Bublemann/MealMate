@@ -74,7 +74,15 @@ from app.schemas.lists import (
     ListUpdate,
 )
 from app.schemas.users import UserRef
-from app.services import access, aggregation, detach, recurring, reference, shopping
+from app.services import (
+    access,
+    aggregation,
+    detach,
+    recurring,
+    reference,
+    shopping,
+    walking_order,
+)
 from app.services.access import ListRights
 from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
@@ -196,8 +204,9 @@ async def list_detail(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """The list as the viewer sees it; a draft they can edit offers their due recurring items
-    (LIST-16), counted in calendar days of `zone`."""
+    """The list as the viewer sees it, grouped in their walking order (REF-01, D-48); a draft
+    they can edit offers their due recurring items (LIST-16), counted in calendar days of
+    `zone`."""
     content = await aggregation.load(session, [shopping_list])
     visible = await access.owners_visible_to(session, viewer_id, rights.viewer_partner_id, "meals")
     list_meals = content.meals.get(shopping_list.id, [])
@@ -212,11 +221,18 @@ async def list_detail(
         ],
     )
     private = private_meals(list_meals, visible)
-    lines = aggregation.lines(content, shopping_list, private_meals=private, refs=refs)
+    owner = owner_key_of(viewer_id, rights.viewer_couple_id)
+    lines = aggregation.lines(
+        content,
+        shopping_list,
+        order=await walking_order.order_of(session, owner),
+        private_meals=private,
+        refs=refs,
+    )
     due_items = (
         await recurring.due_items(
             session,
-            owner_key_of(viewer_id, rights.viewer_couple_id),
+            owner,
             shopping_list.id,
             {line.ingredient_id for line in lines if line.ingredient_id is not None},
             today=local_date(now, zone),

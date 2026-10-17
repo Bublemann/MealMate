@@ -44,6 +44,7 @@ export const SETTINGS_ROWS: readonly SettingsRow[] = [
   { group: 'own', label: 'couple.title', to: '/me/couple', value: CoupleValue },
   { group: 'own', label: 'me.security.title', to: '/me/security' },
   { group: 'own', label: 'recurring.title', to: '/me/recurring', value: RecurringValue },
+  { group: 'own', label: 'walkingOrder.title', to: '/me/walking-order' },
   // The admin pages are a separate chunk (PERF-03): only their addresses are named here, and the
   // System value loads its query from `./api`, not from the admin chunk.
   { group: 'admin', label: 'admin.users.title', to: '/me/admin/users' },

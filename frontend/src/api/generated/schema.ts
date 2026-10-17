@@ -1692,6 +1692,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/walking-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Walking Order
+         * @description The order the caller's lists are grouped in: the admins' while it follows theirs, else
+         *     the own one.
+         */
+        get: operations["get_walking_order"];
+        /**
+         * Save Walking Order
+         * @description Keep an own order, which stops following the admins' one ("Reihenfolge der Verwaltung
+         *     übernehmen" off).
+         */
+        put: operations["save_walking_order"];
+        post?: never;
+        /**
+         * Follow Admin Walking Order
+         * @description Follow the admins' order again ("Reihenfolge der Verwaltung übernehmen" on): the own
+         *     order goes.
+         */
+        delete: operations["follow_admin_walking_order"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3623,6 +3654,46 @@ export interface components {
             source_url: string;
             /** Version */
             version: string;
+        };
+        /**
+         * WalkingOrder
+         * @description The caller's walking order: their couple's while in one, else their own. While
+         *     `follows_admin` ("Reihenfolge der Verwaltung übernehmen") it is the admins' order and follows
+         *     their changes; otherwise it is the own order. `categories` lists every category that isn't
+         *     deleted in that order.
+         */
+        WalkingOrder: {
+            /** Categories */
+            categories: components["schemas"]["WalkingOrderCategory"][];
+            /** Follows Admin */
+            follows_admin: boolean;
+        };
+        /**
+         * WalkingOrderCategory
+         * @description A category that isn't deleted, *Uncategorized* included, shown by its name in the UI
+         *     language (`names`). `new`: an admin added it after the own order was saved, so it went to
+         *     the end; it stays new until it is moved.
+         */
+        WalkingOrderCategory: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string | null;
+            names: components["schemas"]["CategoryNames"];
+            /** New */
+            new: boolean;
+        };
+        /**
+         * WalkingOrderSave
+         * @description An own order: every category that isn't deleted exactly once, *Uncategorized* included,
+         *     in the new order. `moved_id` names the category the user moved, which is no longer new;
+         *     left out or null when the switch was turned off without a move.
+         */
+        WalkingOrderSave: {
+            /** Category Ids */
+            category_ids: string[];
+            /** Moved Id */
+            moved_id?: string | null;
         };
     };
     responses: never;
@@ -6647,6 +6718,95 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VersionInfo"];
                 };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_walking_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalkingOrder"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    save_walking_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkingOrderSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalkingOrder"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    follow_admin_walking_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error envelope; `code` names the error */
             default: {

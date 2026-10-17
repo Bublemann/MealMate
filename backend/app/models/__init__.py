@@ -24,6 +24,7 @@ from app.models.shopping_list import (
     ShoppingList,
 )
 from app.models.user import User
+from app.models.walking_order import WalkingOrderEntry
 
 __all__ = [
     "AdminEvent",
@@ -51,4 +52,5 @@ __all__ = [
     "ShoppingList",
     "Tag",
     "User",
+    "WalkingOrderEntry",
 ]

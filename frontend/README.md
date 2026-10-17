@@ -64,6 +64,7 @@ frontend/
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
     │   ├── recurring/      # Regelmäßige Artikel: the set, its notices, the recurring pop-up, the field
+    │   ├── walkingOrder/   # Reihenfolge im Laden: the own walking order of a couple or a user
     │   ├── meals/          # Meals tab (search, filter panel), meal form, detail, photo resize
     │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
@@ -202,7 +203,7 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   System page. Abmelden is a red, centred button: with changes still waiting it asks first with
   their count (SYNC-05).
 - **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
-  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/about`), framed by `SettingsPage`: the strip
+  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/walking-order`, `/me/about`), framed by `SettingsPage`: the strip
   with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
   held, without the card's heading. The admin pages share the frame and stay under
   `/me/admin/…` (`/me/admin` opens Benutzer); they have no switcher of their own, admins go back
@@ -246,6 +247,20 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the box is gone. A failed ✕ says why until the due items change or the next action. The box comes with the list, so polling
   and the local copy carry it; offline its buttons are inactive. There is none while shopping
   or on done and read-only lists.
+- **Walking order** (REF-01, D-48): `features/walkingOrder/` is the page "Reihenfolge im Laden",
+  on `GET /api/walking-order` (`walkingOrderQuery`): the categories that aren't deleted, in the
+  order the lists of the user, or of their couple, are grouped in. The server sorts every list
+  in its viewer's order, so the list views and the export only keep the order of the lines they
+  get. "Reihenfolge der Verwaltung übernehmen" is on while the order follows the admins'; moving
+  a category keeps the order as the own one and turns it off, turning it off by hand keeps the
+  admins' order as it is, and turning it back on asks first and drops the own order. A category
+  is moved with its up and down buttons (for VoiceOver, keyboards and the mouse) or by dragging
+  its handle (touch and the mouse; hidden from screen readers, `touch-action: none` so it
+  doesn't scroll): the rows are where they were when the drag started, the dragged one goes to
+  the row the pointer is over, and the order is saved once it is let go. Each move is saved at
+  once, the saves one after another (`WALKING_ORDER_SCOPE`), as on the admins' Kategorien page;
+  a failed save puts the order back. Each save loads the lists in the cache again. A category an
+  admin added since shows "neu" until it is moved. Offline the page's controls are disabled.
 - **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
   buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `IngredientMenu` pass
@@ -648,6 +663,7 @@ order.
 | `screenCouple`           | `screen-couple`            | Settings → Paar page                             |
 | `screenSecurity`         | `screen-security`          | Settings → Sicherheit page                       |
 | `screenRecurring`        | `screen-recurring`         | Settings → Regelmäßige Artikel page              |
+| `screenWalkingOrder`     | `screen-walking-order`     | Settings → Reihenfolge im Laden page             |
 | `screenAbout`            | `screen-about`             | Settings → Über MealMate page                    |
 | `languageSelect`         | `language-select`          | Language select on Profil                        |
 | `appVersion`             | `app-version`              | Running version on Über MealMate (once loaded)   |
@@ -724,6 +740,9 @@ order.
 | `recurringInput`         | `recurring-input`          | Ingredient field on Regelmäßige Artikel          |
 | `recurringNewIngredient` | `recurring-new-ingredient` | "„X“ als neue Zutat" under that field            |
 | `recurringRemove`        | `recurring-remove`         | "No longer recurring" in the recurring pop-up    |
+| `walkingOrderSwitch`     | `walking-order-switch`     | "Reihenfolge der Verwaltung übernehmen" switch   |
+| `walkingOrderList`       | `walking-order-list`       | Categories in the walking order (D-48)           |
+| `walkingOrderHandle`     | `walking-order-handle`     | Drag handle of a category (touch and mouse)      |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)              |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                        |
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                         |

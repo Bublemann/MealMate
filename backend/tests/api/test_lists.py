@@ -1372,9 +1372,9 @@ async def test_a_list_takes_a_fixed_number_of_queries(
     with counted_queries(app) as summary_queries:
         assert len(await summaries(api, carl)) == 2
 
-    # Authentication, access (the couple once), the eight content queries, visibility and
-    # users (two BEGINs).
-    assert len(big_detail) == len(small_detail) <= 16
+    # Authentication, access (the couple once), the eight content queries, visibility, users
+    # and the viewer's walking order (two BEGINs).
+    assert len(big_detail) == len(small_detail) <= 17
     assert len(summary_queries) <= 17
 
 

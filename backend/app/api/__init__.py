@@ -21,6 +21,7 @@ from app.api import (
     reference,
     system,
     users,
+    walking_order,
 )
 
 api_router = APIRouter()
@@ -35,6 +36,7 @@ for module in (
     meals,
     lists,
     recurring,
+    walking_order,
     media,
     admin,
 ):

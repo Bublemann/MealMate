@@ -4,7 +4,7 @@ import re
 import sqlite3
 import uuid
 from collections.abc import Iterator
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,8 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Connection, Engine, event
+from sqlalchemy.dialects import sqlite
+from sqlalchemy.schema import CreateTable
 from typer.testing import CliRunner
 
 from app.cli import main
@@ -32,13 +34,13 @@ from app.db.migrations import (
 from app.db.session import Database
 from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.main import create_app
-from app.models import Base
+from app.models import Base, WalkingOrderEntry
 from app.services import demo
 from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0017"
+HEAD = "0018"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -63,10 +65,11 @@ LIST_TABLES = {
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
-# one. 0015 and 0016 add tables; 0017 drops a column.
+# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
-HEAD_TABLES = TABLES_0015 | {"list_hidden_due_items"}
+TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
+HEAD_TABLES = TABLES_0016 | {"walking_order_entries"}
 
 
 @pytest.fixture
@@ -151,11 +154,15 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0015")
     assert tables(database_path) == TABLES_0015
     command.upgrade(config, "0016")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0016
     command.upgrade(config, "0017")
+    assert tables(database_path) == TABLES_0016
+    command.upgrade(config, "0018")
     assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0017")
+    assert tables(database_path) == TABLES_0016
     command.downgrade(config, "0016")
-    assert tables(database_path) == HEAD_TABLES
+    assert tables(database_path) == TABLES_0016
     command.downgrade(config, "0015")
     assert tables(database_path) == TABLES_0015
     command.downgrade(config, "0014")
@@ -1197,6 +1204,22 @@ async def _what_the_demo_users_see(
     return seen
 
 
+@contextmanager
+def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
+    """The app of today groups every list in its viewer's walking order (D-48), read from a
+    table an old database doesn't have yet. Nobody had an own order then, so an empty table
+    stands in while the app reads, and goes again before the upgrade adds it."""
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(
+            str(CreateTable(WalkingOrderEntry.__table__).compile(dialect=sqlite.dialect()))
+        )
+    try:
+        yield
+    finally:
+        with closing(sqlite3.connect(path)) as connection, connection:
+            connection.execute("DROP TABLE walking_order_entries")
+
+
 def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
     return sorted(
         (meal["name"], row["ingredient"]["name"], row["amount"], row["unit"])
@@ -1221,7 +1244,8 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
     settings = demo_settings(data_dir)
-    before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
+    with no_own_walking_orders_yet(path):
+        before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
 
     upgrade_database(data_dir)
 
@@ -1584,6 +1608,102 @@ def test_the_0017_downgrade_gives_every_list_a_new_seed(tmp_path: Path) -> None:
 
     command.upgrade(config, "0017")
     assert rows_of(path, "shopping_lists") == lists
+
+
+# --- 0018 -----------------------------------------------------------------------------------
+
+
+def test_0018_adds_the_table_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0017 → 0018 (D-48): one empty table, so everyone follows the admins'
+    walking order, and every row and reference as it was."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0017")
+    counts, references, rows = row_counts(path), non_null_foreign_keys(path), inserts(path)
+
+    command.upgrade(config, "0018")
+
+    assert row_counts(path) == counts | {"walking_order_entries": 0}
+    assert non_null_foreign_keys(path) == references | {
+        "walking_order_entries.couple_id": 0,
+        "walking_order_entries.user_id": 0,
+    }
+    assert [line for line in inserts(path) if "alembic_version" not in line] == [
+        line for line in rows if "alembic_version" not in line
+    ]
+    assert_clean(path)
+
+
+def walking_order_entry(
+    connection: sqlite3.Connection,
+    category_key: str,
+    *,
+    couple_id: str | None = None,
+    user: str | None = None,
+) -> str:
+    category_id = connection.execute(
+        "SELECT id FROM categories WHERE key = ?", (category_key,)
+    ).fetchone()[0]
+    return insert(
+        connection,
+        "walking_order_entries",
+        couple_id=couple_id,
+        user_id=None if user is None else user_id(connection, user),
+        category_id=category_id,
+        position=0,
+        is_new=False,
+    )
+
+
+def test_the_0018_downgrade_refuses_while_there_are_rows(tmp_path: Path) -> None:
+    """Own walking orders don't exist before 0018: the downgrade refuses while there are any and
+    changes nothing. Without them it steps down to 0017 as it was (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0017")
+    at_0017 = dump_without(path)
+    command.upgrade(config, "0018")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        walking_order_entry(connection, "cheese", user="carl")
+    before = dump_without(path)
+
+    with pytest.raises(
+        RuntimeError, match=r"cannot downgrade below 0018: there are own walking orders \(1 "
+    ):
+        command.downgrade(config, "0017")
+
+    assert current_revision(path) == "0018"
+    assert dump_without(path) == before
+    execute(path, "DELETE FROM walking_order_entries")
+    command.downgrade(config, "0017")
+    assert dump_without(path) == at_0017
+
+
+@pytest.mark.parametrize(
+    ("earlier", "owner", "message"),
+    [
+        # Exactly one owner: a couple, or a user without one.
+        (None, {}, "CHECK constraint failed: ck_walking_order_entries_one_owner"),
+        (None, {"couple_id": DEMO_COUPLE_ID, "user": "anna"},
+         "CHECK constraint failed: ck_walking_order_entries_one_owner"),
+        # An order holds a category once.
+        ({"user": "carl"}, {"user": "carl"}, "UNIQUE"),
+        ({"couple_id": DEMO_COUPLE_ID}, {"couple_id": DEMO_COUPLE_ID}, "UNIQUE"),
+    ],
+)  # fmt: skip
+def test_a_walking_order_has_one_owner_and_each_category_once(
+    tmp_path: Path, earlier: dict[str, str] | None, owner: dict[str, str], message: str
+) -> None:
+    path = tmp_path / "data" / "mealmate.db"
+    load_demo_0013(path)
+    command.upgrade(alembic_config(path), "head")
+    with closing(sqlite3.connect(path)) as connection:
+        if earlier is not None:
+            walking_order_entry(connection, "cheese", **earlier)
+        with pytest.raises(sqlite3.IntegrityError, match=message):
+            walking_order_entry(connection, "cheese", **owner)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

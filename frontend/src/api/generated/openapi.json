@@ -5013,6 +5013,96 @@
         ],
         "title": "VersionInfo",
         "type": "object"
+      },
+      "WalkingOrder": {
+        "description": "The caller's walking order: their couple's while in one, else their own. While\n`follows_admin` (\"Reihenfolge der Verwaltung übernehmen\") it is the admins' order and follows\ntheir changes; otherwise it is the own order. `categories` lists every category that isn't\ndeleted in that order.",
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/WalkingOrderCategory"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "follows_admin": {
+            "title": "Follows Admin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "follows_admin",
+          "categories"
+        ],
+        "title": "WalkingOrder",
+        "type": "object"
+      },
+      "WalkingOrderCategory": {
+        "description": "A category that isn't deleted, *Uncategorized* included, shown by its name in the UI\nlanguage (`names`). `new`: an admin added it after the own order was saved, so it went to\nthe end; it stays new until it is moved.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "names": {
+            "$ref": "#/components/schemas/CategoryNames"
+          },
+          "new": {
+            "title": "New",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "names",
+          "new"
+        ],
+        "title": "WalkingOrderCategory",
+        "type": "object"
+      },
+      "WalkingOrderSave": {
+        "description": "An own order: every category that isn't deleted exactly once, *Uncategorized* included,\nin the new order. `moved_id` names the category the user moved, which is no longer new;\nleft out or null when the switch was turned off without a move.",
+        "properties": {
+          "category_ids": {
+            "items": {
+              "maxLength": 36,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Category Ids",
+            "type": "array"
+          },
+          "moved_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moved Id"
+          }
+        },
+        "required": [
+          "category_ids"
+        ],
+        "title": "WalkingOrderSave",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -9709,6 +9799,116 @@
         "summary": "Get Version",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/walking-order": {
+      "delete": {
+        "description": "Follow the admins' order again (\"Reihenfolge der Verwaltung übernehmen\" on): the own\norder goes.",
+        "operationId": "follow_admin_walking_order",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Follow Admin Walking Order",
+        "tags": [
+          "walking order"
+        ]
+      },
+      "get": {
+        "description": "The order the caller's lists are grouped in: the admins' while it follows theirs, else\nthe own one.",
+        "operationId": "get_walking_order",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalkingOrder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Walking Order",
+        "tags": [
+          "walking order"
+        ]
+      },
+      "put": {
+        "description": "Keep an own order, which stops following the admins' one (\"Reihenfolge der Verwaltung\nübernehmen\" off).",
+        "operationId": "save_walking_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalkingOrderSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalkingOrder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save Walking Order",
+        "tags": [
+          "walking order"
         ]
       }
     }
