@@ -58,7 +58,7 @@ frontend/
     ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt, viewport
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
-    │   ├── me/ couple/     # Settings tab: profile, privacy, security, sessions; couple section
+    │   ├── me/ couple/     # Settings tab, its rows and gear count; Profil, Privatsphäre, Sicherheit, Paar …
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
@@ -182,6 +182,35 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   display name of the list a new meal goes onto (`useListOnce`, which doesn't poll; "Einkaufsliste"
   until it is known). On its right, `action` takes the screen's one button, its ⋯ menu (D-39);
   without one the slot is empty, with nothing to see or to focus. Tests: `DetailStrip.test.tsx`.
+- **Settings tab** (UI-07, D-45): `features/me/SettingsScreen.tsx` shows the headline, then rows
+  in grouped panels, and Abmelden last. The rows come from one ordered list, `SETTINGS_ROWS` in
+  `features/me/settingsRows.ts`: each entry has its group, its label key, its address and,
+  optionally, a value component (`SettingsValues.tsx`). The groups (`SETTINGS_GROUPS`) are the
+  user's own rows, **Verwaltung** for admins only (its heading, `adminEntry`), and Über MealMate.
+  A later page adds its row as one entry in its group, plus its route in `app/router.tsx`. A row
+  is a link: the label first (its accessible name starts with it, so tests find "Paar" whatever
+  the value), the value in muted text, then a chevron; at large text sizes the value wraps below
+  the label. Values load on their own and never hold the rows back: while one loads, fails or
+  can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
+  name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
+  (`waitingRequests`) or else the partner (`userLabel`), Über MealMate the version. Only their
+  addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03). Abmelden is
+  a red, centred button: with changes still waiting it asks first with their count (SYNC-05).
+- **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
+  `/me/privacy`, `/me/couple`, `/me/security`, `/me/about`), framed by `SettingsPage`: the strip
+  with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
+  held, without the card's heading. The admin pages stay under `/me/admin/…`.
+- **Count on the gear** (UI-07, D-51): while something waits for the user to act on, the Settings
+  tab's gear carries a small red count ("9+" above nine), sized by the capped
+  `--tab-bar-badge*` tokens so it doesn't grow beyond the bar. It is hidden from screen readers,
+  which hear it in the tab's name ("Einstellungen, 1 neu", `nav.meCount`). `useSettingsCount`
+  (`features/me/settingsCount.ts`) sums `COUNT_SOURCES`; a source is one entry, the query its
+  page uses (so they share one cache entry) and how to count it (`select`). The first source is
+  the incoming couple requests (`coupleQuery`). A spec adds a source as one more entry, without
+  touching the tab bar. The `Layout` keeps the count loaded once signed in: it is loaded again on
+  returning to the foreground with data older than the usual 30 s and every 60 s while the app is
+  visible, never in the background; an answer to a request updates it at once, and a failed
+  refresh keeps the last count without showing an error.
 - **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
   buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `IngredientMenu` pass
@@ -318,7 +347,7 @@ How the app stays signed in (plan § 5.4, § 8):
   checked with `POST /api/auth/codes/check` before the form appears. Only submitting the form
   consumes it.
 - **Language.** Before login the device language (or the stored choice) is used; the join form
-  sends it. When signed in, the server's `language` wins, and changing it on the Settings tab
+  sends it. When signed in, the server's `language` wins, and changing it on Settings → Profil
   saves it there.
 
 ## Sharing links
@@ -577,10 +606,15 @@ order.
 | `screenLists`            | `screen-lists`             | Lists screen                                     |
 | `screenMeals`            | `screen-meals`             | Meals screen                                     |
 | `screenIngredients`      | `screen-ingredients`       | Ingredients screen                               |
-| `screenMe`               | `screen-me`                | Settings screen                                  |
-| `languageSelect`         | `language-select`          | Language select on Settings                      |
-| `appVersion`             | `app-version`              | Running version on Settings (once loaded)        |
-| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Settings        |
+| `screenMe`               | `screen-me`                | Settings tab (its rows)                          |
+| `screenProfile`          | `screen-profile`           | Settings → Profil page                           |
+| `screenPrivacy`          | `screen-privacy`           | Settings → Privatsphäre page                     |
+| `screenCouple`           | `screen-couple`            | Settings → Paar page                             |
+| `screenSecurity`         | `screen-security`          | Settings → Sicherheit page                       |
+| `screenAbout`            | `screen-about`             | Settings → Über MealMate page                    |
+| `languageSelect`         | `language-select`          | Language select on Profil                        |
+| `appVersion`             | `app-version`              | Running version on Über MealMate (once loaded)   |
+| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" on Über MealMate        |
 | `updatePrompt`           | `update-prompt`            | "New version available" prompt                   |
 | `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen              |
 | `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip            |
@@ -591,18 +625,18 @@ order.
 | `screenJoin`             | `screen-join`              | Registration screen (invite link)                |
 | `screenReset`            | `screen-reset`             | New password screen (reset link)                 |
 | `linkInvalid`            | `link-invalid`             | "Link invalid or expired" on Join/Reset          |
-| `displayNameInput`       | `display-name-input`       | Display name field on Settings                   |
-| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Settings                |
-| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Settings                |
-| `coupleSection`          | `couple-section`           | Couple card on Settings                          |
-| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Settings        |
+| `displayNameInput`       | `display-name-input`       | Display name field on Profil                     |
+| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Privatsphäre            |
+| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Privatsphäre            |
+| `coupleSection`          | `couple-section`           | Content of the Paar page                         |
+| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Paar            |
 | `couplePicker`           | `couple-picker`            | User picker for a couple request                 |
-| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Settings         |
+| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Sicherheit       |
 | `changePasswordButton`   | `change-password-button`   | Opens the change-password dialog                 |
-| `sessionList`            | `session-list`             | List of the user's sessions on Settings          |
-| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Settings             |
-| `adminEntry`             | `admin-entry`              | Administration card on Settings (admins)         |
-| `logoutButton`           | `logout-button`            | "Log out" on Settings                            |
+| `sessionList`            | `session-list`             | List of the user's sessions on Sicherheit        |
+| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Sicherheit           |
+| `adminEntry`             | `admin-entry`              | Verwaltung group on Settings (admins)            |
+| `logoutButton`           | `logout-button`            | Abmelden, the last row on Settings               |
 | `screenAdminUsers`       | `screen-admin-users`       | Admin: users screen                              |
 | `adminUserList`          | `admin-user-list`          | Admin: list of users                             |
 | `screenAdminInvites`     | `screen-admin-invites`     | Admin: invites screen                            |
@@ -739,7 +773,7 @@ order.
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint          |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint                 |
 | `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint                |
-| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Settings, admins only (M1–M9) |
+| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Über MealMate, admins (M1–M9) |
 | `screenDiagnostics`      | `screen-diagnostics`       | Diagnostics screen `/diag` (M1–M9)               |
 | `diagResult`             | `diag-result`              | One result line on the diagnostics screen        |
 | `diagReport`             | `diag-report`              | Plain-text report on the diagnostics screen      |

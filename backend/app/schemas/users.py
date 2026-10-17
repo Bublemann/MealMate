@@ -85,7 +85,7 @@ class SessionInfo(BaseModel):
 
 
 class SecurityInfo(BaseModel):
-    """What *Me → Security* shows, e.g. "Password reset by X on <date>" (ACC-10).
+    """What *Einstellungen → Sicherheit* shows, e.g. "Password reset by X on <date>" (ACC-10).
 
     `password_reset_by` is null for a reset link from the command line or a deleted admin.
     """

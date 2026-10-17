@@ -6,6 +6,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from support.frontend import TEST_IDS, text
+from support.ui import settings_row
 
 # The screens need a signed-in user; the route guard itself is tested in test_accounts.py.
 pytestmark = pytest.mark.usefixtures("member_page")
@@ -52,7 +53,7 @@ def test_tabs_navigate_between_screens(page: Page) -> None:
         assert box["height"] > 24, f"{text(headline)!r} is {box['height']} px high"
 
 
-@pytest.mark.parametrize("path", ["/does-not-exist", "/some/deep/link"])
+@pytest.mark.parametrize("path", ["/does-not-exist", "/some/deep/link", "/me/does-not-exist"])
 def test_unknown_routes_fall_back_to_lists(page: Page, path: str) -> None:
     page.goto(path)
 
@@ -60,14 +61,18 @@ def test_unknown_routes_fall_back_to_lists(page: Page, path: str) -> None:
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
 
 
-def test_me_shows_version_and_source_link(page: Page) -> None:
+def test_about_shows_version_and_source_link(page: Page) -> None:
     """UI-06, LIC-02: the running version and a link to its exact source revision."""
     version = page.request.get("/api/version").json()
 
     page.goto("/me")
+    row = settings_row(page, "me.about")
+    expect(row).to_have_accessible_name(f"{text('me.about')} {version['version']}")
+    row.click()
 
-    expect(page.get_by_test_id(TEST_IDS["appVersion"])).to_have_text(version["version"])
-    link = page.get_by_test_id(TEST_IDS["sourceLink"])
+    about = page.get_by_test_id(TEST_IDS["screenAbout"])
+    expect(about.get_by_test_id(TEST_IDS["appVersion"])).to_have_text(version["version"])
+    link = about.get_by_test_id(TEST_IDS["sourceLink"])
     expect(link).to_have_attribute("href", version["source_url"])
     expect(link).to_have_attribute("target", "_blank")
     assert {"noopener", "noreferrer"} <= set((link.get_attribute("rel") or "").split())

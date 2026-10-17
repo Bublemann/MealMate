@@ -7,7 +7,7 @@ from playwright.sync_api import Page, Request, expect
 
 from support.api import CODE_REQUESTS, Account, Api, unique
 from support.frontend import TEST_IDS, text
-from support.ui import log_in, log_out
+from support.ui import log_in, log_out, open_settings_page
 
 LOCAL_SCHEMES = frozenset({"data", "blob"})
 
@@ -41,12 +41,16 @@ def test_no_request_leaves_the_origin(page: Page, base_url: str, api: Api, admin
     ]:
         page.get_by_test_id(tab).click()
         expect(page.get_by_test_id(screen)).to_be_visible()
-    page.goto("/me")
-    expect(page.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
-    expect(page.get_by_test_id(TEST_IDS["sessionList"])).to_be_visible()
+    # The Settings pages that load something of their own.
+    about = open_settings_page(page, "me.about", "screenAbout")
+    expect(about.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
+    security = open_settings_page(page, "me.security.title", "screenSecurity")
+    expect(security.get_by_test_id(TEST_IDS["sessionList"])).to_be_visible()
+    open_settings_page(page, "me.profile.title", "screenProfile")
     page.get_by_test_id(TEST_IDS["languageSelect"]).select_option("de")
     page.reload()
-    expect(page.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
+    about = open_settings_page(page, "me.about", "screenAbout", language="de")
+    expect(about.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
 
     log_out(page)
     log_in(page, admin, language="de")

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 
@@ -9,11 +9,22 @@ export type RequestAction = 'accept' | 'decline' | 'cancel';
 
 const COUPLE_KEY = ['couple'] as const;
 
+/**
+ * The couple state: one cache entry for the Paar page, its row and the count on the Settings
+ * tab's gear (D-51), so they always agree and no request type is added for the count.
+ */
+export const coupleQuery = queryOptions({
+  queryKey: COUPLE_KEY,
+  queryFn: ({ signal }) => unwrap(api.GET('/api/couple', { signal })),
+});
+
 export function useCouple() {
-  return useQuery({
-    queryKey: COUPLE_KEY,
-    queryFn: ({ signal }) => unwrap(api.GET('/api/couple', { signal })),
-  });
+  return useQuery(coupleQuery);
+}
+
+/** The incoming requests that wait for the user's answer (D-51). */
+export function waitingRequests(state: CoupleState): number {
+  return state.incoming.length;
 }
 
 /** All active users except me, by display name (CPL-01 picker). */
