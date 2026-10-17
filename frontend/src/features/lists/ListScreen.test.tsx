@@ -1227,8 +1227,10 @@ describe('ListScreen', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 
       expect(dialog).not.toBeInTheDocument();
-      // The focus goes back to the box, not into the item field (no keyboard).
-      expect(screen.getByTestId(testIds.dueBox)).toHaveFocus();
+      // The row leaves: the focus goes on to the next row's ＋, not into the item field.
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Add Zahnpasta (Elmex)' })).toHaveFocus(),
+      );
       await waitFor(() =>
         expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
       );
@@ -1264,6 +1266,135 @@ describe('ListScreen', () => {
       expect(await screen.findByTestId(testIds.amountDialog)).toBeVisible();
       await user.keyboard('{Escape}');
       await waitFor(() => expect(dueRows()).toHaveLength(2));
+    });
+
+    describe('focus when a row leaves (A11Y-01)', () => {
+      /** The server hides what it is asked to and answers with the rest. */
+      function hiding(due: Schemas['DueItem'][]) {
+        let left = due;
+        return {
+          [`GET ${BASE}`]: () => withDue({ due_items: left }),
+          ...Object.fromEntries(
+            due.map((item) => [
+              `POST ${BASE}/due-items/${item.ingredient.id}/hide`,
+              () => {
+                left = left.filter((other) => other !== item);
+                return withDue({ due_items: left, version: 4 });
+              },
+            ]),
+          ),
+        };
+      }
+
+      /** Long enough for Radix to hand the focus back after a pop-up closed. */
+      async function settle() {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      }
+
+      it('goes to the item field when ＋ added the only due item', async () => {
+        const { user } = renderList({
+          [`GET ${BASE}`]: withDue({ due_items: [dueItem()] }),
+          'GET /api/units': UNITS,
+          [`POST ${BASE}/extra-items`]: Response.json(withDue({ due_items: [] }), { status: 201 }),
+        });
+
+        await user.click(await screen.findByRole('button', { name: 'Add Klopapier' }));
+        const dialog = await screen.findByTestId(testIds.amountDialog);
+        await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+        await waitFor(() => expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument());
+        await settle();
+        expect(screen.getByTestId(testIds.extraItemInput)).toHaveFocus();
+      });
+
+      it('goes back to ＋ when the pop-up is cancelled', async () => {
+        const { user } = renderList({ [`GET ${BASE}`]: withDue(), 'GET /api/units': UNITS });
+
+        const plus = await screen.findByRole('button', { name: 'Add Zahnpasta (Elmex)' });
+        await user.click(plus);
+        await screen.findByTestId(testIds.amountDialog);
+        await user.keyboard('{Escape}');
+
+        await settle();
+        expect(plus).toHaveFocus();
+      });
+
+      it('goes to the item field when ✕ hid the only due item', async () => {
+        const { user } = renderList(hiding([dueItem()]));
+
+        await user.click(await screen.findByRole('button', { name: 'Hide Klopapier' }));
+
+        await waitFor(() => expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument());
+        await settle();
+        expect(screen.getByTestId(testIds.extraItemInput)).toHaveFocus();
+      });
+
+      it('goes to the ✕ of the row that takes its place, or of the one above', async () => {
+        const { user } = renderList(hiding(DUE));
+
+        await user.click(await screen.findByRole('button', { name: 'Hide Klopapier' }));
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: 'Hide Zahnpasta (Elmex)' })).toHaveFocus(),
+        );
+        await settle();
+        expect(screen.getByRole('button', { name: 'Hide Zahnpasta (Elmex)' })).toHaveFocus();
+
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument());
+        expect(screen.getByTestId(testIds.extraItemInput)).toHaveFocus();
+      });
+
+      it('goes to the ✕ of the row above when the last row is hidden', async () => {
+        const { user } = renderList(hiding(DUE));
+
+        await user.click(await screen.findByRole('button', { name: 'Hide Zahnpasta (Elmex)' }));
+
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: 'Hide Klopapier' })).toHaveFocus(),
+        );
+      });
+    });
+
+    describe('when ✕ fails', () => {
+      const failing = (due: () => Schemas['DueItem'][]) => ({
+        [`GET ${BASE}`]: () => withDue({ due_items: due() }),
+        'GET /api/units': UNITS,
+        [`POST ${BASE}/due-items/ing-klopapier/hide`]: errorResponse(409, 'list.not_draft'),
+      });
+      const NOT_DRAFT = "This list is no longer a draft, so this can't be changed any more.";
+
+      it('says why and brings the row back, until the due items change', async () => {
+        let due = DUE;
+        const { fetchMock, user } = renderList(failing(() => due));
+
+        await user.click(await screen.findByRole('button', { name: 'Hide Klopapier' }));
+
+        expect(await screen.findByText(NOT_DRAFT)).toBeVisible();
+        await waitFor(() => expect(dueRows()).toHaveLength(2));
+        // A later load that changes the due items clears it.
+        due = [dueItem()];
+        const loads = requestsTo(fetchMock, `GET ${BASE}`).length;
+        act(() => {
+          focusManager.setFocused(false);
+          focusManager.setFocused(true);
+        });
+        await waitFor(() =>
+          expect(requestsTo(fetchMock, `GET ${BASE}`).length).toBeGreaterThan(loads),
+        );
+        await waitFor(() => expect(dueRows()).toHaveLength(1));
+        expect(screen.queryByText(NOT_DRAFT)).not.toBeInTheDocument();
+      });
+
+      it('clears the error with the next action in the box', async () => {
+        const { user } = renderList(failing(() => DUE));
+
+        await user.click(await screen.findByRole('button', { name: 'Hide Klopapier' }));
+        expect(await screen.findByText(NOT_DRAFT)).toBeVisible();
+        await waitFor(() => expect(dueRows()).toHaveLength(2));
+
+        await user.click(screen.getByRole('button', { name: 'Add Zahnpasta (Elmex)' }));
+        expect(screen.queryByText(NOT_DRAFT)).not.toBeInTheDocument();
+      });
     });
 
     it('opens the amount pop-up empty, on the base unit, without a last amount', async () => {

@@ -240,8 +240,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   field's `AmountDialog` with the last amount (when the server gives one, i.e. it fits), and ✕
   ("Klopapier ausblenden") hides it on that list for everyone, without asking
   (`useHideDueItem`). Both take the row out at once; adding a linked item does that for its
-  ingredient. While one of the field's pop-ups is open the rows stay as they are, and the focus
-  goes back to the box when the amount pop-up closes. The box comes with the list, so polling
+  ingredient. While one of the field's pop-ups is open the rows stay as they are. The focus goes
+  back to the ＋ the amount pop-up was opened from; when a row leaves with the focus on its ＋
+  or ✕, the same button of the row in its place (or above) takes it, and the item field once
+  the box is gone. A failed ✕ says why until the due items change or the next action. The box comes with the list, so polling
   and the local copy carry it; offline its buttons are inactive. There is none while shopping
   or on done and read-only lists.
 - **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`

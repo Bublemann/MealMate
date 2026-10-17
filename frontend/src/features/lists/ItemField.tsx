@@ -27,7 +27,7 @@ import {
   RESULT_LIST_CLASS,
 } from './AddField';
 import { AmountDialog, FreeTextDialog, type AmountValue, type FreeTextValue } from './AddDialogs';
-import { DueBox } from './DueBox';
+import { DueBox, type DueBoxHandle } from './DueBox';
 import { shoppingOps, stampOp, useAddExtraItem, useHideDueItem, type ExtraItemCreate } from './api';
 import { usePlus } from './usePlus';
 
@@ -40,16 +40,19 @@ interface Retry {
   error: Error;
 }
 
+/** The amount pop-up of an ingredient. */
+interface AmountRequest {
+  kind: 'amount';
+  ingredient: IngredientSummary;
+  value: AmountValue;
+  retry: Retry | null;
+  /** Opened from the "Fällig" box: the focus goes back there, not into the field. */
+  fromDue: boolean;
+}
+
 /** The open pop-up of the item field. */
 type ItemRequest =
-  | {
-      kind: 'amount';
-      ingredient: IngredientSummary;
-      value: AmountValue;
-      retry: Retry | null;
-      /** Opened from the "Fällig" box: the focus goes back there, not into the field. */
-      fromDue: boolean;
-    }
+  | AmountRequest
   | { kind: 'freeText'; text: string; value: FreeTextValue | null; retry: Retry | null }
   | { kind: 'newIngredient'; name: string };
 
@@ -76,15 +79,20 @@ interface ItemFieldProps {
  * request did reach the server), so it isn't added twice.
  *
  * On a draft, `due` fills the "Fällig" box below the field (LIST-16): its ＋ opens the same amount
- * pop-up with the last amount, and the focus goes back to the box when the pop-up closes.
+ * pop-up with the last amount, and the focus goes back to the box when the pop-up closes (to the
+ * row in its place once the item is added, or to the field when the box is gone).
  */
 export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps) {
   const { t } = useTranslation();
   const connected = useConnected();
   const inputRef = useRef<HTMLInputElement>(null);
-  const dueRef = useRef<HTMLElement>(null);
-  /** Where the focus goes when the amount pop-up closes: the box it was opened from, or the field. */
-  const amountFromDue = useRef(false);
+  const dueBox = useRef<DueBoxHandle>(null);
+  /**
+   * Where the focus goes when the open pop-up closes: the "Fällig" box it was opened from, or the
+   * field. Set with the request (`show`); a ref because the pop-ups ask for it in
+   * `onCloseAutoFocus`, after the request is already gone.
+   */
+  const focusBack = useRef<'field' | 'due'>('field');
   const [text, setText] = useState('');
   const [request, setRequest] = useState<ItemRequest | null>(null);
   const requestRef = useRef(request);
@@ -113,27 +121,62 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
     requestRef.current = request;
   });
 
+  // A failed ✕ says why until the due items change after the reload that brought its row back,
+  // or until the next action (`show`, another ✕). Compared by their ingredients: a reload with
+  // the same items is no change.
+  const hideFailed = hideDue.isError;
+  const dueIds = due.map((item) => item.ingredient.id).join(' ');
+  const rowBack = hideFailed && due.some((item) => item.ingredient.id === hideDue.variables);
+  const resetHide = hideDue.reset;
+  const failedWith = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hideFailed) {
+      failedWith.current = null;
+    } else if (failedWith.current === null) {
+      if (rowBack) failedWith.current = dueIds;
+    } else if (failedWith.current !== dueIds) {
+      resetHide();
+    }
+  }, [hideFailed, rowBack, dueIds, resetHide]);
+
   function startUnit(ingredient: IngredientSummary): Unit {
     const kept = units.data ? keptUnit(units.data, ingredient.base_unit, lastUnit) : '';
     return kept || ingredient.base_unit;
   }
 
+  /** Opens a pop-up; a new action also clears the error of a failed ✕. */
+  function show(next: ItemRequest) {
+    focusBack.current = next.kind === 'amount' && next.fromDue ? 'due' : 'field';
+    hideDue.reset();
+    setRequest(next);
+  }
+
+  /** The focus goes back where the pop-up was opened from (A11Y-01). */
+  function focusBackThere() {
+    if (focusBack.current === 'due' && dueBox.current?.restoreFocus()) return;
+    inputRef.current?.focus();
+  }
+
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    focusBackThere();
+  };
+
   function chooseIngredient(ingredient: IngredientSummary) {
     setAddError(null);
-    setRequest({
+    show({
       kind: 'amount',
       ingredient,
       value: { amount: null, unit: startUnit(ingredient) },
       retry: null,
       fromDue: false,
     });
-    amountFromDue.current = false;
   }
 
   /** ＋ of a due item: its last amount filled in, when the server gives one that fits (D-42). */
   function chooseDue({ ingredient, last_amount }: DueItem) {
     setAddError(null);
-    setRequest({
+    show({
       kind: 'amount',
       ingredient,
       value: last_amount
@@ -142,12 +185,11 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
       retry: null,
       fromDue: true,
     });
-    amountFromDue.current = true;
   }
 
   function chooseFreeText() {
     setAddError(null);
-    setRequest({ kind: 'freeText', text: typed, value: null, retry: null });
+    show({ kind: 'freeText', text: typed, value: null, retry: null });
   }
 
   const plus = usePlus(typed, answer, (found) => {
@@ -161,17 +203,17 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
    * The pop-up closes and the emptied field gets the focus within this tap (iOS keyboard); after
    * an item of the "Fällig" box the box gets it, and what was typed in the field stays.
    */
-  function closeAndFocus(fromDue: boolean) {
+  function closeAndFocus() {
     flushSync(() => {
       setRequest(null);
-      if (!fromDue) setText('');
+      if (focusBack.current === 'field') setText('');
     });
-    (fromDue ? dueRef : inputRef).current?.focus();
+    focusBackThere();
   }
 
   /** After an error: the pop-up again, unless the user opened another one meanwhile. */
   function reopen(next: ItemRequest, error: Error | null) {
-    if (requestRef.current === null) setRequest(next);
+    if (requestRef.current === null) show(next);
     else if (error) setAddError(error);
   }
 
@@ -184,18 +226,13 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
     return uuidv7();
   }
 
-  function addLinked(
-    ingredient: IngredientSummary,
-    value: AmountValue,
-    retry: Retry | null,
-    fromDue: boolean,
-  ) {
+  function addLinked({ ingredient, retry, fromDue }: AmountRequest, value: AmountValue) {
     const body =
       value.amount === null
         ? { ingredient_id: ingredient.id }
         : { ingredient_id: ingredient.id, amount: value.amount, unit: value.unit };
     const item = { id: itemId(body, retry), ...body };
-    closeAndFocus(fromDue);
+    closeAndFocus();
     setLastUnit(value.unit);
     add.mutate(item, {
       onError: (error) =>
@@ -209,7 +246,7 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
       ...(value.amountText ? { amount_text: value.amountText } : {}),
       ...(value.categoryId ? { category_id: value.categoryId } : {}),
     };
-    closeAndFocus(false);
+    closeAndFocus();
     if (shopping) {
       // SHOP-02: into the outbox, online or offline; it says so itself if it can't be stored.
       const payload = { extra_id: uuidv7(), ...body };
@@ -236,7 +273,7 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
           testId={testIds.itemNewIngredient}
           onSelect={() => {
             setAddError(null);
-            setRequest({ kind: 'newIngredient', name: typed });
+            show({ kind: 'newIngredient', name: typed });
           }}
         >
           {t('lists.itemField.newIngredient', { name: typed })}
@@ -270,10 +307,6 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
   );
   const amountRequest = request?.kind === 'amount' ? request : null;
   const freeTextRequest = request?.kind === 'freeText' ? request : null;
-  const focusField = (event: Event) => {
-    event.preventDefault();
-    inputRef.current?.focus();
-  };
 
   return (
     <>
@@ -298,12 +331,13 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
         <ErrorAlert error={addError} />
       </AddField>
       <DueBox
-        ref={dueRef}
+        ref={dueBox}
         items={due}
         disabled={!connected}
         frozen={request !== null}
         onAdd={chooseDue}
         onHide={(item) => hideDue.mutate(item.ingredient.id)}
+        onEmpty={() => inputRef.current?.focus()}
       />
       <ErrorAlert error={hideDue.error} />
       <AmountDialog
@@ -312,14 +346,10 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
         error={amountRequest?.retry?.error}
         disabled={!connected}
         onAdd={(value) => {
-          if (amountRequest)
-            addLinked(amountRequest.ingredient, value, amountRequest.retry, amountRequest.fromDue);
+          if (amountRequest) addLinked(amountRequest, value);
         }}
         onCancel={() => setRequest(null)}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          (amountFromDue.current ? dueRef : inputRef).current?.focus();
-        }}
+        onCloseAutoFocus={restoreFocus}
       />
       <FreeTextDialog
         text={freeTextRequest?.text ?? null}
@@ -330,7 +360,7 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
           if (freeTextRequest) addFreeText(freeTextRequest.text, value, freeTextRequest.retry);
         }}
         onCancel={() => setRequest(null)}
-        onCloseAutoFocus={focusField}
+        onCloseAutoFocus={restoreFocus}
       />
       {connected && (
         <IngredientFormDialog
@@ -345,7 +375,7 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             // Saved: the amount pop-up has the focus; cancelled: back to the field.
-            if (requestRef.current === null) inputRef.current?.focus();
+            if (requestRef.current === null) focusBackThere();
           }}
         />
       )}

@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-react';
-import { useId, useState, type Ref } from 'react';
+import { useId, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ingredientLabel } from '@/features/ingredients/label';
@@ -9,10 +9,20 @@ import { dueLine } from '@/features/recurring/format';
 import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
 
+/** What a row's button does. */
+type DueAction = 'add' | 'hide';
+
+export interface DueBoxHandle {
+  /**
+   * Focuses the button last tapped in the box, or, when its row has left, the same button of the
+   * row in its place, else of the row above. Returns false when there is no row to focus.
+   */
+  restoreFocus: () => boolean;
+}
+
 interface DueBoxProps {
-  /** The box, to take the focus back from the amount pop-up. */
-  ref?: Ref<HTMLElement>;
-  /** The due items as the list detail carries them, most overdue first (the server sorts). */
+  ref?: Ref<DueBoxHandle>;
+  /** The due items as the list detail carries them, longest due first (the server sorts). */
   items: readonly DueItem[];
   /** ＋: the item field's amount pop-up for it. */
   onAdd: (item: DueItem) => void;
@@ -22,6 +32,8 @@ interface DueBoxProps {
   disabled: boolean;
   /** While a pop-up is open the rows stay as they are, so a load of the list doesn't move them. */
   frozen: boolean;
+  /** The last row left while its button had the focus: the item field takes it (A11Y-01). */
+  onEmpty: () => void;
 }
 
 /**
@@ -29,23 +41,68 @@ interface DueBoxProps {
  * viewer's set that aren't on the list, each with its name and "fällig seit 3 Tagen · zuletzt
  * 02.10.", worded from the server's values (MNT-02). Nothing shows when nothing is due. While a
  * pop-up is open the rows don't change: polling (SYNC-08) shows the new ones once it is closed.
+ * When the row whose button had the focus leaves (added, hidden), the focus moves to the same
+ * button of the next row, or of the one above, or to the item field when none is left.
  */
-export function DueBox({ ref, items, onAdd, onHide, disabled, frozen }: DueBoxProps) {
+export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }: DueBoxProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const headingId = useId();
-  const [held, setHeld] = useState(items);
-  if (!frozen && held !== items) setHeld(items);
-  const rows = frozen ? held : items;
+  const [shownRows, setShownRows] = useState(items);
+  if (!frozen && shownRows !== items) setShownRows(items);
+  const rows = frozen ? shownRows : items;
+  /** The row and button last tapped, and where that row was. */
+  const acted = useRef<{ id: string; index: number; action: DueAction } | null>(null);
+  const buttons = useRef(new Map<string, HTMLButtonElement>());
+
+  function focusActed(): boolean {
+    const last = acted.current;
+    if (!last) return false;
+    const index = rows.findIndex((row) => row.ingredient.id === last.id);
+    const at = index >= 0 ? index : Math.min(last.index, rows.length - 1);
+    const row = rows[at];
+    if (!row) {
+      acted.current = null;
+      return false;
+    }
+    acted.current = { id: row.ingredient.id, index: at, action: last.action };
+    buttons.current.get(`${last.action}:${row.ingredient.id}`)?.focus();
+    return true;
+  }
+
+  useImperativeHandle(ref, () => ({ restoreFocus: focusActed }));
+
+  // The row that had the focus left: its button went, and the focus with it (to the page).
+  useLayoutEffect(() => {
+    const last = acted.current;
+    if (!last || rows.some((row) => row.ingredient.id === last.id)) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) {
+      acted.current = null;
+      return;
+    }
+    if (!focusActed()) onEmpty();
+  });
+
+  function act(item: DueItem, index: number, action: DueAction) {
+    acted.current = { id: item.ingredient.id, index, action };
+    if (action === 'add') onAdd(item);
+    else onHide(item);
+  }
+
+  function buttonRef(action: DueAction, id: string) {
+    return (button: HTMLButtonElement | null) => {
+      if (button) buttons.current.set(`${action}:${id}`, button);
+      else buttons.current.delete(`${action}:${id}`);
+    };
+  }
 
   if (rows.length === 0) return null;
   return (
     <section
-      ref={ref}
-      tabIndex={-1}
       aria-labelledby={headingId}
       data-testid={testIds.dueBox}
-      className="flex flex-col rounded-xl border bg-card outline-none"
+      className="flex flex-col rounded-xl border bg-card"
     >
       <h3
         id={headingId}
@@ -54,7 +111,7 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen }: DueBoxPr
         {t('lists.due.title')}
       </h3>
       <ul aria-labelledby={headingId} className="flex flex-col divide-y">
-        {rows.map((item) => {
+        {rows.map((item, index) => {
           const name = ingredientLabel(item.ingredient.name, item.ingredient.brand);
           return (
             <li
@@ -73,7 +130,8 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen }: DueBoxPr
                 className="text-primary"
                 disabled={disabled}
                 aria-label={t('lists.due.add', { name })}
-                onClick={() => onAdd(item)}
+                ref={buttonRef('add', item.ingredient.id)}
+                onClick={() => act(item, index, 'add')}
               >
                 <Plus aria-hidden="true" />
               </Button>
@@ -84,7 +142,8 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen }: DueBoxPr
                 className="text-muted-foreground"
                 disabled={disabled}
                 aria-label={t('lists.due.hide', { name })}
-                onClick={() => onHide(item)}
+                ref={buttonRef('hide', item.ingredient.id)}
+                onClick={() => act(item, index, 'hide')}
               >
                 <X aria-hidden="true" />
               </Button>

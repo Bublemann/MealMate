@@ -360,6 +360,14 @@ export function useRemoveListMeal(listId: string) {
   );
 }
 
+/** The list without the due item of `ingredientId`: it leaves the "Fällig" box (LIST-16). */
+function withoutDue(list: ListDetail, ingredientId: string): ListDetail {
+  return {
+    ...list,
+    due_items: list.due_items.filter((item) => item.ingredient.id !== ingredientId),
+  };
+}
+
 /**
  * LIST-06: a linked or free-text extra item. Its id comes with it (made by the input, which keeps
  * it while the item is sent again), so a retry after a lost answer doesn't add it twice. While
@@ -380,12 +388,7 @@ export function useAddExtraItem(listId: string) {
       optimistic:
         ({ ingredient_id }) =>
         (list) =>
-          ingredient_id
-            ? {
-                ...list,
-                due_items: list.due_items.filter((due) => due.ingredient.id !== ingredient_id),
-              }
-            : list,
+          ingredient_id ? withoutDue(list, ingredient_id) : list,
     },
   );
 }
@@ -453,10 +456,7 @@ export function useHideDueItem(listId: string) {
         }),
       ),
     {
-      optimistic: (ingredientId) => (list) => ({
-        ...list,
-        due_items: list.due_items.filter((item) => item.ingredient.id !== ingredientId),
-      }),
+      optimistic: (ingredientId) => (list) => withoutDue(list, ingredientId),
     },
   );
 }
