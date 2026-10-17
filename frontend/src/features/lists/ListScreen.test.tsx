@@ -1,6 +1,6 @@
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BEN,
   CARL,
@@ -23,7 +23,10 @@ import {
   DETACHED_MEAL,
   EXTRA_ITEMS,
   FLOUR_EXTRA_ID,
+  shoppingList,
+  doneList,
 } from '@/test/lists';
+import { menuItemNames, openMoreMenu } from '@/test/menu';
 import { CATEGORIES, unitOptions, UNITS } from '@/test/ingredients';
 import { EGGS, FLOUR, MILK, mealSummary } from '@/test/meals';
 import { renderApp } from '@/test/render';
@@ -55,6 +58,7 @@ function lineTexts(container: HTMLElement) {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   focusManager.setFocused(undefined);
   Reflect.deleteProperty(navigator, 'share');
   Reflect.deleteProperty(navigator, 'clipboard');
@@ -1070,24 +1074,139 @@ describe('ListScreen', () => {
     });
   });
 
-  describe('someone else’s list (read-only)', () => {
+  describe('⋯ menu (D-39)', () => {
     const carls = listDetail({ owner: CARL, is_owner: false, can_edit: false });
+    const bens = listDetail({ owner: BEN, is_owner: false, shared_with_partner: true });
 
-    it('shows the same list without editing controls (VIS-03)', async () => {
+    beforeEach(() => {
+      // As on the iPhone, which has a share sheet: export reads "Share as text".
+      Object.defineProperty(navigator, 'share', {
+        value: () => Promise.resolve(),
+        configurable: true,
+      });
+    });
+
+    it.each([
+      {
+        role: 'owner in a couple, draft',
+        routes: { 'GET /api/couple': IN_COUPLE },
+        items: ['Rename', 'Share as text', 'Shared with Ben (off)', 'Delete'],
+      },
+      {
+        role: 'owner in a couple, shopping',
+        routes: {
+          'GET /api/couple': IN_COUPLE,
+          [`GET ${BASE}`]: shoppingList({ shared_with_partner: true }),
+        },
+        items: ['Rename', 'Share as text', 'Shared with Ben (on)', 'Delete'],
+      },
+      { role: 'owner without a partner', routes: {}, items: ['Rename', 'Share as text', 'Delete'] },
+      {
+        role: 'partner on a shared list (CPL-03)',
+        routes: { 'GET /api/couple': IN_COUPLE, [`GET ${BASE}`]: bens },
+        items: ['Rename', 'Share as text'],
+      },
+      {
+        role: 'someone else’s list (VIS-03)',
+        routes: { [`GET ${BASE}`]: carls },
+        items: ['Copy to my lists', 'Share as text'],
+      },
+      {
+        role: 'owner of a done list (LIST-13, SHOP-06)',
+        routes: { 'GET /api/couple': IN_COUPLE, [`GET ${BASE}`]: doneList() },
+        items: ['Shop again', 'Reopen', 'Share as text', 'Delete'],
+      },
+      {
+        role: 'partner on a shared done list',
+        routes: { [`GET ${BASE}`]: doneList({ owner: BEN, is_owner: false }) },
+        items: ['Shop again', 'Reopen', 'Share as text'],
+      },
+      {
+        role: 'another user’s done list',
+        routes: { [`GET ${BASE}`]: doneList({ owner: CARL, is_owner: false, can_edit: false }) },
+        items: ['Copy to my lists', 'Shop again', 'Share as text'],
+      },
+    ])('offers the items of the $role in order', async ({ routes, items }) => {
+      const { user } = renderList(routes);
+      await screen.findByTestId(testIds.screenList);
+      await screen.findByRole('heading', { level: 2, name: 'Shopping list' });
+
+      const menu = await openMoreMenu(user);
+
+      expect(menuItemNames(menu)).toEqual(items);
+      // Their buttons are gone from the screen.
+      for (const id of [testIds.renameList, testIds.exportList, testIds.deleteList]) {
+        expect(screen.queryAllByTestId(id).every((element) => menu.contains(element))).toBe(true);
+      }
+      if (items.includes('Delete')) {
+        const remove = within(menu).getByRole('menuitem', { name: 'Delete' });
+        expect(menu.lastElementChild).toBe(remove);
+        expect(remove.previousElementSibling).toHaveAttribute('role', 'separator');
+      }
+    });
+
+    it('is a button named "More actions" in the strip, which arrows and Escape work (A11Y-02)', async () => {
+      const { user } = renderList();
+      await screen.findByTestId(testIds.listLines);
+      const button = screen.getByRole('button', { name: 'More actions' });
+      expect(within(screen.getByTestId(testIds.detailStrip)).getByTestId(testIds.moreActions)).toBe(
+        button,
+      );
+      expect(button).toHaveAttribute('aria-haspopup', 'menu');
+
+      button.focus();
+      await user.keyboard('{Enter}');
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getByRole('menuitem', { name: 'Rename' })).toHaveFocus();
+      await user.keyboard('{ArrowDown}');
+      expect(within(menu).getByRole('menuitem', { name: 'Share as text' })).toHaveFocus();
+      await user.keyboard('{ArrowDown}');
+      expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
+      await user.keyboard('{ArrowUp}');
+      expect(within(menu).getByRole('menuitem', { name: 'Share as text' })).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      expect(button).toHaveFocus();
+    });
+
+    it('closes on a tap outside, which does nothing else', async () => {
+      const { user } = renderList();
+      await screen.findByTestId(testIds.listLines);
+
+      await openMoreMenu(user);
+      await user.click(screen.getByTestId(testIds.addMeals));
+
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      // The meal picker didn't open: the tap only closed the menu.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      // The next tap works as usual.
+      await user.click(screen.getByTestId(testIds.addMeals));
+      expect(await screen.findByRole('dialog')).toBeVisible();
+    });
+
+    it('is not shown before the list is there', async () => {
+      renderList({ [`GET ${BASE}`]: heldRoute().route });
+
+      expect(await screen.findByTestId(testIds.backLink)).toBeVisible();
+      expect(screen.queryByTestId(testIds.moreActions)).not.toBeInTheDocument();
+    });
+
+    it('keeps the read-only note on screen, without a button (VIS-03)', async () => {
       const { user } = renderList({ [`GET ${BASE}`]: carls });
 
-      expect(await screen.findByTestId(testIds.listReadOnly)).toHaveTextContent(
+      const note = await screen.findByTestId(testIds.listReadOnly);
+      expect(note).toHaveTextContent(
         "This is Carl's list. You can look at it and copy it, but not change it.",
       );
+      expect(within(note).queryByRole('button')).not.toBeInTheDocument();
       expect(screen.getByTestId(testIds.listMeals)).toHaveTextContent('4 servings');
       expect(screen.queryByRole('group', { name: /^Servings of/ })).not.toBeInTheDocument();
       expect(screen.queryByTestId(testIds.addMeals)).not.toBeInTheDocument();
       expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.renameList)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.deleteList)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Restore/ })).not.toBeInTheDocument();
-      expect(screen.getByTestId(testIds.exportList)).toBeVisible();
 
       await user.click(
         within(screen.getByTestId(testIds.listLines)).getByRole('button', { name: /^Mehl/ }),
@@ -1096,7 +1215,7 @@ describe('ListScreen', () => {
       expect(within(dialog).queryByRole('button', { name: /Remove|Edit/ })).not.toBeInTheDocument();
     });
 
-    it('copies it to my lists and says how many meals were left out (VIS-03/06)', async () => {
+    it('copies someone else’s list to mine and says how many meals were left out (VIS-03/06)', async () => {
       const copy = emptyList({ id: 'list-copy', name: 'Wochenende' });
       const { fetchMock, user, router } = renderList({
         [`GET ${BASE}`]: carls,
@@ -1104,7 +1223,8 @@ describe('ListScreen', () => {
         'GET /api/lists/list-copy': copy,
       });
 
-      await user.click(await screen.findByTestId(testIds.copyList));
+      const menu = await openMoreMenu(user);
+      await user.click(within(menu).getByTestId(testIds.copyList));
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-copy'));
       expect(await screen.findByTestId(testIds.listLeftOut)).toHaveTextContent(
@@ -1122,173 +1242,231 @@ describe('ListScreen', () => {
         'GET /api/lists/list-copy': copy,
       });
 
-      await user.click(await screen.findByTestId(testIds.copyList));
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.copyList));
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-copy'));
       expect(await screen.findByTestId(testIds.addMeals)).toBeVisible();
       expect(screen.queryByTestId(testIds.listLeftOut)).not.toBeInTheDocument();
     });
-  });
 
-  describe('share switch (CPL-02)', () => {
-    it('is shown to the owner in a couple, named after the partner, and saves', async () => {
-      const { fetchMock, user } = renderList({
-        'GET /api/couple': IN_COUPLE,
-        [`PATCH ${BASE}`]: listDetail({ shared_with_partner: true }),
+    it('shows an error of an action in an alert below the title', async () => {
+      const { user } = renderList({
+        [`GET ${BASE}`]: carls,
+        [`POST ${BASE}/copy`]: errorResponse(403, 'common.forbidden'),
       });
 
-      const toggle = await screen.findByRole('switch', { name: 'Shared with Ben' });
-      expect(toggle).toBe(screen.getByTestId(testIds.shareListSwitch));
-      expect(toggle).not.toBeChecked();
-      await user.click(toggle);
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.copyList));
 
-      await waitFor(() => expect(toggle).toBeChecked());
-      await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({
-        shared_with_partner: true,
-      });
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent("You're not allowed to do that.");
+      const heading = screen.getByRole('heading', { level: 1 });
+      expect(
+        heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
-    it('is not shown without a partner', async () => {
-      renderList();
-
-      await screen.findByTestId(testIds.listLines);
-      expect(screen.queryByTestId(testIds.shareListSwitch)).not.toBeInTheDocument();
-    });
-
-    it('is not shown to the partner, who may still edit a shared list (CPL-03)', async () => {
-      renderList({
-        'GET /api/couple': { ...IN_COUPLE, partner: BEN },
-        [`GET ${BASE}`]: listDetail({ owner: BEN, is_owner: false, shared_with_partner: true }),
-      });
-
-      expect(await screen.findByTestId(testIds.renameList)).toBeVisible();
-      expect(screen.getByTestId(testIds.addMeals)).toBeVisible();
-      expect(screen.queryByTestId(testIds.shareListSwitch)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.deleteList)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.listReadOnly)).not.toBeInTheDocument();
-    });
-  });
-
-  it('renames the list, and an empty name goes back to the default (LIST-02)', async () => {
-    const { fetchMock, user } = renderList({
-      [`PATCH ${BASE}`]: async (request: Request) => {
-        const { name } = (await request.json()) as { name: string | null };
-        return listDetail({ name });
-      },
-    });
-
-    await user.click(await screen.findByTestId(testIds.renameList));
-    let dialog = await screen.findByRole('dialog', { name: 'Rename list' });
-    const field = within(dialog).getByLabelText('Name');
-    // The cursor is in the name, so typing can start at once.
-    expect(field).toHaveFocus();
-    expect(field).toHaveValue('Wochenende');
-    await user.clear(field);
-    await user.type(field, 'Grillabend');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Grillabend (26/09/2026)' }),
-    ).toBeVisible();
-    await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({ name: 'Grillabend' });
-
-    await user.click(screen.getByTestId(testIds.renameList));
-    dialog = await screen.findByRole('dialog', { name: 'Rename list' });
-    await user.clear(within(dialog).getByLabelText('Name'));
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Shopping list (26/09/2026)' }),
-    ).toBeVisible();
-    await expect(bodyOf(fetchMock, `PATCH ${BASE}`, 1)).resolves.toEqual({ name: null });
-  });
-
-  it('keeps a change when a load of the list that started before it answers later', async () => {
-    let loads = 0;
-    let answerReload: (() => void) | undefined;
-    const { user } = renderList({
-      [`GET ${BASE}`]: () => {
-        loads += 1;
-        if (loads === 1) return listDetail();
-        // Back in the foreground: this load still has the old name and answers late.
-        return new Promise((resolve) => {
-          answerReload = () => resolve(listDetail());
+    describe('share switch (CPL-02)', () => {
+      it('is a switch item named after the partner that toggles with the menu still open', async () => {
+        const { fetchMock, user } = renderList({
+          'GET /api/couple': IN_COUPLE,
+          [`PATCH ${BASE}`]: listDetail({ shared_with_partner: true }),
         });
-      },
-      [`PATCH ${BASE}`]: listDetail({ name: 'Grillabend' }),
-    });
-    await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' });
+        await screen.findByTestId(testIds.listLines);
 
-    act(() => {
-      focusManager.setFocused(false);
-      focusManager.setFocused(true);
-    });
-    await waitFor(() => expect(answerReload).toBeDefined());
-    await user.click(screen.getByTestId(testIds.renameList));
-    const dialog = await screen.findByRole('dialog', { name: 'Rename list' });
-    await user.clear(within(dialog).getByLabelText('Name'));
-    await user.type(within(dialog).getByLabelText('Name'), 'Grillabend');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-    const heading = await screen.findByRole('heading', {
-      level: 1,
-      name: 'Grillabend (26/09/2026)',
-    });
-    await act(async () => {
-      answerReload?.();
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+        const menu = await openMoreMenu(user);
+        const toggle = within(menu).getByRole('menuitemcheckbox', { name: 'Shared with Ben' });
+        expect(toggle).toBe(screen.getByTestId(testIds.shareListSwitch));
+        expect(toggle).not.toBeChecked();
+        await user.click(toggle);
 
-    expect(heading).toHaveTextContent('Grillabend (26/09/2026)');
-  });
+        expect(menu).toBeInTheDocument();
+        await waitFor(() => expect(toggle).toBeChecked());
+        expect(screen.getByRole('menu')).toBe(menu);
+        await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({
+          shared_with_partner: true,
+        });
+        // No hint and no badge on the screen.
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+        expect(document.body).not.toHaveTextContent(/sees this list|Shared with Ben/);
+      });
 
-  it('deletes the list after asking and goes back to Lists (LIST-13)', async () => {
-    const { fetchMock, user, router } = renderList({ [`DELETE ${BASE}`]: null });
+      it('is not shown to the partner, who may still edit a shared list (CPL-03)', async () => {
+        const { user } = renderList({
+          'GET /api/couple': IN_COUPLE,
+          [`GET ${BASE}`]: bens,
+        });
+        expect(await screen.findByTestId(testIds.addMeals)).toBeVisible();
+        expect(screen.queryByTestId(testIds.listReadOnly)).not.toBeInTheDocument();
 
-    await user.click(await screen.findByRole('button', { name: 'Delete Wochenende (26/09/2026)' }));
-    const confirm = await screen.findByRole('alertdialog', {
-      name: 'Delete Wochenende (26/09/2026)?',
-    });
-    await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/lists'));
-    expect(requestsTo(fetchMock, `DELETE ${BASE}`)).toHaveLength(1);
-  });
-
-  describe('export (EXP-01/02)', () => {
-    it('opens the share sheet with the list as text, within the tap', async () => {
-      const share = vi.fn(() => Promise.resolve());
-      Object.defineProperty(navigator, 'share', { value: share, configurable: true });
-      renderList();
-
-      const button = await screen.findByRole('button', { name: 'Share as text' });
-      await screen.findByTestId(testIds.listLines);
-      fireEvent.click(button);
-
-      expect(share).toHaveBeenCalledTimes(1);
-      const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
-      expect(text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen\n3× Private meal')).toBe(
-        true,
-      );
-      expect(text).toContain('Dairy & eggs\n- Milch: 1.5 l');
-      expect(text).not.toContain('Eier');
-      // It ends with the lines (D-43).
-      expect(text.endsWith('- Mehl: 850 g\n- Salz')).toBe(true);
+        const menu = await openMoreMenu(user);
+        expect(within(menu).queryByTestId(testIds.shareListSwitch)).not.toBeInTheDocument();
+      });
     });
 
-    it('copies the text where there is no share sheet', async () => {
-      renderList();
-      const button = await screen.findByTestId(testIds.exportList);
-      // After rendering: user-event would replace the clipboard with its own.
-      const writeText = vi.fn(() => Promise.resolve());
-      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    it('renames the list, and an empty name goes back to the default (LIST-02)', async () => {
+      const { fetchMock, user } = renderList({
+        [`PATCH ${BASE}`]: async (request: Request) => {
+          const { name } = (await request.json()) as { name: string | null };
+          return listDetail({ name });
+        },
+      });
 
-      fireEvent.click(button);
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.renameList));
+      let dialog = await screen.findByRole('dialog', { name: 'Rename list' });
+      const field = within(dialog).getByLabelText('Name');
+      // The cursor is in the name, so typing can start at once.
+      await waitFor(() => expect(field).toHaveFocus());
+      expect(field).toHaveValue('Wochenende');
+      await user.clear(field);
+      await user.type(field, 'Grillabend');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
       expect(
-        await screen.findByText('Copied – paste the list into a note or message.'),
+        await screen.findByRole('heading', { level: 1, name: 'Grillabend (26/09/2026)' }),
       ).toBeVisible();
-      expect(screen.getByTestId(testIds.exportList)).toHaveTextContent('Copy as text');
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('- Mehl: 850 g'));
+      await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({ name: 'Grillabend' });
+      await waitFor(() => expect(screen.getByTestId(testIds.moreActions)).toHaveFocus());
+
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.renameList));
+      dialog = await screen.findByRole('dialog', { name: 'Rename list' });
+      expect(within(dialog).getByLabelText('Name')).toHaveValue('Grillabend');
+      await user.clear(within(dialog).getByLabelText('Name'));
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Shopping list (26/09/2026)' }),
+      ).toBeVisible();
+      await expect(bodyOf(fetchMock, `PATCH ${BASE}`, 1)).resolves.toEqual({ name: null });
+    });
+
+    it('keeps a change when a load of the list that started before it answers later', async () => {
+      let loads = 0;
+      let answerReload: (() => void) | undefined;
+      const { user } = renderList({
+        [`GET ${BASE}`]: () => {
+          loads += 1;
+          if (loads === 1) return listDetail();
+          // Back in the foreground: this load still has the old name and answers late.
+          return new Promise((resolve) => {
+            answerReload = () => resolve(listDetail());
+          });
+        },
+        [`PATCH ${BASE}`]: listDetail({ name: 'Grillabend' }),
+      });
+      await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' });
+
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(answerReload).toBeDefined());
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.renameList));
+      const dialog = await screen.findByRole('dialog', { name: 'Rename list' });
+      await user.clear(within(dialog).getByLabelText('Name'));
+      await user.type(within(dialog).getByLabelText('Name'), 'Grillabend');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      const heading = await screen.findByRole('heading', {
+        level: 1,
+        name: 'Grillabend (26/09/2026)',
+      });
+      await act(async () => {
+        answerReload?.();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(heading).toHaveTextContent('Grillabend (26/09/2026)');
+    });
+
+    it('deletes the list after asking and goes back to Lists (LIST-13)', async () => {
+      const { fetchMock, user, router } = renderList({ [`DELETE ${BASE}`]: null });
+
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.deleteList));
+      const confirm = await screen.findByRole('alertdialog', {
+        name: 'Delete Wochenende (26/09/2026)?',
+      });
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/lists'));
+      expect(requestsTo(fetchMock, `DELETE ${BASE}`)).toHaveLength(1);
+    });
+
+    it('puts the focus back on ⋯ when deleting is cancelled (LIST-13)', async () => {
+      const { fetchMock, user } = renderList({ [`DELETE ${BASE}`]: null });
+
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.deleteList));
+      const confirm = await screen.findByRole('alertdialog');
+      await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId(testIds.moreActions)).toHaveFocus());
+      expect(requestsTo(fetchMock, `DELETE ${BASE}`)).toHaveLength(0);
+    });
+
+    it('disables what needs a connection offline, and export still works (SYNC-03, EXP-03)', async () => {
+      const share = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+      const { user, fetchMock } = renderList({ 'GET /api/couple': IN_COUPLE });
+      await screen.findByTestId(testIds.listLines);
+      goOffline(fetchMock);
+
+      const button = await screen.findByRole('button', { name: 'More actions' });
+      expect(button).toBeEnabled();
+      const menu = await openMoreMenu(user);
+      for (const id of [testIds.renameList, testIds.shareListSwitch, testIds.deleteList]) {
+        expect(within(menu).getByTestId(id)).toHaveAttribute('aria-disabled', 'true');
+      }
+      const exportItem = within(menu).getByTestId(testIds.exportList);
+      expect(exportItem).not.toHaveAttribute('aria-disabled');
+
+      await user.click(exportItem);
+      expect(share).toHaveBeenCalledTimes(1);
+    });
+
+    describe('export (EXP-01/02)', () => {
+      it('opens the share sheet with the list as text, within the tap', async () => {
+        const share = vi.fn(() => Promise.resolve());
+        Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+        const { user } = renderList();
+        await screen.findByTestId(testIds.listLines);
+
+        const menu = await openMoreMenu(user);
+        const item = within(menu).getByRole('menuitem', { name: 'Share as text' });
+        fireEvent.click(item);
+
+        expect(share).toHaveBeenCalledTimes(1);
+        const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
+        expect(text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen\n3× Private meal')).toBe(
+          true,
+        );
+        expect(text).toContain('Dairy & eggs\n- Milch: 1.5 l');
+        expect(text).not.toContain('Eier');
+        // It ends with the lines (D-43).
+        expect(text.endsWith('- Mehl: 850 g\n- Salz')).toBe(true);
+      });
+
+      it('copies the text where there is no share sheet, and says so below the title', async () => {
+        Reflect.deleteProperty(navigator, 'share');
+        const { user } = renderList();
+        await screen.findByTestId(testIds.listLines);
+        const menu = await openMoreMenu(user);
+        const item = within(menu).getByTestId(testIds.exportList);
+        // After user-event's setup: it would replace the clipboard with its own.
+        const writeText = vi.fn(() => Promise.resolve());
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+        expect(item).toHaveTextContent('Copy as text');
+
+        fireEvent.click(item);
+
+        const message = await screen.findByText('Copied – paste the list into a note or message.');
+        expect(message).toHaveAttribute('aria-live', 'polite');
+        const heading = screen.getByRole('heading', { level: 1 });
+        expect(
+          heading.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining('- Mehl: 850 g'));
+      });
     });
   });
 

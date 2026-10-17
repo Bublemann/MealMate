@@ -1,6 +1,7 @@
 import { Check, CircleCheck, Pencil, ShoppingBasket } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FloatingBar, FloatingBarButton } from '@/components/FloatingBar';
 import { InitialMarker } from '@/components/InitialMarker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,8 +39,9 @@ const CART = Symbol('cart');
 /**
  * The list while shopping (SHOP): big check boxes by category, checked lines in the collapsed
  * "In the cart" section with who checked them, quick add (SHOP-02), extra items editable from
- * their line, the meals still editable but collapsed (LIST-12), and "Finish shopping" (SHOP-04).
- * Checking the last line offers to finish, once per visit.
+ * their line, the meals still editable but collapsed (LIST-12), and "Finish shopping" (SHOP-04)
+ * in the floating bar above the tab bar (D-39). Checking the last line offers to finish, once per
+ * visit.
  *
  * Checking off, free-text items and *Finish* go through the outbox, online or offline (SYNC-03):
  * stored, shown at once, then sent; what hasn't been sent yet looks faded (SYNC-07).
@@ -150,16 +152,6 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
         <p data-testid={testIds.shoppingAnnouncement} aria-live="polite" className="sr-only">
           {announcement}
         </p>
-        {editable && (
-          <Button
-            data-testid={testIds.finishShopping}
-            onClick={() => setFinishOpen(true)}
-            className="self-start"
-          >
-            <ShoppingBasket aria-hidden="true" />
-            {t('lists.shop.finish')}
-          </Button>
-        )}
       </section>
       {editable && <ExtraItemInput listId={list.id} shopping />}
       <ListMeals list={list} editable={editable} collapsible onAddMeals={onAddMeals} />
@@ -171,6 +163,18 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
           shopping
           onClose={() => setEditingId(null)}
         />
+      )}
+      {editable && (
+        // Above the tab bar, under the thumb (D-39); finishing works offline too.
+        <FloatingBar>
+          <FloatingBarButton
+            data-testid={testIds.finishShopping}
+            onClick={() => setFinishOpen(true)}
+          >
+            <ShoppingBasket aria-hidden="true" />
+            {t('lists.shop.finish')}
+          </FloatingBarButton>
+        </FloatingBar>
       )}
       {editable && (
         <FinishDialog

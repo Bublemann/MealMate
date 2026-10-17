@@ -19,6 +19,7 @@ import {
 } from '@/test/ingredients';
 import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
+import { chooseFromMenu } from '@/test/menu';
 import { testIds } from '@/testIds';
 import { toSummary } from './api';
 
@@ -487,7 +488,7 @@ describe('IngredientsScreen', () => {
 
     // Give Gouda a new category.
     await user.click(await screen.findByRole('link', { name: /^Gouda/ }));
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Gouda' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Uncategorized'));

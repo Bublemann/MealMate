@@ -115,6 +115,8 @@ interface IngredientFormDialogProps {
    * already in MealMate offer to use that ingredient instead of linking to it (the picker).
    */
   onPickExisting?: (ingredient: IngredientSummary) => void;
+  /** Where the focus goes when it closes (default: back to its trigger). */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**
@@ -122,7 +124,12 @@ interface IngredientFormDialogProps {
  * scrolls between the headline and its footer with "Save", which stays in the visible area
  * above the keyboard (UI-01).
  */
-export function IngredientFormDialog({ open, onOpenChange, ...props }: IngredientFormDialogProps) {
+export function IngredientFormDialog({
+  open,
+  onOpenChange,
+  onCloseAutoFocus,
+  ...props
+}: IngredientFormDialogProps) {
   const { t } = useTranslation();
   const { ingredient } = props;
   const nameRef = useRef<HTMLInputElement>(null);
@@ -132,6 +139,7 @@ export function IngredientFormDialog({ open, onOpenChange, ...props }: Ingredien
       <DialogContent
         className="gap-0 overflow-hidden"
         aria-describedby={undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
         onOpenAutoFocus={(event) => {
           // The cursor starts in the name only while it is empty (D-35): with a name, the
           // keyboard would cover the icons and the category, so the pop-up itself takes the focus.

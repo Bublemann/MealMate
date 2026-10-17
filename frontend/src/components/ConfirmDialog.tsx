@@ -23,6 +23,8 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   onConfirm: () => void;
   destructive?: boolean;
+  /** Where the focus goes when it closes (default: back to its trigger). */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /** Asks before an action that can't (easily) be undone. */
@@ -35,13 +37,14 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   destructive = false,
+  onCloseAutoFocus,
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

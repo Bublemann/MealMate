@@ -7,6 +7,7 @@ from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
+from support.ui import open_more_menu
 
 # The largest iPhone text size (53 px body text, simulated as in test_ingredients.py): the
 # content grows, so every screen scrolls, while the strip stops growing (D-29).
@@ -115,3 +116,38 @@ def strip_height(page: Page) -> float:
     box = strip.bounding_box()
     assert box is not None
     return box["height"]
+
+
+def test_menu_fits_the_screen_at_the_largest_text_size(
+    page: Page, api: Api, member: Account
+) -> None:
+    """D-39, UI-01: at the largest text size the ⋯ menu's items wrap within the screen's width
+    and the menu scrolls within its height; the floating bar stays above the tab bar."""
+    draft = api.create_list(member, f"Wochenende {unique('menu')}")
+    sign_in(page.context, member)
+    page.goto(f"/lists/{draft['id']}")
+    bar = page.get_by_test_id(TEST_IDS["floatingBar"])
+    expect(bar).to_be_visible()
+    page.add_style_tag(content=LARGEST_TEXT)
+
+    menu = open_more_menu(page)
+    viewport = page.viewport_size
+    assert viewport is not None
+    box = menu.bounding_box()
+    assert box is not None
+    # 16 px from the screen's edges, give or take rounding.
+    assert box["x"] >= 15
+    assert box["x"] + box["width"] <= viewport["width"] - 15
+    assert box["y"] + box["height"] <= viewport["height"] - 15
+    assert menu.evaluate("menu => menu.scrollWidth <= menu.clientWidth")
+    delete = menu.get_by_test_id(TEST_IDS["deleteList"])
+    delete.scroll_into_view_if_needed()
+    expect(delete).to_be_in_viewport()
+
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    bar_box = bar.bounding_box()
+    nav_box = page.get_by_role("navigation", name=text("nav.label")).bounding_box()
+    assert bar_box is not None
+    assert nav_box is not None
+    assert bar_box["y"] + bar_box["height"] <= nav_box["y"]
