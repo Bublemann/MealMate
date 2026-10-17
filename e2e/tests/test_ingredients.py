@@ -120,10 +120,10 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
 
 
 @pytest.mark.parametrize(
-    "viewport", [None, IPHONE_SE_SCREEN], ids=["default-device", "iphone-se-screen"]
+    "screen", [None, IPHONE_SE_SCREEN], ids=["default-device", "iphone-se-screen"]
 )
 def test_pinned_block_fits_the_largest_text_size(
-    member_page: Page, viewport: ViewportSize | None
+    member_page: Page, screen: ViewportSize | None
 ) -> None:
     """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
     shows its headline and wraps a long "Create …" tile without clipping them or widening the
@@ -132,8 +132,8 @@ def test_pinned_block_fits_the_largest_text_size(
     Also on the smaller screen of an iPhone SE, where the narrower tile takes more lines.
     test_lists.py has a headline that has to wrap."""
     page = member_page
-    if viewport is not None:
-        page.set_viewport_size(viewport)
+    if screen is not None:
+        page.set_viewport_size(screen)
     page.goto("/ingredients")
     # How many lines the tile takes depends on the font. The browsers' default one differs by
     # platform (wider on Linux than on a Mac), so the text is set in Arial, as wide as the

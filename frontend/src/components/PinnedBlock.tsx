@@ -50,13 +50,11 @@ export function PinnedBlock({ search, filter, newTile }: PinnedBlockProps) {
       data-testid={testIds.pinnedBlock}
       className="frosted pinned sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em]"
     >
-      {/* As large as a detail screen's title, but in em, so the block's cap holds it too, and
-          no larger than 42 px (1.5 times the capped text), so the block leaves room for the
-          content at the largest text sizes. A long one wraps, hyphenated in the UI language
-          (<html lang>). */}
+      {/* Sized by --pinned-headline-size, under the block's cap (D-29). A long one wraps,
+          hyphenated in the UI language (<html lang>). */}
       <h1
         id={heading.id}
-        className="text-[min(1.875em,42px)] leading-[1.2] font-bold tracking-tight hyphens-auto wrap-anywhere"
+        className="text-(length:--pinned-headline-size) leading-[1.2] font-bold tracking-tight hyphens-auto wrap-anywhere"
       >
         {heading.title}
       </h1>

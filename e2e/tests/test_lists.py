@@ -9,12 +9,14 @@ reorders the categories).
 import re
 from collections.abc import Callable
 
-from playwright.sync_api import Locator, Page, expect
+from playwright.sync_api import Locator, Page, ViewportSize, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
 
 LIST_URL = re.compile(r"/lists/([\w-]+)$")
+# As narrow as an iPhone SE's screen with Display Zoom.
+NARROW_SCREEN: ViewportSize = {"width": 320, "height": 568}
 
 
 def category_names(api: Api, account: Account, keys: set[str]) -> list[str]:
@@ -280,7 +282,7 @@ def test_pinned_headline_wraps_on_a_narrow_screen(
     content column: the headline breaks inside the word, hyphenated where the browser can, instead
     of clipping or widening the page."""
     sign_in(page.context, invite_user(language="de"))
-    page.set_viewport_size({"width": 320, "height": 568})
+    page.set_viewport_size(NARROW_SCREEN)
     page.goto("/lists")
     page.add_style_tag(content="html { font-size: 53px !important; }")
 
@@ -299,4 +301,4 @@ def test_pinned_headline_wraps_on_a_narrow_screen(
     box = headline.bounding_box()
     assert box is not None
     assert box["x"] >= 0
-    assert box["x"] + box["width"] <= 320
+    assert box["x"] + box["width"] <= NARROW_SCREEN["width"]
