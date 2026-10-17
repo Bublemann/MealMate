@@ -275,7 +275,7 @@ async def reset_password(
     user_agent: str | None,
 ) -> LoginResult:
     """Set a new password with a reset link, end every other session of the user, record who
-    reset it (shown in *Me → Security*), and log in (ACC-07, ACC-10)."""
+    reset it (shown in *Einstellungen → Sicherheit*), and log in (ACC-07, ACC-10)."""
     async with session.begin():
         _, user = await _reset_target(session, config, code, now)
         username = user.username
