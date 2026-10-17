@@ -15,8 +15,8 @@ interface Tab {
   label: 'nav.lists' | 'nav.meals' | 'nav.ingredients' | 'nav.me';
   icon: LucideIcon;
   testId: TestId;
-  /** The tab carries the count of what waits for the user (D-51). */
-  counted?: boolean;
+  /** The tab carries the count of what waits for the user (D-51), named by this key. */
+  countLabel?: 'nav.meCount';
 }
 
 const TABS: readonly Tab[] = [
@@ -24,7 +24,7 @@ const TABS: readonly Tab[] = [
   { to: '/meals', label: 'nav.meals', icon: CookingPot, testId: testIds.tabMeals },
   { to: '/ingredients', label: 'nav.ingredients', icon: Carrot, testId: testIds.tabIngredients },
   // The Settings tab keeps the address and test ID it had as "Me" (D-44).
-  { to: '/me', label: 'nav.me', icon: Settings, testId: testIds.tabMe, counted: true },
+  { to: '/me', label: 'nav.me', icon: Settings, testId: testIds.tabMe, countLabel: 'nav.meCount' },
 ];
 
 /**
@@ -61,8 +61,8 @@ export function Layout() {
         className="frosted fixed inset-x-(--tab-bar-margin) bottom-(--tab-bar-bottom) z-10 mx-auto h-(--tab-bar-height) max-w-[calc(var(--container-2xl)-2rem)] rounded-full border border-frosted-border p-(--tab-bar-padding) shadow-frosted"
       >
         <ul className="flex h-full">
-          {TABS.map(({ to, label, icon: Icon, testId, counted }) => {
-            const count = counted ? settingsCount : 0;
+          {TABS.map(({ to, label, icon: Icon, testId, countLabel }) => {
+            const count = countLabel ? settingsCount : 0;
             return (
               <li key={to} className="flex min-w-0 flex-1">
                 <NavLink
@@ -99,7 +99,7 @@ export function Layout() {
                         )}
                       </span>
                       <span className="sr-only">
-                        {count > 0 ? t('nav.meCount', { count }) : t(label)}
+                        {countLabel && count > 0 ? t(countLabel, { count }) : t(label)}
                       </span>
                     </>
                   )}
