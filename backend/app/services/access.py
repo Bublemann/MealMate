@@ -9,6 +9,8 @@
 | Shopping (M5b) | shop again: whoever sees the done list | start, ops, reopen: list editors |
 | Meal on a list (M5a) | details if its meal is visible, else "Private meal" (VIS-06) | n/a |
 | Ingredient (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
+| Recurring item (LIST-16) | own set; the couple's set while in a couple | same (either partner) |
+| Notice (D-51) | the user it is for | dismiss: same |
 | Reference data (M3) | everyone | add a cuisine: everyone; reorder categories: admin |
 | Admin endpoints | active admin (`require_admin`) | same; never self-deactivation or deletion |
 
@@ -18,9 +20,9 @@ shared list) sees it read-only. Only the owner deletes a list and switches shari
 Ingredients are a shared household wiki, so they need no per-object check; the
 admin-only actions go through `require_admin` (via the `CurrentAdmin` dependency).
 
-A meal or list the viewer may not see answers exactly like one that does not exist (404
-`common.not_found`), so its existence never leaks; a visible meal or list the viewer may not
-change answers edits with 403 `common.forbidden`.
+A meal, list, recurring item or notice the viewer may not see answers exactly like one that
+does not exist (404 `common.not_found`), so its existence never leaks; a visible meal or list
+the viewer may not change answers edits with 403 `common.forbidden`.
 """
 
 from dataclasses import dataclass
@@ -28,10 +30,13 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode, not_found
-from app.models import Meal, ShoppingList
+from app.domain.owners import OwnerKey
+from app.models import Meal, Notice, RecurringItem, ShoppingList
 from app.repositories import couples as couples_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
+from app.repositories import notices as notices_repo
+from app.repositories import recurring as recurring_repo
 from app.repositories import users as users_repo
 from app.schemas.users import VisibilityScope
 from app.services.principal import Principal
@@ -53,6 +58,39 @@ async def partner_id(session: AsyncSession, user_id: str) -> str | None:
     if couple is None:
         return None
     return couple.addressee_id if couple.requester_id == user_id else couple.requester_id
+
+
+async def owner_key(session: AsyncSession, user_id: str) -> OwnerKey:
+    """Who owns the data the user shares with their partner now (recurring items D-42,
+    walking order D-48): their couple while they are in one (a deactivated partner included,
+    CPL-07), else the user."""
+    couple = await couples_repo.accepted_for(session, user_id)
+    if couple is None:
+        return OwnerKey(couple_id=None, user_id=user_id)
+    return OwnerKey(couple_id=couple.id, user_id=None)
+
+
+async def require_recurring_item(
+    session: AsyncSession, principal: Principal, item_id: str
+) -> RecurringItem:
+    """The recurring item, if it is in the principal's current set (LIST-16): for every method
+    404 `common.not_found` otherwise, exactly as for an item that does not exist."""
+    item = await recurring_repo.get(session, item_id)
+    if item is None:
+        raise not_found()
+    owner = OwnerKey(couple_id=item.couple_id, user_id=item.user_id)
+    if owner != await owner_key(session, principal.user_id):
+        raise not_found()
+    return item
+
+
+async def require_own_notice(session: AsyncSession, principal: Principal, notice_id: str) -> Notice:
+    """The notice, if it is for the principal (D-51); 404 `common.not_found` otherwise, exactly
+    as for a notice that does not exist."""
+    notice = await notices_repo.get(session, notice_id)
+    if notice is None or notice.user_id != principal.user_id:
+        raise not_found()
+    return notice
 
 
 async def visible_owner_ids(

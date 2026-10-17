@@ -79,3 +79,9 @@ async def set_stored(app: FastAPI, ingredient_id: str, **values: Any) -> None:
         await session.execute(
             update(Ingredient).where(Ingredient.id == ingredient_id).values(**values)
         )
+
+
+def summary(ingredient: Any) -> dict[str, Any]:
+    """An ingredient as other objects embed it (`IngredientSummary`)."""
+    keys = ("id", "name", "brand", "barcode", "source", "category_id", "base_unit")
+    return {key: ingredient[key] for key in keys}

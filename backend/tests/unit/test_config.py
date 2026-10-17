@@ -1,4 +1,5 @@
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
@@ -42,6 +43,8 @@ def test_defaults(secret_key: str) -> None:
     assert (settings.off_rate_app_per_minute, settings.off_rate_job_per_minute) == (6, 4)
     assert (settings.invite_ttl_days, settings.reset_ttl_hours) == (7, 24)
     assert settings.session_idle_days == 90
+    assert settings.time_zone == "Europe/Berlin"
+    assert settings.zone == ZoneInfo("Europe/Berlin")
     assert (settings.version, settings.commit) == ("0.0.0-dev", "unknown")
 
 
@@ -55,6 +58,7 @@ def test_reads_prefixed_environment(monkeypatch: pytest.MonkeyPatch, secret_key:
     monkeypatch.setenv("MEALMATE_COMMIT", "0123abc")
     monkeypatch.setenv("MEALMATE_STATUS_DIR", "/srv/status")
     monkeypatch.setenv("MEALMATE_IMAGE_DIGEST", " sha256:abc ")
+    monkeypatch.setenv("MEALMATE_TIME_ZONE", "America/New_York")
     monkeypatch.setenv("SECRET_KEY", "unprefixed variables are ignored")
 
     settings = get_settings()
@@ -67,6 +71,7 @@ def test_reads_prefixed_environment(monkeypatch: pytest.MonkeyPatch, secret_key:
     assert (settings.version, settings.commit) == ("2.0.0-alpha.1", "0123abc")
     assert settings.status_dir == Path("/srv/status")
     assert settings.image_digest == "sha256:abc"
+    assert settings.zone == ZoneInfo("America/New_York")
     assert get_settings() is settings
 
 
@@ -143,6 +148,14 @@ def test_public_url_is_normalised(secret_key: str) -> None:
 def test_public_url_must_be_http_url(secret_key: str, public_url: str) -> None:
     with pytest.raises(ValidationError, match="public_url"):
         Settings(secret_key=secret_key, public_url=public_url)
+
+
+@pytest.mark.parametrize("time_zone", ["Mars/Olympus_Mons", "", "../etc/passwd", "Europe/"])
+def test_unknown_time_zone_is_rejected(secret_key: str, time_zone: str) -> None:
+    """Calendar days of recurring items need the zone's data (LIST-16): the app refuses to
+    start without it."""
+    with pytest.raises(ValidationError, match="unknown time zone"):
+        Settings(secret_key=secret_key, time_zone=time_zone)
 
 
 def test_invalid_log_level_is_rejected(secret_key: str) -> None:
