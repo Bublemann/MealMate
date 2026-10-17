@@ -64,6 +64,18 @@ export function formatDayMonth(
   }).format(new Date(date));
 }
 
+/**
+ * A calendar date such as `2026-10-02` (a day, not a moment): `02.10.` (de) or `02/10` (en) in
+ * the current year, else with its year, `20.12.2025` or `20/12/2025`.
+ */
+export function formatCalendarDay(date: string, language: Language): string {
+  const sameYear = date.slice(0, 4) === String(new Date().getFullYear());
+  return new Intl.DateTimeFormat(LOCALES[language], {
+    ...(sameYear ? { day: '2-digit', month: '2-digit' } : DATE_OPTIONS),
+    timeZone: 'UTC',
+  }).format(new Date(date));
+}
+
 const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   ...DATE_OPTIONS,
   hour: '2-digit',

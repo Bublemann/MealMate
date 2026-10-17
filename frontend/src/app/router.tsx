@@ -16,6 +16,7 @@ import { PrivacyScreen } from '@/features/me/PrivacyScreen';
 import { ProfileScreen } from '@/features/me/ProfileScreen';
 import { SecurityScreen } from '@/features/me/SecurityScreen';
 import { SettingsScreen } from '@/features/me/SettingsScreen';
+import { RecurringScreen } from '@/features/recurring/RecurringScreen';
 import { Layout } from './Layout';
 
 /**
@@ -63,6 +64,7 @@ export const routes: RouteObject[] = [
           { path: 'me/privacy', element: <PrivacyScreen /> },
           { path: 'me/couple', element: <CoupleScreen /> },
           { path: 'me/security', element: <SecurityScreen /> },
+          { path: 'me/recurring', element: <RecurringScreen /> },
           { path: 'me/about', element: <AboutScreen /> },
           {
             path: 'me/admin',

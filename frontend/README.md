@@ -597,6 +597,7 @@ order.
 | `screenPrivacy`          | `screen-privacy`           | Settings → Privatsphäre page                     |
 | `screenCouple`           | `screen-couple`            | Settings → Paar page                             |
 | `screenSecurity`         | `screen-security`          | Settings → Sicherheit page                       |
+| `screenRecurring`        | `screen-recurring`         | Settings → Regelmäßige Artikel page              |
 | `screenAbout`            | `screen-about`             | Settings → Über MealMate page                    |
 | `languageSelect`         | `language-select`          | Language select on Profil                        |
 | `appVersion`             | `app-version`              | Running version on Über MealMate (once loaded)   |
@@ -664,6 +665,12 @@ order.
 | `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge…" in the ingredient's ⋯ menu       |
 | `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge      |
 | `deleteIngredient`       | `delete-ingredient`        | Admin: "Delete" in the ingredient's ⋯ menu       |
+| `recurringList`          | `recurring-list`           | The recurring items on Regelmäßige Artikel       |
+| `recurringItem`          | `recurring-item`           | One recurring item (opens its pop-up)            |
+| `recurringNotices`       | `recurring-notices`        | Unread notices at the top of the page            |
+| `dismissNotice`          | `dismiss-notice`           | ✕ that dismisses one notice                      |
+| `recurringDialog`        | `recurring-dialog`         | Recurring pop-up (new or edit)                   |
+| `recurringRemove`        | `recurring-remove`         | "No longer recurring" in the recurring pop-up    |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)              |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                        |
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                         |

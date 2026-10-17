@@ -39,6 +39,7 @@ describe('SettingsScreen', () => {
       '/me/privacy',
       '/me/couple',
       '/me/security',
+      '/me/recurring',
       '/me/about',
     ]);
     expect(within(settings).getByRole('link', { name: /^Profile/ })).toHaveAttribute(
@@ -48,6 +49,7 @@ describe('SettingsScreen', () => {
     expect(within(settings).getByRole('link', { name: /^Privacy/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^Couple/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^Security/ })).toBeVisible();
+    expect(within(settings).getByRole('link', { name: /^Recurring items/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^About MealMate/ })).toBeVisible();
     // Abmelden is a button, not a link, and comes last.
     const logout = screen.getByTestId(testIds.logoutButton);
@@ -80,6 +82,7 @@ describe('SettingsScreen', () => {
       '/me/privacy',
       '/me/couple',
       '/me/security',
+      '/me/recurring',
       '/me/admin/users',
       '/me/admin/invites',
       '/me/admin/categories',
@@ -94,6 +97,12 @@ describe('SettingsScreen', () => {
     { row: /^Privacy/, path: '/me/privacy', title: 'Privacy', testId: testIds.screenPrivacy },
     { row: /^Couple/, path: '/me/couple', title: 'Couple', testId: testIds.screenCouple },
     { row: /^Security/, path: '/me/security', title: 'Security', testId: testIds.screenSecurity },
+    {
+      row: /^Recurring items/,
+      path: '/me/recurring',
+      title: 'Recurring items',
+      testId: testIds.screenRecurring,
+    },
     {
       row: /^About MealMate/,
       path: '/me/about',
