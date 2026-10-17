@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
-import { errorResponse, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
+import { errorResponse, goOffline, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
 import {
   APPLES,
   CATEGORIES_WITH_UNCATEGORIZED,
@@ -12,6 +12,13 @@ import {
   summary,
   WEIDEHOF_MILK,
 } from '@/test/ingredients';
+import {
+  deletedNotice,
+  noticeList,
+  recurringItem,
+  recurringList,
+  stubResizeObserver,
+} from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { chooseFromMenu, menuItemNames, openMoreMenu } from '@/test/menu';
 import { testIds } from '@/testIds';
@@ -649,7 +656,7 @@ describe('IngredientMenu (D-39)', () => {
 
     const menu = await openMoreMenu(user);
 
-    expect(menuItemNames(menu)).toEqual(['Edit']);
+    expect(menuItemNames(menu)).toEqual(['Edit', 'Buy regularly…']);
     // The properties card has no button of its own any more.
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
@@ -663,7 +670,7 @@ describe('IngredientMenu (D-39)', () => {
 
     const menu = await openMoreMenu(user);
 
-    expect(menuItemNames(menu)).toEqual(['Edit', 'Merge…', 'Delete']);
+    expect(menuItemNames(menu)).toEqual(['Edit', 'Buy regularly…', 'Merge…', 'Delete']);
     const remove = within(menu).getByTestId(testIds.deleteIngredient);
     expect(menu.lastElementChild).toBe(remove);
     expect(remove.previousElementSibling).toHaveAttribute('role', 'separator');
@@ -815,5 +822,106 @@ describe('IngredientMenu (D-39)', () => {
     );
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients'));
+  });
+});
+
+describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
+  const APPLES_ITEM = recurringItem({
+    id: 'rec-aepfel',
+    ingredient: summary('Äpfel', 'fruit_vegetables', { id: 'ing-aepfel' }),
+    interval_weeks: 2,
+    interval: { value: 2, unit: 'week', automatic: false },
+  });
+
+  it('opens the recurring pop-up for the ingredient and makes it recurring', async () => {
+    stubResizeObserver();
+    let items: (typeof APPLES_ITEM)[] = [];
+    const { fetchMock, user } = renderDetail({
+      'GET /api/recurring-items': () => recurringList(items),
+      'POST /api/recurring-items': () => {
+        items = [APPLES_ITEM];
+        return Response.json(APPLES_ITEM, { status: 201 });
+      },
+    });
+    await screen.findByTestId(testIds.ingredientNutrition);
+
+    await chooseFromMenu(user, testIds.buyRegularly);
+    const dialog = await screen.findByRole('dialog', { name: 'Äpfel' });
+    expect(within(dialog).getByRole('spinbutton', { name: 'Every weeks' })).toHaveValue(4);
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(requestsTo(fetchMock, 'POST /api/recurring-items')[0]?.json()).resolves.toEqual({
+      ingredient_id: 'ing-aepfel',
+      interval_weeks: 4,
+    });
+    // The focus goes back to ⋯, and the set is loaded again: next time it opens for editing.
+    expect(screen.getByTestId(testIds.moreActions)).toHaveFocus();
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(2));
+    await chooseFromMenu(user, testIds.buyRegularly);
+    const again = await screen.findByRole('dialog', { name: 'Äpfel' });
+    expect(within(again).getByRole('button', { name: 'Save' })).toBeVisible();
+  });
+
+  it('opens it for editing when the ingredient is recurring already', async () => {
+    stubResizeObserver();
+    const { user } = renderDetail({ 'GET /api/recurring-items': recurringList([APPLES_ITEM]) });
+    await screen.findByTestId(testIds.ingredientNutrition);
+
+    await chooseFromMenu(user, testIds.buyRegularly);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Äpfel' });
+    expect(within(dialog).getByRole('spinbutton', { name: 'Every weeks' })).toHaveValue(2);
+    expect(within(dialog).getByRole('switch', { name: 'Adjust automatically' })).not.toBeChecked();
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeVisible();
+    expect(within(dialog).getByTestId(testIds.recurringRemove)).toBeVisible();
+  });
+
+  it('is disabled while the set failed to load: it couldn’t tell adding from editing', async () => {
+    const { fetchMock, user } = renderDetail({
+      'GET /api/recurring-items': errorResponse(500, 'common.internal'),
+    });
+    await screen.findByTestId(testIds.ingredientNutrition);
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(1));
+
+    const menu = await openMoreMenu(user);
+
+    expect(within(menu).getByTestId(testIds.buyRegularly)).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('is disabled offline, not hidden (SYNC-03)', async () => {
+    const { fetchMock, user } = renderDetail();
+    await screen.findByTestId(testIds.ingredientNutrition);
+
+    goOffline(fetchMock);
+    const menu = await openMoreMenu(user);
+
+    expect(within(menu).getByTestId(testIds.buyRegularly)).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('shows an admin the notice about their own recurring ingredient they just deleted (D-51)', async () => {
+    let notices: ReturnType<typeof deletedNotice>[] = [];
+    const { fetchMock, user, router } = renderDetail(
+      {
+        'GET /api/me/notices': () => noticeList(notices),
+        'DELETE /api/admin/ingredients/ing-aepfel': () => {
+          notices = [deletedNotice('Äpfel')];
+          return null;
+        },
+        'GET /api/ingredients': [],
+      },
+      true,
+    );
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/me/notices')).toHaveLength(1));
+
+    await chooseFromMenu(user, testIds.deleteIngredient);
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients'));
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.tabMe)).toHaveAccessibleName('Settings, 1 new'),
+    );
   });
 });

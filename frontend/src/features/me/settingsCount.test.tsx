@@ -3,6 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
 import { BEN, errorResponse, mockApi, NO_COUPLE, requestsTo, TEST_USER, userRef } from '@/test/api';
+import { deletedNotice, noticeList, recurringItem, recurringList } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -157,5 +158,17 @@ describe('the count on the gear (UI-07, D-51)', () => {
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(within(nav).queryByRole('alert')).not.toBeInTheDocument();
     expect(nav).not.toHaveTextContent('Something went wrong');
+  });
+
+  it('counts unread notices as a second source, next to the requests; due items count not', async () => {
+    mockApi({
+      'GET /api/couple': { ...NO_COUPLE, incoming: incoming(1) },
+      'GET /api/me/notices': noticeList([deletedNotice('Klopapier'), deletedNotice('Zahnpasta')]),
+      'GET /api/recurring-items': recurringList([recurringItem({ due: true, days_until_due: -2 })]),
+    });
+    renderApp('/lists');
+
+    await waitFor(() => expect(gearTab()).toHaveAccessibleName('Settings, 3 new'));
+    expect(visibleCount()).toHaveTextContent('3');
   });
 });

@@ -905,6 +905,27 @@ describe('finish (SHOP-04)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('loads the recurring set again once the list is done: its checked lines are purchases (LIST-16)', async () => {
+    const fetchMock = mockApi({
+      ...LIST_ROUTES,
+      [`GET ${BASE}`]: shoppingList(),
+      [`POST ${BASE}/ops`]: opsAnswer(doneList()),
+    });
+    const { user, router } = renderApp('/me/recurring');
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(1));
+
+    await act(() => router.navigate(`/lists/${LIST_ID}`));
+    await user.click(await screen.findByTestId(testIds.finishShopping));
+    const dialog = await screen.findByRole('dialog', { name: 'Finish shopping?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Finish' }));
+    expect(await screen.findByTestId(testIds.doneLines)).toBeVisible();
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
+
+    // Well within the usual 30 s in which a query isn't loaded again.
+    await act(() => router.navigate('/me/recurring'));
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(2));
+  });
+
   it('sends *Finish* again as the same op after an error', async () => {
     let fail = true;
     const { user, fetchMock } = renderList({
