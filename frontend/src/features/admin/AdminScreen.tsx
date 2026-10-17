@@ -1,7 +1,6 @@
-import { ChevronLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, NavLink } from 'react-router';
+import { NavLink } from 'react-router';
 import { Screen } from '@/components/Screen';
 import { cn } from '@/lib/utils';
 import type { TestId } from '@/testIds';
@@ -20,20 +19,16 @@ interface AdminScreenProps {
   children: ReactNode;
 }
 
-/** An admin screen (ADM-01): back to the Settings tab, the section switcher, then the content. */
+/**
+ * An admin screen (ADM-01): the strip back to Settings (D-46), the title, the section switcher
+ * below it, then the content.
+ */
 export function AdminScreen({ title, testId, children }: AdminScreenProps) {
   const { t } = useTranslation();
 
   return (
-    <Screen title={title} testId={testId}>
-      <nav aria-label={t('admin.title')} className="-mt-3 flex flex-col gap-3">
-        <Link
-          to="/me"
-          className="inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
-        >
-          <ChevronLeft aria-hidden="true" className="size-5" />
-          {t('admin.backToMe')}
-        </Link>
+    <Screen title={title} testId={testId} back={{ to: '/me', label: t('nav.me') }}>
+      <nav aria-label={t('admin.title')} className="-mt-3">
         <ul className="flex flex-wrap gap-2">
           {SECTIONS.map(({ to, label }) => (
             <li key={to}>

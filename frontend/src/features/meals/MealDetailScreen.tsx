@@ -1,4 +1,4 @@
-import { ChevronLeft, Copy, ExternalLink as ExternalLinkIcon, Pencil, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink as ExternalLinkIcon, Pencil, Trash2 } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -42,14 +42,11 @@ export function MealDetailScreen() {
   const failedPhoto = photoError(location.state);
 
   return (
-    <Screen title={meal.data?.name ?? t('nav.meals')} testId={testIds.screenMeal}>
-      <Link
-        to="/meals"
-        className="-mt-3 inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
-      >
-        <ChevronLeft aria-hidden="true" className="size-5" />
-        {t('meals.detail.back')}
-      </Link>
+    <Screen
+      title={meal.data?.name ?? t('nav.meals')}
+      testId={testIds.screenMeal}
+      back={{ to: '/meals', label: t('meals.detail.back') }}
+    >
       {failedPhoto && (
         <Alert variant="destructive">
           <AlertDescription>

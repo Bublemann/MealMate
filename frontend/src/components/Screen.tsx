@@ -1,8 +1,9 @@
 import { useId, useMemo, type ReactNode } from 'react';
 import type { TestId } from '@/testIds';
+import { DetailStrip, type BackLink } from './DetailStrip';
 import { ScreenHeadingContext } from './screenHeading';
 
-interface ScreenProps {
+type ScreenProps = {
   title: string;
   testId: TestId;
   /**
@@ -12,10 +13,25 @@ interface ScreenProps {
    */
   variant?: 'scrolling' | 'pinned';
   children: ReactNode;
-}
+} & (
+  | {
+      /** A detail screen's strip above the title (D-46): its back link "‹ parent"… */
+      back: BackLink;
+      /** …and the screen's ⋯ button at the strip's right, on screens with actions (D-39). */
+      action?: ReactNode;
+    }
+  | { back?: undefined; action?: undefined }
+);
 
 /** A top-level screen: one <h1> and its content, labelled for assistive technology. */
-export function Screen({ title, testId, variant = 'scrolling', children }: ScreenProps) {
+export function Screen({
+  title,
+  testId,
+  variant = 'scrolling',
+  back,
+  action,
+  children,
+}: ScreenProps) {
   const headingId = useId();
   const heading = useMemo(() => ({ id: headingId, title }), [headingId, title]);
 
@@ -25,6 +41,7 @@ export function Screen({ title, testId, variant = 'scrolling', children }: Scree
         <ScreenHeadingContext value={heading}>{children}</ScreenHeadingContext>
       ) : (
         <>
+          {back && <DetailStrip back={back} action={action} />}
           <h1 id={headingId} className="text-3xl font-bold tracking-tight wrap-anywhere">
             {title}
           </h1>

@@ -1,4 +1,3 @@
-import { ChevronLeft } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -8,7 +7,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,14 +70,11 @@ export function DiagnosticsScreen() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      <Link
-        to="/"
-        className="inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
+      <Screen
+        title={t('diag.title')}
+        testId={testIds.screenDiagnostics}
+        back={{ to: '/me', label: t('nav.me') }}
       >
-        <ChevronLeft aria-hidden="true" className="size-5" />
-        {t('diag.back')}
-      </Link>
-      <Screen title={t('diag.title')} testId={testIds.screenDiagnostics}>
         <p className="text-muted-foreground">{t('diag.intro')}</p>
         <EnvironmentSection results={results} record={record} serverReady={serverReady} />
         <ShareSection results={results} record={record} serverReady={serverReady} />

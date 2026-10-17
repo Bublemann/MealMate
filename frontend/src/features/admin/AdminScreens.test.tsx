@@ -64,7 +64,9 @@ describe('AdminScreen', () => {
     await i18n.changeLanguage('de');
     const { router, user } = renderApp('/me/admin/users', { user: admin });
 
-    await user.click(await screen.findByRole('link', { name: 'Zurück zu den Einstellungen' }));
+    const back = await screen.findByTestId(testIds.backLink);
+    expect(back).toHaveAccessibleName('Einstellungen');
+    await user.click(back);
 
     expect(router.state.location.pathname).toBe('/me');
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();

@@ -156,7 +156,7 @@ describe('AdminCategoriesScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
-    await user.click(screen.getByRole('link', { name: 'Back to Settings' }));
+    await user.click(screen.getByTestId(testIds.backLink));
     expect(await screen.findByTestId(testIds.screenMe)).toBeVisible();
     await waitFor(() => expect(answers).toHaveLength(1));
 

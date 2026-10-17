@@ -68,7 +68,7 @@ frontend/
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
     ├── components/ui/      # shadcn/ui building blocks, plus the sheet and the native checkbox
-    ├── components/         # shared app components (Screen, PinnedBlock, FilterPanel, InitialMarker, FormField, …)
+    ├── components/         # shared app components (Screen, PinnedBlock, DetailStrip, FilterPanel, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
     ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
@@ -157,12 +157,25 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   text and its controls' `--control-font-size` and `--tap-target` at the `--pinned-*` tokens
   (about the first accessibility size, D-29), and its sizes and spacing are in `em` of that text:
   the headline is as large as a detail screen's title (`1.875em`, not `text-3xl`, which is in
-  `rem` and would escape the cap) up to 42 px, and wraps hyphenated in the UI language. A long
+  `rem` and would escape the cap), but no larger than 1.5 times the capped text
+  (`--pinned-headline-size`), and wraps hyphenated in the UI language. A long
   name in the tile wraps with its lines closer together than a one-line tile's (the difference
   goes into its padding, so a one-line tile keeps its height). The space above the screen (the
   `main` in `Layout`) stops growing at 24 px or is the status bar's, so the block leaves a quarter
   of the screen for the content as the tab opens too, also on an iPhone SE's smaller screen
   (`e2e/tests/test_ingredients.py`).
+- **Detail strip** (UI-01, D-46): every detail screen (a shopping list, a meal, the meal form, an
+  ingredient, the admin pages, the diagnostics) starts with `DetailStrip`, which `Screen` renders
+  above the visible title when it gets `back`; the title follows below and scrolls with the page.
+  Like the pinned block, the strip is frosted, stuck below the status bar while the content
+  scrolls under it, and capped by the `pinned` utility (D-29). On its left, the back link
+  "‹ _parent_" (`backLink`) stays on one line and at least 44 pt; a long name is cut with "…" on
+  screen and is still its accessible name in full. It leads to a fixed parent, never back in the
+  history: "Alle Listen", "Alle Gerichte", "Alle Zutaten", "Einstellungen" (the admin pages and
+  the diagnostics → the fourth tab), and in the meal form the meal's name when editing, or the
+  display name of the list a new meal goes onto (`useListOnce`, which doesn't poll; "Einkaufsliste"
+  until it is known). On its right, `action` takes the screen's one button, its ⋯ menu (D-39);
+  without one the slot is empty, with nothing to see or to focus. Tests: `DetailStrip.test.tsx`.
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
@@ -519,6 +532,8 @@ order.
 | `appVersion`             | `app-version`              | Running version on Settings (once loaded)        |
 | `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Settings        |
 | `updatePrompt`           | `update-prompt`            | "New version available" prompt                   |
+| `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen              |
+| `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip            |
 | `screenLogin`            | `screen-login`             | Login screen                                     |
 | `loginReason`            | `login-reason`             | Why the user was logged out (on Login)           |
 | `screenJoin`             | `screen-join`              | Registration screen (invite link)                |
