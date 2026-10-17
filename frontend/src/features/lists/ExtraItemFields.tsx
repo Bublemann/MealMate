@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,8 @@ import { useUnitChoice } from '@/features/reference/units';
 export const MAX_AMOUNT_TEXT_LENGTH = 30;
 
 interface AmountFieldsProps {
+  /** The amount's input, e.g. to put the cursor there. */
+  amountRef?: RefObject<HTMLInputElement | null>;
   amount: string;
   unit: Unit;
   /**
@@ -32,6 +35,7 @@ interface AmountFieldsProps {
  * whose unit doesn't fit is marked, and stays as it is until the user picks one that fits.
  */
 export function AmountFields({
+  amountRef,
   amount,
   unit,
   baseUnit,
@@ -50,6 +54,7 @@ export function AmountFields({
         {(control) => (
           <Input
             {...control}
+            ref={amountRef}
             name="amount"
             inputMode="decimal"
             autoComplete="off"
@@ -83,6 +88,8 @@ export function AmountFields({
 }
 
 interface FreeTextFieldsProps {
+  /** The free-text amount's input, e.g. to put the cursor there. */
+  amountTextRef?: RefObject<HTMLInputElement | null>;
   amountText: string;
   /** '' until the categories have loaded. */
   categoryId: string;
@@ -99,6 +106,7 @@ interface FreeTextFieldsProps {
  * deleted category nor *Uncategorized* is offered; an item already in a deleted one shows it.
  */
 export function FreeTextFields({
+  amountTextRef,
   amountText,
   categoryId,
   onAmountTextChange,
@@ -116,6 +124,7 @@ export function FreeTextFields({
         {(control) => (
           <Input
             {...control}
+            ref={amountTextRef}
             name="amount_text"
             autoComplete="off"
             maxLength={MAX_AMOUNT_TEXT_LENGTH}

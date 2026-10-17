@@ -830,11 +830,12 @@ describe('MealFormScreen (edit)', () => {
     expect(screen.queryByTestId(testIds.mealForm)).not.toBeInTheDocument();
   });
 
-  describe('from the meal picker of a list (LIST-03)', () => {
+  describe('from the meal field of a list (LIST-03, D-41)', () => {
     const LIST = `/api/lists/${LIST_ID}`;
 
-    function renderFromList(routes: Record<string, unknown> = {}, addToList = LIST_ID) {
-      return renderForm(`/meals/new?addToList=${encodeURIComponent(addToList)}`, {
+    function renderFromList(routes: Record<string, unknown> = {}, addToList = LIST_ID, name = '') {
+      const params = new URLSearchParams({ addToList, ...(name ? { name } : {}) });
+      return renderForm(`/meals/new?${params.toString()}`, {
         'POST /api/meals': Response.json(bareMeal({ name: 'Suppe' }), { status: 201 }),
         [`POST ${LIST}/meals`]: listDetail(),
         [`GET ${LIST}`]: listDetail(),
@@ -860,6 +861,19 @@ describe('MealFormScreen (edit)', () => {
       });
       expect(await screen.findByTestId(testIds.listMeals)).toBeVisible();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('starts with the name typed into the meal field', async () => {
+      const { fetchMock, user, router } = renderFromList({}, LIST_ID, 'Quiche Lorraine');
+      const form = await screen.findByTestId(testIds.mealForm);
+
+      expect(within(form).getByLabelText('Name')).toHaveValue('Quiche Lorraine');
+      await user.click(within(form).getByRole('button', { name: 'Create meal' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/lists/${LIST_ID}`));
+      await expect(bodyOf(fetchMock, 'POST /api/meals')).resolves.toMatchObject({
+        name: 'Quiche Lorraine',
+      });
     });
 
     it('goes back to the list and says so when the meal could not be added', async () => {

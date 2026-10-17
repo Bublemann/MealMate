@@ -356,7 +356,7 @@ describe('a draft offline (SYNC-03)', () => {
     expect(
       within(screen.getByTestId(testIds.floatingBar)).getByTestId(testIds.startShopping),
     ).toBeDisabled();
-    for (const testId of [testIds.addMeals, testIds.extraItemInput]) {
+    for (const testId of [testIds.mealField, testIds.extraItemInput]) {
       expect(screen.getByTestId(testId)).toBeDisabled();
     }
     const menu = await openMoreMenu(user);

@@ -18,31 +18,31 @@ import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
 import { isUnreachable, useList, useStartShopping } from './api';
 import { DoneView } from './DoneView';
-import { ExtraItemInput } from './ExtraItemInput';
 import { listDisplayName } from './format';
 import { ListLines } from './ListLines';
+import { ItemField } from './ItemField';
 import { ListMeals } from './ListMeals';
+import { MealField } from './MealField';
 import { ListMenu, ListNotices, type ListNotice } from './ListMenu';
-import { MealPicker } from './MealPicker';
 import { ShoppingView } from './ShoppingView';
 
 /** Passed along when navigating to a list, e.g. from "+ New list" or a copy. */
 export interface ListViewState {
-  /** Open the meal picker right away (LIST-01). */
-  openPicker?: boolean;
+  /** Show the meal field's list right away, keyboard closed ("New list", LIST-01). */
+  showMeals?: boolean;
   /** Meals a copy left out (VIS-03/06). */
   leftOut?: number;
-  /** A meal created from the picker could not be added (translated message). */
+  /** A meal created from the meal field could not be added (translated message). */
   addMealError?: string;
-  /** A meal created from the picker was saved without its photo (translated message). */
+  /** A meal created from the meal field was saved without its photo (translated message). */
   photoError?: string;
 }
 
 function viewState(state: unknown): ListViewState {
   if (typeof state !== 'object' || state === null) return {};
-  const { openPicker, leftOut, addMealError, photoError } = state as Record<string, unknown>;
+  const { showMeals, leftOut, addMealError, photoError } = state as Record<string, unknown>;
   return {
-    openPicker: openPicker === true,
+    showMeals: showMeals === true,
     leftOut: typeof leftOut === 'number' ? leftOut : undefined,
     addMealError: typeof addMealError === 'string' ? addMealError : undefined,
     photoError: typeof photoError === 'string' ? photoError : undefined,
@@ -127,7 +127,7 @@ function ListView({ id }: { id: string }) {
         <ListContent
           list={shown}
           categories={categories.data}
-          openPicker={initial.openPicker === true}
+          showMeals={initial.showMeals === true}
           onRefresh={() => {
             void engine.flush();
             void list.refetch();
@@ -141,19 +141,22 @@ function ListView({ id }: { id: string }) {
 interface ListContentProps {
   list: PendingList;
   categories: readonly Category[];
-  openPicker: boolean;
+  showMeals: boolean;
   onRefresh: () => void;
 }
 
-function ListContent({ list, categories, openPicker, onRefresh }: ListContentProps) {
+/**
+ * A draft has two sections, Gerichte and Artikel, each starting with its add field for editors
+ * (LIST-05, D-41); offline both fields are inactive (SYNC-03). While shopping and on a done list
+ * the views lay the sections out themselves.
+ */
+function ListContent({ list, categories, showMeals, onRefresh }: ListContentProps) {
   const { t } = useTranslation();
   const connected = useConnected();
   // Meals and extra items can change while shopping too (LIST-12); a done list is read-only.
   const editable = list.can_edit && list.status !== 'done';
   const draft = list.status === 'draft';
-  const [pickerOpen, setPickerOpen] = useState(openPicker && editable && draft);
   const start = useStartShopping(list.id);
-  const openPickerNow = () => setPickerOpen(true);
 
   return (
     <>
@@ -167,16 +170,25 @@ function ListContent({ list, categories, openPicker, onRefresh }: ListContentPro
       )}
       {draft && (
         <>
-          <ListMeals list={list} editable={editable} onAddMeals={openPickerNow} />
-          {editable && <ExtraItemInput listId={list.id} />}
-          <ListLines list={list} categories={categories} editable={editable} />
+          <ListMeals
+            list={list}
+            editable={editable}
+            field={
+              editable && (
+                <MealField listId={list.id} disabled={!connected} openOnStart={showMeals} />
+              )
+            }
+          />
+          <ListLines
+            list={list}
+            categories={categories}
+            editable={editable}
+            top={editable && <ItemField listId={list.id} />}
+          />
         </>
       )}
-      {list.status === 'shopping' && (
-        <ShoppingView list={list} categories={categories} onAddMeals={openPickerNow} />
-      )}
+      {list.status === 'shopping' && <ShoppingView list={list} categories={categories} />}
       {list.status === 'done' && <DoneView list={list} categories={categories} />}
-      {editable && <MealPicker listId={list.id} open={pickerOpen} onOpenChange={setPickerOpen} />}
       {draft && list.can_edit && (
         // Inactive offline and while starting; its error shows here, where it was tapped (D-39).
         <FloatingBar>

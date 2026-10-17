@@ -15,31 +15,32 @@ import {
 } from '@/components/ui/dialog';
 import type { Category } from '@/features/reference/api';
 import type { PendingLine, PendingList } from '@/features/sync/applyPending';
-import { useQueueOp } from '@/features/sync/context';
+import { useConnected, useQueueOp } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { userLabel } from '@/i18n/users';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import { shoppingOps, stampOp } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
-import { ExtraItemInput } from './ExtraItemInput';
 import { groupByCategory, lineAmount, lineLabel, needsMoreTexts } from './format';
+import { ItemField } from './ItemField';
 import { ListMeals } from './ListMeals';
+import { MealField } from './MealField';
 
 interface ShoppingViewProps {
   /** The list with the user's waiting changes applied. */
   list: PendingList;
   categories: readonly Category[];
-  onAddMeals: () => void;
 }
 
 /** Where the focus goes once a line has moved: a line to buy (by key), or the cart. */
 const CART = Symbol('cart');
 
 /**
- * The list while shopping (SHOP): big check boxes by category, checked lines in the collapsed
- * "In the cart" section with who checked them, quick add (SHOP-02), extra items editable from
- * their line, the meals still editable but collapsed (LIST-12), and "Finish shopping" (SHOP-04)
+ * The list while shopping (SHOP): Artikel first, with the item field (SHOP-02, D-41), big check
+ * boxes by category and the checked lines in the collapsed "In the cart" section with who checked
+ * them; extra items editable from their line; then the meals, still editable but collapsed under
+ * "Gerichte (N)" with the meal field inside (LIST-12); and "Finish shopping" (SHOP-04)
  * in the floating bar above the tab bar (D-39). Checking the last line offers to finish, once per
  * visit.
  *
@@ -50,11 +51,12 @@ const CART = Symbol('cart');
  * there is none), and an unchecked one keeps it in its new place; a polite live region says where
  * the line went.
  */
-export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps) {
+export function ShoppingView({ list, categories }: ShoppingViewProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const headingId = useId();
   const queue = useQueueOp(list.id);
+  const connected = useConnected();
   const [finishOpen, setFinishOpen] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -126,6 +128,7 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
         <h2 id={headingId} className="text-xl font-semibold">
           {t('lists.lines.title')}
         </h2>
+        {editable && <ItemField listId={list.id} shopping />}
         {!editable && <p className="text-muted-foreground">{t('lists.shop.readOnly')}</p>}
         {shown.length === 0 && <p className="text-muted-foreground">{t('lists.lines.empty')}</p>}
         {shown.length > 0 && open.length === 0 && (
@@ -153,8 +156,13 @@ export function ShoppingView({ list, categories, onAddMeals }: ShoppingViewProps
           {announcement}
         </p>
       </section>
-      {editable && <ExtraItemInput listId={list.id} shopping />}
-      <ListMeals list={list} editable={editable} collapsible onAddMeals={onAddMeals} />
+      <ListMeals
+        list={list}
+        editable={editable}
+        collapsible
+        // Changing meals needs a connection (LIST-12, SYNC-03).
+        field={editable && <MealField listId={list.id} disabled={!connected} />}
+      />
       {editable && (
         <ExtraItemDialog
           listId={list.id}

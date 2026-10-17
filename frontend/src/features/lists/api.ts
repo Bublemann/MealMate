@@ -498,7 +498,7 @@ export function useShopAgain(listId: string) {
   });
 }
 
-/** MEAL-09: meals I added to lists lately, for the top of the meal picker. */
+/** MEAL-09: meals I added to lists lately, for the top of the meal field's list. */
 export function useRecentMeals({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: RECENT_MEALS_KEY,
