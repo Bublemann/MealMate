@@ -133,3 +133,49 @@ def preferred_stays(preferred: date, other: date) -> bool:
     with all its values; on a tie the preferred one: the requester's when a couple forms, the
     surviving ingredient's on a merge (D-42). Takes the two last purchase dates."""
     return preferred >= other
+
+
+def purchase_date(checked_at: datetime, *, now: datetime, zone: tzinfo) -> date:
+    """The day a checked line was bought: the calendar day of its check-off in `zone`, not of
+    the request that brought it (a list finished offline counts on the right day), and never
+    after today (a tap may run up to five minutes ahead of the server, past midnight)."""
+    return min(local_date(checked_at, zone), local_date(now, zone))
+
+
+@dataclass(frozen=True)
+class LastPurchase:
+    """What a recurring item keeps of its purchases: the last one's day, amount and unit (when
+    it was one amount) and list, and the last three intervals between purchases."""
+
+    on: date
+    measured: tuple[int, ...]
+    amount: float | None
+    unit: str | None
+    list_id: str | None
+
+
+@dataclass(frozen=True)
+class Purchase:
+    """A checked line of the item's ingredient on a finished list (LIST-16): its day, its list,
+    and its amount and unit when the line shows exactly one amount."""
+
+    on: date
+    list_id: str
+    amount: float | None
+    unit: str | None
+
+
+def record_purchase(last: LastPurchase, purchase: Purchase) -> LastPurchase | None:
+    """The item after a purchase, or None when it changes nothing (LIST-16, D-42): a list counts
+    once (finished again after "Reopen", a batch sent twice), and a purchase before the last one
+    is ignored (a list finished offline and sent late). A purchase on the last one's day takes
+    its amount but adds no interval; one without an amount keeps the previous amount."""
+    if purchase.list_id == last.list_id or purchase.on < last.on:
+        return None
+    measured = add_measured(last.measured, previous=last.on, purchased_on=purchase.on)
+    amount, unit = (
+        (last.amount, last.unit) if purchase.amount is None else (purchase.amount, purchase.unit)
+    )
+    return LastPurchase(
+        on=purchase.on, measured=tuple(measured), amount=amount, unit=unit, list_id=purchase.list_id
+    )

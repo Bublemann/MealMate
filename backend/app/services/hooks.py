@@ -153,8 +153,9 @@ async def before_ingredient_deleted(
 ) -> None:
     """Runs when an admin deletes an ingredient nothing refers to (ING-05), before its row is
     deleted: the tombstones of deleted extra items linked to it go with it. Its recurring
-    items are no references (LIST-16) and go by `ON DELETE CASCADE`; each user who had one
-    gets a notice with the ingredient's name and brand (D-51)."""
+    items and the due items hidden as it on lists are no references (LIST-16) and go by
+    `ON DELETE CASCADE`; each user who had a recurring item gets a notice with the
+    ingredient's name and brand (D-51)."""
     await lists_repo.delete_deleted_extras_of(session, ingredient_id)
     items = await recurring_repo.with_ingredient(session, ingredient_id)
     if not items:
@@ -193,9 +194,10 @@ async def on_ingredients_merged(
       back, LIST-07) goes;
     - neither has a line: the state of `into_id` stays, else the one of `from_id` moves.
 
-    Every list whose lines change gets a new version. Recurring items move as well, without a
-    notice: in a set that has both ingredients, the one bought more recently stays, on a tie
-    the one of `into_id` (D-42).
+    Due items hidden on a list (LIST-16) move too; on a list that hid both, one stays. Every
+    list whose lines or hidden due items change gets a new version. Recurring items move as
+    well, without a notice: in a set that has both ingredients, the one bought more recently
+    stays, on a tie the one of `into_id` (D-42).
     """
     from_lists = await lists_repo.lists_with_parts_of(session, from_id)
     into_lists = await lists_repo.lists_with_parts_of(session, into_id)
@@ -227,6 +229,7 @@ async def on_ingredients_merged(
         if source is not None:
             await session.delete(source)
     await session.flush()
+    changed |= await lists_repo.move_hidden_due_items(session, from_id, into_id)
     await lists_repo.bump(session, changed, now)
     await _move_recurring_items(session, from_id, into_id, now=now)
 

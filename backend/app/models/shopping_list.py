@@ -200,6 +200,25 @@ class ListLineState(Base):
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class ListHiddenDueItem(Base):
+    """A due recurring item hidden on one list, for everyone who sees it (✕ in the "Fällig"
+    box, LIST-16, D-42). Keyed by ingredient rather than by recurring item, so it survives a
+    couple forming or ending; there is no undo. It goes with its list or ingredient."""
+
+    __tablename__ = "list_hidden_due_items"
+
+    list_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("shopping_lists.id", ondelete="CASCADE"), primary_key=True
+    )
+    ingredient_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    hidden_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    hidden_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+
 class ProcessedOp(Base):
     """An op of shopping mode that was applied (plan § 5.8): the same user sending it again
     changes nothing (SYNC-05). Op ids are the clients', so they are unique per user only.

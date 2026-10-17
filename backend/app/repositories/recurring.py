@@ -2,11 +2,11 @@
 
 from collections.abc import Collection, Sequence
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.owners import OwnerKey
-from app.models import Ingredient, RecurringItem
+from app.models import Ingredient, ListHiddenDueItem, RecurringItem
 
 
 def _owned_by(key: OwnerKey) -> ColumnElement[bool]:
@@ -20,15 +20,24 @@ async def get(session: AsyncSession, item_id: str) -> RecurringItem | None:
 
 
 async def of_owner(
-    session: AsyncSession, key: OwnerKey
+    session: AsyncSession, key: OwnerKey, *, not_hidden_on: str | None = None
 ) -> Sequence[tuple[RecurringItem, Ingredient]]:
-    """The owner's set with each item's ingredient, in dictionary order by name and brand."""
-    result = await session.execute(
+    """The owner's set with each item's ingredient, in dictionary order by name and brand;
+    without the items hidden on the list `not_hidden_on` (LIST-16), if given."""
+    query = (
         select(RecurringItem, Ingredient)
         .join(Ingredient, Ingredient.id == RecurringItem.ingredient_id)
         .where(_owned_by(key))
         .order_by(Ingredient.name_sort, func.coalesce(Ingredient.brand_sort, ""), Ingredient.id)
     )
+    if not_hidden_on is not None:
+        query = query.where(
+            ~exists().where(
+                ListHiddenDueItem.list_id == not_hidden_on,
+                ListHiddenDueItem.ingredient_id == RecurringItem.ingredient_id,
+            )
+        )
+    result = await session.execute(query)
     return result.all()
 
 

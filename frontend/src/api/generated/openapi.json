@@ -749,6 +749,47 @@
         "title": "DisplayAmountOut",
         "type": "object"
       },
+      "DueItem": {
+        "description": "A due recurring item of the viewer's set, offered in a draft's \"Fällig\" box (LIST-16):\ndue since `due_on`, `days_until_due` from today (0 \"fällig heute\", -3 \"fällig seit 3\nTagen\"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,\nonly while its unit fits the ingredient's base unit (REF-02), for the amount pop-up.",
+        "properties": {
+          "days_until_due": {
+            "title": "Days Until Due",
+            "type": "integer"
+          },
+          "due_on": {
+            "format": "date",
+            "title": "Due On",
+            "type": "string"
+          },
+          "ingredient": {
+            "$ref": "#/components/schemas/IngredientSummary"
+          },
+          "last_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayAmountOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_purchased_on": {
+            "format": "date",
+            "title": "Last Purchased On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ingredient",
+          "due_on",
+          "days_until_due",
+          "last_purchased_on",
+          "last_amount"
+        ],
+        "title": "DueItem",
+        "type": "object"
+      },
       "ErrorCode": {
         "description": "What went wrong; the frontend shows the translation `error.<code>`.",
         "enum": [
@@ -2446,7 +2487,7 @@
         "type": "object"
       },
       "ListDetail": {
-        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is\n`reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`\nare set once shopping started and while the list is done (LIST-10).",
+        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is\n`reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`\nare set once shopping started and while the list is done (LIST-10).\n\n`due_items` fill the \"Fällig\" box (LIST-16), only on a draft the viewer can edit, else\nempty: the due recurring items of the viewer's set whose ingredient has no line on the list\n(a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.",
         "properties": {
           "can_edit": {
             "title": "Can Edit",
@@ -2456,6 +2497,13 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "due_items": {
+            "items": {
+              "$ref": "#/components/schemas/DueItem"
+            },
+            "title": "Due Items",
+            "type": "array"
           },
           "extra_items": {
             "items": {
@@ -2567,7 +2615,8 @@
           "reminder_seed",
           "meals",
           "lines",
-          "extra_items"
+          "extra_items",
+          "due_items"
         ],
         "title": "ListDetail",
         "type": "object"
@@ -7417,6 +7466,64 @@
           }
         ],
         "summary": "Copy List",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/due-items/{ingredient_id}/hide": {
+      "post": {
+        "description": "Hide a due recurring item (\"Fällig\" box) on this list for everyone who sees it (drafts;\n409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an\nextra item.",
+        "operationId": "hide_due_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "maxLength": 36,
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hide Due Item",
         "tags": [
           "lists"
         ]
