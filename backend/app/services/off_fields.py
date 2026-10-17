@@ -1,10 +1,11 @@
 """The Open Food Facts fields of an ingredient and its pending update (BAR-04, BAR-06).
 
 An ingredient from Open Food Facts (`source` off) has the fields of `OFF_FIELDS`: `name`,
-`brand` and `nutrients.<key>`. Those a user changed are listed in `user_edited_fields`; a refresh
-(`services.off_refresh`) updates the others silently and collects newer values for the
-user-edited ones into `pending_update`. The pack size (`PACK_FIELDS`) is never user-edited and
-always updated, so it never goes there: marks and entries for it from before D-38 are ignored.
+`brand`, `quantity_text` (the pack size) and `nutrients.<key>`. Those a user changed are listed in
+`user_edited_fields` (`edited_fields`); a refresh (`services.off_refresh`) updates the others
+silently and collects newer values for the user-edited ones into `pending_update`. The pack size's
+amount (`pack_quantity`, `pack_unit`) always follows its text (`set_pack_size`, D-47); a mark on
+it from before D-38 counts as one on the pack size.
 
 `pending_update` is stored as `{field: {"current": ..., "proposed": ...}}`; the API shows the
 entries whose proposed value still differs from the ingredient's value, as of its
@@ -17,7 +18,7 @@ shows ignored entries.
 from collections.abc import Iterable
 from typing import Any
 
-from app.domain.catalog import OFF_FIELDS, nutrient_field
+from app.domain.catalog import OFF_FIELDS, PACK_AMOUNT_FIELDS, nutrient_field, pack_amount
 from app.domain.text import normalize, sort_key
 from app.models import Ingredient as IngredientRow
 from app.schemas.ingredients import PendingUpdate, PendingUpdateField
@@ -37,16 +38,35 @@ def field_value(row: IngredientRow, field: str) -> FieldValue:
     return value
 
 
+def edited_fields(row: IngredientRow) -> list[str]:
+    """The Open Food Facts fields a user changed (BAR-04), in field order. A mark on the pack
+    size's amount from before D-38 counts as one on the pack size: a user did change it (D-47)."""
+    marks = set(row.user_edited_fields)
+    if marks.intersection(PACK_AMOUNT_FIELDS):
+        marks.add("quantity_text")
+    return [field for field in OFF_FIELDS if field in marks]
+
+
+def unmark_edited(row: IngredientRow, fields: Iterable[str]) -> None:
+    """These fields are Open Food Facts' again (an applied update): no longer user-edited, the
+    pack size along with any mark on its amount from before D-38."""
+    unmarked = set(fields)
+    if "quantity_text" in unmarked:
+        unmarked.update(PACK_AMOUNT_FIELDS)
+    row.user_edited_fields = [field for field in row.user_edited_fields if field not in unmarked]
+
+
 def set_field_value(row: IngredientRow, field: str, value: Any) -> None:
-    """Set an Open Food Facts field; a new brand also updates the normalised one."""
+    """Set an Open Food Facts field; a new name or brand also updates its normalised form, a new
+    pack size its amount."""
     if field.startswith(_NUTRIENT_PREFIX):
         row.set_nutrient(field.removeprefix(_NUTRIENT_PREFIX), value)
     elif field == "name":
         set_name(row, value)
     elif field == "brand":
         set_brand(row, value)
-    else:
-        setattr(row, field, value)
+    else:  # `quantity_text`, the last of `OFF_DATA_FIELDS`
+        set_pack_size(row, value)
 
 
 def set_name(row: IngredientRow, name: str) -> None:
@@ -60,6 +80,14 @@ def set_brand(row: IngredientRow, brand: str | None) -> None:
     row.brand = brand
     row.brand_norm = None if brand is None else normalize(brand) or None
     row.brand_sort = None if brand is None else sort_key(brand) or None
+
+
+def set_pack_size(row: IngredientRow, text: str | None) -> None:
+    """Set the pack size's text together with its amount, taken from the text (D-47)."""
+    amount = pack_amount(text)
+    row.quantity_text = text
+    row.pack_quantity = None if amount is None else amount[0]
+    row.pack_unit = None if amount is None else amount[1].value
 
 
 def ignored_entries(row: IngredientRow) -> dict[str, Any]:

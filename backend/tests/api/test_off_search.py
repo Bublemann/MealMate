@@ -31,7 +31,6 @@ MILK_PRODUCT = product_response(
     product_name_de="Frische Vollmilch",
     brands="Weihenstephan",
     quantity="1 l",
-    product_quantity=1000,
     product_quantity_unit="ml",
     nutrition_data_per="100g",
     nutriments={"energy-kcal_100g": 64},
@@ -108,8 +107,6 @@ async def test_results_are_proposals_like_a_scan(
                     "name": "Haferflocken",
                     "brand": "MealMate Test Kitchen",
                     "quantity_text": "500 g",
-                    "pack_quantity": 500,
-                    "pack_unit": "g",
                     "nutrition_basis": "g",
                     "nutrients": {
                         "kcal": 372,
@@ -130,8 +127,6 @@ async def test_results_are_proposals_like_a_scan(
                     "name": "Frische Vollmilch",
                     "brand": "Weihenstephan",
                     "quantity_text": "1 l",
-                    "pack_quantity": 1000,
-                    "pack_unit": "ml",
                     "nutrition_basis": "ml",
                     "nutrients": {
                         "kcal": 64,

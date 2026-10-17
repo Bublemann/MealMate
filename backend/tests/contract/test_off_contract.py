@@ -46,7 +46,7 @@ async def test_a_known_product_has_the_expected_shape(off: OffClient) -> None:
     nutrients = product.nutrients
     assert 450 <= (nutrients["kcal"] or 0) <= 650
     assert sum(value is not None for value in nutrients.values()) >= 4
-    assert product.pack[1] is BaseUnit.G
+    assert product.quantity
     assert product.categories_tags
     assert product.last_modified_at is not None
 

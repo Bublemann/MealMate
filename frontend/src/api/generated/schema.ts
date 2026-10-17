@@ -2130,9 +2130,11 @@ export interface components {
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
          *     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-         *     Facts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` are the
-         *     pack size from Open Food Facts (information only, never user-edited, D-38). `created_by` /
-         *     `updated_by` are null for a deleted user (ING-06).
+         *     Facts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food
+         *     Facts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from
+         *     the text when it is a plain amount and unit ("500 g", "1,5 l"), else null (D-47); one saved
+         *     before D-47 keeps Open Food Facts' amount until its text changes.
+         *     `created_by` / `updated_by` are null for a deleted user (ING-06).
          */
         Ingredient: {
             /** Barcode */
@@ -2182,7 +2184,7 @@ export interface components {
             updated_by: components["schemas"]["UserRef"] | null;
             usage: components["schemas"]["IngredientUsage"];
             /** User Edited Fields */
-            user_edited_fields: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            user_edited_fields: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
         };
         /**
          * IngredientBarcodeLink
@@ -2205,11 +2207,11 @@ export interface components {
          *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
          *     ingredient has is 409 `ingredient.barcode_taken`.
          *
-         *     With `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs
-         *     its `barcode` (422 `required` without). Only then are `quantity_text`, `pack_quantity` and
-         *     `pack_unit` taken, the pack size passed on from the proposal; without `off` they are refused
-         *     (422 `invalid`), as nobody types in a pack size (D-38). Names need not be unique: the
-         *     "similar ingredient exists" hint (`GET /api/ingredients/similar`) is only a hint.
+         *     `quantity_text` is the pack size ("500 g", "6 x 1,5 l"), at most 40 characters, for any
+         *     ingredient; its amount is taken from it (D-47). With `off`, the ingredient is from Open Food
+         *     Facts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).
+         *     Names need not be unique: the "similar ingredient exists" hint
+         *     (`GET /api/ingredients/similar`) is only a hint.
          */
         IngredientCreate: {
             /** Barcode */
@@ -2228,9 +2230,6 @@ export interface components {
             name: string;
             nutrients?: components["schemas"]["NutrientValues"] | null;
             off?: components["schemas"]["IngredientOffOrigin"] | null;
-            /** Pack Quantity */
-            pack_quantity?: number | null;
-            pack_unit?: components["schemas"]["Unit"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
             /** Quantity Text */
@@ -2258,7 +2257,7 @@ export interface components {
          */
         IngredientOffOrigin: {
             /** Edited Fields */
-            edited_fields?: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            edited_fields?: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
             /** Off Last Modified At */
             off_last_modified_at?: string | null;
         };
@@ -2296,10 +2295,9 @@ export interface components {
          *     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
          *     only the nutrients it contains (null clears one).
          *
-         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and
-         *     the nutrients) becomes user-edited (BAR-04). The pack size (`quantity_text`, `pack_quantity`,
-         *     `pack_unit`) comes only from Open Food Facts and is refused here, even as null (422
-         *     `invalid`, D-38). A new barcode must be free (409
+         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the
+         *     pack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack
+         *     size's amount follows its text. A new barcode must be free (409
          *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
@@ -2326,6 +2324,8 @@ export interface components {
             nutrients?: components["schemas"]["NutrientValues"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
+            /** Quantity Text */
+            quantity_text?: string | null;
         };
         /**
          * IngredientUsage
@@ -3145,7 +3145,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
+            field: "name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
             /** Proposed */
             proposed: string | number | null;
         };
@@ -3174,9 +3174,6 @@ export interface components {
             nutrition_basis: ("g" | "ml") | null;
             /** Off Last Modified At */
             off_last_modified_at: string | null;
-            /** Pack Quantity */
-            pack_quantity: number | null;
-            pack_unit: components["schemas"]["Unit"] | null;
             /** Quantity Text */
             quantity_text: string | null;
         };
