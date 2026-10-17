@@ -16,6 +16,7 @@ from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, ingredient_label, text
+from support.ui import choose_from_menu, floating_bar_button
 
 # One polling interval (5 s) plus the time a request and a render take.
 POLLED = 10_000
@@ -96,9 +97,9 @@ def test_couple_shops_together(
     api.add_list_meal(anna, shared["id"], tart["id"])
     list_path = f"/lists/{shared['id']}"
 
-    # Anna starts shopping (LIST-11).
+    # Anna starts shopping from the bar above the tab bar (LIST-11, D-39).
     anna_page = open_page(context, anna, list_path)
-    anna_page.get_by_test_id(TEST_IDS["startShopping"]).click()
+    floating_bar_button(anna_page, "startShopping").click()
     check_flour = text("lists.shop.check", name=flour["name"])
     expect(anna_page.get_by_role("checkbox", name=check_flour)).to_be_visible()
     expect(shopping_line(anna_page, flour["name"])).to_contain_text("200 g")
@@ -147,8 +148,8 @@ def test_couple_shops_together(
         expect(flour_line).to_contain_text("400 g")
         expect(flour_line.get_by_role("checkbox", name=check_flour)).not_to_be_checked()
 
-    # Anna finishes through the dialog (SHOP-04).
-    anna_page.get_by_test_id(TEST_IDS["finishShopping"]).click()
+    # Anna finishes from the same place, through the dialog (SHOP-04).
+    floating_bar_button(anna_page, "finishShopping").click()
     dialog = anna_page.get_by_role("dialog", name=text("lists.shop.finishTitle"))
     expect(dialog).to_contain_text(text("lists.shop.unchecked_other", count="2"))
     dialog.get_by_role("button", name=text("lists.shop.finishConfirm"), exact=True).click()
@@ -195,10 +196,14 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     bought = page.get_by_test_id(TEST_IDS["doneLines"]).get_by_role("listitem")
     expect(bought.filter(has_text=rice["name"])).to_contain_text(f"({text('lists.done.bought')})")
 
-    # Shop again: a new draft with the meal and its servings, nothing checked.
-    page.get_by_test_id(TEST_IDS["shopAgain"]).click()
+    # The done note stands alone; no bar on a done list (D-39).
+    expect(page.get_by_test_id(TEST_IDS["listDone"]).get_by_role("button")).to_have_count(0)
+    expect(page.get_by_test_id(TEST_IDS["floatingBar"])).to_have_count(0)
+
+    # Shop again from the ⋯ menu: a new draft with the meal and its servings, nothing checked.
+    choose_from_menu(page, "shopAgain")
     expect(page).not_to_have_url(re.compile(f"/lists/{done['id']}$"))
-    expect(page.get_by_test_id(TEST_IDS["startShopping"])).to_be_visible()
+    expect(floating_bar_button(page, "startShopping")).to_be_visible()
     meals = page.get_by_test_id(TEST_IDS["listMeals"])
     expect(meals.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(1)
     group = meals.get_by_role("group", name=text("lists.meals.servingsOf", name=curry["name"]))
@@ -210,8 +215,8 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
 
     # Reopen the done list: shopping again, the rice still in the cart.
     page.goto(f"/lists/{done['id']}")
-    page.get_by_test_id(TEST_IDS["reopenList"]).click()
-    expect(page.get_by_test_id(TEST_IDS["finishShopping"])).to_be_visible()
+    choose_from_menu(page, "reopenList")
+    expect(floating_bar_button(page, "finishShopping")).to_be_visible()
     open_cart(page, 1)
     expect(
         cart_line(page, rice["name"]).get_by_role(
@@ -259,7 +264,7 @@ def test_two_brands_are_two_lines(
         expect(lines.filter(has_text=label)).to_contain_text(amount)
 
     # While shopping each brand is checked off on its own.
-    page.get_by_test_id(TEST_IDS["startShopping"]).click()
+    floating_bar_button(page, "startShopping").click()
     weidehof, alpenhof = labels
     shopping_line(page, weidehof).get_by_role(
         "checkbox", name=text("lists.shop.check", name=weidehof)

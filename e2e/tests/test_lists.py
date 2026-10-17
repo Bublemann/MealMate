@@ -13,6 +13,7 @@ from playwright.sync_api import Locator, Page, ViewportSize, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
+from support.ui import choose_from_menu, open_more_menu
 
 LIST_URL = re.compile(r"/lists/([\w-]+)$")
 # As narrow as an iPhone SE's screen with Display Zoom.
@@ -192,6 +193,27 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     assert draft is not None
     assert [meal["meal_id"] for meal in api.get_list(anna, draft[1])["meals"]] == [tart["id"]]
 
+    # Renaming and deleting go through the ⋯ menu (D-39, LIST-02, LIST-13).
+    new_name = f"Grillabend {tag}"
+    choose_from_menu(page, "renameList")
+    rename = page.get_by_role("dialog", name=text("lists.detail.renameTitle"))
+    rename.get_by_label(text("lists.detail.name"), exact=True).fill(new_name)
+    rename.get_by_role("button", name=text("common.save"), exact=True).click()
+    expect(rename).to_be_hidden()
+    expect(page.get_by_role("heading", level=1)).to_contain_text(new_name)
+
+    # Cancelling the deletion puts the focus back on ⋯; confirming deletes.
+    choose_from_menu(page, "deleteList")
+    confirm = page.get_by_role("alertdialog")
+    confirm.get_by_role("button", name=text("common.cancel"), exact=True).click()
+    expect(confirm).to_be_hidden()
+    expect(page.get_by_test_id(TEST_IDS["moreActions"])).to_be_focused()
+    choose_from_menu(page, "deleteList")
+    page.get_by_role("alertdialog").get_by_role(
+        "button", name=text("lists.detail.deleteConfirm"), exact=True
+    ).click()
+    expect(page).to_have_url(re.compile("/lists$"))
+
 
 def test_partner_edits_a_shared_draft(
     page: Page,
@@ -232,9 +254,19 @@ def test_partner_edits_a_shared_draft(
         group.get_by_role("button", name=text("lists.meals.more", name=soup["name"])).click()
     assert saved.value.ok
     expect(group).to_contain_text("3 servings")
-    expect(page.get_by_test_id(TEST_IDS["deleteList"])).to_have_count(0)
-    expect(page.get_by_test_id(TEST_IDS["shareListSwitch"])).to_have_count(0)
     expect(page.get_by_test_id(TEST_IDS["listReadOnly"])).to_have_count(0)
+    # His ⋯ menu offers renaming and the export, not deleting or the share switch (D-39).
+    menu = open_more_menu(page)
+    # The export reads "Share as text" where the browser has a share sheet, else "Copy as text".
+    export = "|".join(
+        re.escape(text(key)) for key in ("lists.detail.export", "lists.detail.exportCopy")
+    )
+    expect(menu.get_by_role("menuitem")).to_have_text(
+        [text("lists.detail.rename"), re.compile(f"^({export})$")]
+    )
+    expect(menu.get_by_test_id(TEST_IDS["shareListSwitch"])).to_have_count(0)
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
 
     # Anna's list has changed.
     assert api.get_list(anna, draft["id"])["meals"][0]["servings"] == 3
@@ -286,7 +318,10 @@ def test_others_list_is_read_only_and_copies_what_i_can_see(
     expect(page.get_by_test_id(TEST_IDS["extraItemInput"])).to_have_count(0)
     expect(page.get_by_text(curry["name"])).to_have_count(0)
 
-    page.get_by_test_id(TEST_IDS["copyList"]).click()
+    # The note has no button; copying is in the ⋯ menu, next to the export (D-39).
+    expect(page.get_by_test_id(TEST_IDS["listReadOnly"]).get_by_role("button")).to_have_count(0)
+    expect(page.get_by_test_id(TEST_IDS["floatingBar"])).to_have_count(0)
+    choose_from_menu(page, "copyList")
     expect(page).not_to_have_url(re.compile(f"/lists/{party['id']}$"))
     expect(page).to_have_url(LIST_URL)
     expect(page.get_by_test_id(TEST_IDS["listLeftOut"])).to_have_text(

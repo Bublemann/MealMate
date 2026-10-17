@@ -70,6 +70,13 @@
   --tab-bar-clearance: calc(var(--tab-bar-bottom) + var(--tab-bar-height));
 
   /*
+   * The room a screen's floating bar (D-39) takes above the tab bar, its gap included: 0 without
+   * one. While a bar shows, `FloatingBar` sets it on <html> to its measured height, so the main
+   * content's end and the update prompt move up above it.
+   */
+  --floating-bar-space: 0px;
+
+  /*
    * The pinned block (UI-01) stays at the top while the content scrolls under it, so like the tab
    * bar it must leave room for the content at the largest text sizes (D-29): its text grows with
    * the text size up to 28 px (about the first accessibility size) and its tap targets up to 64 px

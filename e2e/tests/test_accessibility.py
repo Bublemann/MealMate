@@ -45,6 +45,8 @@ SCREENS = [
         "member",
         (TEST_IDS["listMeals"], TEST_IDS["listLines"], TEST_IDS["hiddenLines"]),
     ),
+    # A draft with its ⋯ menu open (D-39), created in the test: /lists/<id>.
+    Screen("/lists/:id/menu", "member", (TEST_IDS["moreMenu"],)),
     # A list being shopped with a checked, a new and a needs-more line: /lists/<id>.
     Screen(
         "/lists/:id/shopping",
@@ -185,6 +187,10 @@ def test_no_serious_violations(
         # The admin's lists are public: one shows as a read-only list, with a lock.
         read_only = api.create_list(request.getfixturevalue("admin"), unique("A11y read-only"))
         feed_lists = [draft["name"], done["name"], read_only["name"]]
+    if path == "/lists/:id/menu":
+        api = request.getfixturevalue("api")
+        menu_list = api.create_list(account, unique("A11y menu"))
+        path = f"/lists/{menu_list['id']}"
     if path == "/lists/:id":
         api = request.getfixturevalue("api")
         onions = api.create_ingredient(
@@ -291,6 +297,9 @@ def test_no_serious_violations(
         page.get_by_test_id(TEST_IDS["inTheCart"]).get_by_text(
             text("lists.shop.cart", count="1"), exact=True
         ).click()
+    if screen.path == "/lists/:id/menu":
+        expect(page.get_by_test_id(TEST_IDS["floatingBar"])).to_be_visible()
+        page.get_by_test_id(TEST_IDS["moreActions"]).click()
     for test_id in screen.ready:
         expect(page.get_by_test_id(test_id)).to_be_visible()
     if screen.path == "/lists/:id":

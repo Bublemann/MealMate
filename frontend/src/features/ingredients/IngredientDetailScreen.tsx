@@ -1,13 +1,10 @@
-import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useCurrentUser } from '@/features/auth/context';
 import { useCategories } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
@@ -15,8 +12,7 @@ import { formatDate, formatNumber } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
 import { useIngredient, type Ingredient } from './api';
-import { IngredientAdminActions } from './IngredientAdminActions';
-import { IngredientFormDialog } from './IngredientFormDialog';
+import { IngredientMenu } from './IngredientMenu';
 import { ingredientLabel } from './label';
 import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, nutritionUnit } from './nutrients';
 import { OffAttribution } from './OffAttribution';
@@ -24,13 +20,19 @@ import { PendingUpdateHint } from './PendingUpdateHint';
 
 /**
  * One ingredient: its details (brand, barcode, package, source, use), nutrition, newer values
- * from Open Food Facts (BAR-06), who created and changed it, and the admin actions.
+ * from Open Food Facts (BAR-06), and who created and changed it; editing and the admin actions
+ * are in the ⋯ menu (`IngredientMenu`), their errors below the title.
  */
 export function IngredientDetailScreen() {
-  const { t } = useTranslation();
   const { id = '' } = useParams();
+  // A fresh screen per ingredient, so an error of one ingredient's menu doesn't stay on the next.
+  return <IngredientDetail key={id} id={id} />;
+}
+
+function IngredientDetail({ id }: { id: string }) {
+  const { t } = useTranslation();
   const ingredient = useIngredient(id);
-  const user = useCurrentUser();
+  const [actionError, setActionError] = useState<unknown>(null);
 
   return (
     <Screen
@@ -41,7 +43,11 @@ export function IngredientDetailScreen() {
       }
       testId={testIds.screenIngredient}
       back={{ to: '/ingredients', label: t('ingredients.detail.back') }}
+      action={
+        ingredient.data && <IngredientMenu ingredient={ingredient.data} onError={setActionError} />
+      }
     >
+      <ErrorAlert error={actionError} />
       {ingredient.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={ingredient.error} />
       {ingredient.data && (
@@ -54,7 +60,6 @@ export function IngredientDetailScreen() {
           )}
           <PropertiesCard ingredient={ingredient.data} />
           <NutritionCard ingredient={ingredient.data} />
-          {user.role === 'admin' && <IngredientAdminActions ingredient={ingredient.data} />}
         </>
       )}
     </Screen>
@@ -65,11 +70,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
   const { t } = useTranslation();
   const language = useLanguage();
   const categories = useCategories();
-  const [editing, setEditing] = useState(false);
   const category = categories.data?.find(({ id }) => id === ingredient.category_id);
   const notSet = <span className="text-muted-foreground">{t('ingredients.detail.notSet')}</span>;
-
-  const label = ingredientLabel(ingredient.name, ingredient.brand);
 
   const rows = [
     { label: t('ingredients.detail.brand'), value: ingredient.brand ?? notSet },
@@ -113,18 +115,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between gap-3">
+      <CardHeader>
         <CardTitle>{t('ingredients.detail.properties')}</CardTitle>
-        <Button
-          size="compact"
-          variant="outline"
-          data-testid={testIds.editIngredient}
-          aria-label={t('ingredients.detail.editLabel', { name: label })}
-          onClick={() => setEditing(true)}
-        >
-          <Pencil aria-hidden="true" />
-          {t('ingredients.detail.edit')}
-        </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <dl className="flex flex-col divide-y">
@@ -152,7 +144,6 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
           </p>
         </div>
       </CardContent>
-      <IngredientFormDialog open={editing} onOpenChange={setEditing} ingredient={ingredient} />
     </Card>
   );
 }

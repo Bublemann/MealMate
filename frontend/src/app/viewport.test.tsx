@@ -2,43 +2,13 @@ import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockApi } from '@/test/api';
 import { renderApp } from '@/test/render';
+import {
+  KEYBOARD_HEIGHT as KEYBOARD,
+  stubVisualViewport,
+  VIEWPORT_HEIGHT as SCREEN,
+} from '@/test/viewport';
 import { testIds } from '@/testIds';
 import { pwaUpdate } from './pwaUpdate';
-
-/** The layout viewport of an iPhone 15 in portrait, in CSS pixels. */
-const SCREEN = 852;
-/** About the height of its keyboard with the suggestion bar. */
-const KEYBOARD = 336;
-
-/** A stand-in for `window.visualViewport`, which jsdom lacks: no keyboard, not zoomed. */
-class FakeVisualViewport extends EventTarget {
-  offsetTop = 0;
-  height = SCREEN;
-  scale = 1;
-
-  /** Resizes the visible area, as the keyboard or pinch-zoom do. */
-  change(values: Partial<Pick<FakeVisualViewport, 'height' | 'scale'>>) {
-    Object.assign(this, values);
-    act(() => {
-      this.dispatchEvent(new Event('resize'));
-    });
-  }
-
-  /** Moves the visible area down the page, as iOS does to show the focused field. */
-  scroll(offsetTop: number) {
-    this.offsetTop = offsetTop;
-    act(() => {
-      this.dispatchEvent(new Event('scroll'));
-    });
-  }
-}
-
-function stubVisualViewport(): FakeVisualViewport {
-  vi.stubGlobal('innerHeight', SCREEN);
-  const viewport = new FakeVisualViewport();
-  vi.stubGlobal('visualViewport', viewport);
-  return viewport;
-}
 
 /**
  * The visible area a pop-up gets: the edges its position and height are calculated from
