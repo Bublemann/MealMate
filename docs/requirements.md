@@ -707,6 +707,8 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - reaching "Speichern" in the pinned footer of "Neue Zutat" with the keyboard up;
   - the name row of "Neue Zutat" with its two icons at the largest text size;
   - the headline in the pinned block of Lists, Meals and Ingredients at the largest text size (D-44);
+  - the Settings rows with their values (a long display name, "1 Anfrage") and the count on the gear at the largest text size, and the count readable over meal photos in light and dark mode (UI-07, D-51);
+  - the red Abmelden row on the Settings tab in dark mode (UI-07);
   - swiping a meal and a line to reveal their buttons, and a swipe all the way through (D-40);
   - the keyboard staying up after "Hinzufügen" in the meal and item fields (D-41);
   - the ⋯ menu at the largest text size (D-39);

@@ -58,7 +58,7 @@ frontend/
     ├── app/                # App, router, providers, Layout (floating tab bar), UpdatePrompt, viewport
     ├── features/<feature>/ # screens and hooks of one feature; server calls in `api.ts`
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
-    │   ├── me/ couple/     # Settings tab: profile, privacy, security, sessions; couple section
+    │   ├── me/ couple/     # Settings tab, its rows and gear count; Profil, Privatsphäre, Sicherheit, Paar …
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
     │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
     │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
@@ -176,6 +176,35 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   display name of the list a new meal goes onto (`useListOnce`, which doesn't poll; "Einkaufsliste"
   until it is known). On its right, `action` takes the screen's one button, its ⋯ menu (D-39);
   without one the slot is empty, with nothing to see or to focus. Tests: `DetailStrip.test.tsx`.
+- **Settings tab** (UI-07, D-45): `features/me/SettingsScreen.tsx` shows the headline, then rows
+  in grouped panels, and Abmelden last. The rows come from one ordered list, `SETTINGS_ROWS` in
+  `features/me/settingsRows.ts`: each entry has its group, its label key, its address and,
+  optionally, a value component (`SettingsValues.tsx`). The groups (`SETTINGS_GROUPS`) are the
+  user's own rows, **Verwaltung** for admins only (its heading, `adminEntry`), and Über MealMate.
+  A later page adds its row as one entry in its group, plus its route in `app/router.tsx`. A row
+  is a link: the label first (its accessible name starts with it, so tests find "Paar" whatever
+  the value), the value in muted text, then a chevron; at large text sizes the value wraps below
+  the label. Values load on their own and never hold the rows back: while one loads, fails or
+  can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
+  name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
+  (`waitingRequests`) or else the partner (`userLabel`), Über MealMate the version. Only their
+  addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03). Abmelden is
+  a red, centred button: with changes still waiting it asks first with their count (SYNC-05).
+- **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
+  `/me/privacy`, `/me/couple`, `/me/security`, `/me/about`), framed by `SettingsPage`: the strip
+  with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
+  held, without the card's heading. The admin pages stay under `/me/admin/…`.
+- **Count on the gear** (UI-07, D-51): while something waits for the user to act on, the Settings
+  tab's gear carries a small red count ("9+" above nine), sized by the capped
+  `--tab-bar-badge*` tokens so it doesn't grow beyond the bar. It is hidden from screen readers,
+  which hear it in the tab's name ("Einstellungen, 1 neu", `nav.meCount`). `useSettingsCount`
+  (`features/me/settingsCount.ts`) sums `COUNT_SOURCES`; a source is one entry, the query its
+  page uses (so they share one cache entry) and how to count it (`select`). The first source is
+  the incoming couple requests (`coupleQuery`). A spec adds a source as one more entry, without
+  touching the tab bar. The `Layout` keeps the count loaded once signed in: it is loaded again on
+  returning to the foreground with data older than the usual 30 s and every 60 s while the app is
+  visible, never in the background; an answer to a request updates it at once, and a failed
+  refresh keeps the last count without showing an error.
 - **Filter panel** (UI-01, D-23): `FilterPanel` is the pinned block's filter button and the panel
   it slides up (`ui/sheet.tsx`, a bottom sheet on the Radix dialog that doesn't slide under
   Reduce Motion). A tab passes its groups of checkboxes (`ui/checkbox.tsx`, a native checkbox in
@@ -270,7 +299,7 @@ How the app stays signed in (plan § 5.4, § 8):
   checked with `POST /api/auth/codes/check` before the form appears. Only submitting the form
   consumes it.
 - **Language.** Before login the device language (or the stored choice) is used; the join form
-  sends it. When signed in, the server's `language` wins, and changing it on the Settings tab
+  sends it. When signed in, the server's `language` wins, and changing it on Settings → Profil
   saves it there.
 
 ## Sharing links
