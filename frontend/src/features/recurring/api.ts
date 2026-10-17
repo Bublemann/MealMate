@@ -7,6 +7,8 @@ export type RecurringItemList = components['schemas']['RecurringItemList'];
 export type Notice = components['schemas']['Notice'];
 export type NoticeList = components['schemas']['NoticeList'];
 export type RecurringItemUpdate = components['schemas']['RecurringItemUpdate'];
+/** A due item of the viewer's set, as a draft's list detail carries it for the "Fällig" box. */
+export type DueItem = components['schemas']['DueItem'];
 
 /**
  * A new recurring item as the pop-up makes it. The server's create has no `automatic` (a new item

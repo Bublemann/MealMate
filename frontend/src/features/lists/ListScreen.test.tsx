@@ -38,6 +38,7 @@ import {
   UNITS,
 } from '@/test/ingredients';
 import { EGGS, FLOUR, foundMeal, MILK, mealSummary } from '@/test/meals';
+import { dueItem } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { swipe, tap } from '@/test/swipe';
 import { testIds } from '@/testIds';
@@ -1135,6 +1136,268 @@ describe('ListScreen', () => {
       expect(await within(dialog).findByText('Out of range')).toBeVisible();
       expect(within(dialog).getByLabelText('Amount (optional)')).toHaveValue('999999');
       expect(screen.queryByText('Please check your input.')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('"Fällig" box (LIST-16, D-42)', () => {
+    const TOOTHPASTE = dueItem({
+      ingredient: summary('Zahnpasta', 'other', {
+        id: 'ing-zahnpasta',
+        brand: 'Elmex',
+        base_unit: 'g',
+      }),
+      due_on: '2026-10-25',
+      days_until_due: 0,
+      last_purchased_on: '2025-12-20',
+      last_amount: null,
+    });
+    const DUE = [dueItem(), TOOTHPASTE];
+    const withDue = (overrides: Partial<Schemas['ListDetail']> = {}) =>
+      listDetail({ due_items: DUE, ...overrides });
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-25T10:00:00'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function dueRows() {
+      return within(screen.getByTestId(testIds.dueBox)).getAllByTestId(testIds.dueItem);
+    }
+
+    it('shows the due items below the item field and above the lines, in the server’s order', async () => {
+      renderList({ [`GET ${BASE}`]: withDue() });
+
+      const box = await screen.findByTestId(testIds.dueBox);
+      expect(box).toHaveAccessibleName('Due');
+      const items = screen.getByRole('region', { name: 'Items' });
+      expect(items).toContainElement(box);
+      expectInPageOrder([
+        within(items).getByTestId(testIds.extraItemInput),
+        box,
+        within(items).getByTestId(testIds.listLines),
+      ]);
+      expect(dueRows().map((row) => row.textContent)).toEqual([
+        'Klopapierdue for 3 days · last 24/09',
+        'Zahnpasta (Elmex)due today · last 20/12/2025',
+      ]);
+    });
+
+    it('words the rows in German and names ＋ and ✕ after the ingredient (A11Y-01)', async () => {
+      const { authSession } = renderList({ [`GET ${BASE}`]: withDue() });
+      authSession.setUser({ ...authSession.getState().user!, language: 'de' });
+      const { changeLanguage } = await import('@/i18n');
+      await changeLanguage('de');
+
+      const box = await screen.findByRole('region', { name: 'Fällig' });
+      expect(dueRows().map((row) => row.textContent)).toEqual([
+        'Klopapierfällig seit 3 Tagen · zuletzt 24.09.',
+        'Zahnpasta (Elmex)fällig heute · zuletzt 20.12.2025',
+      ]);
+      expect(within(box).getByRole('button', { name: 'Klopapier hinzufügen' })).toBeEnabled();
+      expect(within(box).getByRole('button', { name: 'Klopapier ausblenden' })).toBeEnabled();
+      expect(
+        within(box).getByRole('button', { name: 'Zahnpasta (Elmex) hinzufügen' }),
+      ).toBeEnabled();
+      expect(
+        within(box).getByRole('button', { name: 'Zahnpasta (Elmex) ausblenden' }),
+      ).toBeEnabled();
+    });
+
+    it('adds an item with ＋ through the amount pop-up, the last amount filled in, and it leaves the box', async () => {
+      const { fetchMock, user } = renderList({
+        [`GET ${BASE}`]: withDue(),
+        'GET /api/units': UNITS,
+        [`POST ${BASE}/extra-items`]: Response.json(
+          withDue({ due_items: [TOOTHPASTE], version: 4 }),
+          {
+            status: 201,
+          },
+        ),
+      });
+
+      await user.click(await screen.findByRole('button', { name: 'Add Klopapier' }));
+      const dialog = await screen.findByTestId(testIds.amountDialog);
+      expect(dialog).toHaveAccessibleName('Klopapier');
+      expect(within(dialog).getByLabelText('Amount (optional)')).toHaveValue('12');
+      expect(within(dialog).getByLabelText('Unit')).toHaveValue('piece');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+      expect(dialog).not.toBeInTheDocument();
+      // The focus goes back to the box, not into the item field (no keyboard).
+      expect(screen.getByTestId(testIds.dueBox)).toHaveFocus();
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
+      );
+      await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
+        id: A_UUID_V7,
+        ingredient_id: 'ing-klopapier',
+        amount: 12,
+        unit: 'piece',
+      });
+      await waitFor(() =>
+        expect(dueRows().map((row) => row.textContent)).toEqual([
+          'Zahnpasta (Elmex)due today · last 20/12/2025',
+        ]),
+      );
+    });
+
+    it('takes the row out at once, so a second ＋ can’t add it twice, and brings it back on an error', async () => {
+      const post = heldRoute();
+      const { user } = renderList({
+        [`GET ${BASE}`]: withDue(),
+        'GET /api/units': UNITS,
+        [`POST ${BASE}/extra-items`]: post.route,
+      });
+
+      await user.click(await screen.findByRole('button', { name: 'Add Klopapier' }));
+      const dialog = await screen.findByTestId(testIds.amountDialog);
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+      expect(dueRows().map((row) => row.textContent)).toEqual([
+        'Zahnpasta (Elmex)due today · last 20/12/2025',
+      ]);
+      await post.answer(errorResponse(409, 'list.not_draft'));
+      expect(await screen.findByTestId(testIds.amountDialog)).toBeVisible();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(dueRows()).toHaveLength(2));
+    });
+
+    it('opens the amount pop-up empty, on the base unit, without a last amount', async () => {
+      const { fetchMock, user } = renderList({
+        [`GET ${BASE}`]: withDue(),
+        'GET /api/units': UNITS,
+        [`POST ${BASE}/extra-items`]: Response.json(withDue({ due_items: [dueItem()] }), {
+          status: 201,
+        }),
+      });
+
+      await user.click(await screen.findByRole('button', { name: 'Add Zahnpasta (Elmex)' }));
+      const dialog = await screen.findByTestId(testIds.amountDialog);
+      expect(dialog).toHaveAccessibleName('Zahnpasta (Elmex)');
+      expect(within(dialog).getByLabelText('Amount (optional)')).toHaveValue('');
+      expect(within(dialog).getByLabelText('Unit')).toHaveValue('g');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
+      );
+      await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
+        id: A_UUID_V7,
+        ingredient_id: 'ing-zahnpasta',
+      });
+    });
+
+    it('keeps its rows in place while a pop-up is open, and follows the list once it closes', async () => {
+      let partnerAdded = false;
+      const { fetchMock, user } = renderList({
+        // Ben adds Klopapier meanwhile: the next load no longer has it.
+        [`GET ${BASE}`]: () =>
+          partnerAdded ? withDue({ due_items: [TOOTHPASTE], version: 4 }) : withDue(),
+        'GET /api/units': UNITS,
+      });
+      await user.click(await screen.findByRole('button', { name: 'Add Zahnpasta (Elmex)' }));
+      const dialog = await screen.findByTestId(testIds.amountDialog);
+
+      partnerAdded = true;
+      const loads = requestsTo(fetchMock, `GET ${BASE}`).length;
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, `GET ${BASE}`).length).toBeGreaterThan(loads),
+      );
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(dueRows()).toHaveLength(2);
+
+      await user.keyboard('{Escape}');
+      expect(dialog).not.toBeInTheDocument();
+      await waitFor(() => expect(dueRows()).toHaveLength(1));
+      expect(dueRows()[0]).toHaveTextContent('Zahnpasta (Elmex)');
+    });
+
+    it('keeps the box offline with ＋ and ✕ inactive, not hidden (SYNC-03, D-10)', async () => {
+      const { fetchMock } = renderList({ [`GET ${BASE}`]: withDue() });
+      const box = await screen.findByTestId(testIds.dueBox);
+
+      goOffline(fetchMock);
+
+      await waitFor(() =>
+        expect(within(box).getByRole('button', { name: 'Add Klopapier' })).toBeDisabled(),
+      );
+      expect(dueRows()).toHaveLength(2);
+      for (const button of within(box).getAllByRole('button')) {
+        expect(button).toBeDisabled();
+      }
+    });
+
+    it('shows no box when nothing is due, on a done list or on someone else’s list', async () => {
+      const { unmount } = renderList();
+      await screen.findByTestId(testIds.extraItemInput);
+      expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Due' })).not.toBeInTheDocument();
+      unmount();
+
+      // Whatever the list detail carries (the server sends none there).
+      const carls = withDue({ owner: CARL, can_edit: false, is_owner: false });
+      const second = renderList({ [`GET ${BASE}`]: carls });
+      await screen.findByTestId(testIds.listReadOnly);
+      expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument();
+      expect(screen.queryByText('Klopapier')).not.toBeInTheDocument();
+      second.unmount();
+
+      renderList({ [`GET ${BASE}`]: doneList({ due_items: DUE }) });
+      await screen.findByTestId(testIds.listDone);
+      expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument();
+      expect(screen.queryByText('Klopapier')).not.toBeInTheDocument();
+    });
+
+    it('hides an item with ✕ at once, without asking, and it stays hidden when the list is loaded again', async () => {
+      const HIDE = `POST ${BASE}/due-items/ing-klopapier/hide`;
+      let hidden = false;
+      const { fetchMock, user } = renderList({
+        // Ben's draft, shared with me: a hide counts for both of us (CPL-03).
+        [`GET ${BASE}`]: () =>
+          withDue({
+            owner: BEN,
+            is_owner: false,
+            shared_with_partner: true,
+            due_items: hidden ? [TOOTHPASTE] : DUE,
+          }),
+        [HIDE]: () => {
+          hidden = true;
+          return withDue({
+            owner: BEN,
+            is_owner: false,
+            shared_with_partner: true,
+            due_items: [TOOTHPASTE],
+            version: 4,
+          });
+        },
+      });
+
+      await user.click(await screen.findByRole('button', { name: 'Hide Klopapier' }));
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(dueRows().map((row) => row.textContent)).toEqual([
+        'Zahnpasta (Elmex)due today · last 20/12/2025',
+      ]);
+      await waitFor(() => expect(requestsTo(fetchMock, HIDE)).toHaveLength(1));
+      const loads = requestsTo(fetchMock, `GET ${BASE}`).length;
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, `GET ${BASE}`).length).toBeGreaterThan(loads),
+      );
+      expect(dueRows().map((row) => row.textContent)).toEqual([
+        'Zahnpasta (Elmex)due today · last 20/12/2025',
+      ]);
     });
   });
 

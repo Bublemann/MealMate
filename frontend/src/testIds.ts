@@ -146,6 +146,8 @@ export const testIds = {
   itemNewIngredient: 'item-new-ingredient',
   amountDialog: 'amount-dialog',
   freeTextDialog: 'free-text-dialog',
+  dueBox: 'due-box',
+  dueItem: 'due-item',
   listLines: 'list-lines',
   listLine: 'list-line',
   lineSources: 'line-sources',

@@ -11,6 +11,7 @@ import {
 import { IngredientCategoryUnit } from '@/features/ingredients/IngredientCategoryUnit';
 import { IngredientFormDialog } from '@/features/ingredients/IngredientFormDialog';
 import { IngredientName } from '@/features/ingredients/IngredientName';
+import type { DueItem } from '@/features/recurring/api';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { keptUnit } from '@/features/reference/units';
 import { useConnected, useQueueOp } from '@/features/sync/context';
@@ -26,7 +27,8 @@ import {
   RESULT_LIST_CLASS,
 } from './AddField';
 import { AmountDialog, FreeTextDialog, type AmountValue, type FreeTextValue } from './AddDialogs';
-import { shoppingOps, stampOp, useAddExtraItem, type ExtraItemCreate } from './api';
+import { DueBox } from './DueBox';
+import { shoppingOps, stampOp, useAddExtraItem, useHideDueItem, type ExtraItemCreate } from './api';
 import { usePlus } from './usePlus';
 
 /** Results shown under the field; typing more narrows them down. */
@@ -40,12 +42,21 @@ interface Retry {
 
 /** The open pop-up of the item field. */
 type ItemRequest =
-  | { kind: 'amount'; ingredient: IngredientSummary; value: AmountValue; retry: Retry | null }
+  | {
+      kind: 'amount';
+      ingredient: IngredientSummary;
+      value: AmountValue;
+      retry: Retry | null;
+      /** Opened from the "Fällig" box: the focus goes back there, not into the field. */
+      fromDue: boolean;
+    }
   | { kind: 'freeText'; text: string; value: FreeTextValue | null; retry: Retry | null }
   | { kind: 'newIngredient'; name: string };
 
 interface ItemFieldProps {
   listId: string;
+  /** The due items of a draft, shown in the "Fällig" box below the field (LIST-16). */
+  due?: readonly DueItem[];
   /** While shopping, free-text items go through the outbox and work offline (SHOP-02). */
   shopping?: boolean;
 }
@@ -63,11 +74,17 @@ interface ItemFieldProps {
  *
  * An item keeps its id when it is sent again unchanged after an error (e.g. a timeout whose
  * request did reach the server), so it isn't added twice.
+ *
+ * On a draft, `due` fills the "Fällig" box below the field (LIST-16): its ＋ opens the same amount
+ * pop-up with the last amount, and the focus goes back to the box when the pop-up closes.
  */
-export function ItemField({ listId, shopping = false }: ItemFieldProps) {
+export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps) {
   const { t } = useTranslation();
   const connected = useConnected();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dueRef = useRef<HTMLElement>(null);
+  /** Where the focus goes when the amount pop-up closes: the box it was opened from, or the field. */
+  const amountFromDue = useRef(false);
   const [text, setText] = useState('');
   const [request, setRequest] = useState<ItemRequest | null>(null);
   const requestRef = useRef(request);
@@ -75,6 +92,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
   /** The unit last chosen here: the next ingredient starts with it while it fits (MEAL-02). */
   const [lastUnit, setLastUnit] = useState<Unit | ''>('');
   const add = useAddExtraItem(listId);
+  const hideDue = useHideDueItem(listId);
   const queue = useQueueOp(listId);
   const units = useUnits();
   const categories = useCategories();
@@ -107,7 +125,24 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
       ingredient,
       value: { amount: null, unit: startUnit(ingredient) },
       retry: null,
+      fromDue: false,
     });
+    amountFromDue.current = false;
+  }
+
+  /** ＋ of a due item: its last amount filled in, when the server gives one that fits (D-42). */
+  function chooseDue({ ingredient, last_amount }: DueItem) {
+    setAddError(null);
+    setRequest({
+      kind: 'amount',
+      ingredient,
+      value: last_amount
+        ? { amount: last_amount.value, unit: last_amount.unit }
+        : { amount: null, unit: startUnit(ingredient) },
+      retry: null,
+      fromDue: true,
+    });
+    amountFromDue.current = true;
   }
 
   function chooseFreeText() {
@@ -122,13 +157,16 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     // Several brands of that name: the results stay for a tap.
   });
 
-  /** The pop-up closes and the emptied field gets the focus within this tap (iOS keyboard). */
-  function closeAndFocus() {
+  /**
+   * The pop-up closes and the emptied field gets the focus within this tap (iOS keyboard); after
+   * an item of the "Fällig" box the box gets it, and what was typed in the field stays.
+   */
+  function closeAndFocus(fromDue: boolean) {
     flushSync(() => {
       setRequest(null);
-      setText('');
+      if (!fromDue) setText('');
     });
-    inputRef.current?.focus();
+    (fromDue ? dueRef : inputRef).current?.focus();
   }
 
   /** After an error: the pop-up again, unless the user opened another one meanwhile. */
@@ -146,17 +184,22 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     return uuidv7();
   }
 
-  function addLinked(ingredient: IngredientSummary, value: AmountValue, retry: Retry | null) {
+  function addLinked(
+    ingredient: IngredientSummary,
+    value: AmountValue,
+    retry: Retry | null,
+    fromDue: boolean,
+  ) {
     const body =
       value.amount === null
         ? { ingredient_id: ingredient.id }
         : { ingredient_id: ingredient.id, amount: value.amount, unit: value.unit };
     const item = { id: itemId(body, retry), ...body };
-    closeAndFocus();
+    closeAndFocus(fromDue);
     setLastUnit(value.unit);
     add.mutate(item, {
       onError: (error) =>
-        reopen({ kind: 'amount', ingredient, value, retry: { sent: item, error } }, error),
+        reopen({ kind: 'amount', ingredient, value, retry: { sent: item, error }, fromDue }, error),
     });
   }
 
@@ -166,7 +209,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
       ...(value.amountText ? { amount_text: value.amountText } : {}),
       ...(value.categoryId ? { category_id: value.categoryId } : {}),
     };
-    closeAndFocus();
+    closeAndFocus(false);
     if (shopping) {
       // SHOP-02: into the outbox, online or offline; it says so itself if it can't be stored.
       const payload = { extra_id: uuidv7(), ...body };
@@ -254,16 +297,29 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
       >
         <ErrorAlert error={addError} />
       </AddField>
+      <DueBox
+        ref={dueRef}
+        items={due}
+        disabled={!connected}
+        frozen={request !== null}
+        onAdd={chooseDue}
+        onHide={(item) => hideDue.mutate(item.ingredient.id)}
+      />
+      <ErrorAlert error={hideDue.error} />
       <AmountDialog
         ingredient={amountRequest?.ingredient ?? null}
         initial={amountRequest?.value}
         error={amountRequest?.retry?.error}
         disabled={!connected}
         onAdd={(value) => {
-          if (amountRequest) addLinked(amountRequest.ingredient, value, amountRequest.retry);
+          if (amountRequest)
+            addLinked(amountRequest.ingredient, value, amountRequest.retry, amountRequest.fromDue);
         }}
         onCancel={() => setRequest(null)}
-        onCloseAutoFocus={focusField}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          (amountFromDue.current ? dueRef : inputRef).current?.focus();
+        }}
       />
       <FreeTextDialog
         text={freeTextRequest?.text ?? null}

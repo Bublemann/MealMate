@@ -183,7 +183,7 @@ function ListContent({ list, categories, showMeals, onRefresh }: ListContentProp
             list={list}
             categories={categories}
             editable={editable}
-            top={editable && <ItemField listId={list.id} />}
+            top={editable && <ItemField listId={list.id} due={list.due_items} />}
           />
         </>
       )}

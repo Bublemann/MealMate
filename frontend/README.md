@@ -234,7 +234,16 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   request (the create has no such field). The page's `RecurringIngredientField` looks like the
   item field (D-41) but offers only ingredients and "„X“ als neue Zutat" (`IngredientFormDialog`,
   then the pop-up). `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
-  02.10. · fällig in 5 Tagen") without counting days.
+  02.10. · fällig in 5 Tagen") without counting days. On a draft the viewer can edit, the item
+  field shows the list detail's `due_items` in the "Fällig" box below it (`DueBox`, LIST-16):
+  name, "fällig seit 3 Tagen · zuletzt 02.10.", ＋ ("Klopapier hinzufügen") opens the item
+  field's `AmountDialog` with the last amount (when the server gives one, i.e. it fits), and ✕
+  ("Klopapier ausblenden") hides it on that list for everyone, without asking
+  (`useHideDueItem`). Both take the row out at once; adding a linked item does that for its
+  ingredient. While one of the field's pop-ups is open the rows stay as they are, and the focus
+  goes back to the box when the amount pop-up closes. The box comes with the list, so polling
+  and the local copy carry it; offline its buttons are inactive. There is none while shopping
+  or on done and read-only lists.
 - **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
   buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `IngredientMenu` pass
@@ -766,6 +775,8 @@ order.
 | `itemNewIngredient`      | `item-new-ingredient`      | "“X” as a new ingredient" under it               |
 | `amountDialog`           | `amount-dialog`            | Amount pop-up of an ingredient being added       |
 | `freeTextDialog`         | `free-text-dialog`         | Free-text pop-up of an item being added          |
+| `dueBox`                 | `due-box`                  | "Due" box of due recurring items on a draft      |
+| `dueItem`                | `due-item`                 | One due item with its ＋ and ✕                   |
 | `listLines`              | `list-lines`               | Aggregated lines grouped by category             |
 | `listLine`               | `list-line`                | One line (opens its sources)                     |
 | `lineSources`            | `line-sources`             | Sources dialog of a line                         |

@@ -17,6 +17,7 @@ import {
   SHOPPING_LINES,
 } from '@/test/lists';
 import { openMoreMenu } from '@/test/menu';
+import { dueItem } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import { DB_NAME, DB_VERSION, openSyncStorage, userMetaKey } from './storage';
@@ -128,6 +129,19 @@ describe('lists from the local copy (SYNC-09)', () => {
 
     const lines = await screen.findByTestId(testIds.listLines);
     expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
+  });
+
+  it('shows the "Fällig" box of a stored draft offline, its ＋ and ✕ inactive (LIST-16, SYNC-03)', async () => {
+    await storeCopy(listDetail({ due_items: [dueItem()] }));
+    serverGone(FAIL);
+    goOffline();
+
+    renderApp(`/lists/${LIST_ID}`);
+
+    const box = await screen.findByTestId(testIds.dueBox);
+    expect(within(box).getByTestId(testIds.dueItem)).toHaveTextContent('Klopapier');
+    expect(within(box).getByRole('button', { name: 'Add Klopapier' })).toBeDisabled();
+    expect(within(box).getByRole('button', { name: 'Hide Klopapier' })).toBeDisabled();
   });
 
   it('heads lines of a deleted category with its stored name (D-30)', async () => {

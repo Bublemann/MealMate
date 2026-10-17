@@ -29,6 +29,7 @@ import {
 } from '@/test/ingredients';
 import { FLOUR, ME } from '@/test/meals';
 import { chooseFromMenu, openMoreMenu } from '@/test/menu';
+import { dueItem } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { swipe, tap } from '@/test/swipe';
 import { KEYBOARD_HEIGHT, stubVisualViewport, VIEWPORT_HEIGHT } from '@/test/viewport';
@@ -476,6 +477,14 @@ describe('shopping view (SHOP-01)', () => {
       within(meals).getByTestId(testIds.mealField),
       within(meals).getByTestId(testIds.listMeals),
     ]);
+  });
+
+  it('suggests no due items while shopping, not even what the list detail carries (LIST-16)', async () => {
+    renderList({ [`GET ${BASE}`]: shoppingList({ due_items: [dueItem()] }) });
+
+    expect(await screen.findByTestId(testIds.extraItemInput)).toBeVisible();
+    expect(screen.queryByTestId(testIds.dueBox)).not.toBeInTheDocument();
+    expect(screen.queryByText('Klopapier')).not.toBeInTheDocument();
   });
 
   it('adds a linked item with its amount while shopping online (LIST-12)', async () => {
