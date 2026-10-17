@@ -725,7 +725,7 @@
   "diag.storage.write": "Markierung schreiben",
   "diag.storage.persist": "Dauerhaften Speicher anfordern",
   "diag.offline.title": "Offline und schlechtes Netz",
-  "diag.offline.steps": "Flugmodus an, App ganz schließen, wieder öffnen: MealMate muss sofort erscheinen. Dann Einstellungen → Diagnose öffnen: „App-Start“ zeigt, ob der Service Worker sie ausgeliefert hat.",
+  "diag.offline.steps": "Flugmodus an, App ganz schließen, wieder öffnen: MealMate muss sofort erscheinen. Dann Einstellungen → Über MealMate → Diagnose öffnen: „App-Start“ zeigt, ob der Service Worker sie ausgeliefert hat.",
   "diag.offline.lieFi": "Schlechtes Netz: Flugmodus aus und Tailscale an, das Netzwerkkabel des Pi ziehen (oder den Pi ausschalten), App schließen und wieder öffnen: Sie muss sofort erscheinen und deine Listen zeigen; nach ein paar Sekunden meldet sie, dass MealMate nicht erreichbar ist.",
   "diag.report.title": "Bericht",
   "diag.report.copy": "Bericht kopieren",

@@ -1,40 +1,35 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useCurrentUser } from '@/features/auth/context';
 import { testIds, type TestId } from '@/testIds';
 import { useUpdateMe } from './api';
+import { SettingsPage } from './SettingsPage';
 
 type PrivacyField = 'meals_public' | 'lists_public';
 
-/** The two privacy switches (VIS-02); the partner always sees everything (CPL-04). */
-export function PrivacySection() {
+/** Settings → Privatsphäre: the two switches (VIS-02); the partner always sees everything (CPL-04). */
+export function PrivacyScreen() {
   const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('me.privacy.title')}</CardTitle>
-        <CardDescription>{t('me.privacy.text')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <PrivacySwitch
-          field="meals_public"
-          label={t('me.privacy.mealsPublic')}
-          hint={t('me.privacy.mealsPublicHint')}
-          testId={testIds.mealsPublicSwitch}
-        />
-        <PrivacySwitch
-          field="lists_public"
-          label={t('me.privacy.listsPublic')}
-          hint={t('me.privacy.listsPublicHint')}
-          testId={testIds.listsPublicSwitch}
-        />
-      </CardContent>
-    </Card>
+    <SettingsPage title={t('me.privacy.title')} testId={testIds.screenPrivacy}>
+      <p className="text-muted-foreground">{t('me.privacy.text')}</p>
+      <PrivacySwitch
+        field="meals_public"
+        label={t('me.privacy.mealsPublic')}
+        hint={t('me.privacy.mealsPublicHint')}
+        testId={testIds.mealsPublicSwitch}
+      />
+      <PrivacySwitch
+        field="lists_public"
+        label={t('me.privacy.listsPublic')}
+        hint={t('me.privacy.listsPublicHint')}
+        testId={testIds.listsPublicSwitch}
+      />
+    </SettingsPage>
   );
 }
 

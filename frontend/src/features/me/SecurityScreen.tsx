@@ -7,7 +7,6 @@ import { LoadError } from '@/components/LoadError';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSyncEngine } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { formatDate, formatDateTime } from '@/i18n/format';
@@ -22,14 +21,15 @@ import {
   type SessionInfo,
 } from './api';
 import { PasswordDialog } from './PasswordDialog';
+import { SettingsPage } from './SettingsPage';
 
 /**
- * Security notice, password change, sessions and "log out on all devices" (ACC-09, ACC-10). The
+ * Settings → Sicherheit: security notice, password change, sessions and "log out on all devices" (ACC-09, ACC-10). The
  * latter logs out here too: with changes still waiting it says they will be lost (SYNC-05). The
  * outbox is read before the question is asked, so a tap right after the start (before the
  * waiting count has loaded) can't leave that out.
  */
-export function SecuritySection() {
+export function SecurityScreen() {
   const { t } = useTranslation();
   const [passwordChanged, setPasswordChanged] = useState(false);
   const logoutAll = useLogoutAll();
@@ -42,49 +42,44 @@ export function SecuritySection() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('me.security.title')}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <SecurityNotice />
-        <div className="flex flex-col gap-2">
-          <PasswordDialog onChanged={() => setPasswordChanged(true)} />
-          <p aria-live="polite" className="text-sm text-muted-foreground">
-            {passwordChanged && t('me.password.changed')}
-          </p>
-        </div>
-        <SessionList />
-        <Button
-          variant="outline"
-          data-testid={testIds.logoutAllButton}
-          disabled={logoutAll.isPending}
-          onClick={() => void onLogoutAll()}
-        >
-          {t('me.sessions.logoutAll')}
-        </Button>
-        <ConfirmDialog
-          open={pending !== null}
-          onOpenChange={(open) => {
-            if (!open) setPending(null);
-          }}
-          title={
-            pending
-              ? t('me.logoutPending.title', { count: pending })
-              : t('me.sessions.logoutAllTitle')
-          }
-          description={
-            pending
-              ? `${t('me.sessions.logoutAllText')} ${t('me.logoutPending.text')}`
-              : t('me.sessions.logoutAllText')
-          }
-          confirmLabel={pending ? t('me.logoutPending.confirm') : t('me.sessions.logoutAllConfirm')}
-          onConfirm={() => logoutAll.mutate()}
-          destructive
-        />
-        <ErrorAlert error={logoutAll.error} />
-      </CardContent>
-    </Card>
+    <SettingsPage title={t('me.security.title')} testId={testIds.screenSecurity}>
+      <SecurityNotice />
+      <div className="flex flex-col gap-2">
+        <PasswordDialog onChanged={() => setPasswordChanged(true)} />
+        <p aria-live="polite" className="text-sm text-muted-foreground">
+          {passwordChanged && t('me.password.changed')}
+        </p>
+      </div>
+      <SessionList />
+      <Button
+        variant="outline"
+        data-testid={testIds.logoutAllButton}
+        disabled={logoutAll.isPending}
+        onClick={() => void onLogoutAll()}
+      >
+        {t('me.sessions.logoutAll')}
+      </Button>
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
+        title={
+          pending
+            ? t('me.logoutPending.title', { count: pending })
+            : t('me.sessions.logoutAllTitle')
+        }
+        description={
+          pending
+            ? `${t('me.sessions.logoutAllText')} ${t('me.logoutPending.text')}`
+            : t('me.sessions.logoutAllText')
+        }
+        confirmLabel={pending ? t('me.logoutPending.confirm') : t('me.sessions.logoutAllConfirm')}
+        onConfirm={() => logoutAll.mutate()}
+        destructive
+      />
+      <ErrorAlert error={logoutAll.error} />
+    </SettingsPage>
   );
 }
 
@@ -129,9 +124,9 @@ function SessionList() {
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby={headingId}>
-      <h3 id={headingId} className="font-semibold">
+      <h2 id={headingId} className="text-lg font-semibold">
         {t('me.sessions.title')}
-      </h3>
+      </h2>
       {sessions.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={sessions.error} />
       {sessions.data && (

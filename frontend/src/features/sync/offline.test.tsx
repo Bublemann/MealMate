@@ -462,7 +462,7 @@ describe('logging out with waiting changes (SYNC-05, SYNC-10)', () => {
     keepBusy();
     const fetchMock = mockApi({ 'POST /api/auth/logout-all': null });
     goOffline();
-    const { user } = renderApp('/me');
+    const { user } = renderApp('/me/security');
 
     await user.click(await screen.findByTestId(testIds.logoutAllButton));
     // Nothing is asked before it is known what waits.

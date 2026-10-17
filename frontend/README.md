@@ -527,10 +527,15 @@ order.
 | `screenLists`            | `screen-lists`             | Lists screen                                     |
 | `screenMeals`            | `screen-meals`             | Meals screen                                     |
 | `screenIngredients`      | `screen-ingredients`       | Ingredients screen                               |
-| `screenMe`               | `screen-me`                | Settings screen                                  |
-| `languageSelect`         | `language-select`          | Language select on Settings                      |
-| `appVersion`             | `app-version`              | Running version on Settings (once loaded)        |
-| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" link on Settings        |
+| `screenMe`               | `screen-me`                | Settings tab (its rows)                          |
+| `screenProfile`          | `screen-profile`           | Settings → Profil page                           |
+| `screenPrivacy`          | `screen-privacy`           | Settings → Privatsphäre page                     |
+| `screenCouple`           | `screen-couple`            | Settings → Paar page                             |
+| `screenSecurity`         | `screen-security`          | Settings → Sicherheit page                       |
+| `screenAbout`            | `screen-about`             | Settings → Über MealMate page                    |
+| `languageSelect`         | `language-select`          | Language select on Profil                        |
+| `appVersion`             | `app-version`              | Running version on Über MealMate (once loaded)   |
+| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" on Über MealMate        |
 | `updatePrompt`           | `update-prompt`            | "New version available" prompt                   |
 | `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen              |
 | `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip            |
@@ -539,18 +544,18 @@ order.
 | `screenJoin`             | `screen-join`              | Registration screen (invite link)                |
 | `screenReset`            | `screen-reset`             | New password screen (reset link)                 |
 | `linkInvalid`            | `link-invalid`             | "Link invalid or expired" on Join/Reset          |
-| `displayNameInput`       | `display-name-input`       | Display name field on Settings                   |
-| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Settings                |
-| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Settings                |
-| `coupleSection`          | `couple-section`           | Couple card on Settings                          |
-| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Settings        |
+| `displayNameInput`       | `display-name-input`       | Display name field on Profil                     |
+| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Privatsphäre            |
+| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Privatsphäre            |
+| `coupleSection`          | `couple-section`           | Content of the Paar page                         |
+| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Paar            |
 | `couplePicker`           | `couple-picker`            | User picker for a couple request                 |
-| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Settings         |
+| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Sicherheit       |
 | `changePasswordButton`   | `change-password-button`   | Opens the change-password dialog                 |
-| `sessionList`            | `session-list`             | List of the user's sessions on Settings          |
-| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Settings             |
-| `adminEntry`             | `admin-entry`              | Administration card on Settings (admins)         |
-| `logoutButton`           | `logout-button`            | "Log out" on Settings                            |
+| `sessionList`            | `session-list`             | List of the user's sessions on Sicherheit        |
+| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Sicherheit           |
+| `adminEntry`             | `admin-entry`              | Verwaltung group on Settings (admins)            |
+| `logoutButton`           | `logout-button`            | Abmelden, the last row on Settings               |
 | `screenAdminUsers`       | `screen-admin-users`       | Admin: users screen                              |
 | `adminUserList`          | `admin-user-list`          | Admin: list of users                             |
 | `screenAdminInvites`     | `screen-admin-invites`     | Admin: invites screen                            |
@@ -682,7 +687,7 @@ order.
 | `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint          |
 | `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint                 |
 | `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint                |
-| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Settings, admins only (M1–M9) |
+| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Über MealMate, admins (M1–M9) |
 | `screenDiagnostics`      | `screen-diagnostics`       | Diagnostics screen `/diag` (M1–M9)               |
 | `diagResult`             | `diag-result`              | One result line on the diagnostics screen        |
 | `diagReport`             | `diag-report`              | Plain-text report on the diagnostics screen      |

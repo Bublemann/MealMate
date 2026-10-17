@@ -115,7 +115,7 @@ describe('on-screen keyboard (UI-01)', () => {
   it('gives pop-ups the visible area above the keyboard', async () => {
     const viewport = stubVisualViewport();
     mockApi();
-    const { user } = renderApp('/me');
+    const { user } = renderApp('/me/security');
     await user.click(await screen.findByTestId(testIds.changePasswordButton));
     const dialog = await screen.findByRole('dialog', { name: 'Change password' });
 
@@ -133,7 +133,7 @@ describe('on-screen keyboard (UI-01)', () => {
   it('does not take pinch-zoom for an open keyboard (A11Y-02)', async () => {
     const viewport = stubVisualViewport();
     mockApi();
-    const { user } = renderApp('/me');
+    const { user } = renderApp('/me/security');
     act(() => pwaUpdate.announce(() => Promise.resolve()));
     const prompt = await screen.findByTestId(testIds.updatePrompt);
 
@@ -151,7 +151,7 @@ describe('on-screen keyboard (UI-01)', () => {
   it('changes nothing where the browser lacks the visible-viewport API', async () => {
     vi.stubGlobal('visualViewport', undefined);
     mockApi();
-    const { user } = renderApp('/me');
+    const { user } = renderApp('/me/security');
 
     expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeVisible();
     await user.click(screen.getByTestId(testIds.changePasswordButton));

@@ -5,9 +5,9 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatDate } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
@@ -22,23 +22,20 @@ import {
   type CoupleState,
 } from './api';
 
-/** Couple status, requests and the user picker (CPL-01, CPL-05, CPL-07). */
-export function CoupleSection() {
+/** Settings → Paar: couple status, requests and the user picker (CPL-01, CPL-05, CPL-07). */
+export function CoupleScreen() {
   const { t } = useTranslation();
   const couple = useCouple();
 
   return (
-    <Card data-testid={testIds.coupleSection}>
-      <CardHeader>
-        <CardTitle>{t('couple.title')}</CardTitle>
-        <CardDescription>{t('couple.text')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+    <SettingsPage title={t('couple.title')} testId={testIds.screenCouple}>
+      <div data-testid={testIds.coupleSection} className="flex flex-col gap-5">
+        <p className="text-muted-foreground">{t('couple.text')}</p>
         {couple.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
         <LoadError error={couple.error} />
         {couple.data && <CoupleContent state={couple.data} />}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsPage>
   );
 }
 
