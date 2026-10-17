@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/i18n';
 import { formatDateTime } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useAdminEvents } from './api';
 import { describeEvent } from './events';
 import { LoadError } from '@/components/LoadError';
@@ -14,7 +14,7 @@ export function AdminEventsScreen() {
   const events = useAdminEvents();
 
   return (
-    <AdminScreen title={t('admin.events.title')} testId={testIds.screenAdminEvents}>
+    <SettingsPage title={t('admin.events.title')} testId={testIds.screenAdminEvents}>
       {events.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={events.error} />
       {events.data?.length === 0 && (
@@ -34,6 +34,6 @@ export function AdminEventsScreen() {
           ))}
         </ol>
       )}
-    </AdminScreen>
+    </SettingsPage>
   );
 }

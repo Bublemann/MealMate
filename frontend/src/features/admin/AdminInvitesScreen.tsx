@@ -12,7 +12,7 @@ import { fieldErrorMessages } from '@/i18n/errors';
 import { formatDate, formatDateTime } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useCreateInvite, useInvites, useRevokeInvite, type Invite } from './api';
 import { inviteMessage } from './shareMessages';
 
@@ -21,10 +21,10 @@ export function AdminInvitesScreen() {
   const { t } = useTranslation();
 
   return (
-    <AdminScreen title={t('admin.invites.title')} testId={testIds.screenAdminInvites}>
+    <SettingsPage title={t('admin.invites.title')} testId={testIds.screenAdminInvites}>
       <CreateInvite />
       <InviteList />
-    </AdminScreen>
+    </SettingsPage>
   );
 }
 

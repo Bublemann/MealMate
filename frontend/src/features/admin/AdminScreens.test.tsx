@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
-import { errorResponse, mockApi, requestsTo, TEST_ADMIN, userRef } from '@/test/api';
+import { errorResponse, mockApi, requestsTo, TEST_ADMIN, userRef, VERSION_INFO } from '@/test/api';
+import { CATEGORIES } from '@/test/ingredients';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import type { AdminEvent, AdminUser, Invite } from './api';
@@ -57,7 +58,51 @@ afterEach(() => {
   Reflect.deleteProperty(navigator, 'share');
 });
 
-describe('AdminScreen', () => {
+const PAGES = [
+  { path: '/me/admin/users', title: 'Users', testId: testIds.screenAdminUsers },
+  { path: '/me/admin/invites', title: 'Invites', testId: testIds.screenAdminInvites },
+  { path: '/me/admin/categories', title: 'Categories', testId: testIds.screenAdminCategories },
+  { path: '/me/admin/events', title: 'Activity log', testId: testIds.screenAdminEvents },
+  { path: '/me/admin/system', title: 'System', testId: testIds.screenAdminSystem },
+];
+
+/** What the five pages load, so that each shows its content below the title. */
+const PAGE_ROUTES = {
+  'GET /api/admin/invites': [],
+  'GET /api/categories': CATEGORIES,
+  'GET /api/admin/events': [],
+  'GET /api/admin/system': { ...VERSION_INFO, image_digest: null, backup: null, disk: null },
+};
+
+describe('Admin pages', () => {
+  it.each(PAGES)(
+    '$path is a detail screen: the strip back to Settings, then the title, no chips (D-45, D-46)',
+    async ({ path, title, testId }) => {
+      const { router, user } = renderAdmin(path, PAGE_ROUTES);
+
+      const page = await screen.findByTestId(testId);
+      expect(screen.getByRole('region', { name: title })).toBe(page);
+      const strip = within(page).getByTestId(testIds.detailStrip);
+      const heading = within(page).getByRole('heading', { level: 1, name: title });
+      expect(screen.getAllByRole('heading', { level: 1 })).toEqual([heading]);
+      expect(page.firstElementChild).toBe(strip);
+      expect(strip.nextElementSibling).toBe(heading);
+      // "‹ Einstellungen" and no ⋯ menu; the pages are switched through the Verwaltung rows.
+      const back = within(strip).getByTestId(testIds.backLink);
+      expect(within(strip).getAllByRole('link')).toEqual([back]);
+      expect(within(strip).queryByRole('button')).not.toBeInTheDocument();
+      expect(back).toHaveAccessibleName('Settings');
+      expect(screen.queryByRole('navigation', { name: 'Administration' })).toBeNull();
+      for (const other of PAGES.filter((other) => other.path !== path)) {
+        expect(within(page).queryByRole('link', { name: other.title })).toBeNull();
+      }
+
+      await user.click(back);
+      expect(await screen.findByTestId(testIds.screenMe)).toBeVisible();
+      expect(router.state.location.pathname).toBe('/me');
+    },
+  );
+
   it('leads back to the Settings tab, in German too (D-44)', async () => {
     const admin = { ...TEST_ADMIN, language: 'de' as const };
     mockApi({ 'GET /api/me': admin, 'GET /api/admin/users': USERS });
@@ -71,19 +116,28 @@ describe('AdminScreen', () => {
     expect(router.state.location.pathname).toBe('/me');
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
   });
+
+  it('opens Benutzer at /me/admin', async () => {
+    const { router } = renderAdmin('/me/admin');
+
+    expect(await screen.findByTestId(testIds.screenAdminUsers)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/me/admin/users');
+  });
+
+  it.each(PAGES)('sends a member from $path to the Settings tab (ADM-01)', async ({ path }) => {
+    mockApi();
+    const { router } = renderApp(path);
+
+    expect(await screen.findByTestId(testIds.screenMe)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/me');
+  });
 });
 
 describe('AdminUsersScreen', () => {
   it('lists the users with role and status, without actions on oneself', async () => {
-    renderAdmin('/me/admin');
+    renderAdmin('/me/admin/users');
 
-    expect(await screen.findByTestId(testIds.screenAdminUsers)).toBeVisible();
     await screen.findByTestId(testIds.adminUserList);
-    const nav = screen.getByRole('navigation', { name: 'Administration' });
-    expect(within(nav).getByRole('link', { name: 'Users' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
 
     const admin = userCard('Admin');
     expect(admin).toHaveTextContent("That's you.");

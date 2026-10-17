@@ -10,8 +10,9 @@ interface SettingsPageProps {
 }
 
 /**
- * A page that a row of the Settings tab opens (D-45): a detail screen with the strip back to
- * the tab, "‹ Einstellungen", and no ⋯ menu, since none of these pages has actions (D-46).
+ * A page that a row of the Settings tab opens (D-45), the admin pages too: a detail screen with
+ * the strip back to the tab, "‹ Einstellungen", and no ⋯ menu, since none of these pages has
+ * actions (D-46). Admins switch admin pages through the Verwaltung rows, not on the pages.
  */
 export function SettingsPage({ title, testId, children }: SettingsPageProps) {
   const { t } = useTranslation();

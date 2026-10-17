@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useLanguage } from '@/i18n';
 import { formatBytes, formatDateTime, formatNumber } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import {
   useRequestBackup,
   useSystemInfo,
@@ -33,7 +33,7 @@ export function AdminSystemScreen() {
   const system = useSystemInfo();
 
   return (
-    <AdminScreen title={t('admin.system.title')} testId={testIds.screenAdminSystem}>
+    <SettingsPage title={t('admin.system.title')} testId={testIds.screenAdminSystem}>
       {system.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <ErrorAlert error={system.error} />
       {system.data && (
@@ -43,7 +43,7 @@ export function AdminSystemScreen() {
           <DiskCard disk={system.data.disk} />
         </>
       )}
-    </AdminScreen>
+    </SettingsPage>
   );
 }
 

@@ -39,16 +39,11 @@ function renderSystem(routes: Record<string, unknown> = {}) {
 }
 
 describe('AdminSystemScreen', () => {
-  it('shows empty states while the server has not reported yet, reachable from the navigation', async () => {
+  it('shows empty states while the server has not reported yet', async () => {
     renderSystem();
 
     expect(await screen.findByTestId(testIds.screenAdminSystem)).toBeVisible();
     expect(await screen.findByTestId(testIds.systemVersion)).toHaveTextContent('2.0.0-alpha.1');
-    const nav = screen.getByRole('navigation', { name: 'Administration' });
-    expect(within(nav).getByRole('link', { name: 'System' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
     expect(screen.getByText(VERSION_INFO.commit)).toBeVisible();
     expect(screen.queryByText('Image')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Source code/ })).toHaveAttribute(

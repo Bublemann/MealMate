@@ -10,7 +10,7 @@ import { useCurrentUser } from '@/features/auth/context';
 import { useLanguage } from '@/i18n';
 import { formatDate } from '@/i18n/format';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import {
   useAdminUsers,
   useCreateResetLink,
@@ -27,7 +27,7 @@ export function AdminUsersScreen() {
   const me = useCurrentUser();
 
   return (
-    <AdminScreen title={t('admin.users.title')} testId={testIds.screenAdminUsers}>
+    <SettingsPage title={t('admin.users.title')} testId={testIds.screenAdminUsers}>
       {users.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={users.error} />
       {users.data && (
@@ -39,7 +39,7 @@ export function AdminUsersScreen() {
           ))}
         </ul>
       )}
-    </AdminScreen>
+    </SettingsPage>
   );
 }
 
