@@ -15,6 +15,7 @@ import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { keptUnit } from '@/features/reference/units';
 import { useConnected, useQueueOp } from '@/features/sync/context';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { cn } from '@/lib/utils';
 import { uuidv7 } from '@/lib/uuid';
 import { testIds } from '@/testIds';
 import { AddField, FieldOption, FieldOptions, RESULT_BUTTON_CLASS } from './AddField';
@@ -231,7 +232,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
               <button
                 type="button"
                 onClick={() => chooseIngredient(ingredient)}
-                className={`${RESULT_BUTTON_CLASS} flex-col items-start gap-0`}
+                className={cn(RESULT_BUTTON_CLASS, 'flex-col items-start gap-0')}
               >
                 <IngredientName ingredient={ingredient} />
                 <IngredientCategoryUnit
@@ -267,7 +268,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
         disabled={!connected && !shopping}
         onAdd={plus}
         panelOpen={open && typed !== ''}
-        onFocus={() => setOpen(true)}
+        onOpen={() => setOpen(true)}
         onDismiss={dismiss}
         options={options}
         results={resultList}

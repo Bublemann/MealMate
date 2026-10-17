@@ -33,7 +33,8 @@ interface AddFieldProps {
   options?: ReactNode;
   /** The results, below the options. */
   results?: ReactNode;
-  onFocus?: () => void;
+  /** The field was focused or tapped: e.g. show the panel again. */
+  onOpen?: () => void;
   /** A tap outside the field and its panel, or Escape in the field. */
   onDismiss?: () => void;
   /** Below the panel, e.g. an error of the last add. */
@@ -59,7 +60,7 @@ export function AddField({
   panelOpen,
   options,
   results,
-  onFocus,
+  onOpen,
   onDismiss,
   children,
   inputTestId,
@@ -71,15 +72,20 @@ export function AddField({
   const typed = value.trim();
   const shown = panelOpen && !disabled;
 
-  // A tap anywhere else closes the panel (the pop-ups it opens are elsewhere in the page too).
+  // A tap anywhere else closes the panel once the tap is done: closing it on the way down would
+  // move what is below it, e.g. the other field's results, from under the finger. Taps in a
+  // pop-up, or on what went away with the tap (the pop-up's "Hinzufügen"), leave it as it is.
   useEffect(() => {
     if (!shown || !onDismiss) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
+    const onClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.isConnected) return;
+      if (rootRef.current?.contains(target)) return;
+      if (target.closest('[role="dialog"], [role="alertdialog"]')) return;
       onDismiss();
     };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
   }, [shown, onDismiss]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -118,7 +124,8 @@ export function AddField({
             disabled={disabled}
             value={value}
             onChange={(event) => onValueChange(event.target.value)}
-            onFocus={onFocus}
+            onFocus={onOpen}
+            onClick={onOpen}
             onKeyDown={onKeyDown}
           />
         </div>

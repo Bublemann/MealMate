@@ -45,6 +45,8 @@ SCREENS = [
     ),
     # A draft with its ⋯ menu open (D-39), created in the test: /lists/<id>.
     Screen("/lists/:id/menu", "member", (TEST_IDS["moreMenu"],)),
+    # A draft with the free-text pop-up of its item field open (D-41): /lists/<id>.
+    Screen("/lists/:id/popup", "member", (TEST_IDS["freeTextDialog"],)),
     # A list being shopped with a checked, a new and a needs-more line: /lists/<id>.
     Screen(
         "/lists/:id/shopping",
@@ -178,7 +180,7 @@ def test_no_serious_violations(
         # The admin's lists are public: one shows as a read-only list, with a lock.
         read_only = api.create_list(request.getfixturevalue("admin"), unique("A11y read-only"))
         feed_lists = [draft["name"], done["name"], read_only["name"]]
-    if path == "/lists/:id/menu":
+    if path in ("/lists/:id/menu", "/lists/:id/popup"):
         api = request.getfixturevalue("api")
         menu_list = api.create_list(account, unique("A11y menu"))
         path = f"/lists/{menu_list['id']}"
@@ -291,14 +293,26 @@ def test_no_serious_violations(
     if screen.path == "/lists/:id/menu":
         expect(page.get_by_test_id(TEST_IDS["floatingBar"])).to_be_visible()
         page.get_by_test_id(TEST_IDS["moreActions"]).click()
+    if screen.path == "/lists/:id/popup":
+        # Free text: "+" (Enter) without an exact match.
+        field = page.get_by_test_id(TEST_IDS["extraItemInput"])
+        field.fill(unique("A11y candles"))
+        field.press("Enter")
     for test_id in screen.ready:
         expect(page.get_by_test_id(test_id)).to_be_visible()
     if screen.path == "/lists/:id":
-        # Also check the hidden line with its restore button, and a meal's "Remove", which shows
-        # on focus (D-40).
+        # Also check the meal field's list of meals (D-41), the hidden line with its restore
+        # button, and a meal's "Remove", which shows on focus (D-40).
         hidden = page.get_by_test_id(TEST_IDS["hiddenLines"])
         hidden.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
         expect(hidden.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
+        # A tap elsewhere would close the meal field's list again; focusing doesn't.
+        page.get_by_test_id(TEST_IDS["mealField"]).click()
+        expect(
+            page.get_by_test_id(TEST_IDS["mealFieldPanel"]).get_by_role(
+                "list", name=text("lists.mealField.recent")
+            )
+        ).to_be_visible()
         page.get_by_test_id(TEST_IDS["removeListMeal"]).first.focus()
     if screen.path == "/lists":
         # The newest lists come first: this run's lists are on the first page.

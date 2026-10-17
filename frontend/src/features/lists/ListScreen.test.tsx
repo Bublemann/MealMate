@@ -589,9 +589,13 @@ describe('ListScreen', () => {
       expect(within(all).getByRole('button', { name: 'Lasagne Ben' })).toBeVisible();
       expect(within(panel).queryByTestId(testIds.mealFieldCreate)).not.toBeInTheDocument();
 
-      // Escape, or a tap elsewhere, closes it.
+      // Escape, or a tap elsewhere once it is done, closes it.
       await user.keyboard('{Escape}');
       expect(panel).not.toBeInTheDocument();
+      await user.click(screen.getByTestId(testIds.mealField));
+      expect(await screen.findByTestId(testIds.mealFieldPanel)).toBeVisible();
+      await user.click(screen.getByTestId(testIds.extraItemInput));
+      expect(screen.queryByTestId(testIds.mealFieldPanel)).not.toBeInTheDocument();
     });
 
     it('offers the meals of users the Meals tab hides (MEAL-09, MEAL-10)', async () => {
@@ -628,6 +632,8 @@ describe('ListScreen', () => {
     it('adds a picked meal with the chosen servings, then empties the field and keeps its focus', async () => {
       const { fetchMock, user } = renderList(mealRoutes());
       const field = await screen.findByTestId(testIds.mealField);
+      await user.click(field);
+      expect(await screen.findByRole('list', { name: 'Recently used' })).toBeVisible();
 
       await user.type(field, 'lasa');
       const results = await screen.findByRole('list', { name: 'Matching meals' });

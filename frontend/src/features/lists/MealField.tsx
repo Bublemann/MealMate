@@ -144,7 +144,7 @@ export function MealField({ listId, disabled, openOnStart = false }: MealFieldPr
         disabled={disabled}
         onAdd={plus}
         panelOpen={open}
-        onFocus={() => setOpen(true)}
+        onOpen={() => setOpen(true)}
         onDismiss={dismiss}
         options={options}
         results={
