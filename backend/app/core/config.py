@@ -5,6 +5,7 @@ from functools import cache
 from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -69,6 +70,9 @@ class Settings(BuildInfo):
     session_idle_days: int = Field(default=90, ge=1)
     # bcrypt cost factor (plan § 5.4, O-7); tests use the minimum of 4.
     bcrypt_rounds: int = Field(default=12, ge=4, le=16)
+    # The IANA time zone whose calendar days recurring items count in (LIST-16). The zone's data
+    # must be there, so the app doesn't start without it.
+    time_zone: str = "Europe/Berlin"
 
     @field_validator("public_url")
     @classmethod
@@ -90,6 +94,15 @@ class Settings(BuildInfo):
     @classmethod
     def _normalise_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
+
+    @field_validator("time_zone")
+    @classmethod
+    def _check_time_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("unknown time zone") from exc
+        return value
 
     @model_validator(mode="after")
     def _check_cookie_secure(self) -> Self:
@@ -115,6 +128,11 @@ class Settings(BuildInfo):
                 "(Open Food Facts' limit for searches)"
             )
         return self
+
+    @property
+    def zone(self) -> ZoneInfo:
+        """The instance's time zone (`time_zone`); ZoneInfo keeps one instance per key."""
+        return ZoneInfo(self.time_zone)
 
     @property
     def database_path(self) -> Path:

@@ -3835,6 +3835,69 @@
         "title": "MealUpdate",
         "type": "object"
       },
+      "Notice": {
+        "description": "An unread notice of the caller's.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "recurring_item.ingredient_deleted",
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "params",
+          "created_at"
+        ],
+        "title": "Notice",
+        "type": "object"
+      },
+      "NoticeList": {
+        "description": "The caller's unread notices, newest first, and how many there are (the count on the\nSettings tab, UI-07).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "title": "Notices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notices",
+          "count"
+        ],
+        "title": "NoticeList",
+        "type": "object"
+      },
       "NutrientValues": {
         "description": "Values per 100 g or 100 ml; null means unknown. In requests every value must be plausible: 0 up to the nutrient's maximum (900 kcal, 100 g for the others).",
         "properties": {
@@ -4271,6 +4334,194 @@
           "off_last_modified_at"
         ],
         "title": "ProductProposal",
+        "type": "object"
+      },
+      "RecurringInterval": {
+        "description": "The interval an item is due after, as the app shows it (MNT-02): below a week in days,\nelse in whole weeks rounded to the nearest. `automatic` while it adapts to the purchases\n(\"alle ~4 Wochen\"); off when it was set by hand (\"alle 4 Wochen\").",
+        "properties": {
+          "automatic": {
+            "title": "Automatic",
+            "type": "boolean"
+          },
+          "unit": {
+            "enum": [
+              "day",
+              "week"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "unit",
+          "automatic"
+        ],
+        "title": "RecurringInterval",
+        "type": "object"
+      },
+      "RecurringItem": {
+        "description": "An item of the caller's set. It is due from `due_on` on: the last purchase plus the\ninterval, in calendar days of the instance's time zone. `days_until_due` counts from today\n(0 \"fällig heute\", 1 \"fällig morgen\", -3 \"fällig seit 3 Tagen\"). `interval_weeks` is the\nset interval for the edit pop-up. `last_amount` is the last purchase's amount, only while\nits unit fits the ingredient's base unit (REF-02).",
+        "properties": {
+          "days_until_due": {
+            "title": "Days Until Due",
+            "type": "integer"
+          },
+          "due": {
+            "title": "Due",
+            "type": "boolean"
+          },
+          "due_on": {
+            "format": "date",
+            "title": "Due On",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingredient": {
+            "$ref": "#/components/schemas/IngredientSummary"
+          },
+          "interval": {
+            "$ref": "#/components/schemas/RecurringInterval"
+          },
+          "interval_weeks": {
+            "title": "Interval Weeks",
+            "type": "integer"
+          },
+          "last_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayAmountOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_purchased_on": {
+            "format": "date",
+            "title": "Last Purchased On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ingredient",
+          "interval",
+          "interval_weeks",
+          "last_purchased_on",
+          "due_on",
+          "days_until_due",
+          "due",
+          "last_amount"
+        ],
+        "title": "RecurringItem",
+        "type": "object"
+      },
+      "RecurringItemCreate": {
+        "description": "Make an ingredient recurring: every `interval_weeks` (1 to 52), last bought on\n`last_purchased_on` (today if left out; not in the future, at most 730 days back:\n422 `out_of_range`). An ingredient already in the set is 422 `taken`, an unknown one\n`invalid`. The interval adapts automatically from the second purchase on.",
+        "properties": {
+          "ingredient_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "interval_weeks": {
+            "maximum": 52.0,
+            "minimum": 1.0,
+            "title": "Interval Weeks",
+            "type": "integer"
+          },
+          "last_purchased_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Purchased On"
+          }
+        },
+        "required": [
+          "ingredient_id",
+          "interval_weeks"
+        ],
+        "title": "RecurringItemCreate",
+        "type": "object"
+      },
+      "RecurringItemList": {
+        "description": "The caller's set (their couple's while in one, else their own), sorted by due date and\nthen by the ingredient's name, and how many items are due.",
+        "properties": {
+          "due_count": {
+            "title": "Due Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "due_count"
+        ],
+        "title": "RecurringItemList",
+        "type": "object"
+      },
+      "RecurringItemUpdate": {
+        "description": "Only the fields that are sent change; null is refused (422 `invalid`). A new\n`interval_weeks` sets the interval by hand. `automatic` true lets it adapt again, with the\nset interval serving until two intervals are measured; false alone keeps the interval that\nserves now, as set by hand. `last_purchased_on` corrects the last purchase date, within\nthe same range as on create.",
+        "properties": {
+          "automatic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automatic"
+          },
+          "interval_weeks": {
+            "anyOf": [
+              {
+                "maximum": 52.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Weeks"
+          },
+          "last_purchased_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Purchased On"
+          }
+        },
+        "title": "RecurringItemUpdate",
         "type": "object"
       },
       "RefreshRequest": {
@@ -7961,6 +8212,84 @@
         ]
       }
     },
+    "/api/me/notices": {
+      "get": {
+        "description": "The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a\nrecurring item.",
+        "operationId": "list_notices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Notices",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/me/notices/{notice_id}/dismiss": {
+      "post": {
+        "description": "Mark one of the own notices as read; dismissing it again changes nothing.",
+        "operationId": "dismiss_notice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notice_id",
+            "required": true,
+            "schema": {
+              "title": "Notice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dismiss Notice",
+        "tags": [
+          "me"
+        ]
+      }
+    },
     "/api/me/password": {
       "post": {
         "description": "Change the password; logs out all other devices (throttled like login, ACC-11).",
@@ -8722,6 +9051,185 @@
         "summary": "Get Media",
         "tags": [
           "media"
+        ]
+      }
+    },
+    "/api/recurring-items": {
+      "get": {
+        "description": "The caller's set (their couple's while in one, else their own), due first.",
+        "operationId": "list_recurring_items",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringItemList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recurring Items",
+        "tags": [
+          "recurring"
+        ]
+      },
+      "post": {
+        "description": "Make an ingredient recurring in the caller's set.",
+        "operationId": "create_recurring_item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Recurring Item",
+        "tags": [
+          "recurring"
+        ]
+      }
+    },
+    "/api/recurring-items/{item_id}": {
+      "delete": {
+        "description": "Remove an item from the caller's set (\"Nicht mehr regelmäßig\").",
+        "operationId": "delete_recurring_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Recurring Item",
+        "tags": [
+          "recurring"
+        ]
+      },
+      "patch": {
+        "description": "Change an item's interval, switch it back to automatic, or correct its last purchase\ndate.",
+        "operationId": "update_recurring_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringItemUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Recurring Item",
+        "tags": [
+          "recurring"
         ]
       }
     },

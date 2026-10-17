@@ -203,10 +203,10 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     )
     assert members == [("anna",), ("ben",)]
     assert query(database, "SELECT kind, used_at FROM one_time_codes") == [("invite", None)]
-    assert "Demo ingredients: 30 (5 with a barcode)" in result.output
+    assert "Demo ingredients: 32 (5 with a barcode)" in result.output
 
     ingredients = query(database, "SELECT name, brand, barcode, source FROM ingredients")
-    assert len(ingredients) == 30
+    assert len(ingredients) == 32
     # The same thing in two brands: two ingredients of the same name.
     assert sorted(
         (brand, barcode) for name, brand, barcode, _ in ingredients if name == "Spaghetti"
@@ -220,7 +220,7 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     assert {source for *_, source in ingredients} == {"manual"}  # never refreshed in development
     assert query(database, "SELECT kcal FROM ingredients WHERE name = 'Milch'") == [(64,)]
     categories = query(database, "SELECT count(DISTINCT category_id) FROM ingredients")
-    assert categories == [(15,)]
+    assert categories == [(16,)]
     creators = query(
         database,
         "SELECT DISTINCT u.username FROM ingredients i JOIN users u ON u.id = i.created_by "
@@ -307,6 +307,15 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     )
     assert detached == [(None, "Kartoffelsuppe", "deleted", 4)]
     assert query(database, "SELECT count(*) FROM meals WHERE name = 'Kartoffelsuppe'") == [(0,)]
+
+    # The couple's set; which of them is due is up to the API tests (LIST-16).
+    assert "Demo recurring items: 2 (anna + ben)" in result.output
+    recurring = query(
+        database,
+        "SELECT i.name, r.couple_id IS NOT NULL FROM recurring_items r "
+        "JOIN ingredients i ON i.id = r.ingredient_id ORDER BY 1",
+    )
+    assert recurring == [("Klopapier", 1), ("Zahnpasta", 1)]
 
     again = runner.invoke(main, ["seed-demo"])
     assert again.exit_code == 1

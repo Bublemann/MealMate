@@ -22,16 +22,20 @@
   that needs more (ben's meal got more servings after the onions were checked) and a new
   line (coffee, added while shopping); two done lists, finished in different weeks: anna's
   shared "Salatabend" (one line not bought) and carl's "Vorrat".
+- Recurring items (`_insert_recurring`, LIST-16): the couple's set has "Klopapier", last bought
+  five weeks ago with a four-week interval and so due, and "Zahnpasta", bought last week; both
+  are household items, the only ones in the catalog.
 
 The content is fixed; only ids, the password, the invite code and the photo keys differ
-between runs; the times of shopping and finishing are relative to the time of seeding.
+between runs; the times of shopping and finishing, and the days of the last purchases, are
+relative to the time of seeding.
 """
 
 import io
 import secrets
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 from PIL import Image, ImageDraw
 from sqlalchemy import select
@@ -41,6 +45,7 @@ from app.core.passwords import hash_password
 from app.db.ids import new_id
 from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
+from app.domain.recurring import local_date, weeks_to_days
 from app.domain.text import normalize, sort_key
 from app.domain.units import Unit
 from app.media.store import MediaStore
@@ -55,6 +60,7 @@ from app.models import (
     Meal,
     MealIngredient,
     MealTag,
+    RecurringItem,
     ShoppingList,
     Tag,
 )
@@ -62,7 +68,7 @@ from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
-from app.services import accounts, aggregation, codes, hooks, shopping
+from app.services import access, accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
 from app.services.off_fields import set_brand, set_name, set_pack_size
 
@@ -147,6 +153,8 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Zartbitterschokolade", "snacks_sweets", "carl"),
     DemoIngredient("Erbsen (TK)", "frozen", "anna"),
     DemoIngredient("Kaffee", "drinks", "carl"),
+    DemoIngredient("Klopapier", "household_hygiene", "anna", base_unit="piece"),
+    DemoIngredient("Zahnpasta", "household_hygiene", "ben", base_unit="piece"),
 )  # fmt: skip
 
 
@@ -447,6 +455,24 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         ),
     ),
 )  # fmt: skip
+
+
+@dataclass(frozen=True)
+class DemoRecurring:
+    """An item of the demo couple's set: the interval typed in weeks, the last purchase so many
+    days before the day of seeding, and its amount."""
+
+    ingredient: str
+    weeks: int
+    last_bought_days_ago: int
+    amount: float | None = None
+    unit: Unit | None = None
+
+
+DEMO_RECURRING: tuple[DemoRecurring, ...] = (
+    DemoRecurring("Klopapier", 4, last_bought_days_ago=35, amount=1, unit=Unit.PIECE),
+    DemoRecurring("Zahnpasta", 6, last_bought_days_ago=7, amount=2, unit=Unit.PIECE),
+)
 
 
 class DemoRefusedError(RuntimeError):
@@ -834,6 +860,34 @@ async def _insert_lists(
     await session.flush()
 
 
+async def _insert_recurring(
+    session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime, zone: tzinfo
+) -> None:
+    """The demo couple's recurring items, inserted directly: the couple was not formed through
+    `couples.accept`, so there are no own sets to combine. The last purchases count back from
+    today in the instance's time zone."""
+    owner = await access.owner_key(session, user_ids[DEMO_COUPLE[0]])
+    ingredient_ids = await _ingredient_ids(session)
+    today = local_date(now, zone)
+    session.add_all(
+        RecurringItem(
+            couple_id=owner.couple_id,
+            user_id=owner.user_id,
+            ingredient_id=ingredient_ids(item.ingredient),
+            interval_days=weeks_to_days(item.weeks),
+            interval_manual=False,
+            last_purchased_on=today - timedelta(days=item.last_bought_days_ago),
+            last_amount=item.amount,
+            last_unit=None if item.unit is None else item.unit.value,
+            measured_intervals=[],
+            created_at=now,
+            updated_at=now,
+        )
+        for item in DEMO_RECURRING
+    )
+    await session.flush()
+
+
 async def seed_accounts(session: AsyncSession, config: AuthConfig, *, now: datetime) -> DemoSeed:
     """The demo users (all with one random password), the couple and an open invite."""
     password, password_hash = await _demo_password(config)
@@ -842,11 +896,11 @@ async def seed_accounts(session: AsyncSession, config: AuthConfig, *, now: datet
 
 
 async def seed_demo(
-    session: AsyncSession, config: AuthConfig, media: MediaStore, *, now: datetime
+    session: AsyncSession, config: AuthConfig, media: MediaStore, *, now: datetime, zone: tzinfo
 ) -> DemoSeed:
-    """Accounts, catalog, meals and lists in one transaction: if anything fails, nothing is left
-    behind (but photo files, which `mealmate jobs cleanup` removes) and `seed-demo` can simply
-    run again."""
+    """Accounts, catalog, meals, lists and recurring items in one transaction: if anything
+    fails, nothing is left behind (but photo files, which `mealmate jobs cleanup` removes) and
+    `seed-demo` can simply run again. `zone` is the instance's time zone (LIST-16)."""
     password, password_hash = await _demo_password(config)
     photo_keys = await _write_photos(media)
     async with session.begin():
@@ -855,4 +909,5 @@ async def seed_demo(
         await session.flush()
         await _insert_meals(session, seed.user_ids, photo_keys, now=now)
         await _insert_lists(session, seed.user_ids, now=now)
+        await _insert_recurring(session, seed.user_ids, now=now, zone=zone)
     return seed
