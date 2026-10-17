@@ -57,6 +57,22 @@ afterEach(() => {
   Reflect.deleteProperty(navigator, 'share');
 });
 
+describe('AdminScreen', () => {
+  it('leads back to the Settings tab, in German too (D-44)', async () => {
+    const admin = { ...TEST_ADMIN, language: 'de' as const };
+    mockApi({ 'GET /api/me': admin, 'GET /api/admin/users': USERS });
+    await i18n.changeLanguage('de');
+    const { router, user } = renderApp('/me/admin/users', { user: admin });
+
+    const back = await screen.findByTestId(testIds.backLink);
+    expect(back).toHaveAccessibleName('Einstellungen');
+    await user.click(back);
+
+    expect(router.state.location.pathname).toBe('/me');
+    expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
+  });
+});
+
 describe('AdminUsersScreen', () => {
   it('lists the users with role and status, without actions on oneself', async () => {
     renderAdmin('/me/admin');

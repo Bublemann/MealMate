@@ -75,7 +75,7 @@ export function ListsScreen() {
   };
 
   return (
-    <Screen variant="tab" title={t('nav.lists')} testId={testIds.screenLists}>
+    <Screen variant="pinned" title={t('nav.lists')} testId={testIds.screenLists}>
       <ListsPinnedBlock
         filter={
           <FilterPanel

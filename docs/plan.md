@@ -218,7 +218,7 @@ MealMate/
 - **Home Screen fork:** a Home Screen app that starts for the first time (empty IndexedDB) and carries a valid cookie, because iOS may have copied it from Safari (O-10), calls `POST /api/auth/refresh` with `{"fork": true}`. This creates a **new, independent session** for the same user instead of rotating the shared token, so Safari and the Home Screen app can't revoke each other.
   - A fork is accepted only with an **active** token, and at most once per token (`session_tokens.forked_at`).
   - A fork with an already-forked or superseded token returns `auth.login_required` and revokes nothing; the app then shows the login screen once.
-  - The new session appears in *Me → Sessions* as its own device.
+  - The new session appears in *Settings → Security* as its own device.
 - **Access tokens:** JWT with HS256, valid 15 min, containing `sub`, `sid` and `iat`, and held only in memory.
 - **Per-request check:** one indexed lookup loads the session and user and checks that the session is not revoked, the user is active, and the role. The role is **never** taken from the token, so demoting, deactivating or "log out all devices" take effect immediately.
 - **Passwords:** bcrypt with a cost factor tuned in M2 to about 250–500 ms on the Pi 3 (O-7), run in a thread. There is a length check of ≤ 72 bytes and a common-password list (top 10k, bundled).

@@ -73,7 +73,11 @@
    * (the `pinned` utility in index.css), and its spacing is in em of that text. A long name in its
    * "Neu…" tile wraps.
    */
-  --pinned-font-size: min(1rem, 28px);
+  --pinned-font-cap: 28px;
+  --pinned-font-size: min(1rem, var(--pinned-font-cap));
+  /* The tab's headline in the block (D-44): a detail title's 1.875em, but no more than 1.5 times
+     the capped text, so the block leaves a quarter of the screen for the content. */
+  --pinned-headline-size: min(1.875em, calc(1.5 * var(--pinned-font-cap)));
   --pinned-tap-target: clamp(44px, 2.75rem, 64px);
 
   /*

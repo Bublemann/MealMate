@@ -48,8 +48,9 @@ const SHARE_DELAYS = [
 /**
  * `/diag`: the temporary diagnostics screen of the M1 platform spike (plan § 12), removed in M9.
  * Public and outside the tab layout, so Safari can open it before any login; a Home Screen app
- * has no address bar and reaches it through Me (admins only) once signed in. Every test writes a
- * result line; the report at the end collects them as plain text for docs/platform-notes.md.
+ * has no address bar and reaches it through the Settings tab (admins only) once signed in. Every
+ * test writes a result line; the report at the end collects them as plain text for
+ * docs/platform-notes.md.
  *
  * Like every screen, it sends no request before the start-up refresh has settled (frontend
  * README, "Start-up"): the calls that load on their own wait for it, and the buttons that call
@@ -72,7 +73,7 @@ export function DiagnosticsScreen() {
       <Screen
         title={t('diag.title')}
         testId={testIds.screenDiagnostics}
-        back={{ to: '/me', label: t('nav.backToSettings') }}
+        back={{ to: '/me', label: t('nav.me') }}
       >
         <p className="text-muted-foreground">{t('diag.intro')}</p>
         <EnvironmentSection results={results} record={record} serverReady={serverReady} />
@@ -487,7 +488,7 @@ function StorageSection({ results, record }: SectionProps) {
 /**
  * The steps for the offline and lie-fi starts, and whether the service worker served the
  * document of this app start. The Home Screen app starts at `/`, so the owner opens this screen
- * through Me after such a start.
+ * through the Settings tab after such a start.
  */
 function OfflineSection({ results, record }: SectionProps) {
   const { t } = useTranslation();

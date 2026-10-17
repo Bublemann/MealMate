@@ -5,17 +5,17 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from support.frontend import TEST_IDS
+from support.frontend import TEST_IDS, text
 
 # The screens need a signed-in user; the route guard itself is tested in test_accounts.py.
 pytestmark = pytest.mark.usefixtures("member_page")
 
-# (path, tab test ID, screen test ID)
+# (path, tab test ID, screen test ID, headline key)
 SCREENS = [
-    ("/lists", TEST_IDS["tabLists"], TEST_IDS["screenLists"]),
-    ("/meals", TEST_IDS["tabMeals"], TEST_IDS["screenMeals"]),
-    ("/ingredients", TEST_IDS["tabIngredients"], TEST_IDS["screenIngredients"]),
-    ("/me", TEST_IDS["tabMe"], TEST_IDS["screenMe"]),
+    ("/lists", TEST_IDS["tabLists"], TEST_IDS["screenLists"], "nav.lists"),
+    ("/meals", TEST_IDS["tabMeals"], TEST_IDS["screenMeals"], "nav.meals"),
+    ("/ingredients", TEST_IDS["tabIngredients"], TEST_IDS["screenIngredients"], "nav.ingredients"),
+    ("/me", TEST_IDS["tabMe"], TEST_IDS["screenMe"], "nav.me"),
 ]
 
 
@@ -26,19 +26,30 @@ def test_root_opens_lists_with_four_tabs(page: Page) -> None:
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
     tab_bar = page.get_by_role("navigation")
     expect(tab_bar.get_by_role("link")).to_have_count(len(SCREENS))
-    for _, tab, _ in SCREENS:
+    for _, tab, _, _ in SCREENS:
         expect(tab_bar.get_by_test_id(tab)).to_be_visible()
     expect(page.get_by_test_id(TEST_IDS["tabLists"])).to_have_attribute("aria-current", "page")
 
 
 def test_tabs_navigate_between_screens(page: Page) -> None:
+    """UI-01, D-44: each tab opens its screen, which shows the tab's name as its headline."""
     page.goto("/lists")
 
-    for path, tab, screen in [*SCREENS[1:], SCREENS[0]]:
+    for path, tab, screen, headline in [*SCREENS[1:], SCREENS[0]]:
         page.get_by_test_id(tab).click()
         expect(page).to_have_url(re.compile(f"{path}$"))
         expect(page.get_by_test_id(screen)).to_be_visible()
         expect(page.get_by_test_id(tab)).to_have_attribute("aria-current", "page")
+        expect(page.get_by_test_id(tab)).to_have_text(text(headline))
+        heading = page.get_by_role("heading", level=1)
+        expect(heading).to_have_count(1)
+        expect(page.get_by_test_id(screen).get_by_role("heading", level=1)).to_have_text(
+            text(headline)
+        )
+        # Playwright counts a heading only screen readers get as visible too: it is 1 px high.
+        box = heading.bounding_box()
+        assert box is not None
+        assert box["height"] > 24, f"{text(headline)!r} is {box['height']} px high"
 
 
 @pytest.mark.parametrize("path", ["/does-not-exist", "/some/deep/link"])

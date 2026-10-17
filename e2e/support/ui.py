@@ -18,7 +18,7 @@ def log_in(page: Page, account: Account, language: str = "en") -> None:
 
 
 def log_out(page: Page) -> None:
-    """Logs out from Me and waits for the login screen."""
+    """Logs out from the Settings tab and waits for the login screen."""
     page.get_by_test_id(TEST_IDS["tabMe"]).click()
     page.get_by_test_id(TEST_IDS["logoutButton"]).click()
     expect(page).to_have_url(re.compile(r"/login$"))
