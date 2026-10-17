@@ -2,7 +2,7 @@
 
 import re
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
 
 from support.api import Account
 from support.frontend import TEST_IDS, text
@@ -23,3 +23,21 @@ def log_out(page: Page) -> None:
     page.get_by_test_id(TEST_IDS["logoutButton"]).click()
     expect(page).to_have_url(re.compile(r"/login$"))
     expect(page.get_by_test_id(TEST_IDS["screenLogin"])).to_be_visible()
+
+
+def open_more_menu(page: Page) -> Locator:
+    """Opens the detail screen's ⋯ menu (D-39) and returns it."""
+    page.get_by_test_id(TEST_IDS["detailStrip"]).get_by_test_id(TEST_IDS["moreActions"]).click()
+    menu = page.get_by_test_id(TEST_IDS["moreMenu"])
+    expect(menu).to_be_visible()
+    return menu
+
+
+def choose_from_menu(page: Page, test_id: str) -> None:
+    """Opens the ⋯ menu and chooses the item with that test ID (a key of TEST_IDS)."""
+    open_more_menu(page).get_by_test_id(TEST_IDS[test_id]).click()
+
+
+def floating_bar_button(page: Page, test_id: str) -> Locator:
+    """The button with that test ID (a key of TEST_IDS) in the bar above the tab bar (D-39)."""
+    return page.get_by_test_id(TEST_IDS["floatingBar"]).get_by_test_id(TEST_IDS[test_id])

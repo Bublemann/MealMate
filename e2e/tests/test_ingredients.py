@@ -14,6 +14,7 @@ from playwright.sync_api import Locator, Page, ViewportSize, expect
 
 from support.api import Account, Api, new_barcode, sign_in, unique
 from support.frontend import TEST_IDS, ingredient_label, text
+from support.ui import choose_from_menu, open_more_menu
 
 # The whole screen of an iPhone SE (2nd and 3rd generation), as the app has it from the Home
 # Screen: narrower than the default device's visible area (393 by 659 px), and a little taller.
@@ -110,7 +111,7 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
 
     # Its own values, changed by anyone (ING-01, NUT-02).
     page.goto(ingredient_url)
-    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    choose_from_menu(page, "editIngredient")
     dialog = page.get_by_role("dialog", name=text("ingredients.form.editTitle", name=label))
     dialog.get_by_label(text("nutrient.kcal"), exact=True).fill("60")
     dialog.get_by_role("button", name=text("common.save")).click()
@@ -410,7 +411,7 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
     rows.filter(has_text=gouda["name"]).click()
     detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
-    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    choose_from_menu(page, "editIngredient")
     form = page.get_by_test_id(TEST_IDS["ingredientForm"])
     form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=name)
     form.get_by_role("button", name=text("common.save")).click()
@@ -458,7 +459,7 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     # Anyone can give it a new category; until then its detail and form show "Uncategorized".
     row.click()
     expect(detail).to_contain_text(uncategorized)
-    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    choose_from_menu(page, "editIngredient")
     field = form.get_by_label(text("ingredients.field.category"), exact=True)
     expect(field).to_have_value(built_in["id"])
     expect(field.get_by_role("option", name=uncategorized, exact=True)).to_be_disabled()
@@ -527,7 +528,16 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
     sign_in(page.context, admin)
     page.goto(f"/ingredients/{duplicate['id']}")
     expect(page.get_by_test_id(TEST_IDS["screenIngredient"])).to_contain_text(barcode)
-    page.get_by_test_id(TEST_IDS["mergeIngredient"]).click()
+    # In the ⋯ menu for admins: "Edit", "Merge…" and, last, "Delete" (D-39).
+    menu = open_more_menu(page)
+    expect(menu.get_by_role("menuitem")).to_have_text(
+        [
+            text("ingredients.detail.edit"),
+            text("ingredients.admin.merge"),
+            text("ingredients.admin.delete"),
+        ]
+    )
+    menu.get_by_test_id(TEST_IDS["mergeIngredient"]).click()
     dialog = page.get_by_role(
         "dialog", name=text("ingredients.admin.mergeTitle", name=duplicate["name"])
     )
@@ -555,4 +565,21 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
         page.get_by_test_id(TEST_IDS["mealIngredients"]).get_by_role("link", name=keep["name"])
     ).to_have_attribute("href", f"/ingredients/{keep['id']}")
     page.goto(f"/ingredients/{duplicate['id']}")
+    expect(page.get_by_role("alert")).to_have_text(text("error.common.not_found"))
+
+
+def test_admin_deletes_an_unused_ingredient(page: Page, api: Api, admin: Account) -> None:
+    """ING-05: an admin deletes an ingredient nothing uses from its ⋯ menu, after confirming."""
+    unused = api.create_ingredient(admin, f"Rest {unique('e2e')}", category_key="other")
+
+    sign_in(page.context, admin)
+    page.goto(f"/ingredients/{unused['id']}")
+    expect(page.get_by_role("heading", level=1)).to_have_text(unused["name"])
+    choose_from_menu(page, "deleteIngredient")
+    page.get_by_role(
+        "alertdialog", name=text("ingredients.admin.deleteTitle", name=unused["name"])
+    ).get_by_role("button", name=text("ingredients.admin.deleteConfirm"), exact=True).click()
+
+    expect(page).to_have_url(re.compile("/ingredients$"))
+    page.goto(f"/ingredients/{unused['id']}")
     expect(page.get_by_role("alert")).to_have_text(text("error.common.not_found"))

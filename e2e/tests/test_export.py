@@ -14,6 +14,7 @@ from playwright.sync_api import Page, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
+from support.ui import open_more_menu
 
 # Records what the app shares instead of opening a share sheet.
 RECORD_SHARE = """
@@ -71,7 +72,8 @@ def test_export_list_as_text(
     sign_in(page.context, anna)
     page.goto(f"/lists/{draft['id']}")
     expect(page.get_by_test_id(TEST_IDS["listLines"])).to_be_visible()
-    export = page.get_by_test_id(TEST_IDS["exportList"])
+    # In the ⋯ menu (D-39), named for the share sheet the browser now has.
+    export = open_more_menu(page).get_by_test_id(TEST_IDS["exportList"])
     expect(export).to_have_text(text("lists.detail.export", language))
     export.click()
     page.wait_for_function("() => window.__mealmateShared !== undefined")
