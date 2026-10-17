@@ -1,6 +1,6 @@
 """Regelmäßige Artikel: making ingredients recurring on the settings page and from the ingredient's
 ⋯ menu, the row's value, editing, and the notice when an admin deletes one (LIST-16, D-42, D-51,
-UI-07)."""
+UI-07); a due item in a draft's "Fällig" box, bought and no longer due (LIST-16, QA-04)."""
 
 import re
 from collections.abc import Callable
@@ -10,8 +10,8 @@ from playwright.sync_api import Locator, Page, expect
 
 from support.a11y import serious_violations
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, text
-from support.ui import choose_from_menu, open_settings_page, settings_row
+from support.frontend import TEST_IDS, ingredient_label, text
+from support.ui import choose_from_menu, floating_bar_button, open_settings_page, settings_row
 
 
 def recurring_dialog(page: Page, name: str) -> Locator:
@@ -125,3 +125,80 @@ def test_recurring_items_from_the_page_and_the_menu_with_a_deletion_notice(
     expect(notices).to_be_hidden()
     expect(gear).to_have_accessible_name(text("nav.me"))
     expect(row_of(page, paper["name"])).to_be_visible()
+
+
+def due_box(page: Page) -> Locator:
+    return page.get_by_test_id(TEST_IDS["dueBox"])
+
+
+def test_a_due_item_is_suggested_on_a_draft_added_bought_and_then_no_longer_due(
+    page: Page, api: Api, invite_user: Callable[..., Account]
+) -> None:
+    tag = unique("due")
+    anna = invite_user(unique("anna"), unique("Anna"))
+    paper = api.create_ingredient(anna, f"Klopapier {tag}", base_unit="piece")
+    name = ingredient_label(paper["name"])
+    # Last bought five weeks ago, every four weeks: due for a week.
+    bought = date.today() - timedelta(weeks=5)
+    api.call(
+        "POST",
+        "/api/recurring-items",
+        token=api.token(anna),
+        json={
+            "ingredient_id": paper["id"],
+            "interval_weeks": 4,
+            "last_purchased_on": bought.isoformat(),
+        },
+    )
+    draft = api.create_list(anna, f"Einkauf {tag}")
+    sign_in(page.context, anna)
+    page.goto(f"/lists/{draft['id']}")
+
+    # The draft's "Due" box, below the item field, with the row's due line (LIST-16).
+    box = due_box(page)
+    expect(box).to_be_visible()
+    expect(box.get_by_role("heading", name=text("lists.due.title"))).to_be_visible()
+    row = box.get_by_test_id(TEST_IDS["dueItem"]).filter(has_text=name)
+    last = (
+        bought.strftime("%d/%m")
+        if bought.year == date.today().year
+        else bought.strftime("%d/%m/%Y")
+    )
+    expect(row).to_contain_text(
+        f"{text('recurring.due.since_other', count='7')} · "
+        f"{text('recurring.lastBought', date=last)}"
+    )
+    expect(row.get_by_role("button", name=text("lists.due.hide", name=name))).to_be_enabled()
+    assert serious_violations(page) == []
+
+    # The plus opens the item field's amount pop-up; nothing bought yet, so no amount is filled in.
+    row.get_by_role("button", name=text("lists.due.add", name=name)).click()
+    dialog = page.get_by_test_id(TEST_IDS["amountDialog"])
+    expect(dialog).to_have_accessible_name(name)
+    amount = dialog.get_by_label(text("lists.extra.amount"), exact=True)
+    expect(amount).to_have_value("")
+    amount.fill("12")
+    dialog.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
+    expect(dialog).to_be_hidden()
+    # On the list now, so it leaves the box, and the box with it.
+    expect(box).to_have_count(0)
+    lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
+    expect(lines.filter(has_text=name)).to_contain_text("12 pcs")
+
+    # Shopping: no box; check it off, the last line, which offers to finish (SHOP-04).
+    floating_bar_button(page, "startShopping").click()
+    page.get_by_role("checkbox", name=text("lists.shop.check", name=name)).click()
+    finish = page.get_by_role("dialog", name=text("lists.shop.finishTitle"))
+    expect(finish).to_be_visible()
+    expect(due_box(page)).to_have_count(0)
+    finish.get_by_role("button", name=text("lists.shop.finishConfirm"), exact=True).click()
+    expect(page.get_by_test_id(TEST_IDS["listDone"])).to_be_visible()
+    expect(due_box(page)).to_have_count(0)
+
+    # Bought today: a new draft suggests nothing.
+    page.goto("/lists")
+    page.get_by_test_id(TEST_IDS["newList"]).click()
+    expect(page).not_to_have_url(re.compile(f"/lists/{draft['id']}$"))
+    expect(page.get_by_test_id(TEST_IDS["extraItemInput"])).to_be_visible()
+    expect(floating_bar_button(page, "startShopping")).to_be_visible()
+    expect(due_box(page)).to_have_count(0)

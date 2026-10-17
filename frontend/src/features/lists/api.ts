@@ -360,19 +360,36 @@ export function useRemoveListMeal(listId: string) {
   );
 }
 
+/** The list without the due item of `ingredientId`: it leaves the "Fällig" box (LIST-16). */
+function withoutDue(list: ListDetail, ingredientId: string): ListDetail {
+  return {
+    ...list,
+    due_items: list.due_items.filter((item) => item.ingredient.id !== ingredientId),
+  };
+}
+
 /**
  * LIST-06: a linked or free-text extra item. Its id comes with it (made by the input, which keeps
  * it while the item is sent again), so a retry after a lost answer doesn't add it twice. While
  * shopping, a free-text item is an `extra.add` op of the outbox instead (SHOP-02, SYNC-03).
+ * A linked item's ingredient leaves the "Fällig" box at once: it is on the list now (LIST-16).
  */
 export function useAddExtraItem(listId: string) {
-  return useListChange(listId, (item: ExtraItemCreate) =>
-    unwrap(
-      api.POST('/api/lists/{list_id}/extra-items', {
-        params: { path: { list_id: listId } },
-        body: item,
-      }),
-    ),
+  return useListChange(
+    listId,
+    (item: ExtraItemCreate) =>
+      unwrap(
+        api.POST('/api/lists/{list_id}/extra-items', {
+          params: { path: { list_id: listId } },
+          body: item,
+        }),
+      ),
+    {
+      optimistic:
+        ({ ingredient_id }) =>
+        (list) =>
+          ingredient_id ? withoutDue(list, ingredient_id) : list,
+    },
   );
 }
 
@@ -421,6 +438,25 @@ export function useSetLineHidden(listId: string) {
           ...list,
           lines: list.lines.map((line) => (line.key === key ? { ...line, hidden } : line)),
         }),
+    },
+  );
+}
+
+/**
+ * LIST-16: hides a due item of the "Fällig" box on this draft, for everyone who sees it (the
+ * partner too); it leaves the box at once. There is no undo: the item field can still add it.
+ */
+export function useHideDueItem(listId: string) {
+  return useListChange(
+    listId,
+    (ingredientId: string) =>
+      unwrap(
+        api.POST('/api/lists/{list_id}/due-items/{ingredient_id}/hide', {
+          params: { path: { list_id: listId, ingredient_id: ingredientId } },
+        }),
+      ),
+    {
+      optimistic: (ingredientId) => (list) => withoutDue(list, ingredientId),
     },
   );
 }

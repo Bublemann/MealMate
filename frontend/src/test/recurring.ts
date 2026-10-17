@@ -22,6 +22,21 @@ export function recurringItem(
   };
 }
 
+/**
+ * A due item of a draft's "Fällig" box (LIST-16): Klopapier, due for 3 days on 25 October 2026,
+ * last bought on 24 September, 12 pieces then.
+ */
+export function dueItem(overrides: Partial<Schemas['DueItem']> = {}): Schemas['DueItem'] {
+  return {
+    ingredient: summary('Klopapier', 'other', { base_unit: 'piece' }),
+    due_on: '2026-10-22',
+    days_until_due: -3,
+    last_purchased_on: '2026-09-24',
+    last_amount: { value: 12, unit: 'piece' },
+    ...overrides,
+  };
+}
+
 /** The answer of `GET /api/recurring-items`; the server counts the due items. */
 export function recurringList(items: Schemas['RecurringItem'][]): Schemas['RecurringItemList'] {
   return { items, due_count: items.filter(({ due }) => due).length };

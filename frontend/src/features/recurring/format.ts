@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { Language } from '@/i18n';
 import { formatCalendarDay } from '@/i18n/format';
-import type { RecurringItem } from './api';
+import type { DueItem, RecurringItem } from './api';
 
 // The words of a recurring item, from the display values the server computed (MNT-02): the
 // frontend only picks the sentence, it never counts days or rounds an interval.
@@ -37,5 +37,13 @@ export function recurringLine(t: TFunction, language: Language, item: RecurringI
     intervalText(t, item.interval),
     lastBoughtText(t, language, item.last_purchased_on),
     dueText(t, item.days_until_due),
+  ].join(' · ');
+}
+
+/** The grey line of a due item in a draft's "Fällig" box: "fällig seit 3 Tagen · zuletzt 02.10.". */
+export function dueLine(t: TFunction, language: Language, item: DueItem) {
+  return [
+    dueText(t, item.days_until_due),
+    lastBoughtText(t, language, item.last_purchased_on),
   ].join(' · ');
 }
