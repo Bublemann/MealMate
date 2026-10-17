@@ -42,6 +42,14 @@ def open_settings_page(page: Page, label_key: str, screen: str, language: str = 
     return page_screen
 
 
+def back_to_settings(page: Page) -> None:
+    """Goes back from a Settings page through the strip's back link and waits for the tab."""
+    back = page.get_by_test_id(TEST_IDS["detailStrip"]).get_by_test_id(TEST_IDS["backLink"])
+    expect(back).to_have_accessible_name(text("nav.me"))
+    back.click()
+    expect(page.get_by_test_id(TEST_IDS["screenMe"])).to_be_visible()
+
+
 def open_more_menu(page: Page) -> Locator:
     """Opens the detail screen's ⋯ menu (D-39) and returns it."""
     page.get_by_test_id(TEST_IDS["detailStrip"]).get_by_test_id(TEST_IDS["moreActions"]).click()
