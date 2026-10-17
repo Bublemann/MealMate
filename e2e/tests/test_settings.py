@@ -1,15 +1,26 @@
 """The Settings tab: its rows with their values and the count on the gear (UI-07, D-45, D-51)."""
 
 from collections.abc import Callable
+from typing import Literal
 
+import pytest
 from playwright.sync_api import Locator, Page, expect
 
+from support.a11y import serious_violations
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
 from support.ui import settings_row
 
 # The largest iPhone text size (53 px body text, simulated as in test_ingredients.py).
 LARGEST_TEXT = "html { font-size: 53px !important; }"
+
+
+def with_a_request(api: Api, invite_user: Callable[..., Account]) -> Account:
+    """A new user with a long display name, whom another new user has sent a couple request."""
+    anna = invite_user(unique("anna"), unique("Annemarie-Charlotte"))
+    ben = invite_user(unique("ben"), unique("Benedikt"))
+    api.call("POST", "/api/couple/requests", token=api.token(ben), json={"user_id": anna.id})
+    return anna
 
 
 def box_of(locator: Locator) -> dict[str, float]:
@@ -41,10 +52,7 @@ def test_settings_rows_fit_the_largest_text_size(
 ) -> None:
     """A11Y-01, A11Y-02: at the largest text size each row's label and value wrap inside the row,
     without clipping, overlap or a horizontal scroll; the gear's count stays inside the tab bar."""
-    anna = invite_user(unique("anna"), unique("Annemarie-Charlotte"))
-    ben = invite_user(unique("ben"), unique("Benedikt"))
-    api.call("POST", "/api/couple/requests", token=api.token(ben), json={"user_id": anna.id})
-
+    anna = with_a_request(api, invite_user)
     sign_in(page.context, anna)
     page.goto("/me")
     page.add_style_tag(content=LARGEST_TEXT)
@@ -88,3 +96,25 @@ def test_settings_rows_fit_the_largest_text_size(
     count = box_of(gear.get_by_text("1", exact=True))
     assert inside(count, tab_bar)
     assert count["height"] <= 22
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_the_count_and_the_rows_pass_axe(
+    page: Page,
+    api: Api,
+    invite_user: Callable[..., Account],
+    color_scheme: Literal["light", "dark"],
+) -> None:
+    """A11Y-01, A11Y-03: the red count on the gear and the Paar row's value, as test_accessibility
+    sees no count (its accounts have no requests), in light and dark mode."""
+    page.emulate_media(color_scheme=color_scheme)
+    sign_in(page.context, with_a_request(api, invite_user))
+    page.goto("/me")
+    expect(page.get_by_test_id(TEST_IDS["tabMe"])).to_have_accessible_name(
+        text("nav.meCount_one", count="1")
+    )
+    expect(settings_row(page, "couple.title")).to_contain_text(
+        text("couple.requests_one", count="1")
+    )
+
+    assert serious_violations(page) == []
