@@ -119,6 +119,7 @@ export const testIds = {
   deleteList: 'delete-list',
   listMeals: 'list-meals',
   listMeal: 'list-meal',
+  removeListMeal: 'remove-list-meal',
   addMeals: 'add-meals',
   mealPicker: 'meal-picker',
   mealPickerRecent: 'meal-picker-recent',
