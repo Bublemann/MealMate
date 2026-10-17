@@ -275,6 +275,6 @@ async def apply_ops(
         if changed:
             await lists.touch(session, shopping_list, now)
         detail = await lists.list_detail(
-            session, media, principal.user_id, shopping_list, rights, now=now
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )
         return OpsResponse(results=results, list=detail)

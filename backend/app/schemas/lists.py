@@ -3,7 +3,7 @@ and extra items, the inputs that change them, and the ops of shopping mode (LIST
 SHOP, SYNC-05/06, VIS-03/06, CPL-02/03)."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -29,7 +29,13 @@ from app.domain.lists import (
     ListStatus,
 )
 from app.domain.units import Unit
-from app.schemas.ingredients import BaseUnitName, IdInput, blank_to_none, not_null
+from app.schemas.ingredients import (
+    BaseUnitName,
+    IdInput,
+    IngredientSummary,
+    blank_to_none,
+    not_null,
+)
 from app.schemas.meals import AmountInput, ServingsInput
 from app.schemas.users import UserRef
 
@@ -186,13 +192,30 @@ class ExtraItem(BaseModel):
     created_at: datetime
 
 
+class DueItem(BaseModel):
+    """A due recurring item of the viewer's set, offered in a draft's "Fällig" box (LIST-16):
+    due since `due_on`, `days_until_due` from today (0 "fällig heute", -3 "fällig seit 3
+    Tagen"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,
+    only while its unit fits the ingredient's base unit (REF-02), for the amount pop-up."""
+
+    ingredient: IngredientSummary
+    due_on: date
+    days_until_due: int
+    last_purchased_on: date
+    last_amount: DisplayAmountOut | None
+
+
 class ListDetail(BaseModel):
     """A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:
     editors change the name, meals, servings, extra items and hidden lines; only the owner
     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
     `<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is
     `reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`
-    are set once shopping started and while the list is done (LIST-10)."""
+    are set once shopping started and while the list is done (LIST-10).
+
+    `due_items` fill the "Fällig" box (LIST-16), only on a draft the viewer can edit, else
+    empty: the due recurring items of the viewer's set whose ingredient has no line on the list
+    (a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first."""
 
     id: str
     name: str | None
@@ -210,6 +233,7 @@ class ListDetail(BaseModel):
     meals: list[ListMealEntry]
     lines: list[ListLine]
     extra_items: list[ExtraItem]
+    due_items: list[DueItem]
 
 
 class ListSummary(BaseModel):

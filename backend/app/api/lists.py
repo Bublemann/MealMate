@@ -69,6 +69,7 @@ async def sync_lists(
     cache: ListResponses,
     media: Media,
     now: Now,
+    zone: TimeZone,
     if_none_match: Annotated[str | None, Header(max_length=1000)] = None,
 ) -> Response:
     """The local copy for offline use (SYNC-02, SYNC-10): every list you can edit that is a
@@ -78,7 +79,9 @@ async def sync_lists(
     `ETag` covers `lists` but not `generated_at`, so `If-None-Match` gives a 304 while no list
     in it changed."""
     generation = database.write_generation
-    entries = await lists.sync_lists(session, media, principal, cache, generation, now=now)
+    entries = await lists.sync_lists(
+        session, media, principal, cache, generation, now=now, zone=zone
+    )
     # The bodies are the cached `ListDetail` JSON, joined as they are (no parsing again).
     lists_json = b"[" + b",".join(entry.body for entry in entries) + b"]"
     headers = {"ETag": etags.weak_etag(lists_json), "Cache-Control": "no-cache"}
@@ -90,10 +93,15 @@ async def sync_lists(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_list(
-    body: ListCreate, principal: CurrentUser, session: WriteSession, media: Media, now: Now
+    body: ListCreate,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """A new draft of yours; it is shared with your partner if you have one."""
-    return await lists.create_list(session, media, principal, body, now=now)
+    return await lists.create_list(session, media, principal, body, now=now, zone=zone)
 
 
 @router.get(
@@ -109,6 +117,7 @@ async def get_list(
     cache: ListResponses,
     media: Media,
     now: Now,
+    zone: TimeZone,
     if_none_match: Annotated[str | None, Header(max_length=1000)] = None,
 ) -> Response:
     """A list you can see (404 otherwise), with a weak `ETag` over the response as you see it;
@@ -116,7 +125,7 @@ async def get_list(
     are answered from a cache until something is written (PERF-02)."""
 
     async def build() -> bytes:
-        detail = await lists.get_list(session, media, principal, list_id, now=now)
+        detail = await lists.get_list(session, media, principal, list_id, now=now, zone=zone)
         return detail.model_dump_json().encode()
 
     key = (list_id, principal.user_id, media_urls.expiry(now))
@@ -134,10 +143,11 @@ async def update_list(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Rename a list you may edit; switch sharing with your partner on your own list. Not once
     it is done (409 `list.done`)."""
-    return await lists.update_list(session, media, principal, list_id, body, now=now)
+    return await lists.update_list(session, media, principal, list_id, body, now=now, zone=zone)
 
 
 @router.delete("/{list_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -148,40 +158,60 @@ async def delete_list(list_id: str, principal: CurrentUser, session: WriteSessio
 
 @router.post("/{list_id}/copy", status_code=status.HTTP_201_CREATED)
 async def copy_list(
-    list_id: str, principal: CurrentUser, session: WriteSession, media: Media, now: Now
+    list_id: str,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
 ) -> ListCopyResult:
     """Copy a list you can see into a new draft of yours; meals that no longer exist or that
     you cannot see are left out and counted."""
-    return await lists.copy_list(session, media, principal, list_id, now=now)
+    return await lists.copy_list(session, media, principal, list_id, now=now, zone=zone)
 
 
 @router.post("/{list_id}/start-shopping")
 async def start_shopping(
-    list_id: str, principal: CurrentUser, session: WriteSession, media: Media, now: Now
+    list_id: str,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'
     ingredients are frozen, so later changes of meals and ingredients no longer affect it
     (LIST-11), and lines can be checked off."""
-    return await lists.start_shopping(session, media, principal, list_id, now=now)
+    return await lists.start_shopping(session, media, principal, list_id, now=now, zone=zone)
 
 
 @router.post("/{list_id}/reopen")
 async def reopen_list(
-    list_id: str, principal: CurrentUser, session: WriteSession, media: Media, now: Now
+    list_id: str,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Back to shopping, for a done list you may edit (409 `list.not_done` otherwise;
     SHOP-06)."""
-    return await lists.reopen_list(session, media, principal, list_id, now=now)
+    return await lists.reopen_list(session, media, principal, list_id, now=now, zone=zone)
 
 
 @router.post("/{list_id}/shop-again", status_code=status.HTTP_201_CREATED)
 async def shop_again(
-    list_id: str, principal: CurrentUser, session: WriteSession, media: Media, now: Now
+    list_id: str,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
 ) -> ListCopyResult:
     """A new draft of yours from a done list you can see (409 `list.not_done` otherwise): the
     current versions of its meals with their servings, and its extra items, all unchecked;
     meals that no longer exist or that you cannot see are left out and counted (SHOP-06)."""
-    return await lists.shop_again(session, media, principal, list_id, now=now)
+    return await lists.shop_again(session, media, principal, list_id, now=now, zone=zone)
 
 
 @router.post("/{list_id}/ops")
@@ -223,11 +253,12 @@ async def add_list_meal(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Add a meal you can see; if it is already on the list, its servings rise instead. In a
     draft or while shopping (a meal added while shopping is frozen at once); 409 `list.done`
     once the list is done, like every change of its meals and extra items."""
-    return await lists.add_meal(session, media, principal, list_id, body, now=now)
+    return await lists.add_meal(session, media, principal, list_id, body, now=now, zone=zone)
 
 
 @router.patch("/{list_id}/meals/{list_meal_id}")
@@ -239,9 +270,12 @@ async def update_list_meal(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Set the servings of a meal on the list."""
-    return await lists.update_meal(session, media, principal, list_id, list_meal_id, body, now=now)
+    return await lists.update_meal(
+        session, media, principal, list_id, list_meal_id, body, now=now, zone=zone
+    )
 
 
 @router.delete("/{list_id}/meals/{list_meal_id}")
@@ -252,9 +286,12 @@ async def remove_list_meal(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Take a meal off the list (also one that is no longer available)."""
-    return await lists.remove_meal(session, media, principal, list_id, list_meal_id, now=now)
+    return await lists.remove_meal(
+        session, media, principal, list_id, list_meal_id, now=now, zone=zone
+    )
 
 
 @router.post(
@@ -270,11 +307,14 @@ async def add_extra_item(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Add an extra item: linked to an ingredient or free text. With an `id` already on this
     list nothing changes and the answer is 200 (safe to retry). While shopping, the item is
     `new` on the list."""
-    detail, created = await lists.add_extra(session, media, principal, list_id, body, now=now)
+    detail, created = await lists.add_extra(
+        session, media, principal, list_id, body, now=now, zone=zone
+    )
     if not created:
         response.status_code = status.HTTP_200_OK
     return detail
@@ -289,9 +329,12 @@ async def update_extra_item(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Change an extra item; it keeps its kind (linked or free text)."""
-    return await lists.update_extra(session, media, principal, list_id, extra_id, body, now=now)
+    return await lists.update_extra(
+        session, media, principal, list_id, extra_id, body, now=now, zone=zone
+    )
 
 
 @router.delete("/{list_id}/extra-items/{extra_id}")
@@ -302,9 +345,12 @@ async def delete_extra_item(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Delete an extra item."""
-    return await lists.delete_extra(session, media, principal, list_id, extra_id, now=now)
+    return await lists.delete_extra(
+        session, media, principal, list_id, extra_id, now=now, zone=zone
+    )
 
 
 @router.post("/{list_id}/lines/{line_key}/hide")
@@ -315,10 +361,11 @@ async def hide_list_line(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Remove a line for this list only (drafts; 409 `list.not_draft` otherwise)."""
     return await lists.set_line_hidden(
-        session, media, principal, list_id, line_key, hidden=True, now=now
+        session, media, principal, list_id, line_key, hidden=True, now=now, zone=zone
     )
 
 
@@ -330,8 +377,27 @@ async def unhide_list_line(
     session: WriteSession,
     media: Media,
     now: Now,
+    zone: TimeZone,
 ) -> ListDetail:
     """Restore a removed line (drafts; 409 `list.not_draft` otherwise)."""
     return await lists.set_line_hidden(
-        session, media, principal, list_id, line_key, hidden=False, now=now
+        session, media, principal, list_id, line_key, hidden=False, now=now, zone=zone
+    )
+
+
+@router.post("/{list_id}/due-items/{ingredient_id}/hide")
+async def hide_due_item(
+    list_id: str,
+    ingredient_id: Annotated[str, Path(max_length=36)],
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
+) -> ListDetail:
+    """Hide a due recurring item ("Fällig" box) on this list for everyone who sees it (drafts;
+    409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an
+    extra item."""
+    return await lists.hide_due_item(
+        session, media, principal, list_id, ingredient_id, now=now, zone=zone
     )

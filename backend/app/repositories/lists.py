@@ -1,5 +1,5 @@
-"""Queries on `shopping_lists`, `list_meals`, `list_meal_ingredients`, `list_extra_items` and
-`list_line_states`.
+"""Queries on `shopping_lists`, `list_meals`, `list_meal_ingredients`, `list_extra_items`,
+`list_line_states` and `list_hidden_due_items`.
 
 The content of lists (meals, frozen rows, extra items, line states) is loaded in batches per
 list id, so reading a list or many summaries takes a fixed number of queries (PERF).
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.lists import FeedPosition, ListStatus
 from app.models import (
     ListExtraItem,
+    ListHiddenDueItem,
     ListLineState,
     ListMeal,
     ListMealIngredient,
@@ -247,6 +248,12 @@ async def states_for(
 
 async def get_state(session: AsyncSession, list_id: str, line_key: str) -> ListLineState | None:
     return await session.get(ListLineState, (list_id, line_key))
+
+
+async def get_hidden_due_item(
+    session: AsyncSession, list_id: str, ingredient_id: str
+) -> ListHiddenDueItem | None:
+    return await session.get(ListHiddenDueItem, (list_id, ingredient_id))
 
 
 # --- ops ------------------------------------------------------------------------------------

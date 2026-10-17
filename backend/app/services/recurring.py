@@ -9,6 +9,7 @@ A user sees and changes one set: their couple's while they are in one, else thei
 the hooks. `services.ops` and `services.lists` import it, so it must not import them.
 """
 
+from collections.abc import Collection
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -16,13 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain import recurring
+from app.domain.owners import OwnerKey
 from app.domain.units import counted_unit, fits
 from app.models import Ingredient as IngredientRow
 from app.models import RecurringItem as RecurringItemRow
 from app.models import ShoppingList
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import recurring as recurring_repo
-from app.schemas.lists import DisplayAmountOut, ListLine
+from app.schemas.lists import DisplayAmountOut, DueItem, ListLine
 from app.schemas.recurring import (
     RecurringInterval,
     RecurringItem,
@@ -107,6 +109,38 @@ async def list_items(
         (_view(item, ingredient, today) for item, ingredient in rows), key=lambda item: item.due_on
     )
     return RecurringItemList(items=items, due_count=sum(item.due for item in items))
+
+
+async def due_items(
+    session: AsyncSession,
+    key: OwnerKey,
+    list_id: str,
+    on_list: Collection[str],
+    *,
+    today: date,
+) -> list[DueItem]:
+    """The "Fällig" box of a draft (LIST-16): the due items of the owner's set that weren't
+    hidden on the list and whose ingredient is not in `on_list` (the ingredient ids of its
+    lines, hidden ones included), the most overdue first, then in dictionary order. One
+    query."""
+    rows = await recurring_repo.of_owner(session, key, not_hidden_on=list_id)
+    views = [
+        _view(item, ingredient, today)
+        for item, ingredient in rows
+        if item.ingredient_id not in on_list
+    ]
+    # The rows come in dictionary order, which the stable sort keeps within a day.
+    due = sorted((view for view in views if view.due), key=lambda view: view.days_until_due)
+    return [
+        DueItem(
+            ingredient=view.ingredient,
+            due_on=view.due_on,
+            days_until_due=view.days_until_due,
+            last_purchased_on=view.last_purchased_on,
+            last_amount=view.last_amount,
+        )
+        for view in due
+    ]
 
 
 async def create_item(

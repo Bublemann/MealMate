@@ -37,7 +37,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0015"
+HEAD = "0016"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -64,7 +64,8 @@ TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
 # one.
 TABLES_0014 = TABLES_0006 - {"products"}
-HEAD_TABLES = TABLES_0014 | {"recurring_items", "notices"}
+TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
+HEAD_TABLES = TABLES_0015 | {"list_hidden_due_items"}
 
 
 @pytest.fixture
@@ -147,7 +148,11 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0014")
     assert tables(database_path) == TABLES_0014
     command.upgrade(config, "0015")
+    assert tables(database_path) == TABLES_0015
+    command.upgrade(config, "0016")
     assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0015")
+    assert tables(database_path) == TABLES_0015
     command.downgrade(config, "0014")
     assert tables(database_path) == TABLES_0014
     command.downgrade(config, "0013")
@@ -1162,9 +1167,12 @@ def test_0014_drops_the_density_and_changes_nothing_else(tmp_path: Path) -> None
     assert_clean(path)
 
 
-async def _what_the_demo_users_see(settings: Settings) -> dict[str, dict[str, Any]]:
+async def _what_the_demo_users_see(
+    settings: Settings, *, drafts: bool = True
+) -> dict[str, dict[str, Any]]:
     """Every meal's rows and nutrition and every list's lines and extra items, as the demo
-    users see them, by id."""
+    users see them, by id. Without `drafts`, a draft is only its status: the app of today reads
+    a draft's due recurring items (LIST-16) from tables an old database doesn't have yet."""
     app = create_app(settings)
     seen: dict[str, dict[str, Any]] = {}
     async with serve(app, base_url="https://testserver.local") as client:
@@ -1176,6 +1184,9 @@ async def _what_the_demo_users_see(settings: Settings) -> dict[str, dict[str, An
                 seen[body["id"]] = {key: body[key] for key in ("name", "ingredients", "nutrition")}
             feed = (await client.get("/api/lists", headers=user.headers)).json()["lists"]
             for item in feed:
+                if not drafts and item["status"] == "draft":
+                    seen[item["id"]] = {"status": "draft"}
+                    continue
                 body = (await client.get(f"/api/lists/{item['id']}", headers=user.headers)).json()
                 seen[body["id"]] = {key: body[key] for key in ("status", "lines", "extra_items")}
     return seen
@@ -1205,7 +1216,7 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
     settings = demo_settings(data_dir)
-    before = asyncio.run(_what_the_demo_users_see(settings))
+    before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
 
     upgrade_database(data_dir)
 
@@ -1362,7 +1373,7 @@ def test_the_0015_downgrade_refuses_while_there_are_rows(tmp_path: Path) -> None
     ):
         command.downgrade(config, "0014")
 
-    assert current_revision(path) == HEAD
+    assert current_revision(path) == "0015"
     assert dump_without(path) == before
     execute(path, "DELETE FROM recurring_items")
     with pytest.raises(RuntimeError, match=r"recurring items \(0\) and notices \(1\)"):
@@ -1411,6 +1422,66 @@ def test_sets_of_different_owners_may_share_an_ingredient(tmp_path: Path) -> Non
         recurring_item(connection, "Kaffee", user="admin")
     assert query(path, "SELECT count(*) FROM recurring_items") == [(3,)]
     assert_clean(path)
+
+
+# --- 0016 -----------------------------------------------------------------------------------
+
+
+def test_0016_adds_the_table_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0015 → 0016 (LIST-16): one empty table, every row and reference as it
+    was."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0015")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        recurring_item(connection, "Kaffee", couple_id=DEMO_COUPLE_ID)
+    counts, references, rows = row_counts(path), non_null_foreign_keys(path), inserts(path)
+
+    command.upgrade(config, "0016")
+
+    assert row_counts(path) == counts | {"list_hidden_due_items": 0}
+    assert non_null_foreign_keys(path) == references | {"list_hidden_due_items.hidden_by": 0}
+    assert [line for line in inserts(path) if "alembic_version" not in line] == [
+        line for line in rows if "alembic_version" not in line
+    ]
+    assert_clean(path)
+
+
+def hidden_due_item(connection: sqlite3.Connection, name: str, username: str) -> None:
+    list_id = connection.execute(
+        "SELECT id FROM shopping_lists WHERE status = 'draft' ORDER BY id LIMIT 1"
+    ).fetchone()[0]
+    connection.execute(
+        "INSERT INTO list_hidden_due_items (list_id, ingredient_id, hidden_at, hidden_by) "
+        "VALUES (?, ?, ?, ?)",
+        (list_id, ingredient_id(connection, name), NOW, user_id(connection, username)),
+    )
+
+
+def test_the_0016_downgrade_refuses_while_there_are_rows(tmp_path: Path) -> None:
+    """Hidden due items don't exist before 0016: the downgrade refuses while there are any and
+    changes nothing. Without them it steps down to 0015 as it was (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0015")
+    at_0015 = dump_without(path)
+    command.upgrade(config, "0016")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        hidden_due_item(connection, "Kaffee", "anna")
+    before = dump_without(path)
+
+    with pytest.raises(
+        RuntimeError, match=r"cannot downgrade below 0016: there are hidden due items \(1\)"
+    ):
+        command.downgrade(config, "0015")
+
+    assert current_revision(path) == HEAD
+    assert dump_without(path) == before
+    execute(path, "DELETE FROM list_hidden_due_items")
+    command.downgrade(config, "0015")
+    assert dump_without(path) == at_0015
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
