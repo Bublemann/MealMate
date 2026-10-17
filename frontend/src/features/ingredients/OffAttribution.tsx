@@ -7,7 +7,7 @@ const OPEN_FOOD_FACTS_URL = 'https://world.openfoodfacts.org';
 
 /**
  * "Nutrition data: Open Food Facts (ODbL)" with a link (BAR-09): wherever Open Food Facts data
- * is shown, and on the Me tab's About section.
+ * is shown, and on the Settings tab's About section.
  */
 export function OffAttribution({ className }: { className?: string }) {
   return (

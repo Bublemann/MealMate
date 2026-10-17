@@ -347,7 +347,7 @@ def test_private_meals_are_hidden_except_from_the_partner(
     expect(cards).to_have_count(2)
     expect(cards.filter(has_text=meal["name"])).to_have_count(1)
 
-    # Anna switches "meals public" off on Me, on her own device.
+    # Anna switches "meals public" off in Settings, on her own device.
     anna_context = new_context()
     sign_in(anna_context, anna)
     anna_page = anna_context.new_page()

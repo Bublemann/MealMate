@@ -44,7 +44,7 @@ describe('changeLanguage', () => {
     await changeLanguage('de');
 
     expect(i18n.resolvedLanguage).toBe('de');
-    expect(i18n.t('nav.lists')).toBe('Listen');
+    expect(i18n.t('nav.lists')).toBe('Einkaufslisten');
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('de');
     expect(document.documentElement.lang).toBe('de');
   });

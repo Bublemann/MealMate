@@ -24,6 +24,18 @@ function patchMe(request: Request) {
 }
 
 describe('MeScreen', () => {
+  it('shows its headline above the cards, scrolling with them (D-44)', async () => {
+    mockApi();
+    renderApp('/me');
+
+    const settings = await screen.findByTestId(testIds.screenMe);
+    const headline = within(settings).getByRole('heading', { level: 1, name: 'Settings' });
+    expect(screen.getAllByRole('heading', { level: 1 })).toEqual([headline]);
+    expect(settings.firstElementChild).toBe(headline);
+    // The short page needs no pinned block to keep it in view.
+    expect(screen.queryByTestId(testIds.pinnedBlock)).not.toBeInTheDocument();
+  });
+
   it('shows the running version and links to its exact source revision', async () => {
     const fetchMock = mockApi();
     renderApp('/me');
@@ -90,9 +102,9 @@ describe('MeScreen', () => {
 
     await user.selectOptions(select, 'Deutsch');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Profil' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Sprache' })).toHaveValue('de');
-    expect(screen.getByTestId(testIds.tabLists)).toHaveTextContent('Listen');
+    expect(screen.getByTestId(testIds.tabLists)).toHaveTextContent('Einkaufslisten');
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('de');
     expect(document.documentElement.lang).toBe('de');
     await waitFor(() => expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(1));
@@ -103,7 +115,7 @@ describe('MeScreen', () => {
     await waitFor(() => expect(screen.getByTestId(testIds.languageSelect)).toBeEnabled());
     await user.selectOptions(screen.getByTestId(testIds.languageSelect), 'English');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Me' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('en');
   });
 
@@ -111,7 +123,7 @@ describe('MeScreen', () => {
     mockApi({ 'GET /api/me': { ...TEST_USER, language: 'de' } });
     renderApp('/me');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Profil' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
   });
 
   it('changes the display name and shows field errors', async () => {
