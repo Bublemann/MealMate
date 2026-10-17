@@ -189,7 +189,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the menu puts last after a separator. The ⋯ button ("Weitere Aktionen", `moreActions`) is always
   enabled; items that need a connection are disabled offline, not hidden (SYNC-03), and "Als
   Text teilen" works offline (EXP-03). Items are 44 pt, wrap at large text sizes, and the menu
-  scrolls within the screen; there is no animation. An item that opens a dialog (`dialog`) opens it
+  scrolls within the screen; there is no animation. The menu isn't modal: the page keeps its scroll
+  position and stays readable to VoiceOver, and a tap outside only closes the menu. An item that opens a dialog (`dialog`) opens it
   once the menu has closed, and the dialog gives the focus back to ⋯ when it closes
   (`useMoreMenuFocus`). `MoreMenuSwitch` is a checkbox item drawn as a switch ("Mit Anna
   geteilt"): it toggles in place and the menu stays open. What an item leaves to say (the export's

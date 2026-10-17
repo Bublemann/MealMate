@@ -15,6 +15,25 @@ import { testIds, type TestId } from '@/testIds';
 /** Runs an item's action once the menu has closed and the focus is back on ⋯. */
 const AfterCloseContext = createContext<(action: () => void) => void>((action) => action());
 
+/** True for the item in the menu's `danger` slot, which is red. */
+const DangerContext = createContext(false);
+
+/** How long after a tap outside its click may still come (a tap, not a scroll or a hold). */
+const TAP_CLICK_MS = 1000;
+
+/**
+ * Lets the click of a tap outside the open menu fall through to nothing: the tap only closes the
+ * menu, as under a modal one, and never also checks a line or finishes shopping.
+ */
+function swallowNextClick(): void {
+  const swallow = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  document.addEventListener('click', swallow, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', swallow, { capture: true }), TAP_CLICK_MS);
+}
+
 interface MoreMenuProps {
   /** From `useMoreMenuFocus`, which gives the dialogs the way back to ⋯. */
   trigger: RefObject<HTMLButtonElement | null>;
@@ -42,8 +61,8 @@ export function MoreMenu({ trigger, children, danger }: MoreMenuProps) {
 
   return (
     // Not modal: the page keeps its scroll position and stays in the accessibility tree, as
-    // under a pop-up menu on iOS; a tap outside closes the menu (axe also flags a modal menu's
-    // hidden page, A11Y-03).
+    // under a pop-up menu on iOS (axe also flags a modal menu's hidden page, A11Y-03). A tap
+    // outside only closes it.
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
@@ -60,6 +79,11 @@ export function MoreMenu({ trigger, children, danger }: MoreMenuProps) {
       <DropdownMenuContent
         align="end"
         data-testid={testIds.moreMenu}
+        onPointerDownOutside={(event) => {
+          // ⋯ itself toggles the menu as usual.
+          const target = event.target;
+          if (!(target instanceof Node && trigger.current?.contains(target))) swallowNextClick();
+        }}
         onCloseAutoFocus={(event) => {
           const action = pending.current;
           if (!action) return;
@@ -74,7 +98,7 @@ export function MoreMenu({ trigger, children, danger }: MoreMenuProps) {
           {danger && (
             <>
               <DropdownMenuSeparator />
-              {danger}
+              <DangerContext value>{danger}</DangerContext>
             </>
           )}
         </AfterCloseContext.Provider>
@@ -91,8 +115,6 @@ interface MoreMenuItemProps {
   /** It opens a dialog, which then gives the focus back to ⋯ when it closes. */
   dialog?: boolean;
   disabled?: boolean;
-  /** Red: deleting. Pass it as the menu's `danger`, so it comes last after a separator. */
-  destructive?: boolean;
   children: ReactNode;
 }
 
@@ -103,10 +125,11 @@ export function MoreMenuItem({
   onSelect,
   dialog = false,
   disabled = false,
-  destructive = false,
   children,
 }: MoreMenuItemProps) {
   const afterClose = useContext(AfterCloseContext);
+  // Red as the menu's `danger`, last after a separator.
+  const destructive = useContext(DangerContext);
 
   return (
     <DropdownMenuItem

@@ -131,7 +131,6 @@ export function ListMenu({ list, categories, onNotice }: ListMenuProps) {
             <MoreMenuItem
               testId={testIds.deleteList}
               icon={<Trash2 aria-hidden="true" />}
-              destructive
               dialog
               disabled={remove.isPending || offline}
               onSelect={() => setDeleting(true)}

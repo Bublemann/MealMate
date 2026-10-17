@@ -4,13 +4,17 @@ import { cn } from '@/lib/utils';
 import { useKeyboardOpen } from '@/app/viewport';
 import { testIds } from '@/testIds';
 
-/** Between the bar and the tab bar below it, and between the bar and what sits above it. */
+/**
+ * Between the bar and what sits above it; the same 0.5rem as between the bar and the tab bar
+ * (its `bottom` class).
+ */
 const GAP = '0.5rem';
 
 /**
- * A frosted bar floating just above the tab bar (UI-01, D-39), as wide as the content column, for
- * the one action a screen is opened for ("Einkauf starten", "Einkauf beenden"). It belongs to the
- * screen, not the app shell, and hides whenever the tab bar does for the keyboard.
+ * A frosted bar floating just above the tab bar (UI-01, D-39) for the one action a screen is
+ * opened for ("Einkauf starten", "Einkauf beenden"), as wide as the content column (the main's
+ * max-w-2xl less its px-4, in rem like it). It belongs to the screen, not the app shell, and hides
+ * whenever the tab bar does for the keyboard.
  *
  * While it shows, it sets `--floating-bar-space` on <html> to the room it takes (tokens.css), so
  * the content's end scrolls clear of it and the update prompt sits above it (`Layout`).
@@ -43,7 +47,7 @@ export function FloatingBar({ children }: { children: ReactNode }) {
       ref={bar}
       data-testid={testIds.floatingBar}
       hidden={keyboardOpen}
-      className="frosted pinned fixed inset-x-(--tab-bar-margin) bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-10 mx-auto flex max-w-[calc(var(--container-2xl)-2rem)] flex-col gap-[0.5em] rounded-[1em] border border-frosted-border p-[0.5em] shadow-frosted"
+      className="frosted pinned fixed inset-x-4 bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-10 mx-auto flex max-w-[calc(var(--container-2xl)-2rem)] flex-col gap-[0.5em] rounded-[1em] border border-frosted-border p-[0.5em] shadow-frosted"
     >
       {children}
     </div>

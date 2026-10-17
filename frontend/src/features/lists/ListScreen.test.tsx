@@ -1170,6 +1170,21 @@ describe('ListScreen', () => {
       expect(button).toHaveFocus();
     });
 
+    it('closes on a tap outside, which does nothing else', async () => {
+      const { user } = renderList();
+      await screen.findByTestId(testIds.listLines);
+
+      await openMoreMenu(user);
+      await user.click(screen.getByTestId(testIds.addMeals));
+
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      // The meal picker didn't open: the tap only closed the menu.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      // The next tap works as usual.
+      await user.click(screen.getByTestId(testIds.addMeals));
+      expect(await screen.findByRole('dialog')).toBeVisible();
+    });
+
     it('is not shown before the list is there', async () => {
       renderList({ [`GET ${BASE}`]: heldRoute().route });
 

@@ -218,7 +218,6 @@ function MealMenu({ meal, onError }: MealMenuProps) {
             <MoreMenuItem
               testId={testIds.deleteMeal}
               icon={<Trash2 aria-hidden="true" />}
-              destructive
               dialog
               disabled={busy}
               onSelect={() => setDeleting(true)}

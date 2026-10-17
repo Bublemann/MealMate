@@ -106,7 +106,6 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
             <MoreMenuItem
               testId={testIds.deleteIngredient}
               icon={<Trash2 aria-hidden="true" />}
-              destructive
               dialog
               disabled={busy}
               onSelect={() => setDeleting(true)}
