@@ -237,10 +237,10 @@ Dry run: `sudo python3 /srv/mealmate/bin/prune.py --dry-run /srv/mealmate/backup
 
 Before planned maintenance:
 
-- admin page → System → **Back up now** (creates `data/status/backup-request`; `mealmate-backup.path` starts the backup within seconds), or
+- Einstellungen → Verwaltung → System → **Back up now** (creates `data/status/backup-request`; `mealmate-backup.path` starts the backup within seconds), or
 - `sudo /srv/mealmate/bin/backup.sh --label manual`.
 
-The result is shown on the admin page (from `state/status/backup.json`) and pinged to `backup`.
+The result is shown on the System page and its row in Einstellungen (from `state/status/backup.json`) and pinged to `backup`.
 
 ### 7.4 Monthly test restore (OPS-07)
 
