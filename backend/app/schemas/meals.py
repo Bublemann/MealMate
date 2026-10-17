@@ -154,6 +154,14 @@ class MealSummary(BaseModel):
     updated_at: datetime
 
 
+class MealSearchResult(MealSummary):
+    """A meal in the meal list. `exact`: its name is the query `q`, ignoring case, umlaut
+    spelling and accents (ING-03); the list's meal field takes it for "+" (D-41). False without
+    a query."""
+
+    exact: bool
+
+
 class MealIngredientInput(BaseModel):
     """`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an
     amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's

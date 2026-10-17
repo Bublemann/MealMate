@@ -16,6 +16,7 @@ from app.schemas.ingredients import (
     Ingredient,
     IngredientBarcodeLink,
     IngredientCreate,
+    IngredientSearchResult,
     IngredientSummary,
     IngredientUpdate,
     OffSearchPage,
@@ -44,10 +45,11 @@ async def list_ingredients(
     session: ReadSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     category_id: Annotated[list[CategoryId] | None, Query(max_length=100)] = None,
-) -> list[IngredientSummary]:
+) -> list[IngredientSearchResult]:
     """Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
     then names starting with `q`, then the rest, each in dictionary order by name and brand
-    (Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`
+    (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
+    ingredients in that order (at most 1000). `category_id`
     is repeatable: an ingredient matches if it is in any of the given categories."""
     return await ingredients.search(session, query=q, category_ids=category_id or [])
 

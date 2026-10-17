@@ -17,6 +17,7 @@ import {
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
+import { openMoreMenu } from '@/test/menu';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import { DB_NAME, DB_VERSION, openSyncStorage, userMetaKey } from './storage';
@@ -343,12 +344,12 @@ describe('lists from the local copy (SYNC-09)', () => {
     const share = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'share', { value: share, configurable: true });
 
-    renderApp(`/lists/${LIST_ID}`);
+    const { user } = renderApp(`/lists/${LIST_ID}`);
     await screen.findByTestId(testIds.listLines);
     goOffline();
-    const button = screen.getByTestId(testIds.exportList);
-    expect(button).toBeEnabled();
-    fireEvent.click(button);
+    const item = within(await openMoreMenu(user)).getByTestId(testIds.exportList);
+    expect(item).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(item);
 
     const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
     expect(text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen')).toBe(true);
@@ -360,7 +361,7 @@ describe('a draft offline (SYNC-03)', () => {
     await storeCopy(listDetail());
     serverGone(FAIL);
 
-    renderApp(`/lists/${LIST_ID}`);
+    const { user } = renderApp(`/lists/${LIST_ID}`);
     await screen.findByTestId(testIds.listLines);
     goOffline();
 
@@ -368,15 +369,19 @@ describe('a draft offline (SYNC-03)', () => {
       "You're offline. Changes to this list need a connection.",
     );
     expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent('Offline');
-    for (const testId of [
-      testIds.startShopping,
-      testIds.renameList,
-      testIds.deleteList,
-      testIds.addMeals,
-      testIds.extraItemInput,
-    ]) {
+    // "Start shopping" stays in its bar, inactive (D-39).
+    expect(
+      within(screen.getByTestId(testIds.floatingBar)).getByTestId(testIds.startShopping),
+    ).toBeDisabled();
+    for (const testId of [testIds.mealField, testIds.extraItemInput]) {
       expect(screen.getByTestId(testId)).toBeDisabled();
     }
+    const menu = await openMoreMenu(user);
+    for (const testId of [testIds.renameList, testIds.deleteList]) {
+      expect(within(menu).getByTestId(testId)).toHaveAttribute('aria-disabled', 'true');
+    }
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     const meals = screen.getByTestId(testIds.listMeals);
     expect(within(meals).getByRole('button', { name: 'Remove Pfannkuchen' })).toBeDisabled();
     expect(
@@ -479,7 +484,7 @@ describe('logging out with waiting changes (SYNC-05, SYNC-10)', () => {
     keepBusy();
     const fetchMock = mockApi({ 'POST /api/auth/logout-all': null });
     goOffline();
-    const { user } = renderApp('/me');
+    const { user } = renderApp('/me/security');
 
     await user.click(await screen.findByTestId(testIds.logoutAllButton));
     // Nothing is asked before it is known what waits.

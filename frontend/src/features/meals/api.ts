@@ -12,6 +12,7 @@ import { photoFormData, preparePhoto } from './photo';
 
 export type Meal = components['schemas']['Meal'];
 export type MealSummary = components['schemas']['MealSummary'];
+export type MealSearchResult = components['schemas']['MealSearchResult'];
 export type MealCreate = components['schemas']['MealCreate'];
 export type MealUpdate = components['schemas']['MealUpdate'];
 export type MealIngredientRow = components['schemas']['MealIngredientRow'];
@@ -37,8 +38,8 @@ export interface MealFilters {
 const MEALS_KEY = ['meals'] as const;
 /** Every search of the meals: the user filter on Meals loads them again once it is saved. */
 export const MEAL_SEARCH_KEY = [...MEALS_KEY, 'list'] as const;
-/** The meal picker's searches, apart from the Meals tab's: the user filter doesn't narrow them. */
-const MEAL_PICKER_KEY = [...MEALS_KEY, 'picker'] as const;
+/** The meal field's searches, apart from the Meals tab's: the user filter doesn't narrow them. */
+const MEAL_FIELD_KEY = [...MEALS_KEY, 'field'] as const;
 const detailKey = (id: string) => [...MEALS_KEY, 'detail', id] as const;
 const MEAL_TAGS_KEY = [...MEALS_KEY, 'tags'] as const;
 const TAGS_KEY = ['reference', 'tags'] as const;
@@ -48,7 +49,7 @@ export const PHOTO_UPLOAD_TIMEOUT_MS = 60_000;
 
 function invalidateLists(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: MEAL_SEARCH_KEY });
-  void queryClient.invalidateQueries({ queryKey: MEAL_PICKER_KEY });
+  void queryClient.invalidateQueries({ queryKey: MEAL_FIELD_KEY });
 }
 
 /** A meal was saved, copied or deleted: its tags may be new, or no longer used anywhere. */
@@ -82,20 +83,21 @@ export function useMeals({ q, cuisineIds, tagIds }: MealFilters) {
 }
 
 /**
- * The meal picker's search (MEAL-09): every meal the user can see that matches `q`, A–Z, whatever
- * the user filter on Meals says. It asks for the meals of everyone whose meals are visible, so the
- * server doesn't apply that filter. The previous result stays while the next one loads. Unlike the
- * other hooks it returns only what the picker reads, as it waits for two queries.
+ * The search of a list's meal field (MEAL-09, D-41): every meal the user can see that matches `q`
+ * (all of them without one), A–Z, whatever the user filter on Meals says, each marked when its
+ * name is exactly `q`. It asks for the meals of everyone whose meals are visible, so the server
+ * doesn't apply that filter. It keeps no previous result: while the meals for a new `q` load,
+ * `data` is undefined, so no earlier text's meals can be tapped. Unlike the other hooks it
+ * returns only what the field reads, as it waits for two queries.
  */
-export function usePickerMeals(q: string) {
+export function useMealFieldMeals(q: string, { enabled = true }: { enabled?: boolean } = {}) {
   const owners = useVisibleUsers('meals');
   const ownerIds = owners.data?.map((user) => user.id);
   const query = { ...(q.trim() ? { q: q.trim() } : {}), owner_ids: ownerIds ?? [] };
   const meals = useQuery({
-    queryKey: [...MEAL_PICKER_KEY, query],
+    queryKey: [...MEAL_FIELD_KEY, query],
     queryFn: ({ signal }) => unwrap(api.GET('/api/meals', { params: { query }, signal })),
-    enabled: ownerIds !== undefined,
-    placeholderData: keepPreviousData,
+    enabled: enabled && ownerIds !== undefined,
   });
   return {
     data: meals.data,

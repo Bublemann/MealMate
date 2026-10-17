@@ -64,7 +64,17 @@
   --tab-bar-bottom: max(env(safe-area-inset-bottom), var(--tab-bar-margin));
   --tab-bar-height: clamp(56px, 3.5rem, 72px);
   --tab-bar-icon: clamp(24px, 1.5rem, 32px);
+  /* The count on the gear (D-51): it grows with the icon and stops with it. */
+  --tab-bar-badge: clamp(16px, 1rem, 21px);
+  --tab-bar-badge-font: clamp(11px, 0.6875rem, 14px);
   --tab-bar-clearance: calc(var(--tab-bar-bottom) + var(--tab-bar-height));
+
+  /*
+   * The room a screen's floating bar (D-39) takes above the tab bar, its gap included: 0 without
+   * one. While a bar shows, `FloatingBar` sets it on <html> to its measured height, so the main
+   * content's end and the update prompt move up above it.
+   */
+  --floating-bar-space: 0px;
 
   /*
    * The pinned block (UI-01) stays at the top while the content scrolls under it, so like the tab

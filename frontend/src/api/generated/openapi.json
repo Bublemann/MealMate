@@ -1881,6 +1881,78 @@
         "title": "IngredientOffOrigin",
         "type": "object"
       },
+      "IngredientSearchResult": {
+        "description": "A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut\nspelling and accents (ING-03), whatever its brand; these come first. The list's item field\ntakes such a result for \"+\" when it is the only one (D-41). False without a query.",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml",
+              "piece"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "exact": {
+            "title": "Exact",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "barcode",
+          "source",
+          "category_id",
+          "base_unit",
+          "exact"
+        ],
+        "title": "IngredientSearchResult",
+        "type": "object"
+      },
       "IngredientSummary": {
         "description": "A search result, list entry or meal row's ingredient. It is shown as `name` with the\n`brand` in brackets when there is one (\"Milch (Weihenstephan)\"); `barcode` is set for\nscanned ingredients.",
         "properties": {
@@ -3717,6 +3789,76 @@
         "title": "MealPhoto",
         "type": "object"
       },
+      "MealSearchResult": {
+        "description": "A meal in the meal list. `exact`: its name is the query `q`, ignoring case, umlaut\nspelling and accents (ING-03); the list's meal field takes it for \"+\" (D-41). False without\na query.",
+        "properties": {
+          "cuisine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cuisine"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exact": {
+            "title": "Exact",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "servings": {
+            "title": "Servings",
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "thumb_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Url"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner",
+          "cuisine",
+          "tags",
+          "servings",
+          "thumb_url",
+          "updated_at",
+          "exact"
+        ],
+        "title": "MealSearchResult",
+        "type": "object"
+      },
       "MealSummary": {
         "description": "A meal in the meal list; `thumb_url` is a signed URL of the photo's thumbnail.",
         "properties": {
@@ -4607,7 +4749,7 @@
         "type": "object"
       },
       "SecurityInfo": {
-        "description": "What *Me → Security* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
+        "description": "What *Einstellungen → Sicherheit* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
         "properties": {
           "password_changed_at": {
             "anyOf": [
@@ -6522,7 +6664,7 @@
     },
     "/api/ingredients": {
       "get": {
-        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`\nis repeatable: an ingredient matches if it is in any of the given categories.",
+        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all\ningredients in that order (at most 1000). `category_id`\nis repeatable: an ingredient matches if it is in any of the given categories.",
         "operationId": "list_ingredients",
         "parameters": [
           {
@@ -6570,7 +6712,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/IngredientSummary"
+                    "$ref": "#/components/schemas/IngredientSearchResult"
                   },
                   "title": "Response List Ingredients",
                   "type": "array"
@@ -8558,7 +8700,7 @@
     },
     "/api/meals": {
       "get": {
-        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal\nmatches if its cuisine is any of the given ones and it has every given tag. Without\n`owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are\nleft out; with `owner_ids` (repeatable), only those owners' meals are listed.",
+        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts; `exact` marks the meals whose name is `q`.\n`cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given\nones and it has every given tag. Without `owner_ids`, owners you unticked in your user\nfilter on Meals (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only\nthose owners' meals are listed.",
         "operationId": "list_meals",
         "parameters": [
           {
@@ -8647,7 +8789,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/MealSummary"
+                    "$ref": "#/components/schemas/MealSearchResult"
                   },
                   "title": "Response List Meals",
                   "type": "array"
@@ -8725,7 +8867,7 @@
     },
     "/api/meals/recent": {
       "get": {
-        "description": "Up to 10 meals you recently added to lists, most recent first, as far as you can still\nsee them (the \"recently used\" meals of the meal picker).",
+        "description": "Up to 10 meals you recently added to lists, most recent first, as far as you can still\nsee them (the \"recently used\" meals of the list's meal field).",
         "operationId": "list_recent_meals",
         "responses": {
           "200": {

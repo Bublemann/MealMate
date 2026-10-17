@@ -8,7 +8,7 @@ import { useKeyboardOpen } from './viewport';
 
 /**
  * Offers to reload when a new app version has been installed in the background. Like the tab bar,
- * it hides while the keyboard is open (UI-01).
+ * it hides while the keyboard is open (UI-01); it sits above a screen's floating bar (D-39).
  */
 export function UpdatePrompt() {
   const { t } = useTranslation();
@@ -18,7 +18,7 @@ export function UpdatePrompt() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-20 px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-clearance)+var(--floating-bar-space)+0.5rem)] z-20 px-4"
     >
       {/* Left out rather than hidden, so one that arrives while typing is announced later. */}
       {available && !keyboardOpen && (

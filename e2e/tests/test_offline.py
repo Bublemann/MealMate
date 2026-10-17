@@ -22,6 +22,7 @@ from playwright.sync_api import Browser, BrowserContext, Locator, Page, Request,
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
+from support.ui import floating_bar_button, open_more_menu
 
 # One polling interval (5 s) plus the time a request and a render take.
 POLLED = 10_000
@@ -150,8 +151,13 @@ def test_offline_check_off_and_reconnect(
     context.set_offline(True)
     for name in (onions, flour):
         page.get_by_role("checkbox", name=text("lists.shop.check", name=name)).click()
+    # The item field searches nothing offline and offers only free text (SYNC-03, D-41).
     page.get_by_test_id(TEST_IDS["extraItemInput"]).fill(napkins)
-    page.get_by_role("button", name=text("lists.extra.addLabel", name=napkins)).click()
+    expect(page.get_by_test_id(TEST_IDS["itemNewIngredient"])).to_have_count(0)
+    page.get_by_role("button", name=text("lists.addField.plus", name=napkins)).click()
+    free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
+    free_text.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
+    expect(free_text).to_be_hidden()
 
     expect(sync_status(page)).to_have_text(waiting(3))
     expect(page.get_by_test_id(TEST_IDS["offlineBanner"])).to_have_text(
@@ -190,6 +196,50 @@ def test_offline_check_off_and_reconnect(
             anna.display_name[0].upper()
         )
     expect(shopping_line(ben_page, napkins)).to_be_visible()
+
+
+def test_offline_start_is_inactive_and_finishing_works(
+    context: BrowserContext, api: Api, invite_user: Callable[..., Account], browser_name: str
+) -> None:
+    """D-39, SYNC-03, D-10: offline, "Start shopping" stays in its bar but inactive and the ⋯ menu
+    disables what needs a connection (the export still works); "Finish shopping" in the same bar
+    finishes through the outbox, and the list is done on the server once the signal is back."""
+    tag = unique("e2e")
+    anna = invite_user(unique("anna"), unique("Anna"))
+    shopping = shopping_list(api, anna, tag, ["Zwiebeln"])["list"]
+    draft = api.create_list(anna, f"Entwurf {tag}")
+
+    page = open_page(context, anna, f"/lists/{draft['id']}")
+    start = floating_bar_button(page, "startShopping")
+    expect(start).to_be_enabled()
+    ready_for_offline(page, draft["id"], browser_name)
+    context.set_offline(True)
+    expect(page.get_by_test_id(TEST_IDS["offlineBanner"])).to_be_visible()
+    expect(start).to_be_visible()
+    expect(start).to_be_disabled()
+    menu = open_more_menu(page)
+    for test_id in ("renameList", "deleteList"):
+        expect(menu.get_by_test_id(TEST_IDS[test_id])).to_be_disabled()
+    expect(menu.get_by_test_id(TEST_IDS["exportList"])).to_be_enabled()
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+
+    context.set_offline(False)
+    page.goto(f"/lists/{shopping['id']}")
+    finish = floating_bar_button(page, "finishShopping")
+    expect(finish).to_be_enabled()
+    ready_for_offline(page, shopping["id"], browser_name)
+    context.set_offline(True)
+    finish.click()
+    dialog = page.get_by_role("dialog", name=text("lists.shop.finishTitle"))
+    dialog.get_by_role("button", name=text("lists.shop.finishConfirm"), exact=True).click()
+    expect(page.get_by_test_id(TEST_IDS["listDone"])).to_be_visible()
+    expect(page.get_by_test_id(TEST_IDS["floatingBar"])).to_have_count(0)
+    expect(sync_status(page)).to_have_text(waiting(1))
+
+    context.set_offline(False)
+    expect(sync_status(page)).to_have_text(text("lists.sync.saved"), timeout=POLLED)
+    assert api.get_list(anna, shopping["id"])["status"] == "done"
 
 
 def leave_unanswered(route: Route) -> None:

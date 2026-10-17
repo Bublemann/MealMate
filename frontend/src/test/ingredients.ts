@@ -255,3 +255,11 @@ export const REFERENCE_ROUTES: Record<string, unknown> = {
   'GET /api/categories': CATEGORIES,
   'GET /api/units': UNITS,
 };
+
+/** An ingredient as the search answers it, marked when its name is exactly the query (D-41). */
+export function found(
+  ingredient: Schemas['IngredientSummary'],
+  exact = false,
+): Schemas['IngredientSearchResult'] {
+  return { ...ingredient, exact };
+}

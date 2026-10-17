@@ -18,7 +18,7 @@ LIST_NAME_MAX_LENGTH = 60
 EXTRA_TEXT_MAX_LENGTH = 80
 AMOUNT_TEXT_MAX_LENGTH = 30
 LINE_KEY_MAX_LENGTH = 80
-# The meal picker shows this many "recently used" meals first (MEAL-09).
+# The meal field shows this many "recently used" meals first (MEAL-09).
 RECENT_MEALS_LIMIT = 10
 # At most this many ops per request (plan § 5.8).
 OPS_MAX = 100

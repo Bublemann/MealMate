@@ -1,5 +1,5 @@
-import { CookingPot, Plus, Trash2 } from 'lucide-react';
-import { useId } from 'react';
+import { CookingPot, Trash2 } from 'lucide-react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -22,16 +22,18 @@ interface ListMealsProps {
   editable: boolean;
   /** Collapsed under "Meals (N)", as while shopping (LIST-12). */
   collapsible?: boolean;
-  onAddMeals: () => void;
+  /** The meal field, at the top of the section (D-41). */
+  field?: ReactNode;
 }
 
 /**
- * The meals at the top of the list with their servings (LIST-04/05). A meal the viewer can't
+ * The Gerichte section: the meal field (editors), then the meals with their servings
+ * (LIST-04/05); its heading shows even without meals. A meal the viewer can't
  * see is only "Private meal (N servings)" (VIS-06); a detached one is marked "no longer
  * available" and can be removed (LIST-15). Changing meals needs a connection: offline the controls
  * are disabled (SYNC-03).
  */
-export function ListMeals({ list, editable, collapsible = false, onAddMeals }: ListMealsProps) {
+export function ListMeals({ list, editable, collapsible = false, field }: ListMealsProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const setServings = useSetListMealServings(list.id);
@@ -40,6 +42,7 @@ export function ListMeals({ list, editable, collapsible = false, onAddMeals }: L
 
   const content = (
     <>
+      {field}
       {list.meals.length === 0 ? (
         <p className="text-muted-foreground">{t('lists.meals.empty')}</p>
       ) : (
@@ -61,18 +64,6 @@ export function ListMeals({ list, editable, collapsible = false, onAddMeals }: L
         </ul>
       )}
       <ErrorAlert error={setServings.error ?? remove.error} />
-      {editable && (
-        <Button
-          variant="outline"
-          data-testid={testIds.addMeals}
-          disabled={offline}
-          onClick={onAddMeals}
-          className="self-start"
-        >
-          <Plus aria-hidden="true" />
-          {t('lists.meals.add')}
-        </Button>
-      )}
     </>
   );
 

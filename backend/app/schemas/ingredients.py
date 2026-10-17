@@ -108,6 +108,14 @@ class IngredientSummary(BaseModel):
     base_unit: BaseUnitName
 
 
+class IngredientSearchResult(IngredientSummary):
+    """A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut
+    spelling and accents (ING-03), whatever its brand; these come first. The list's item field
+    takes such a result for "+" when it is the only one (D-41). False without a query."""
+
+    exact: bool
+
+
 class PendingUpdateField(BaseModel):
     """A user-edited field for which Open Food Facts now has another value: `current` is the
     ingredient's value, `proposed` the new one (a text, a number or null)."""

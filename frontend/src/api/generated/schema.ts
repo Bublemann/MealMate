@@ -700,7 +700,8 @@ export interface paths {
          * List Ingredients
          * @description Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
          *     then names starting with `q`, then the rest, each in dictionary order by name and brand
-         *     (Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`
+         *     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
+         *     ingredients in that order (at most 1000). `category_id`
          *     is repeatable: an ingredient matches if it is in any of the given categories.
          */
         get: operations["list_ingredients"];
@@ -1383,10 +1384,11 @@ export interface paths {
         /**
          * List Meals
          * @description The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
-         *     and cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal
-         *     matches if its cuisine is any of the given ones and it has every given tag. Without
-         *     `owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are
-         *     left out; with `owner_ids` (repeatable), only those owners' meals are listed.
+         *     and cuisines ignoring case and umlauts; `exact` marks the meals whose name is `q`.
+         *     `cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given
+         *     ones and it has every given tag. Without `owner_ids`, owners you unticked in your user
+         *     filter on Meals (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only
+         *     those owners' meals are listed.
          */
         get: operations["list_meals"];
         put?: never;
@@ -1411,7 +1413,7 @@ export interface paths {
         /**
          * List Recent Meals
          * @description Up to 10 meals you recently added to lists, most recent first, as far as you can still
-         *     see them (the "recently used" meals of the meal picker).
+         *     see them (the "recently used" meals of the list's meal field).
          */
         get: operations["list_recent_meals"];
         put?: never;
@@ -2397,6 +2399,36 @@ export interface components {
             off_last_modified_at?: string | null;
         };
         /**
+         * IngredientSearchResult
+         * @description A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut
+         *     spelling and accents (ING-03), whatever its brand; these come first. The list's item field
+         *     takes such a result for "+" when it is the only one (D-41). False without a query.
+         */
+        IngredientSearchResult: {
+            /** Barcode */
+            barcode: string | null;
+            /**
+             * Base Unit
+             * @enum {string}
+             */
+            base_unit: "g" | "ml" | "piece";
+            /** Brand */
+            brand: string | null;
+            /** Category Id */
+            category_id: string;
+            /** Exact */
+            exact: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "off";
+        };
+        /**
          * IngredientSummary
          * @description A search result, list entry or meal row's ingredient. It is shown as `name` with the
          *     `brand` in brackets when there is one ("Milch (Weihenstephan)"); `barcode` is set for
@@ -3129,6 +3161,33 @@ export interface components {
             url: string;
         };
         /**
+         * MealSearchResult
+         * @description A meal in the meal list. `exact`: its name is the query `q`, ignoring case, umlaut
+         *     spelling and accents (ING-03); the list's meal field takes it for "+" (D-41). False without
+         *     a query.
+         */
+        MealSearchResult: {
+            cuisine: components["schemas"]["Cuisine"] | null;
+            /** Exact */
+            exact: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            owner: components["schemas"]["UserRef"];
+            /** Servings */
+            servings: number;
+            /** Tags */
+            tags: components["schemas"]["Tag"][];
+            /** Thumb Url */
+            thumb_url: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * MealSummary
          * @description A meal in the meal list; `thumb_url` is a signed URL of the photo's thumbnail.
          */
@@ -3461,7 +3520,7 @@ export interface components {
         };
         /**
          * SecurityInfo
-         * @description What *Me → Security* shows, e.g. "Password reset by X on <date>" (ACC-10).
+         * @description What *Einstellungen → Sicherheit* shows, e.g. "Password reset by X on <date>" (ACC-10).
          *
          *     `password_reset_by` is null for a reset link from the command line or a deleted admin.
          */
@@ -4749,7 +4808,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngredientSummary"][];
+                    "application/json": components["schemas"]["IngredientSearchResult"][];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5994,7 +6053,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MealSummary"][];
+                    "application/json": components["schemas"]["MealSearchResult"][];
                 };
             };
             /** @description Error envelope; `code` names the error */

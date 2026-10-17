@@ -1,16 +1,19 @@
 import { HeartHandshake } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { useCurrentUser } from '@/features/auth/context';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatDate } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
+import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import {
   useAnswerCoupleRequest,
@@ -22,23 +25,20 @@ import {
   type CoupleState,
 } from './api';
 
-/** Couple status, requests and the user picker (CPL-01, CPL-05, CPL-07). */
-export function CoupleSection() {
+/** Settings → Paar: couple status, requests and the user picker (CPL-01, CPL-05, CPL-07). */
+export function CoupleScreen() {
   const { t } = useTranslation();
   const couple = useCouple();
 
   return (
-    <Card data-testid={testIds.coupleSection}>
-      <CardHeader>
-        <CardTitle>{t('couple.title')}</CardTitle>
-        <CardDescription>{t('couple.text')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+    <SettingsPage title={t('couple.title')} testId={testIds.screenCouple}>
+      <div data-testid={testIds.coupleSection} className="flex flex-col gap-5">
+        <p className="text-muted-foreground">{t('couple.text')}</p>
         {couple.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
         <LoadError error={couple.error} />
         {couple.data && <CoupleContent state={couple.data} />}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsPage>
   );
 }
 
@@ -151,6 +151,25 @@ function Incoming({ requests, answer }: { requests: CoupleRequest[]; answer: Ans
   );
 }
 
+/**
+ * Nobody else can be picked (D-49): the partner needs an invite first, which only admins send
+ * (ADM-01), so admins get the way to the invites and everyone else is told whom to ask.
+ */
+function NobodyToPick() {
+  const { t } = useTranslation();
+  const isAdmin = useCurrentUser().role === 'admin';
+
+  if (!isAdmin) return <p className="text-muted-foreground">{t('couple.askAdmin')}</p>;
+  return (
+    <div className="flex flex-col gap-3">
+      <p>{t('couple.invitePartner')}</p>
+      <Link to="/me/admin/invites" className={cn(buttonVariants(), 'self-start')}>
+        {t('couple.toInvites')}
+      </Link>
+    </div>
+  );
+}
+
 function RequestForm() {
   const { t } = useTranslation();
   const users = useUsers();
@@ -163,9 +182,7 @@ function RequestForm() {
     if (userId) send.mutate(userId, { onSuccess: () => setUserId('') });
   }
 
-  if (users.data?.length === 0) {
-    return <p className="text-muted-foreground">{t('couple.nobody')}</p>;
-  }
+  if (users.data?.length === 0) return <NobodyToPick />;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">

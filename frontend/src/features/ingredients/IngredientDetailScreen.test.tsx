@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
-import { errorResponse, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
+import { errorResponse, goOffline, heldRoute, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
 import {
   APPLES,
   CATEGORIES_WITH_UNCATEGORIZED,
@@ -12,7 +12,15 @@ import {
   summary,
   WEIDEHOF_MILK,
 } from '@/test/ingredients';
+import {
+  deletedNotice,
+  noticeList,
+  recurringItem,
+  recurringList,
+  stubResizeObserver,
+} from '@/test/recurring';
 import { renderApp } from '@/test/render';
+import { chooseFromMenu, menuItemNames, openMoreMenu } from '@/test/menu';
 import { testIds } from '@/testIds';
 
 const MILK_PATH = `/api/ingredients/${WEIDEHOF_MILK.id}`;
@@ -269,7 +277,7 @@ describe('IngredientDetailScreen', () => {
       },
     });
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     expect(within(dialog).queryByTestId(testIds.ingredientSimilar)).not.toBeInTheDocument();
     await user.click(within(dialog).getByLabelText('Millilitres (ml)'));
@@ -297,7 +305,7 @@ describe('IngredientDetailScreen', () => {
     });
 
     expect(await screen.findByText('Uncategorized')).toBeVisible();
-    await user.click(screen.getByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     const category = within(dialog).getByLabelText('Category');
     // The current value, which can't be picked again.
@@ -329,7 +337,7 @@ describe('IngredientDetailScreen', () => {
       'ing-eier',
     );
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Eier' });
     expect(within(dialog).getByLabelText('Pieces (pcs)')).toBeChecked();
     expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
@@ -354,7 +362,7 @@ describe('IngredientDetailScreen', () => {
       [path]: unlessAccepted({ ...APPLES, base_unit: 'piece' }, { meals: 3, lists: 1, amounts: 5 }),
     });
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -399,7 +407,7 @@ describe('IngredientDetailScreen', () => {
       'ing-eier',
     );
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Eier bearbeiten' });
     await user.click(within(dialog).getByLabelText('Gramm (g)'));
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
@@ -420,7 +428,7 @@ describe('IngredientDetailScreen', () => {
     };
     const { user } = renderDetail({ [`GET ${MILK_PATH}`]: edited }, false, WEIDEHOF_MILK.id);
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Vollmilch (Weidehof) bearbeiten' });
     // A name is filled in, so the keyboard stays down.
     await waitFor(() => expect(dialog).toHaveFocus());
@@ -465,7 +473,7 @@ describe('IngredientDetailScreen', () => {
       WEIDEHOF_MILK.id,
     );
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
     const pack = within(dialog).getByLabelText('Package');
     expect(pack).toHaveAttribute('placeholder', 'optional, e.g. 500 g');
@@ -486,7 +494,7 @@ describe('IngredientDetailScreen', () => {
       WEIDEHOF_MILK.id,
     );
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
     const barcode = within(dialog).getByLabelText('Barcode');
     expect(barcode).not.toHaveAttribute('readonly');
@@ -513,7 +521,7 @@ describe('IngredientDetailScreen', () => {
       'PATCH /api/ingredients/ing-aepfel': { ...APPLES, barcode: '4006381333931' },
     });
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await scanInForm(user, dialog, '4006381333931');
 
@@ -542,7 +550,7 @@ describe('IngredientDetailScreen', () => {
       }),
     });
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
 
@@ -571,7 +579,7 @@ describe('IngredientDetailScreen', () => {
       WEIDEHOF_MILK.id,
     );
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
     const barcode = within(dialog).getByLabelText('Barcode');
     await user.clear(barcode);
@@ -593,7 +601,7 @@ describe('IngredientDetailScreen', () => {
       'PATCH /api/ingredients/ing-aepfel': { ...precise, name: 'Äpfel rot' },
     });
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     expect(within(dialog).getByLabelText('Protein')).toHaveValue('0.333333');
     await user.type(within(dialog).getByLabelText('Name'), ' rot');
@@ -612,7 +620,7 @@ describe('IngredientDetailScreen', () => {
       'PATCH /api/ingredients/ing-aepfel': errorResponse(409, 'ingredient.barcode_taken'),
     });
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await user.type(within(dialog).getByLabelText('Barcode'), '4006381333931');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -627,7 +635,7 @@ describe('IngredientDetailScreen', () => {
   it('shows the barcode’s digit counts as a placeholder, not as a hint', async () => {
     const { user } = renderDetail();
 
-    await user.click(await screen.findByTestId(testIds.editIngredient));
+    await chooseFromMenu(user, testIds.editIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     const barcode = within(dialog).getByLabelText('Barcode');
     expect(barcode).toHaveAttribute('placeholder', '8, 12 or 13 digits');
@@ -641,13 +649,32 @@ describe('IngredientDetailScreen', () => {
   });
 });
 
-describe('IngredientAdminActions', () => {
-  it('are only shown to admins', async () => {
-    renderDetail();
-
+describe('IngredientMenu (D-39)', () => {
+  it('offers "Edit" to everyone', async () => {
+    const { user } = renderDetail();
     await screen.findByTestId(testIds.ingredientNutrition);
-    expect(screen.queryByTestId(testIds.mergeIngredient)).not.toBeInTheDocument();
-    expect(screen.queryByTestId(testIds.deleteIngredient)).not.toBeInTheDocument();
+
+    const menu = await openMoreMenu(user);
+
+    expect(menuItemNames(menu)).toEqual(['Edit', 'Buy regularly…']);
+    // The properties card has no button of its own any more.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(screen.queryByTestId(testIds.editIngredient)).not.toBeInTheDocument();
+  });
+
+  it('offers admins "Merge…" and, red and last, "Delete" instead of an admin card (ING-05)', async () => {
+    const { user } = renderDetail({}, true);
+    await screen.findByTestId(testIds.ingredientNutrition);
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument();
+
+    const menu = await openMoreMenu(user);
+
+    expect(menuItemNames(menu)).toEqual(['Edit', 'Buy regularly…', 'Merge…', 'Delete']);
+    const remove = within(menu).getByTestId(testIds.deleteIngredient);
+    expect(menu.lastElementChild).toBe(remove);
+    expect(remove.previousElementSibling).toHaveAttribute('role', 'separator');
+    expect(within(menu).getByTestId(testIds.mergeIngredient)).toHaveTextContent('Merge…');
   });
 
   it('merge into an ingredient picked from the others, after confirming both names', async () => {
@@ -663,7 +690,7 @@ describe('IngredientAdminActions', () => {
       true,
     );
 
-    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    await chooseFromMenu(user, testIds.mergeIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
     const picker = within(dialog).getByTestId(testIds.ingredientPicker);
     await user.type(within(picker).getByLabelText('Ingredient that stays'), 'Apf');
@@ -699,7 +726,7 @@ describe('IngredientAdminActions', () => {
       true,
     );
 
-    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    await chooseFromMenu(user, testIds.mergeIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
     await user.type(within(dialog).getByLabelText('Ingredient that stays'), 'Eie');
     await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
@@ -744,7 +771,7 @@ describe('IngredientAdminActions', () => {
       true,
     );
 
-    await user.click(await screen.findByTestId(testIds.mergeIngredient));
+    await chooseFromMenu(user, testIds.mergeIngredient);
     const dialog = await screen.findByRole('dialog', { name: 'Äpfel zusammenführen mit …' });
     await user.type(within(dialog).getByLabelText('Zutat, die bleibt'), 'Eie');
     await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
@@ -770,15 +797,17 @@ describe('IngredientAdminActions', () => {
       true,
     );
 
-    await user.click(await screen.findByRole('button', { name: 'Delete Äpfel' }));
+    await chooseFromMenu(user, testIds.deleteIngredient);
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete Äpfel?' });
     await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
 
-    expect(
-      await screen.findByText(
-        'This ingredient is still in use (meals: 1, lists: 3). Merge it into another ingredient instead.',
-      ),
-    ).toBeVisible();
+    // In an alert below the title.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'This ingredient is still in use (meals: 1, lists: 3). Merge it into another ingredient instead.',
+    );
+    const heading = screen.getByRole('heading', { level: 1, name: 'Äpfel' });
+    expect(heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('deletes an unused ingredient and returns to the list', async () => {
@@ -787,11 +816,112 @@ describe('IngredientAdminActions', () => {
       true,
     );
 
-    await user.click(await screen.findByTestId(testIds.deleteIngredient));
+    await chooseFromMenu(user, testIds.deleteIngredient);
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
     );
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients'));
+  });
+});
+
+describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
+  const APPLES_ITEM = recurringItem({
+    id: 'rec-aepfel',
+    ingredient: summary('Äpfel', 'fruit_vegetables', { id: 'ing-aepfel' }),
+    interval_weeks: 2,
+    interval: { value: 2, unit: 'week', automatic: false },
+  });
+
+  it('opens the recurring pop-up for the ingredient and makes it recurring', async () => {
+    stubResizeObserver();
+    let items: (typeof APPLES_ITEM)[] = [];
+    const { fetchMock, user } = renderDetail({
+      'GET /api/recurring-items': () => recurringList(items),
+      'POST /api/recurring-items': () => {
+        items = [APPLES_ITEM];
+        return Response.json(APPLES_ITEM, { status: 201 });
+      },
+    });
+    await screen.findByTestId(testIds.ingredientNutrition);
+
+    await chooseFromMenu(user, testIds.buyRegularly);
+    const dialog = await screen.findByRole('dialog', { name: 'Äpfel' });
+    expect(within(dialog).getByRole('spinbutton', { name: 'Every weeks' })).toHaveValue(4);
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(requestsTo(fetchMock, 'POST /api/recurring-items')[0]?.json()).resolves.toEqual({
+      ingredient_id: 'ing-aepfel',
+      interval_weeks: 4,
+    });
+    // The focus goes back to ⋯, and the set is loaded again: next time it opens for editing.
+    expect(screen.getByTestId(testIds.moreActions)).toHaveFocus();
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(2));
+    await chooseFromMenu(user, testIds.buyRegularly);
+    const again = await screen.findByRole('dialog', { name: 'Äpfel' });
+    expect(within(again).getByRole('button', { name: 'Save' })).toBeVisible();
+  });
+
+  it('opens it for editing when the ingredient is recurring already', async () => {
+    stubResizeObserver();
+    const { user } = renderDetail({ 'GET /api/recurring-items': recurringList([APPLES_ITEM]) });
+    await screen.findByTestId(testIds.ingredientNutrition);
+
+    await chooseFromMenu(user, testIds.buyRegularly);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Äpfel' });
+    expect(within(dialog).getByRole('spinbutton', { name: 'Every weeks' })).toHaveValue(2);
+    expect(within(dialog).getByRole('switch', { name: 'Adjust automatically' })).not.toBeChecked();
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeVisible();
+    expect(within(dialog).getByTestId(testIds.recurringRemove)).toBeVisible();
+  });
+
+  it('is disabled while the set failed to load: it couldn’t tell adding from editing', async () => {
+    const { fetchMock, user } = renderDetail({
+      'GET /api/recurring-items': errorResponse(500, 'common.internal'),
+    });
+    await screen.findByTestId(testIds.ingredientNutrition);
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(1));
+
+    const menu = await openMoreMenu(user);
+
+    expect(within(menu).getByTestId(testIds.buyRegularly)).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('is disabled offline, not hidden (SYNC-03)', async () => {
+    const { fetchMock, user } = renderDetail();
+    await screen.findByTestId(testIds.ingredientNutrition);
+
+    goOffline(fetchMock);
+    const menu = await openMoreMenu(user);
+
+    expect(within(menu).getByTestId(testIds.buyRegularly)).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('shows an admin the notice about their own recurring ingredient they just deleted (D-51)', async () => {
+    let notices: ReturnType<typeof deletedNotice>[] = [];
+    const { fetchMock, user, router } = renderDetail(
+      {
+        'GET /api/me/notices': () => noticeList(notices),
+        'DELETE /api/admin/ingredients/ing-aepfel': () => {
+          notices = [deletedNotice('Äpfel')];
+          return null;
+        },
+        'GET /api/ingredients': [],
+      },
+      true,
+    );
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/me/notices')).toHaveLength(1));
+
+    await chooseFromMenu(user, testIds.deleteIngredient);
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients'));
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.tabMe)).toHaveAccessibleName('Settings, 1 new'),
+    );
   });
 });

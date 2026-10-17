@@ -28,6 +28,8 @@ class Screen:
     visitor: Visitor
     # Shown once the screen's data has loaded, so the whole screen is checked.
     ready: tuple[str, ...]
+    # The test's name, where one path is checked for several visitors.
+    name: str = ""
 
 
 SCREENS = [
@@ -43,6 +45,10 @@ SCREENS = [
         "member",
         (TEST_IDS["listMeals"], TEST_IDS["listLines"], TEST_IDS["hiddenLines"]),
     ),
+    # A draft with its ⋯ menu open (D-39), created in the test: /lists/<id>.
+    Screen("/lists/:id/menu", "member", (TEST_IDS["moreMenu"],)),
+    # A draft with the free-text pop-up of its item field open (D-41): /lists/<id>.
+    Screen("/lists/:id/popup", "member", (TEST_IDS["freeTextDialog"],)),
     # A list being shopped with a checked, a new and a needs-more line: /lists/<id>.
     Screen(
         "/lists/:id/shopping",
@@ -83,7 +89,14 @@ SCREENS = [
         "member",
         (TEST_IDS["mealPhoto"], TEST_IDS["mealNutrition"], TEST_IDS["mealIngredients"]),
     ),
-    Screen("/me", "member", (TEST_IDS["appVersion"], TEST_IDS["sessionList"])),
+    # The Settings tab, with the Verwaltung group for admins, and the pages its rows open.
+    Screen("/me", "member", (TEST_IDS["screenMe"], TEST_IDS["logoutButton"])),
+    Screen("/me", "admin", (TEST_IDS["adminEntry"], TEST_IDS["logoutButton"]), name="/me (admin)"),
+    Screen("/me/profile", "member", (TEST_IDS["screenProfile"], TEST_IDS["displayNameInput"])),
+    Screen("/me/privacy", "member", (TEST_IDS["screenPrivacy"], TEST_IDS["mealsPublicSwitch"])),
+    Screen("/me/couple", "member", (TEST_IDS["screenCouple"], TEST_IDS["coupleSection"])),
+    Screen("/me/security", "member", (TEST_IDS["screenSecurity"], TEST_IDS["sessionList"])),
+    Screen("/me/about", "admin", (TEST_IDS["appVersion"], TEST_IDS["diagnosticsLink"])),
     Screen("/me/admin/users", "admin", (TEST_IDS["adminUserList"],)),
     Screen("/me/admin/invites", "admin", (TEST_IDS["inviteList"], TEST_IDS["shareLinkUrl"])),
     Screen("/me/admin/categories", "admin", (TEST_IDS["adminCategoryList"],)),
@@ -98,7 +111,7 @@ SCREENS = [
 
 
 @pytest.mark.parametrize("color_scheme", ["light", "dark"])
-@pytest.mark.parametrize("screen", SCREENS, ids=lambda screen: screen.path)
+@pytest.mark.parametrize("screen", SCREENS, ids=lambda screen: screen.name or screen.path)
 def test_no_serious_violations(
     page: Page,
     request: pytest.FixtureRequest,
@@ -176,6 +189,10 @@ def test_no_serious_violations(
         # The admin's lists are public: one shows as a read-only list, with a lock.
         read_only = api.create_list(request.getfixturevalue("admin"), unique("A11y read-only"))
         feed_lists = [draft["name"], done["name"], read_only["name"]]
+    if path in ("/lists/:id/menu", "/lists/:id/popup"):
+        api = request.getfixturevalue("api")
+        menu_list = api.create_list(account, unique("A11y menu"))
+        path = f"/lists/{menu_list['id']}"
     if path == "/lists/:id":
         api = request.getfixturevalue("api")
         onions = api.create_ingredient(
@@ -282,14 +299,29 @@ def test_no_serious_violations(
         page.get_by_test_id(TEST_IDS["inTheCart"]).get_by_text(
             text("lists.shop.cart", count="1"), exact=True
         ).click()
+    if screen.path == "/lists/:id/menu":
+        expect(page.get_by_test_id(TEST_IDS["floatingBar"])).to_be_visible()
+        page.get_by_test_id(TEST_IDS["moreActions"]).click()
+    if screen.path == "/lists/:id/popup":
+        # Free text: "+" (Enter) without an exact match.
+        field = page.get_by_test_id(TEST_IDS["extraItemInput"])
+        field.fill(unique("A11y candles"))
+        field.press("Enter")
     for test_id in screen.ready:
         expect(page.get_by_test_id(test_id)).to_be_visible()
     if screen.path == "/lists/:id":
-        # Also check the hidden line with its restore button, and a meal's "Remove", which shows
-        # on focus (D-40).
+        # Also check the meal field's list of meals (D-41), the hidden line with its restore
+        # button, and a meal's "Remove", which shows on focus (D-40).
         hidden = page.get_by_test_id(TEST_IDS["hiddenLines"])
         hidden.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
         expect(hidden.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
+        # A tap elsewhere would close the meal field's list again; focusing doesn't.
+        page.get_by_test_id(TEST_IDS["mealField"]).click()
+        expect(
+            page.get_by_test_id(TEST_IDS["mealFieldPanel"]).get_by_role(
+                "list", name=text("lists.mealField.recent")
+            )
+        ).to_be_visible()
         page.get_by_test_id(TEST_IDS["removeListMeal"]).first.focus()
     if screen.path == "/lists":
         # The newest lists come first: this run's lists are on the first page.

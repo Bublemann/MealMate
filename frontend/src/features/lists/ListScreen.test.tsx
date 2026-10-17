@@ -1,6 +1,7 @@
 import { focusManager } from '@tanstack/react-query';
+import type { components } from '@/api/generated/schema';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BEN,
   CARL,
@@ -23,12 +24,25 @@ import {
   DETACHED_MEAL,
   EXTRA_ITEMS,
   FLOUR_EXTRA_ID,
+  shoppingList,
+  doneList,
 } from '@/test/lists';
-import { CATEGORIES, unitOptions, UNITS } from '@/test/ingredients';
-import { EGGS, FLOUR, MILK, mealSummary } from '@/test/meals';
+import { menuItemNames, openMoreMenu } from '@/test/menu';
+import {
+  CATEGORIES,
+  expectInPageOrder,
+  found,
+  ingredient,
+  summary,
+  unitOptions,
+  UNITS,
+} from '@/test/ingredients';
+import { EGGS, FLOUR, foundMeal, MILK, mealSummary } from '@/test/meals';
 import { renderApp } from '@/test/render';
 import { swipe, tap } from '@/test/swipe';
 import { testIds } from '@/testIds';
+
+type Schemas = components['schemas'];
 
 const BASE = `/api/lists/${LIST_ID}`;
 const IN_COUPLE = { partner: BEN, since: '2026-09-01T10:00:00Z', outgoing: null, incoming: [] };
@@ -55,6 +69,7 @@ function lineTexts(container: HTMLElement) {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   focusManager.setFocused(undefined);
   Reflect.deleteProperty(navigator, 'share');
   Reflect.deleteProperty(navigator, 'clipboard');
@@ -438,63 +453,149 @@ describe('ListScreen', () => {
     });
   });
 
-  describe('meal picker', () => {
+  describe('sections (LIST-05, D-41)', () => {
+    function section(name: string) {
+      return screen.getByRole('region', { name });
+    }
+
+    it('shows "Meals" with the meal field, then "Items" with the item field, on a draft', async () => {
+      renderList();
+
+      await screen.findByTestId(testIds.listLines);
+      const meals = section('Meals');
+      const items = section('Items');
+      expectInPageOrder([meals, items]);
+      expect(within(meals).getByTestId(testIds.mealField)).toBeVisible();
+      expectInPageOrder([
+        within(meals).getByTestId(testIds.mealField),
+        within(meals).getByTestId(testIds.listMeals),
+      ]);
+      expect(within(items).getByTestId(testIds.extraItemInput)).toBeVisible();
+      expectInPageOrder([
+        within(items).getByTestId(testIds.extraItemInput),
+        within(items).getByTestId(testIds.listLines),
+      ]);
+      // The old way of adding is gone.
+      expect(screen.queryByRole('button', { name: 'Add meals' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Pick a matching ingredient/)).not.toBeInTheDocument();
+    });
+
+    it('shows both headings on an empty draft', async () => {
+      renderList({ [`GET ${BASE}`]: emptyList() });
+
+      expect(await screen.findByRole('heading', { name: 'Meals' })).toBeVisible();
+      expect(screen.getByRole('heading', { name: 'Items' })).toBeVisible();
+      expect(screen.getByTestId(testIds.mealField)).toBeVisible();
+      expect(screen.getByTestId(testIds.extraItemInput)).toBeVisible();
+    });
+
+    it('shows both headings without fields on someone else’s list and on a done list', async () => {
+      const carls = listDetail({ owner: CARL, can_edit: false, is_owner: false });
+      const { unmount } = renderList({ [`GET ${BASE}`]: carls });
+
+      expect(await screen.findByRole('heading', { name: 'Meals' })).toBeVisible();
+      expect(screen.getByRole('heading', { name: 'Items' })).toBeVisible();
+      expect(screen.queryByTestId(testIds.mealField)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
+      unmount();
+
+      renderList({ [`GET ${BASE}`]: doneList() });
+      expect(await screen.findByRole('heading', { name: 'Meals' })).toBeVisible();
+      expect(screen.getByRole('heading', { name: 'Items' })).toBeVisible();
+      expect(screen.queryByTestId(testIds.mealField)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
+    });
+
+    it('makes both fields inactive offline on a draft, not hidden (SYNC-03)', async () => {
+      const { fetchMock, user } = renderList();
+      const mealField = await screen.findByTestId(testIds.mealField);
+      const itemField = screen.getByTestId(testIds.extraItemInput);
+      await user.type(itemField, 'Kerzen');
+
+      goOffline(fetchMock);
+
+      await waitFor(() => expect(mealField).toBeDisabled());
+      expect(itemField).toBeDisabled();
+      for (const button of screen.getAllByRole('button', { name: /^Add/ })) {
+        expect(button).toBeDisabled();
+      }
+      expect(screen.queryByTestId(testIds.itemFreeText)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('meal field (LIST-03, MEAL-09, D-41)', () => {
     const CHILI = mealSummary('Chili', { servings: 4 });
     const LASAGNE = mealSummary('Lasagne', { owner: BEN });
     const PANCAKES = mealSummary('Pfannkuchen');
     const MEALS = [CHILI, LASAGNE, PANCAKES];
 
-    /** The meals of one of the picker's sections, by their rows' names. */
-    function rowNames(section: HTMLElement) {
-      return within(section)
-        .getAllByRole('listitem')
-        .map((item) => item.getAttribute('aria-label'));
+    /** The list's meals are these, in this order, each named with its owner's marker. */
+    function expectMeals(list: HTMLElement, names: string[]) {
+      expect(within(list).getAllByRole('button')).toEqual(
+        names.map((name) => within(list).getByRole('button', { name })),
+      );
     }
 
-    function pickerRoutes(routes: Record<string, unknown> = {}) {
+    /** Like the server: `q` matches names, and an equal name is exact. */
+    function search(meals: Schemas['MealSummary'][]) {
+      return (request: Request) => {
+        const q = new URL(request.url).searchParams.get('q')?.toLowerCase();
+        if (!q) return meals.map((meal) => foundMeal(meal));
+        return meals
+          .filter((meal) => meal.name.toLowerCase().includes(q))
+          .map((meal) => foundMeal(meal, meal.name.toLowerCase() === q));
+      };
+    }
+
+    function mealRoutes(routes: Record<string, unknown> = {}) {
       return {
         'GET /api/meals/recent': [CHILI],
-        'GET /api/meals': (request: Request) =>
-          new URL(request.url).searchParams.get('q') === 'lasagne' ? [LASAGNE] : MEALS,
+        'GET /api/meals': search(MEALS),
         [`POST ${BASE}/meals`]: listDetail(),
         ...routes,
       };
     }
 
-    it('offers recently used meals first, then the others (MEAL-09)', async () => {
-      const { user } = renderList(pickerRoutes());
-
-      await user.click(await screen.findByTestId(testIds.addMeals));
-      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
-
-      const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
-      expect(recent).toHaveAccessibleName('Recently used');
-      expect(rowNames(recent)).toEqual(['Chili']);
-      const all = await within(dialog).findByTestId(testIds.mealPickerResults);
-      expect(all).toHaveAccessibleName('All meals');
-      expect(rowNames(all)).toEqual(['Lasagne', 'Pfannkuchen']);
-      // Whose meal it is shows as the owner's marker, one's own included (UI-02).
-      const lasagne = within(all).getByRole('listitem', { name: 'Lasagne' });
-      expect(within(lasagne).getByRole('img', { name: 'Ben' })).toHaveTextContent('B');
-      const pancakes = within(all).getByRole('listitem', { name: 'Pfannkuchen' });
-      expect(within(pancakes).getByRole('img', { name: 'Anna' })).toHaveTextContent('A');
-      expect(within(dialog).queryByText('by Ben')).not.toBeInTheDocument();
-      expect(within(dialog).getByTestId(testIds.mealPickerCreate)).toHaveAttribute(
-        'href',
-        `/meals/new?addToList=${LIST_ID}`,
+    function queriesSent(fetchMock: ReturnType<typeof mockApi>) {
+      return requestsTo(fetchMock, 'GET /api/meals').map((request) =>
+        new URL(request.url).searchParams.get('q'),
       );
+    }
+
+    it('is a search field and an inactive ＋, without a panel until focused', async () => {
+      renderList(mealRoutes());
+
+      const field = await screen.findByTestId(testIds.mealField);
+      expect(field).toHaveAccessibleName('Add a meal');
+      expect(field).toHaveAttribute('placeholder', 'Search meals');
+      expect(field).not.toHaveFocus();
+      const meals = screen.getByRole('region', { name: 'Meals' });
+      expect(within(meals).getByRole('button', { name: 'Add' })).toBeDisabled();
+      expect(screen.queryByTestId(testIds.mealFieldPanel)).not.toBeInTheDocument();
     });
 
-    it('opens without the keyboard: the search field is not focused (MEAL-09)', async () => {
-      const { user } = renderList(pickerRoutes());
+    it('lists recently used meals, then all others A–Z with their owners, when focused empty', async () => {
+      const { user } = renderList(mealRoutes());
 
-      await user.click(await screen.findByTestId(testIds.addMeals));
-      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
+      await user.click(await screen.findByTestId(testIds.mealField));
 
-      await within(dialog).findByTestId(testIds.mealPickerRecent);
-      expect(within(dialog).getByLabelText('Search meals')).not.toHaveFocus();
-      // The focus is in the picker, so screen readers announce it.
-      expect(dialog).toHaveFocus();
+      const panel = await screen.findByTestId(testIds.mealFieldPanel);
+      const recent = await within(panel).findByRole('list', { name: 'Recently used' });
+      // The owner's marker after the name, one's own included (UI-02).
+      expectMeals(recent, ['Chili Anna']);
+      expect(within(recent).getByRole('img', { name: 'Anna' })).toBeVisible();
+      const all = await within(panel).findByRole('list', { name: 'All meals' });
+      expectMeals(all, ['Lasagne Ben', 'Pfannkuchen Anna']);
+      expect(within(all).getByRole('button', { name: 'Lasagne Ben' })).toBeVisible();
+      expect(within(panel).queryByTestId(testIds.mealFieldCreate)).not.toBeInTheDocument();
+
+      // Escape, or a tap elsewhere once it is done, closes it.
+      await user.keyboard('{Escape}');
+      expect(panel).not.toBeInTheDocument();
+      await user.click(screen.getByTestId(testIds.mealField));
+      expect(await screen.findByTestId(testIds.mealFieldPanel)).toBeVisible();
+      await user.click(screen.getByTestId(testIds.extraItemInput));
+      expect(screen.queryByTestId(testIds.mealFieldPanel)).not.toBeInTheDocument();
     });
 
     it('offers the meals of users the Meals tab hides (MEAL-09, MEAL-10)', async () => {
@@ -504,14 +605,16 @@ describe('ListScreen', () => {
       };
       mockApi({
         ...LIST_ROUTES,
-        ...pickerRoutes({
+        ...mealRoutes({
           'GET /api/me': hidingBen,
           // Like the server: the user filter on Meals applies unless owners are asked for.
           'GET /api/meals': (request: Request) => {
             const owners = new URL(request.url).searchParams.getAll('owner_ids');
-            return owners.length > 0
-              ? MEALS.filter((meal) => owners.includes(meal.owner.id))
-              : MEALS.filter((meal) => meal.owner.id !== BEN.id);
+            const meals =
+              owners.length > 0
+                ? MEALS.filter((meal) => owners.includes(meal.owner.id))
+                : MEALS.filter((meal) => meal.owner.id !== BEN.id);
+            return meals.map((meal) => foundMeal(meal));
           },
         }),
       });
@@ -520,127 +623,291 @@ describe('ListScreen', () => {
       expect(within(list).queryByText('Lasagne')).not.toBeInTheDocument();
 
       await act(() => router.navigate(`/lists/${LIST_ID}`));
-      await user.click(await screen.findByTestId(testIds.addMeals));
-      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
+      await user.click(await screen.findByTestId(testIds.mealField));
 
-      const recent = await within(dialog).findByTestId(testIds.mealPickerRecent);
-      expect(rowNames(recent)).toEqual(['Chili']);
-      const all = await within(dialog).findByTestId(testIds.mealPickerResults);
-      await waitFor(() => expect(rowNames(all)).toEqual(['Lasagne', 'Pfannkuchen']));
+      const all = await screen.findByRole('list', { name: 'All meals' });
+      await waitFor(() => expectMeals(all, ['Lasagne Ben', 'Pfannkuchen Anna']));
     });
 
-    it('adds a meal with the chosen servings and stays open for more (LIST-03/04)', async () => {
-      const { fetchMock, user } = renderList(pickerRoutes());
+    it('adds a picked meal with the chosen servings, then empties the field and keeps its focus', async () => {
+      const { fetchMock, user } = renderList(mealRoutes());
+      const field = await screen.findByTestId(testIds.mealField);
+      await user.click(field);
+      expect(await screen.findByRole('list', { name: 'Recently used' })).toBeVisible();
 
-      await user.click(await screen.findByTestId(testIds.addMeals));
-      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
-      const row = await within(dialog).findByRole('listitem', { name: 'Lasagne' });
-      expect(within(row).getByRole('group', { name: 'Servings of Lasagne' })).toHaveTextContent(
+      await user.type(field, 'lasa');
+      const results = await screen.findByRole('list', { name: 'Matching meals' });
+      expectMeals(results, ['Lasagne Ben']);
+      expect(screen.queryByRole('list', { name: 'Recently used' })).not.toBeInTheDocument();
+      await user.click(within(results).getByRole('button', { name: /^Lasagne/ }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Lasagne' });
+      expect(dialog).toBe(screen.getByTestId(testIds.servingsDialog));
+      // At the meal's own servings (LIST-04).
+      expect(within(dialog).getByRole('group', { name: 'Servings of Lasagne' })).toHaveTextContent(
         '2 servings',
       );
-      await user.click(within(row).getByRole('button', { name: 'More servings of Lasagne' }));
-      await user.click(within(row).getByRole('button', { name: 'Add Lasagne' }));
+      await user.click(within(dialog).getByRole('button', { name: 'More servings of Lasagne' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 
-      expect(await within(row).findByText('Lasagne added.')).toBeVisible();
+      // Within the tap: closed, emptied and focused, so iOS keeps the keyboard.
+      expect(dialog).not.toBeInTheDocument();
+      expect(field).toHaveValue('');
+      expect(field).toHaveFocus();
       await expect(bodyOf(fetchMock, `POST ${BASE}/meals`)).resolves.toEqual({
         meal_id: 'meal-lasagne',
         servings: 3,
       });
-      expect(within(row).getByRole('group', { name: 'Servings of Lasagne' })).toHaveTextContent(
-        '2 servings',
-      );
-      // Recently used is loaded again.
+      // Ready for the next meal: recently used is loaded again.
       await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/meals/recent')).toHaveLength(2));
-      await user.click(within(dialog).getByRole('button', { name: 'Done' }));
-      expect(dialog).not.toBeInTheDocument();
+      expect(field).toHaveFocus();
+      expect(await screen.findByRole('list', { name: 'Recently used' })).toBeVisible();
     });
 
-    it('searches all visible meals', async () => {
-      const { user } = renderList(pickerRoutes());
+    it('opens the servings pop-up with ＋ or Enter for an exact name, one’s own of two', async () => {
+      const mine = mealSummary('Lasagne', { id: 'meal-my-lasagne', servings: 6 });
+      const { fetchMock, user } = renderList(
+        mealRoutes({ 'GET /api/meals': search([LASAGNE, mine, PANCAKES]) }),
+      );
+      const field = await screen.findByTestId(testIds.mealField);
 
-      await user.click(await screen.findByTestId(testIds.addMeals));
-      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
-      await user.type(within(dialog).getByLabelText('Search meals'), 'lasagne');
+      await user.type(field, 'LASAGNE');
+      await user.click(screen.getByRole('button', { name: 'Add “LASAGNE”' }));
+      let dialog = await screen.findByRole('dialog', { name: 'Lasagne' });
+      expect(within(dialog).getByRole('group', { name: 'Servings of Lasagne' })).toHaveTextContent(
+        '6 servings',
+      );
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+      await expect(bodyOf(fetchMock, `POST ${BASE}/meals`)).resolves.toEqual({
+        meal_id: 'meal-my-lasagne',
+        servings: 6,
+      });
 
-      const results = await within(dialog).findByRole('list', { name: 'Matching meals' });
-      await waitFor(() => expect(rowNames(results)).toEqual(['Lasagne']));
-      expect(within(dialog).queryByTestId(testIds.mealPickerRecent)).not.toBeInTheDocument();
+      await user.type(field, 'Pfannkuchen{Enter}');
+      dialog = await screen.findByRole('dialog', { name: 'Pfannkuchen' });
+      expect(dialog).toBeVisible();
     });
 
-    it('shows why a meal could not be added', async () => {
+    it('keeps the options of typed text after Escape or a tap elsewhere, in both fields', async () => {
+      const { user } = renderList(mealRoutes({ 'GET /api/ingredients': [] }));
+      const mealField = await screen.findByTestId(testIds.mealField);
+      const itemField = screen.getByTestId(testIds.extraItemInput);
+
+      await user.type(mealField, 'Quiche');
+      await user.keyboard('{Escape}');
+      await user.click(itemField);
+      expect(screen.getByTestId(testIds.mealFieldCreate)).toBeVisible();
+
+      await user.type(itemField, 'Kerzen');
+      await user.keyboard('{Escape}');
+      await user.click(mealField);
+      expect(screen.getByTestId(testIds.itemFreeText)).toBeVisible();
+      expect(screen.getByTestId(testIds.itemNewIngredient)).toBeVisible();
+      expect(screen.getByTestId(testIds.mealFieldCreate)).toBeVisible();
+    });
+
+    it('says why the search failed, not that no meal matches', async () => {
       const { user } = renderList(
-        pickerRoutes({
+        mealRoutes({
+          'GET /api/meals': (request: Request) =>
+            new URL(request.url).searchParams.get('q') ? errorResponse(500, 'common.internal') : [],
+        }),
+      );
+
+      await user.type(await screen.findByTestId(testIds.mealField), 'Quiche');
+
+      const panel = screen.getByTestId(testIds.mealFieldPanel);
+      expect(await within(panel).findByRole('alert')).toBeVisible();
+      expect(within(panel).queryByText('No meal matches.')).not.toBeInTheDocument();
+      expect(within(panel).getByTestId(testIds.mealFieldCreate)).toBeVisible();
+    });
+
+    it('opens the meal form with the name for ＋ without an exact match, as its option does', async () => {
+      const { router, user } = renderList(mealRoutes());
+      const field = await screen.findByTestId(testIds.mealField);
+
+      await user.type(field, 'Quiche');
+      const create = await screen.findByTestId(testIds.mealFieldCreate);
+      expect(create).toHaveTextContent('“Quiche” as a new meal');
+      expect(await screen.findByText('No meal matches.')).toBeVisible();
+      await user.click(screen.getByRole('button', { name: 'Add “Quiche”' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/meals/new'));
+      expect(Object.fromEntries(new URLSearchParams(router.state.location.search))).toEqual({
+        addToList: LIST_ID,
+        name: 'Quiche',
+      });
+    });
+
+    it('keeps its option in place when a late answer comes, and drops an earlier text’s', async () => {
+      const lasa = heldRoute();
+      const lasagne = heldRoute();
+      const { fetchMock, user } = renderList(
+        mealRoutes({
+          'GET /api/meals': (request: Request) => {
+            const q = new URL(request.url).searchParams.get('q');
+            if (q === 'lasa') return lasa.route();
+            if (q === 'lasagne') return lasagne.route();
+            return MEALS.map((meal) => foundMeal(meal));
+          },
+        }),
+      );
+      const field = await screen.findByTestId(testIds.mealField);
+
+      await user.type(field, 'lasa');
+      await waitFor(() => expect(queriesSent(fetchMock)).toContain('lasa'));
+      await user.type(field, 'gne');
+      const panel = screen.getByTestId(testIds.mealFieldPanel);
+      const create = within(panel).getByTestId(testIds.mealFieldCreate);
+      expect(create).toHaveTextContent('“lasagne” as a new meal');
+
+      // The answer for "lasa" comes after "lasagne" was typed: it isn't shown.
+      await lasa.answer([foundMeal(LASAGNE)]);
+      expect(within(panel).queryByRole('list', { name: 'Matching meals' })).not.toBeInTheDocument();
+      expect(within(panel).getByTestId(testIds.mealFieldCreate)).toBe(create);
+
+      await lasagne.answer([foundMeal(LASAGNE, true)]);
+      const results = await within(panel).findByRole('list', { name: 'Matching meals' });
+      expect(within(panel).getByTestId(testIds.mealFieldCreate)).toBe(create);
+      expectInPageOrder([create, results]);
+    });
+
+    it('waits with ＋ for the results of the text in the field', async () => {
+      const held = heldRoute();
+      const { user } = renderList(
+        mealRoutes({
+          'GET /api/meals': (request: Request) =>
+            new URL(request.url).searchParams.get('q') ? held.route() : [],
+        }),
+      );
+      const field = await screen.findByTestId(testIds.mealField);
+
+      await user.type(field, 'Lasagne');
+      await user.click(screen.getByRole('button', { name: 'Add “Lasagne”' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+      await held.answer([foundMeal(LASAGNE, true)]);
+      expect(await screen.findByRole('dialog', { name: 'Lasagne' })).toBeVisible();
+    });
+
+    it('opens the pop-up again with the reason when the meal could not be added', async () => {
+      const { user } = renderList(
+        mealRoutes({
           [`POST ${BASE}/meals`]: errorResponse(422, 'common.validation', [
             { loc: ['body', 'meal_id'], code: 'invalid' },
           ]),
         }),
       );
 
-      await user.click(await screen.findByTestId(testIds.addMeals));
-      const dialog = await screen.findByRole('dialog', { name: 'Add meals' });
-      const row = await within(dialog).findByRole('listitem', { name: 'Pfannkuchen' });
-      await user.click(within(row).getByRole('button', { name: 'Add Pfannkuchen' }));
+      await user.type(await screen.findByTestId(testIds.mealField), 'Pfannkuchen{Enter}');
+      let dialog = await screen.findByRole('dialog', { name: 'Pfannkuchen' });
+      await user.click(
+        within(dialog).getByRole('button', { name: 'More servings of Pfannkuchen' }),
+      );
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 
-      expect(await within(row).findByText('Please check your input.')).toBeVisible();
+      dialog = await screen.findByRole('dialog', { name: 'Pfannkuchen' });
+      expect(within(dialog).getByText('Please check your input.')).toBeVisible();
+      expect(
+        within(dialog).getByRole('group', { name: 'Servings of Pfannkuchen' }),
+      ).toHaveTextContent('3 servings');
     });
   });
 
-  describe('extra items (LIST-06)', () => {
-    async function pickSuggestion(user: ReturnType<typeof renderApp>['user'], name: string) {
-      const suggestions = await screen.findByRole('list', { name: 'Matching ingredients' });
-      await user.click(within(suggestions).getByRole('button', { name: new RegExp(`^${name}`) }));
+  describe('item field (LIST-06, D-41)', () => {
+    const MILK_REWE = summary('Milch', 'dairy_eggs', {
+      id: 'ing-milch-rewe',
+      brand: 'REWE',
+      base_unit: 'ml',
+    });
+    const MILK_WEIDE = summary('Milch', 'dairy_eggs', {
+      id: 'ing-milch-weide',
+      brand: 'Weidehof',
+      base_unit: 'ml',
+    });
+
+    /** Like the server: names starting with `q`, an equal name exact whatever its brand. */
+    function search(ingredients: Schemas['IngredientSummary'][]) {
+      return (request: Request) => {
+        const q = new URL(request.url).searchParams.get('q')?.toLowerCase() ?? '';
+        return ingredients
+          .filter((ingredient) => ingredient.name.toLowerCase().startsWith(q))
+          .map((ingredient) => found(ingredient, ingredient.name.toLowerCase() === q));
+      };
     }
 
     const routes = {
-      'GET /api/ingredients': (request: Request) => {
-        const q = new URL(request.url).searchParams.get('q');
-        return [FLOUR, MILK, EGGS].filter((ingredient) => ingredient.name === q);
-      },
+      'GET /api/ingredients': search([FLOUR, MILK, EGGS]),
       'GET /api/units': UNITS,
       [`POST ${BASE}/extra-items`]: Response.json(listDetail(), { status: 201 }),
     };
 
-    it('adds a picked ingredient with amount and unit as a linked item', async () => {
+    async function pick(user: ReturnType<typeof renderApp>['user'], name: string) {
+      const field = await screen.findByTestId(testIds.extraItemInput);
+      await user.type(field, name);
+      const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+      await user.click(
+        await within(results).findByRole('button', { name: new RegExp(`^${name}`) }),
+      );
+      return screen.findByTestId(testIds.amountDialog);
+    }
+
+    it('is a search field with ＋, its options under it: free text, then a new ingredient', async () => {
+      const { user } = renderList(routes);
+
+      const field = await screen.findByTestId(testIds.extraItemInput);
+      expect(field).toHaveAccessibleName('Add an item');
+      expect(field).toHaveAttribute('placeholder', 'Search items');
+      await user.type(field, 'Me');
+
+      const freeText = screen.getByTestId(testIds.itemFreeText);
+      const newIngredient = screen.getByTestId(testIds.itemNewIngredient);
+      expect(freeText).toHaveTextContent('“Me” as an item');
+      expect(newIngredient).toHaveTextContent('“Me” as a new ingredient');
+      const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+      expectInPageOrder([field, freeText, newIngredient, results]);
+      expect(screen.getByRole('button', { name: 'Add “Me”' })).toBeEnabled();
+    });
+
+    it('adds a picked ingredient with amount and unit, then empties the field and keeps its focus', async () => {
       const { fetchMock, user } = renderList(routes);
 
-      const input = await screen.findByTestId(testIds.extraItemInput);
-      expect(input).toHaveAccessibleName('Add an item');
-      await user.type(input, 'Mehl');
-      await pickSuggestion(user, 'Mehl');
+      const dialog = await pick(user, 'Mehl');
+      expect(dialog).toHaveAccessibleName('Mehl');
+      const amount = within(dialog).getByLabelText('Amount (optional)');
+      // The cursor is in the amount.
+      expect(amount).toHaveFocus();
+      expect(within(dialog).getByLabelText('Unit')).toHaveValue('g');
+      await user.type(amount, '450');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 
-      const form = screen.getByRole('form', { name: 'Add an item' });
-      expect(within(form).getByText('Mehl')).toBeVisible();
-      expect(within(form).getByLabelText('Unit')).toHaveValue('g');
-      await user.type(within(form).getByLabelText('Amount (optional)'), '450');
-      await user.click(within(form).getByRole('button', { name: 'Add Mehl' }));
-
+      const field = screen.getByTestId(testIds.extraItemInput);
+      expect(dialog).not.toBeInTheDocument();
+      expect(field).toHaveValue('');
+      expect(field).toHaveFocus();
       await waitFor(() =>
         expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
       );
-      const body = (await bodyOf(fetchMock, `POST ${BASE}/extra-items`)) as Record<string, unknown>;
-      expect(body).toEqual({
+      await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
         ingredient_id: FLOUR.id,
         amount: 450,
         unit: 'g',
       });
-      // Ready for the next item.
-      expect(await screen.findByTestId(testIds.extraItemInput)).toHaveValue('');
+      expect(field).toHaveFocus();
     });
 
     it('adds a linked item without an amount, and checks a typed amount', async () => {
       const { fetchMock, user } = renderList(routes);
 
-      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Mehl');
-      await pickSuggestion(user, 'Mehl');
-      const form = screen.getByRole('form', { name: 'Add an item' });
-      await user.type(within(form).getByLabelText('Amount (optional)'), '1,5,0');
-      await user.click(within(form).getByRole('button', { name: 'Add Mehl' }));
-      expect(within(form).getByText('Invalid format')).toBeVisible();
+      const dialog = await pick(user, 'Mehl');
+      await user.type(within(dialog).getByLabelText('Amount (optional)'), '1,5,0');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+      expect(within(dialog).getByText('Invalid format')).toBeVisible();
       expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(0);
 
-      await user.clear(within(form).getByLabelText('Amount (optional)'));
-      await user.click(within(form).getByRole('button', { name: 'Add Mehl' }));
+      await user.clear(within(dialog).getByLabelText('Amount (optional)'));
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
       await waitFor(() =>
         expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
       );
@@ -650,22 +917,11 @@ describe('ListScreen', () => {
       });
     });
 
-    it('offers the units that fit the picked ingredient and keeps one only while it fits (REF-02)', async () => {
+    it('offers the units that fit, and starts with the last one while it fits (REF-02, MEAL-02)', async () => {
       const { user } = renderList(routes);
 
-      async function pick(name: string) {
-        const input = await screen.findByTestId(testIds.extraItemInput);
-        await user.clear(input);
-        await user.type(input, name);
-        // The suggestions of the previous search stay until the new ones arrive.
-        const suggestions = await screen.findByRole('list', { name: 'Matching ingredients' });
-        await user.click(
-          await within(suggestions).findByRole('button', { name: new RegExp(`^${name}`) }),
-        );
-        return within(screen.getByRole('form', { name: 'Add an item' })).getByLabelText('Unit');
-      }
-
-      let unit = await pick('Mehl');
+      let dialog = await pick(user, 'Mehl');
+      let unit = within(dialog).getByLabelText('Unit');
       expect(unitOptions(unit)).toEqual([
         ['g', false],
         ['kg', false],
@@ -673,39 +929,62 @@ describe('ListScreen', () => {
         ['tsp', false],
       ]);
       await user.selectOptions(unit, 'tbsp');
-      await user.click(screen.getByRole('button', { name: "Don't use Mehl" }));
+      await user.type(within(dialog).getByLabelText('Amount (optional)'), '2{Enter}');
       // Spoons fit millilitres too.
-      unit = await pick('Milch');
+      dialog = await pick(user, 'Milch');
+      unit = within(dialog).getByLabelText('Unit');
       expect(unit).toHaveValue('tbsp');
       expect(unitOptions(unit).map(([label]) => label)).toEqual(['ml', 'l', 'tbsp', 'tsp']);
-      await user.click(screen.getByRole('button', { name: "Don't use Milch" }));
+      await user.keyboard('{Escape}');
       // Eggs are counted in pieces: the spoons go.
-      unit = await pick('Eier');
+      await user.clear(screen.getByTestId(testIds.extraItemInput));
+      dialog = await pick(user, 'Eier');
+      unit = within(dialog).getByLabelText('Unit');
       expect(unit).toHaveValue('piece');
       expect(unitOptions(unit)).toEqual([['pcs', false]]);
       expect(screen.queryByText(/doesn't fit/)).not.toBeInTheDocument();
     });
 
-    it('lets me go back from a picked ingredient to typing', async () => {
-      const { user } = renderList(routes);
+    it('opens the amount pop-up with ＋ for the only ingredient of that name, whatever its brand', async () => {
+      const { user } = renderList({ ...routes, 'GET /api/ingredients': search([MILK_REWE]) });
 
-      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Mehl');
-      await pickSuggestion(user, 'Mehl');
-      await user.click(screen.getByRole('button', { name: "Don't use Mehl" }));
+      await user.type(await screen.findByTestId(testIds.extraItemInput), 'milch');
+      await user.click(screen.getByRole('button', { name: 'Add “milch”' }));
 
-      expect(screen.getByTestId(testIds.extraItemInput)).toHaveValue('Mehl');
+      const dialog = await screen.findByTestId(testIds.amountDialog);
+      expect(dialog).toHaveAccessibleName('Milch (REWE)');
+      expect(within(dialog).getByLabelText('Unit')).toHaveValue('ml');
     });
 
-    it('adds typed text with Enter as a free-text item in Other', async () => {
+    it('does nothing with ＋ when several brands have that name: the results stay', async () => {
+      const { user } = renderList({
+        ...routes,
+        'GET /api/ingredients': search([MILK_REWE, MILK_WEIDE]),
+      });
+
+      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Milch');
+      const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+      await user.click(screen.getByRole('button', { name: 'Add “Milch”' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(within(results).getAllByRole('button')).toHaveLength(2);
+      expect(screen.getByTestId(testIds.extraItemInput)).toHaveValue('Milch');
+    });
+
+    it('adds free text with Enter without a match: amount first, in Other', async () => {
       const { fetchMock, user } = renderList(routes);
 
-      const input = await screen.findByTestId(testIds.extraItemInput);
-      await user.type(input, 'Geburtstagskerzen');
-      const form = screen.getByRole('form', { name: 'Add an item' });
-      expect(within(form).getByLabelText('Category')).toHaveDisplayValue('Other');
-      await user.type(within(form).getByLabelText('Amount (optional)'), '2 Packungen');
-      await user.type(input, '{Enter}');
+      const field = await screen.findByTestId(testIds.extraItemInput);
+      await user.type(field, 'Geburtstagskerzen{Enter}');
+      const dialog = await screen.findByTestId(testIds.freeTextDialog);
+      expect(dialog).toHaveAccessibleName('Geburtstagskerzen');
+      const amount = within(dialog).getByLabelText('Amount (optional)');
+      expect(amount).toHaveFocus();
+      expect(within(dialog).getByLabelText('Category')).toHaveDisplayValue('Other');
+      await user.type(amount, '2 Packungen{Enter}');
 
+      expect(field).toHaveValue('');
+      expect(field).toHaveFocus();
       await waitFor(() =>
         expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
       );
@@ -717,24 +996,80 @@ describe('ListScreen', () => {
       });
     });
 
-    it('puts a free-text item into the chosen category', async () => {
+    it('puts free text into the chosen category, also for text that is an ingredient', async () => {
       const { fetchMock, user } = renderList(routes);
 
-      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Kerzen');
-      const form = screen.getByRole('form', { name: 'Add an item' });
+      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Mehl');
+      await user.click(screen.getByTestId(testIds.itemFreeText));
+      const dialog = await screen.findByTestId(testIds.freeTextDialog);
       // By value: user-event compares option labels as HTML (`&amp;`).
-      await user.selectOptions(within(form).getByLabelText('Category'), 'cat-dairy_eggs');
-      expect(within(form).getByLabelText('Category')).toHaveDisplayValue('Dairy & eggs');
-      await user.click(within(form).getByRole('button', { name: 'Add Kerzen' }));
+      await user.selectOptions(within(dialog).getByLabelText('Category'), 'cat-dairy_eggs');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 
       await waitFor(() =>
         expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1),
       );
       await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
-        text: 'Kerzen',
+        text: 'Mehl',
         category_id: 'cat-dairy_eggs',
       });
+    });
+
+    it('creates a new ingredient with the typed name, then asks for its amount (ING-04)', async () => {
+      const created = ingredient({ id: 'ing-quitten', name: 'Quitten', category_id: 'cat-other' });
+      const { fetchMock, user } = renderList({
+        ...routes,
+        'POST /api/ingredients': Response.json(created, { status: 201 }),
+      });
+
+      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Quitten');
+      await user.click(screen.getByTestId(testIds.itemNewIngredient));
+      const form = await screen.findByRole('dialog', { name: 'New ingredient' });
+      expect(within(form).getByLabelText('Name')).toHaveValue('Quitten');
+      await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+      const dialog = await screen.findByTestId(testIds.amountDialog);
+      expect(dialog).toHaveAccessibleName('Quitten');
+      expect(form).not.toBeInTheDocument();
+      await user.type(within(dialog).getByLabelText('Amount (optional)'), '3');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+      await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
+        id: A_UUID_V7,
+        ingredient_id: 'ing-quitten',
+        amount: 3,
+        unit: 'g',
+      });
+      expect(screen.getByTestId(testIds.extraItemInput)).toHaveFocus();
+    });
+
+    it('keeps its options in place when a late answer comes, and drops an earlier text’s', async () => {
+      const mi = heldRoute();
+      const { fetchMock, user } = renderList({
+        ...routes,
+        'GET /api/ingredients': (request: Request) =>
+          new URL(request.url).searchParams.get('q') === 'Mi'
+            ? mi.route()
+            : search([FLOUR, MILK, EGGS])(request),
+      });
+      const field = await screen.findByTestId(testIds.extraItemInput);
+
+      await user.type(field, 'Mi');
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, 'GET /api/ingredients').length).toBeGreaterThan(0),
+      );
+      await user.type(field, 'x');
+      const options = [
+        screen.getByTestId(testIds.itemFreeText),
+        screen.getByTestId(testIds.itemNewIngredient),
+      ];
+
+      await mi.answer([found(MILK)]);
+      expect(await screen.findByText('“Mix” as an item')).toBe(options[0]?.lastChild);
+      expect(screen.queryByRole('list', { name: 'Matching ingredients' })).not.toBeInTheDocument();
+      expect(screen.getByTestId(testIds.itemFreeText)).toBe(options[0]);
+      expect(screen.getByTestId(testIds.itemNewIngredient)).toBe(options[1]);
     });
 
     it('sends an item again with the same id after an error, and the next one with a new id', async () => {
@@ -749,13 +1084,28 @@ describe('ListScreen', () => {
         },
       });
 
-      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Kerzen{Enter}');
-      expect(await screen.findByRole('alert')).toHaveTextContent(
+      const field = await screen.findByTestId(testIds.extraItemInput);
+      await user.type(field, 'Kerzen{Enter}');
+      await user.click(
+        within(await screen.findByTestId(testIds.freeTextDialog)).getByRole('button', {
+          name: 'Add',
+        }),
+      );
+      // The pop-up opens again with what went wrong.
+      const dialog = await screen.findByTestId(testIds.freeTextDialog);
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
         "Can't reach MealMate. Are you online?",
       );
-      await user.click(screen.getByRole('button', { name: 'Add Kerzen' }));
-      await waitFor(() => expect(screen.getByTestId(testIds.extraItemInput)).toHaveValue(''));
-      await user.type(screen.getByTestId(testIds.extraItemInput), 'Servietten{Enter}');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(2),
+      );
+      await user.type(field, 'Servietten{Enter}');
+      await user.click(
+        within(await screen.findByTestId(testIds.freeTextDialog)).getByRole('button', {
+          name: 'Add',
+        }),
+      );
 
       await waitFor(() =>
         expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(3),
@@ -769,7 +1119,7 @@ describe('ListScreen', () => {
       expect(next?.id).not.toBe(first?.id);
     });
 
-    it('shows the server’s field errors next to the field', async () => {
+    it('shows the server’s field errors next to the field, in the pop-up opened again', async () => {
       const { user } = renderList({
         ...routes,
         [`POST ${BASE}/extra-items`]: errorResponse(422, 'common.validation', [
@@ -777,12 +1127,13 @@ describe('ListScreen', () => {
         ]),
       });
 
-      await user.type(await screen.findByTestId(testIds.extraItemInput), 'Mehl');
-      await pickSuggestion(user, 'Mehl');
-      await user.type(screen.getByLabelText('Amount (optional)'), '999999');
-      await user.click(screen.getByRole('button', { name: 'Add Mehl' }));
+      let dialog = await pick(user, 'Mehl');
+      await user.type(within(dialog).getByLabelText('Amount (optional)'), '999999');
+      await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 
-      expect(await screen.findByText('Out of range')).toBeVisible();
+      dialog = await screen.findByTestId(testIds.amountDialog);
+      expect(await within(dialog).findByText('Out of range')).toBeVisible();
+      expect(within(dialog).getByLabelText('Amount (optional)')).toHaveValue('999999');
       expect(screen.queryByText('Please check your input.')).not.toBeInTheDocument();
     });
   });
@@ -1070,24 +1421,142 @@ describe('ListScreen', () => {
     });
   });
 
-  describe('someone else’s list (read-only)', () => {
+  describe('⋯ menu (D-39)', () => {
     const carls = listDetail({ owner: CARL, is_owner: false, can_edit: false });
+    const bens = listDetail({ owner: BEN, is_owner: false, shared_with_partner: true });
 
-    it('shows the same list without editing controls (VIS-03)', async () => {
+    beforeEach(() => {
+      // As on the iPhone, which has a share sheet: export reads "Share as text".
+      Object.defineProperty(navigator, 'share', {
+        value: () => Promise.resolve(),
+        configurable: true,
+      });
+    });
+
+    it.each([
+      {
+        role: 'owner in a couple, draft',
+        routes: { 'GET /api/couple': IN_COUPLE },
+        items: ['Rename', 'Share as text', 'Shared with Ben (off)', 'Delete'],
+      },
+      {
+        role: 'owner in a couple, shopping',
+        routes: {
+          'GET /api/couple': IN_COUPLE,
+          [`GET ${BASE}`]: shoppingList({ shared_with_partner: true }),
+        },
+        items: ['Rename', 'Share as text', 'Shared with Ben (on)', 'Delete'],
+      },
+      { role: 'owner without a partner', routes: {}, items: ['Rename', 'Share as text', 'Delete'] },
+      {
+        role: 'partner on a shared list (CPL-03)',
+        routes: { 'GET /api/couple': IN_COUPLE, [`GET ${BASE}`]: bens },
+        items: ['Rename', 'Share as text'],
+      },
+      {
+        role: 'someone else’s list (VIS-03)',
+        routes: { [`GET ${BASE}`]: carls },
+        items: ['Copy to my lists', 'Share as text'],
+      },
+      {
+        role: 'owner of a done list (LIST-13, SHOP-06)',
+        routes: { 'GET /api/couple': IN_COUPLE, [`GET ${BASE}`]: doneList() },
+        items: ['Shop again', 'Reopen', 'Share as text', 'Delete'],
+      },
+      {
+        role: 'partner on a shared done list',
+        routes: { [`GET ${BASE}`]: doneList({ owner: BEN, is_owner: false }) },
+        items: ['Shop again', 'Reopen', 'Share as text'],
+      },
+      {
+        role: 'another user’s done list',
+        routes: { [`GET ${BASE}`]: doneList({ owner: CARL, is_owner: false, can_edit: false }) },
+        items: ['Copy to my lists', 'Shop again', 'Share as text'],
+      },
+    ])('offers the items of the $role in order', async ({ routes, items }) => {
+      const { user } = renderList(routes);
+      await screen.findByTestId(testIds.screenList);
+      await screen.findByRole('heading', { level: 2, name: 'Items' });
+
+      const menu = await openMoreMenu(user);
+
+      expect(menuItemNames(menu)).toEqual(items);
+      // Their buttons are gone from the screen.
+      for (const id of [testIds.renameList, testIds.exportList, testIds.deleteList]) {
+        expect(screen.queryAllByTestId(id).every((element) => menu.contains(element))).toBe(true);
+      }
+      if (items.includes('Delete')) {
+        const remove = within(menu).getByRole('menuitem', { name: 'Delete' });
+        expect(menu.lastElementChild).toBe(remove);
+        expect(remove.previousElementSibling).toHaveAttribute('role', 'separator');
+      }
+    });
+
+    it('is a button named "More actions" in the strip, which arrows and Escape work (A11Y-02)', async () => {
+      const { user } = renderList();
+      await screen.findByTestId(testIds.listLines);
+      const button = screen.getByRole('button', { name: 'More actions' });
+      expect(within(screen.getByTestId(testIds.detailStrip)).getByTestId(testIds.moreActions)).toBe(
+        button,
+      );
+      expect(button).toHaveAttribute('aria-haspopup', 'menu');
+
+      button.focus();
+      await user.keyboard('{Enter}');
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getByRole('menuitem', { name: 'Rename' })).toHaveFocus();
+      await user.keyboard('{ArrowDown}');
+      expect(within(menu).getByRole('menuitem', { name: 'Share as text' })).toHaveFocus();
+      await user.keyboard('{ArrowDown}');
+      expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
+      await user.keyboard('{ArrowUp}');
+      expect(within(menu).getByRole('menuitem', { name: 'Share as text' })).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      expect(button).toHaveFocus();
+    });
+
+    it('closes on a tap outside, which does nothing else', async () => {
+      const { fetchMock, user } = renderList({ [`PATCH ${BASE}/meals/lm-pancakes`]: listDetail() });
+      await screen.findByTestId(testIds.listLines);
+
+      const more = screen.getByRole('button', { name: 'More servings of Pfannkuchen' });
+      await openMoreMenu(user);
+      await user.click(more);
+
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      // The servings didn't change: the tap only closed the menu.
+      expect(requestsTo(fetchMock, `PATCH ${BASE}/meals/lm-pancakes`)).toHaveLength(0);
+      // The next tap works as usual.
+      await user.click(more);
+      await waitFor(() =>
+        expect(requestsTo(fetchMock, `PATCH ${BASE}/meals/lm-pancakes`)).toHaveLength(1),
+      );
+    });
+
+    it('is not shown before the list is there', async () => {
+      renderList({ [`GET ${BASE}`]: heldRoute().route });
+
+      expect(await screen.findByTestId(testIds.backLink)).toBeVisible();
+      expect(screen.queryByTestId(testIds.moreActions)).not.toBeInTheDocument();
+    });
+
+    it('keeps the read-only note on screen, without a button (VIS-03)', async () => {
       const { user } = renderList({ [`GET ${BASE}`]: carls });
 
-      expect(await screen.findByTestId(testIds.listReadOnly)).toHaveTextContent(
+      const note = await screen.findByTestId(testIds.listReadOnly);
+      expect(note).toHaveTextContent(
         "This is Carl's list. You can look at it and copy it, but not change it.",
       );
+      expect(within(note).queryByRole('button')).not.toBeInTheDocument();
       expect(screen.getByTestId(testIds.listMeals)).toHaveTextContent('4 servings');
       expect(screen.queryByRole('group', { name: /^Servings of/ })).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.addMeals)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(testIds.mealField)).not.toBeInTheDocument();
       expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.renameList)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.deleteList)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(testIds.floatingBar)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Restore/ })).not.toBeInTheDocument();
-      expect(screen.getByTestId(testIds.exportList)).toBeVisible();
 
       await user.click(
         within(screen.getByTestId(testIds.listLines)).getByRole('button', { name: /^Mehl/ }),
@@ -1096,7 +1565,7 @@ describe('ListScreen', () => {
       expect(within(dialog).queryByRole('button', { name: /Remove|Edit/ })).not.toBeInTheDocument();
     });
 
-    it('copies it to my lists and says how many meals were left out (VIS-03/06)', async () => {
+    it('copies someone else’s list to mine and says how many meals were left out (VIS-03/06)', async () => {
       const copy = emptyList({ id: 'list-copy', name: 'Wochenende' });
       const { fetchMock, user, router } = renderList({
         [`GET ${BASE}`]: carls,
@@ -1104,14 +1573,15 @@ describe('ListScreen', () => {
         'GET /api/lists/list-copy': copy,
       });
 
-      await user.click(await screen.findByTestId(testIds.copyList));
+      const menu = await openMoreMenu(user);
+      await user.click(within(menu).getByTestId(testIds.copyList));
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-copy'));
       expect(await screen.findByTestId(testIds.listLeftOut)).toHaveTextContent(
         "2 meals were left out: you can't see them, or they no longer exist.",
       );
       expect(requestsTo(fetchMock, `POST ${BASE}/copy`)).toHaveLength(1);
-      expect(await screen.findByTestId(testIds.addMeals)).toBeVisible();
+      expect(await screen.findByTestId(testIds.mealField)).toBeVisible();
     });
 
     it('says nothing about left-out meals when all were copied', async () => {
@@ -1122,173 +1592,231 @@ describe('ListScreen', () => {
         'GET /api/lists/list-copy': copy,
       });
 
-      await user.click(await screen.findByTestId(testIds.copyList));
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.copyList));
 
       await waitFor(() => expect(router.state.location.pathname).toBe('/lists/list-copy'));
-      expect(await screen.findByTestId(testIds.addMeals)).toBeVisible();
+      expect(await screen.findByTestId(testIds.mealField)).toBeVisible();
       expect(screen.queryByTestId(testIds.listLeftOut)).not.toBeInTheDocument();
     });
-  });
 
-  describe('share switch (CPL-02)', () => {
-    it('is shown to the owner in a couple, named after the partner, and saves', async () => {
-      const { fetchMock, user } = renderList({
-        'GET /api/couple': IN_COUPLE,
-        [`PATCH ${BASE}`]: listDetail({ shared_with_partner: true }),
+    it('shows an error of an action in an alert below the title', async () => {
+      const { user } = renderList({
+        [`GET ${BASE}`]: carls,
+        [`POST ${BASE}/copy`]: errorResponse(403, 'common.forbidden'),
       });
 
-      const toggle = await screen.findByRole('switch', { name: 'Shared with Ben' });
-      expect(toggle).toBe(screen.getByTestId(testIds.shareListSwitch));
-      expect(toggle).not.toBeChecked();
-      await user.click(toggle);
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.copyList));
 
-      await waitFor(() => expect(toggle).toBeChecked());
-      await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({
-        shared_with_partner: true,
-      });
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent("You're not allowed to do that.");
+      const heading = screen.getByRole('heading', { level: 1 });
+      expect(
+        heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
-    it('is not shown without a partner', async () => {
-      renderList();
-
-      await screen.findByTestId(testIds.listLines);
-      expect(screen.queryByTestId(testIds.shareListSwitch)).not.toBeInTheDocument();
-    });
-
-    it('is not shown to the partner, who may still edit a shared list (CPL-03)', async () => {
-      renderList({
-        'GET /api/couple': { ...IN_COUPLE, partner: BEN },
-        [`GET ${BASE}`]: listDetail({ owner: BEN, is_owner: false, shared_with_partner: true }),
-      });
-
-      expect(await screen.findByTestId(testIds.renameList)).toBeVisible();
-      expect(screen.getByTestId(testIds.addMeals)).toBeVisible();
-      expect(screen.queryByTestId(testIds.shareListSwitch)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.deleteList)).not.toBeInTheDocument();
-      expect(screen.queryByTestId(testIds.listReadOnly)).not.toBeInTheDocument();
-    });
-  });
-
-  it('renames the list, and an empty name goes back to the default (LIST-02)', async () => {
-    const { fetchMock, user } = renderList({
-      [`PATCH ${BASE}`]: async (request: Request) => {
-        const { name } = (await request.json()) as { name: string | null };
-        return listDetail({ name });
-      },
-    });
-
-    await user.click(await screen.findByTestId(testIds.renameList));
-    let dialog = await screen.findByRole('dialog', { name: 'Rename list' });
-    const field = within(dialog).getByLabelText('Name');
-    // The cursor is in the name, so typing can start at once.
-    expect(field).toHaveFocus();
-    expect(field).toHaveValue('Wochenende');
-    await user.clear(field);
-    await user.type(field, 'Grillabend');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Grillabend (26/09/2026)' }),
-    ).toBeVisible();
-    await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({ name: 'Grillabend' });
-
-    await user.click(screen.getByTestId(testIds.renameList));
-    dialog = await screen.findByRole('dialog', { name: 'Rename list' });
-    await user.clear(within(dialog).getByLabelText('Name'));
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Shopping list (26/09/2026)' }),
-    ).toBeVisible();
-    await expect(bodyOf(fetchMock, `PATCH ${BASE}`, 1)).resolves.toEqual({ name: null });
-  });
-
-  it('keeps a change when a load of the list that started before it answers later', async () => {
-    let loads = 0;
-    let answerReload: (() => void) | undefined;
-    const { user } = renderList({
-      [`GET ${BASE}`]: () => {
-        loads += 1;
-        if (loads === 1) return listDetail();
-        // Back in the foreground: this load still has the old name and answers late.
-        return new Promise((resolve) => {
-          answerReload = () => resolve(listDetail());
+    describe('share switch (CPL-02)', () => {
+      it('is a switch item named after the partner that toggles with the menu still open', async () => {
+        const { fetchMock, user } = renderList({
+          'GET /api/couple': IN_COUPLE,
+          [`PATCH ${BASE}`]: listDetail({ shared_with_partner: true }),
         });
-      },
-      [`PATCH ${BASE}`]: listDetail({ name: 'Grillabend' }),
-    });
-    await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' });
+        await screen.findByTestId(testIds.listLines);
 
-    act(() => {
-      focusManager.setFocused(false);
-      focusManager.setFocused(true);
-    });
-    await waitFor(() => expect(answerReload).toBeDefined());
-    await user.click(screen.getByTestId(testIds.renameList));
-    const dialog = await screen.findByRole('dialog', { name: 'Rename list' });
-    await user.clear(within(dialog).getByLabelText('Name'));
-    await user.type(within(dialog).getByLabelText('Name'), 'Grillabend');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-    const heading = await screen.findByRole('heading', {
-      level: 1,
-      name: 'Grillabend (26/09/2026)',
-    });
-    await act(async () => {
-      answerReload?.();
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+        const menu = await openMoreMenu(user);
+        const toggle = within(menu).getByRole('menuitemcheckbox', { name: 'Shared with Ben' });
+        expect(toggle).toBe(screen.getByTestId(testIds.shareListSwitch));
+        expect(toggle).not.toBeChecked();
+        await user.click(toggle);
 
-    expect(heading).toHaveTextContent('Grillabend (26/09/2026)');
-  });
+        expect(menu).toBeInTheDocument();
+        await waitFor(() => expect(toggle).toBeChecked());
+        expect(screen.getByRole('menu')).toBe(menu);
+        await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({
+          shared_with_partner: true,
+        });
+        // No hint and no badge on the screen.
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+        expect(document.body).not.toHaveTextContent(/sees this list|Shared with Ben/);
+      });
 
-  it('deletes the list after asking and goes back to Lists (LIST-13)', async () => {
-    const { fetchMock, user, router } = renderList({ [`DELETE ${BASE}`]: null });
+      it('is not shown to the partner, who may still edit a shared list (CPL-03)', async () => {
+        const { user } = renderList({
+          'GET /api/couple': IN_COUPLE,
+          [`GET ${BASE}`]: bens,
+        });
+        expect(await screen.findByTestId(testIds.mealField)).toBeVisible();
+        expect(screen.queryByTestId(testIds.listReadOnly)).not.toBeInTheDocument();
 
-    await user.click(await screen.findByRole('button', { name: 'Delete Wochenende (26/09/2026)' }));
-    const confirm = await screen.findByRole('alertdialog', {
-      name: 'Delete Wochenende (26/09/2026)?',
-    });
-    await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/lists'));
-    expect(requestsTo(fetchMock, `DELETE ${BASE}`)).toHaveLength(1);
-  });
-
-  describe('export (EXP-01/02)', () => {
-    it('opens the share sheet with the list as text, within the tap', async () => {
-      const share = vi.fn(() => Promise.resolve());
-      Object.defineProperty(navigator, 'share', { value: share, configurable: true });
-      renderList();
-
-      const button = await screen.findByRole('button', { name: 'Share as text' });
-      await screen.findByTestId(testIds.listLines);
-      fireEvent.click(button);
-
-      expect(share).toHaveBeenCalledTimes(1);
-      const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
-      expect(text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen\n3× Private meal')).toBe(
-        true,
-      );
-      expect(text).toContain('Dairy & eggs\n- Milch: 1.5 l');
-      expect(text).not.toContain('Eier');
-      // It ends with the lines (D-43).
-      expect(text.endsWith('- Mehl: 850 g\n- Salz')).toBe(true);
+        const menu = await openMoreMenu(user);
+        expect(within(menu).queryByTestId(testIds.shareListSwitch)).not.toBeInTheDocument();
+      });
     });
 
-    it('copies the text where there is no share sheet', async () => {
-      renderList();
-      const button = await screen.findByTestId(testIds.exportList);
-      // After rendering: user-event would replace the clipboard with its own.
-      const writeText = vi.fn(() => Promise.resolve());
-      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    it('renames the list, and an empty name goes back to the default (LIST-02)', async () => {
+      const { fetchMock, user } = renderList({
+        [`PATCH ${BASE}`]: async (request: Request) => {
+          const { name } = (await request.json()) as { name: string | null };
+          return listDetail({ name });
+        },
+      });
 
-      fireEvent.click(button);
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.renameList));
+      let dialog = await screen.findByRole('dialog', { name: 'Rename list' });
+      const field = within(dialog).getByLabelText('Name');
+      // The cursor is in the name, so typing can start at once.
+      await waitFor(() => expect(field).toHaveFocus());
+      expect(field).toHaveValue('Wochenende');
+      await user.clear(field);
+      await user.type(field, 'Grillabend');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
       expect(
-        await screen.findByText('Copied – paste the list into a note or message.'),
+        await screen.findByRole('heading', { level: 1, name: 'Grillabend (26/09/2026)' }),
       ).toBeVisible();
-      expect(screen.getByTestId(testIds.exportList)).toHaveTextContent('Copy as text');
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('- Mehl: 850 g'));
+      await expect(bodyOf(fetchMock, `PATCH ${BASE}`)).resolves.toEqual({ name: 'Grillabend' });
+      await waitFor(() => expect(screen.getByTestId(testIds.moreActions)).toHaveFocus());
+
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.renameList));
+      dialog = await screen.findByRole('dialog', { name: 'Rename list' });
+      expect(within(dialog).getByLabelText('Name')).toHaveValue('Grillabend');
+      await user.clear(within(dialog).getByLabelText('Name'));
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Shopping list (26/09/2026)' }),
+      ).toBeVisible();
+      await expect(bodyOf(fetchMock, `PATCH ${BASE}`, 1)).resolves.toEqual({ name: null });
+    });
+
+    it('keeps a change when a load of the list that started before it answers later', async () => {
+      let loads = 0;
+      let answerReload: (() => void) | undefined;
+      const { user } = renderList({
+        [`GET ${BASE}`]: () => {
+          loads += 1;
+          if (loads === 1) return listDetail();
+          // Back in the foreground: this load still has the old name and answers late.
+          return new Promise((resolve) => {
+            answerReload = () => resolve(listDetail());
+          });
+        },
+        [`PATCH ${BASE}`]: listDetail({ name: 'Grillabend' }),
+      });
+      await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' });
+
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(answerReload).toBeDefined());
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.renameList));
+      const dialog = await screen.findByRole('dialog', { name: 'Rename list' });
+      await user.clear(within(dialog).getByLabelText('Name'));
+      await user.type(within(dialog).getByLabelText('Name'), 'Grillabend');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      const heading = await screen.findByRole('heading', {
+        level: 1,
+        name: 'Grillabend (26/09/2026)',
+      });
+      await act(async () => {
+        answerReload?.();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(heading).toHaveTextContent('Grillabend (26/09/2026)');
+    });
+
+    it('deletes the list after asking and goes back to Lists (LIST-13)', async () => {
+      const { fetchMock, user, router } = renderList({ [`DELETE ${BASE}`]: null });
+
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.deleteList));
+      const confirm = await screen.findByRole('alertdialog', {
+        name: 'Delete Wochenende (26/09/2026)?',
+      });
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/lists'));
+      expect(requestsTo(fetchMock, `DELETE ${BASE}`)).toHaveLength(1);
+    });
+
+    it('puts the focus back on ⋯ when deleting is cancelled (LIST-13)', async () => {
+      const { fetchMock, user } = renderList({ [`DELETE ${BASE}`]: null });
+
+      await user.click(within(await openMoreMenu(user)).getByTestId(testIds.deleteList));
+      const confirm = await screen.findByRole('alertdialog');
+      await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId(testIds.moreActions)).toHaveFocus());
+      expect(requestsTo(fetchMock, `DELETE ${BASE}`)).toHaveLength(0);
+    });
+
+    it('disables what needs a connection offline, and export still works (SYNC-03, EXP-03)', async () => {
+      const share = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+      const { user, fetchMock } = renderList({ 'GET /api/couple': IN_COUPLE });
+      await screen.findByTestId(testIds.listLines);
+      goOffline(fetchMock);
+
+      const button = await screen.findByRole('button', { name: 'More actions' });
+      expect(button).toBeEnabled();
+      const menu = await openMoreMenu(user);
+      for (const id of [testIds.renameList, testIds.shareListSwitch, testIds.deleteList]) {
+        expect(within(menu).getByTestId(id)).toHaveAttribute('aria-disabled', 'true');
+      }
+      const exportItem = within(menu).getByTestId(testIds.exportList);
+      expect(exportItem).not.toHaveAttribute('aria-disabled');
+
+      await user.click(exportItem);
+      expect(share).toHaveBeenCalledTimes(1);
+    });
+
+    describe('export (EXP-01/02)', () => {
+      it('opens the share sheet with the list as text, within the tap', async () => {
+        const share = vi.fn(() => Promise.resolve());
+        Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+        const { user } = renderList();
+        await screen.findByTestId(testIds.listLines);
+
+        const menu = await openMoreMenu(user);
+        const item = within(menu).getByRole('menuitem', { name: 'Share as text' });
+        fireEvent.click(item);
+
+        expect(share).toHaveBeenCalledTimes(1);
+        const [[{ text }]] = share.mock.calls as unknown as [[{ text: string }]];
+        expect(text.startsWith('Wochenende (26/09/2026)\n\n4× Pfannkuchen\n3× Private meal')).toBe(
+          true,
+        );
+        expect(text).toContain('Dairy & eggs\n- Milch: 1.5 l');
+        expect(text).not.toContain('Eier');
+        // It ends with the lines (D-43).
+        expect(text.endsWith('- Mehl: 850 g\n- Salz')).toBe(true);
+      });
+
+      it('copies the text where there is no share sheet, and says so below the title', async () => {
+        Reflect.deleteProperty(navigator, 'share');
+        const { user } = renderList();
+        await screen.findByTestId(testIds.listLines);
+        const menu = await openMoreMenu(user);
+        const item = within(menu).getByTestId(testIds.exportList);
+        // After user-event's setup: it would replace the clipboard with its own.
+        const writeText = vi.fn(() => Promise.resolve());
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+        expect(item).toHaveTextContent('Copy as text');
+
+        fireEvent.click(item);
+
+        const message = await screen.findByText('Copied – paste the list into a note or message.');
+        expect(message).toHaveAttribute('aria-live', 'polite');
+        const heading = screen.getByRole('heading', { level: 1 });
+        expect(
+          heading.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining('- Mehl: 850 g'));
+      });
     });
   });
 
@@ -1302,12 +1830,12 @@ describe('ListScreen', () => {
     renderList({ 'GET /api/lists/list-new': emptyList() }, '/lists/list-new');
 
     expect(
-      await screen.findByText('No meals yet. Add some and the shopping list below fills itself.'),
+      await screen.findByText('No meals yet. Add some and the items below fill themselves.'),
     ).toBeVisible();
     expect(screen.getByText('Nothing to buy yet.')).toBeVisible();
     expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
     expect(screen.queryByTestId(testIds.hiddenLines)).not.toBeInTheDocument();
-    // Only a list opened from "+ New list" starts with the picker.
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Only a list opened from "+ New list" starts with the meal field's list showing.
+    expect(screen.queryByTestId(testIds.mealFieldPanel)).not.toBeInTheDocument();
   });
 });

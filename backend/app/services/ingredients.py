@@ -48,7 +48,7 @@ from app.domain.catalog import OFF_FIELDS, nutrient_field
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
-from app.domain.text import normalize
+from app.domain.text import normalize, same_name
 from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit, fits, stops_fitting
 from app.models import Ingredient as IngredientRow
 from app.repositories import ingredients as ingredients_repo
@@ -59,6 +59,7 @@ from app.schemas.ingredients import (
     IngredientBarcodeLink,
     IngredientCreate,
     IngredientMerge,
+    IngredientSearchResult,
     IngredientSource,
     IngredientSummary,
     IngredientUpdate,
@@ -196,16 +197,23 @@ async def _other_category_id(session: AsyncSession) -> str:
 
 async def search(
     session: AsyncSession, *, query: str | None, category_ids: Sequence[str]
-) -> list[IngredientSummary]:
+) -> list[IngredientSearchResult]:
     """Search name and brand ignoring case, umlaut spelling and accents (ING-03): an exact
     name first, then names starting with the query, then the rest, each in dictionary order by
-    name and brand. Without a query: every ingredient (at most 1000) in that order. With
-    `category_ids`, only ingredients in any of those categories (UI-01, D-23)."""
+    name and brand. The exact names are marked (D-41). Without a query: every ingredient (at
+    most 1000) in that order. With `category_ids`, only ingredients in any of those categories
+    (UI-01, D-23)."""
+    query_norm = normalize(query or "")
     async with session.begin():
         rows = await ingredients_repo.search(
-            session, query=normalize(query or ""), category_ids=category_ids, limit=SEARCH_LIMIT
+            session, query=query_norm, category_ids=category_ids, limit=SEARCH_LIMIT
         )
-    return [summary(row) for row in rows]
+    return [
+        IngredientSearchResult(
+            **summary(row).model_dump(), exact=same_name(row.name_norm, query_norm)
+        )
+        for row in rows
+    ]
 
 
 async def similar(

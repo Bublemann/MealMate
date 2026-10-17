@@ -9,7 +9,7 @@ from app.api.deps import CurrentUser, Media, Now, limit_uploads
 from app.db.session import ReadSession, WriteSession
 from app.media.images import MAX_UPLOAD_BYTES
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.meals import Meal, MealCreate, MealSummary, MealUpdate
+from app.schemas.meals import Meal, MealCreate, MealSearchResult, MealSummary, MealUpdate
 from app.schemas.reference import Tag
 from app.services import meals
 
@@ -29,12 +29,13 @@ async def list_meals(
     cuisine_id: Annotated[list[FilterId] | None, Query(max_length=100)] = None,
     tag_id: Annotated[list[FilterId] | None, Query(max_length=100)] = None,
     owner_ids: Annotated[list[str] | None, Query(max_length=500)] = None,
-) -> list[MealSummary]:
+) -> list[MealSearchResult]:
     """The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
-    and cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal
-    matches if its cuisine is any of the given ones and it has every given tag. Without
-    `owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are
-    left out; with `owner_ids` (repeatable), only those owners' meals are listed."""
+    and cuisines ignoring case and umlauts; `exact` marks the meals whose name is `q`.
+    `cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given
+    ones and it has every given tag. Without `owner_ids`, owners you unticked in your user
+    filter on Meals (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only
+    those owners' meals are listed."""
     return await meals.list_meals(
         session,
         media,
@@ -59,7 +60,7 @@ async def list_recent_meals(
     principal: CurrentUser, session: ReadSession, media: Media, now: Now
 ) -> list[MealSummary]:
     """Up to 10 meals you recently added to lists, most recent first, as far as you can still
-    see them (the "recently used" meals of the meal picker)."""
+    see them (the "recently used" meals of the list's meal field)."""
     return await meals.recent_meals(session, media, principal, now=now)
 
 

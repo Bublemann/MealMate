@@ -1,85 +1,45 @@
-import { Check, Circle, RotateCcw, ShoppingCart } from 'lucide-react';
+import { Check, Circle } from 'lucide-react';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { Category } from '@/features/reference/api';
-import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
-import { useReopenList, useShopAgain, type ListDetail, type ListLine } from './api';
+import type { ListDetail, ListLine } from './api';
 import { groupByCategory, lineAmount, lineLabel } from './format';
 import { ListMeals } from './ListMeals';
-import type { ListViewState } from './ListScreen';
 
 interface DoneViewProps {
-  /** `pendingFinish`: finished here, not sent yet; reopening waits until it is. */
-  list: ListDetail & { pendingFinish?: boolean };
+  list: ListDetail;
   categories: readonly Category[];
 }
 
 /**
- * A finished list, read-only (LIST-10): checked lines count as bought, the others are greyed
- * (SHOP-05). "Shop again" starts a new draft from it, "Reopen" goes back to shopping (SHOP-06);
- * both need a connection (SYNC-03). A list finished here but not sent yet shows as done already.
+ * A finished list, read-only (LIST-10): the note when it was bought, then its meals and lines;
+ * checked lines count as bought, the others are greyed (SHOP-05). "Shop again" and "Reopen"
+ * (SHOP-06) are in the ⋯ menu (`ListMenu`). A list finished here but not sent yet shows as done
+ * already.
  */
 export function DoneView({ list, categories }: DoneViewProps) {
   const { t } = useTranslation();
   const language = useLanguage();
-  const navigate = useNavigate();
   const headingId = useId();
-  const shopAgain = useShopAgain(list.id);
-  const reopen = useReopenList(list.id);
-  const offline = !useConnected();
   const groups = groupByCategory(
     list.lines.filter((line) => !line.hidden),
     categories,
     language,
   );
 
-  function onShopAgain() {
-    shopAgain.mutate(undefined, {
-      onSuccess: ({ list: created, left_out }) => {
-        const state: ListViewState = { leftOut: left_out };
-        void navigate(`/lists/${created.id}`, { state });
-      },
-    });
-  }
-
   return (
     <>
-      <Card data-testid={testIds.listDone} className="gap-3 px-5 py-4">
-        {list.finished_at && (
+      {list.finished_at && (
+        <Card data-testid={testIds.listDone} className="px-5 py-4">
           <p>{t('lists.done.note', { date: formatDayMonth(list.finished_at, language) })}</p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            data-testid={testIds.shopAgain}
-            disabled={shopAgain.isPending || offline}
-            onClick={onShopAgain}
-          >
-            <ShoppingCart aria-hidden="true" />
-            {t('lists.done.shopAgain')}
-          </Button>
-          {list.can_edit && (
-            <Button
-              variant="outline"
-              data-testid={testIds.reopenList}
-              disabled={reopen.isPending || offline || list.pendingFinish === true}
-              onClick={() => reopen.mutate()}
-            >
-              <RotateCcw aria-hidden="true" />
-              {t('lists.done.reopen')}
-            </Button>
-          )}
-        </div>
-        <ErrorAlert error={shopAgain.error ?? reopen.error} />
-      </Card>
-      <ListMeals list={list} editable={false} onAddMeals={() => undefined} />
+        </Card>
+      )}
+      <ListMeals list={list} editable={false} />
       <section aria-labelledby={headingId} className="flex flex-col gap-4">
         <h2 id={headingId} className="text-xl font-semibold">
           {t('lists.lines.title')}
