@@ -1,14 +1,15 @@
 """Recurring items (LIST-16, D-42): the caller's set, making an ingredient recurring, changing
-and removing items.
+and removing items, and the purchases finished lists record.
 
 A user sees and changes one set: their couple's while they are in one, else their own
 (`access.owner_key`). When an item is due and how its interval reads follow from
 `domain.recurring`, counted in calendar days of the instance's time zone.
 
 `services.hooks` must not import this module: it imports `services.ingredients`, which imports
-the hooks.
+the hooks. `services.ops` and `services.lists` import it, so it must not import them.
 """
 
+from collections.abc import Collection
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -16,12 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain import recurring
+from app.domain.owners import OwnerKey
 from app.domain.units import counted_unit, fits
 from app.models import Ingredient as IngredientRow
 from app.models import RecurringItem as RecurringItemRow
+from app.models import ShoppingList
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import recurring as recurring_repo
-from app.schemas.lists import DisplayAmountOut
+from app.schemas.lists import DisplayAmountOut, DueItem, ListLine
 from app.schemas.recurring import (
     RecurringInterval,
     RecurringItem,
@@ -29,7 +32,7 @@ from app.schemas.recurring import (
     RecurringItemList,
     RecurringItemUpdate,
 )
-from app.services import access
+from app.services import access, aggregation
 from app.services.ingredients import summary as ingredient_summary
 from app.services.principal import Principal
 
@@ -106,6 +109,38 @@ async def list_items(
         (_view(item, ingredient, today) for item, ingredient in rows), key=lambda item: item.due_on
     )
     return RecurringItemList(items=items, due_count=sum(item.due for item in items))
+
+
+async def due_items(
+    session: AsyncSession,
+    key: OwnerKey,
+    list_id: str,
+    on_list: Collection[str],
+    *,
+    today: date,
+) -> list[DueItem]:
+    """The "Fällig" box of a draft (LIST-16): the due items of the owner's set that weren't
+    hidden on the list and whose ingredient is not in `on_list` (the ingredient ids of its
+    lines, hidden ones included), the most overdue first, then in dictionary order. One
+    query."""
+    rows = await recurring_repo.of_owner(session, key, not_hidden_on=list_id)
+    views = [
+        _view(item, ingredient, today)
+        for item, ingredient in rows
+        if item.ingredient_id not in on_list
+    ]
+    # The rows come in dictionary order, which the stable sort keeps within a day.
+    due = sorted((view for view in views if view.due), key=lambda view: view.days_until_due)
+    return [
+        DueItem(
+            ingredient=view.ingredient,
+            due_on=view.due_on,
+            days_until_due=view.days_until_due,
+            last_purchased_on=view.last_purchased_on,
+            last_amount=view.last_amount,
+        )
+        for view in due
+    ]
 
 
 async def create_item(
@@ -186,3 +221,51 @@ async def delete_item(session: AsyncSession, principal: Principal, item_id: str)
     async with session.begin():
         item = await access.require_recurring_item(session, principal, item_id)
         await session.delete(item)
+
+
+def _purchase(line: ListLine, list_id: str, *, now: datetime, zone: ZoneInfo) -> recurring.Purchase:
+    """A checked line as a purchase: dated by its check-off, with its amount when it shows
+    exactly one ("12 Stk.", not "500 g + 2 Stk." nor only parts without an amount)."""
+    if line.checked_at is None:  # pragma: no cover -- a checked line has its tap time
+        raise RuntimeError("a checked line has no check-off time")
+    amount = line.amounts[0] if len(line.amounts) == 1 else None
+    return recurring.Purchase(
+        on=recurring.purchase_date(line.checked_at, now=now, zone=zone),
+        list_id=list_id,
+        amount=None if amount is None else amount.value,
+        unit=None if amount is None else amount.unit.value,
+    )
+
+
+async def record_purchases(
+    session: AsyncSession, shopping_list: ShoppingList, *, now: datetime, zone: ZoneInfo
+) -> None:
+    """Record the purchases of a done list (LIST-16): each line the list shows as checked (a
+    line that needs more since doesn't count) of an ingredient in the set of the list's owner,
+    their couple's while in one, so a partner's finish counts for the same set (CPL-03).
+    Free-text lines never count. `domain.recurring.record_purchase` decides what changes: a
+    list counts once and nothing goes backwards, so this may run again for the same list."""
+    key = await access.owner_key(session, shopping_list.owner_id)
+    items = {item.ingredient_id: item for item, _ in await recurring_repo.of_owner(session, key)}
+    if not items:
+        return
+    content = await aggregation.load(session, [shopping_list])
+    for line in aggregation.lines(content, shopping_list, private_meals=(), refs={}):
+        item = None if line.ingredient_id is None else items.get(line.ingredient_id)
+        if item is None or not line.checked:
+            continue
+        after = recurring.record_purchase(
+            recurring.LastPurchase(
+                on=item.last_purchased_on,
+                measured=tuple(item.measured_intervals),
+                amount=item.last_amount,
+                unit=item.last_unit,
+                list_id=item.last_list_id,
+            ),
+            _purchase(line, shopping_list.id, now=now, zone=zone),
+        )
+        if after is None:
+            continue
+        item.last_purchased_on, item.measured_intervals = after.on, list(after.measured)
+        item.last_amount, item.last_unit = after.amount, after.unit
+        item.last_list_id, item.updated_at = after.list_id, now
