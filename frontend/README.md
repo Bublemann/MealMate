@@ -648,6 +648,7 @@ order.
 | `screenCouple`           | `screen-couple`            | Settings → Paar page                             |
 | `screenSecurity`         | `screen-security`          | Settings → Sicherheit page                       |
 | `screenRecurring`        | `screen-recurring`         | Settings → Regelmäßige Artikel page              |
+| `screenWalkingOrder`     | `screen-walking-order`     | Settings → Reihenfolge im Laden page             |
 | `screenAbout`            | `screen-about`             | Settings → Über MealMate page                    |
 | `languageSelect`         | `language-select`          | Language select on Profil                        |
 | `appVersion`             | `app-version`              | Running version on Über MealMate (once loaded)   |
@@ -724,6 +725,9 @@ order.
 | `recurringInput`         | `recurring-input`          | Ingredient field on Regelmäßige Artikel          |
 | `recurringNewIngredient` | `recurring-new-ingredient` | "„X“ als neue Zutat" under that field            |
 | `recurringRemove`        | `recurring-remove`         | "No longer recurring" in the recurring pop-up    |
+| `walkingOrderSwitch`     | `walking-order-switch`     | "Reihenfolge der Verwaltung übernehmen" switch   |
+| `walkingOrderList`       | `walking-order-list`       | Categories in the walking order (D-48)           |
+| `walkingOrderHandle`     | `walking-order-handle`     | Drag handle of a category (touch and mouse)      |
 | `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)              |
 | `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                        |
 | `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                         |
