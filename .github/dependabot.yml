@@ -1,72 +1,75 @@
-# Weekly dependency updates, minor and patch grouped per ecosystem (SEC-11). Security updates are
-# not delayed by the cooldown. Majors come as single PRs.
+# Monthly dependency updates, minor and patch only, grouped per ecosystem (SEC-11, D-50). Majors
+# are skipped for every dependency, and so are new Python versions (D-52); the quarterly
+# chore(deps) ticket moves to the ones that are ready. Security updates are not held back: the
+# ignores and the cooldown apply to version updates only.
 version: 2
 updates:
   - package-ecosystem: uv
     directories: ["/backend", "/e2e", "/deploy/tests"]
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     groups:
       python-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
     ignore:
-      # eslint-plugin-jsx-a11y supports ESLint up to 9; lift this once it supports 10.
-      - dependency-name: eslint
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@eslint/js"
-        update-types: ["version-update:semver-major"]
-      # Types follow the Node line the app runs on (26); bump together with Node.
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
-      # openapi-typescript 7 wants TypeScript 5; typescript-eslint 8 supports TypeScript < 6.1, and
-      # TypeScript 7 ships no API for it yet (#79). Lift this once both accept the new major.
-      - dependency-name: typescript
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Node majors are not skipped: from Node 27 on, every major becomes LTS (one a year). A major
-  # still arrives here as "Current", about half a year before its LTS date in October; Docker
-  # cooldowns can't hold majors back that long. Move to it in one go: the Dockerfile and compose
-  # PRs, NODE_VERSION in ci.yml, @types/node, and the Node version in frontend/README.md and
-  # docs/plan.md.
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Dependabot reads python:3.14-slim as version 3.14, so Python 3.15 would be a minor update.
+      # 3.14 patch releases still arrive as new digests of the same tag.
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
 
   # The node image of compose.dev.yml (the same digest as the Dockerfile's).
   - package-ecosystem: docker-compose
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     groups:
       compose-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     groups:
       actions-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
