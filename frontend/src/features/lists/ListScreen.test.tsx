@@ -688,6 +688,40 @@ describe('ListScreen', () => {
       expect(dialog).toBeVisible();
     });
 
+    it('keeps the options of typed text after Escape or a tap elsewhere, in both fields', async () => {
+      const { user } = renderList(mealRoutes({ 'GET /api/ingredients': [] }));
+      const mealField = await screen.findByTestId(testIds.mealField);
+      const itemField = screen.getByTestId(testIds.extraItemInput);
+
+      await user.type(mealField, 'Quiche');
+      await user.keyboard('{Escape}');
+      await user.click(itemField);
+      expect(screen.getByTestId(testIds.mealFieldCreate)).toBeVisible();
+
+      await user.type(itemField, 'Kerzen');
+      await user.keyboard('{Escape}');
+      await user.click(mealField);
+      expect(screen.getByTestId(testIds.itemFreeText)).toBeVisible();
+      expect(screen.getByTestId(testIds.itemNewIngredient)).toBeVisible();
+      expect(screen.getByTestId(testIds.mealFieldCreate)).toBeVisible();
+    });
+
+    it('says why the search failed, not that no meal matches', async () => {
+      const { user } = renderList(
+        mealRoutes({
+          'GET /api/meals': (request: Request) =>
+            new URL(request.url).searchParams.get('q') ? errorResponse(500, 'common.internal') : [],
+        }),
+      );
+
+      await user.type(await screen.findByTestId(testIds.mealField), 'Quiche');
+
+      const panel = screen.getByTestId(testIds.mealFieldPanel);
+      expect(await within(panel).findByRole('alert')).toBeVisible();
+      expect(within(panel).queryByText('No meal matches.')).not.toBeInTheDocument();
+      expect(within(panel).getByTestId(testIds.mealFieldCreate)).toBeVisible();
+    });
+
     it('opens the meal form with the name for ＋ without an exact match, as its option does', async () => {
       const { router, user } = renderList(mealRoutes());
       const field = await screen.findByTestId(testIds.mealField);

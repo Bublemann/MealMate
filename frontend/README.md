@@ -244,8 +244,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the screen hides the rows it hides right away. Tests share the panel helpers in
   `test/filters.ts`. The meal field on a list ignores the user filter on Meals:
   `useMealFieldMeals` asks for the meals of everyone visible, under a query key of its own
-  (MEAL-09). On Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
-  counts nothing then. At the largest text sizes the options and buttons wrap and the panel
+  (MEAL-09). On Lists, `disabled` turns the button off while offline, where the filters don't
+  apply, and it counts nothing then. At the largest text sizes the options and buttons wrap and the panel
   scrolls, its buttons staying in view.
 - **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
   `InitialMarker`, a round marker with the owner's initial, one's own rows included; screen readers

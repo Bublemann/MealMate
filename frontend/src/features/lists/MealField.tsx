@@ -156,7 +156,7 @@ export function MealField({ listId, disabled, openOnStart = false }: MealFieldPr
         // elsewhere.
         panelOpen={open || typed !== ''}
         onOpen={() => setOpen(true)}
-        onDismiss={dismiss}
+        onDismiss={typed === '' ? dismiss : undefined}
         options={options}
         results={
           typed !== '' ? (
