@@ -39,7 +39,7 @@ SCREENS = [
     # A draft and a done list of the member's and another user's public list are created in the
     # test, so the feed shows a row of each kind.
     Screen("/lists", "member", (TEST_IDS["newList"], TEST_IDS["listFeed"])),
-    # A list with meals, lines and a removed line is created in the test: /lists/<id>.
+    # A list with meals, lines and a hidden line is created in the test: /lists/<id>.
     Screen(
         "/lists/:id",
         "member",
@@ -294,10 +294,12 @@ def test_no_serious_violations(
     for test_id in screen.ready:
         expect(page.get_by_test_id(test_id)).to_be_visible()
     if screen.path == "/lists/:id":
-        # Also check the removed line with its restore button.
-        removed = page.get_by_test_id(TEST_IDS["hiddenLines"])
-        removed.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
-        expect(removed.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
+        # Also check the hidden line with its restore button, and a meal's "Remove", which shows
+        # on focus (D-40).
+        hidden = page.get_by_test_id(TEST_IDS["hiddenLines"])
+        hidden.get_by_text(text("lists.lines.hidden", count="1"), exact=True).click()
+        expect(hidden.get_by_role("button", name=text("lists.lines.restore"))).to_be_visible()
+        page.get_by_test_id(TEST_IDS["removeListMeal"]).first.focus()
     if screen.path == "/lists":
         # The newest lists come first: this run's lists are on the first page.
         rows = page.get_by_test_id(TEST_IDS["listFeed"]).get_by_test_id(TEST_IDS["listCard"])
