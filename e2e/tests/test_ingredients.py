@@ -528,11 +528,12 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
     sign_in(page.context, admin)
     page.goto(f"/ingredients/{duplicate['id']}")
     expect(page.get_by_test_id(TEST_IDS["screenIngredient"])).to_contain_text(barcode)
-    # In the ⋯ menu for admins: "Edit", "Merge…" and, last, "Delete" (D-39).
+    # In the ⋯ menu for admins: "Edit", "Buy regularly…", "Merge…" and, last, "Delete" (D-39).
     menu = open_more_menu(page)
     expect(menu.get_by_role("menuitem")).to_have_text(
         [
             text("ingredients.detail.edit"),
+            text("recurring.buyRegularly"),
             text("ingredients.admin.merge"),
             text("ingredients.admin.delete"),
         ]

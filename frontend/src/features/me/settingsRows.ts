@@ -1,5 +1,6 @@
 import type { ParseKeys } from 'i18next';
 import type { ComponentType } from 'react';
+import { RecurringValue } from '@/features/recurring/RecurringValue';
 import { testIds, type TestId } from '@/testIds';
 import { CoupleValue, ProfileValue, SystemValue, VersionValue } from './SettingsValues';
 
@@ -42,6 +43,7 @@ export const SETTINGS_ROWS: readonly SettingsRow[] = [
   { group: 'own', label: 'me.privacy.title', to: '/me/privacy' },
   { group: 'own', label: 'couple.title', to: '/me/couple', value: CoupleValue },
   { group: 'own', label: 'me.security.title', to: '/me/security' },
+  { group: 'own', label: 'recurring.title', to: '/me/recurring', value: RecurringValue },
   // The admin pages are a separate chunk (PERF-03): only their addresses are named here, and the
   // System value loads its query from `./api`, not from the admin chunk.
   { group: 'admin', label: 'admin.users.title', to: '/me/admin/users' },

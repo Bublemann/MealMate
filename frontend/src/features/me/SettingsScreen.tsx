@@ -10,18 +10,13 @@ import { useCurrentUser } from '@/features/auth/context';
 import { useSyncEngine, useSyncStatus } from '@/features/sync/context';
 import { testIds } from '@/testIds';
 import { useMeRefresh } from './api';
+import { SETTINGS_PANEL, SETTINGS_ROW_FOCUS } from './settingsPanel';
 import {
   SETTINGS_GROUPS,
   SETTINGS_ROWS,
   type SettingsGroup,
   type SettingsRow,
 } from './settingsRows';
-
-/** The grouped panel the rows sit in, separated by lines. */
-const PANEL = 'flex flex-col divide-y overflow-hidden rounded-xl border bg-card';
-/** A row's hover and keyboard focus, inside the panel's rounded edge. */
-const ROW_FOCUS =
-  'outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset';
 
 /**
  * The Settings tab (UI-07, D-45): its headline, then rows that each open their own page, in
@@ -52,7 +47,7 @@ function RowGroup({ group, rows }: { group: SettingsGroup; rows: readonly Settin
   const { t } = useTranslation();
   const headingId = useId();
   const list = (
-    <ul className={PANEL}>
+    <ul className={SETTINGS_PANEL}>
       {rows.map((row) => (
         <li key={row.to}>
           <RowLink row={row} />
@@ -76,7 +71,10 @@ function RowLink({ row: { label, to, value: Value } }: { row: SettingsRow }) {
   const { t } = useTranslation();
 
   return (
-    <Link to={to} className={`flex min-h-(--tap-target) items-center gap-3 px-4 py-3 ${ROW_FOCUS}`}>
+    <Link
+      to={to}
+      className={`flex min-h-(--tap-target) items-center gap-3 px-4 py-3 ${SETTINGS_ROW_FOCUS}`}
+    >
       {/* The label first, so the accessible name starts with it; at large text sizes the value
           wraps below it. The space between them is for screen readers only. */}
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -111,13 +109,13 @@ function LogoutRow() {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className={PANEL}>
+      <div className={SETTINGS_PANEL}>
         <button
           type="button"
           data-testid={testIds.logoutButton}
           disabled={logout.isPending}
           onClick={() => void onLogout()}
-          className={`min-h-(--tap-target) px-4 py-3 text-center font-medium text-destructive disabled:opacity-50 ${ROW_FOCUS}`}
+          className={`min-h-(--tap-target) px-4 py-3 text-center font-medium text-destructive disabled:opacity-50 ${SETTINGS_ROW_FOCUS}`}
         >
           {t('me.logout')}
         </button>

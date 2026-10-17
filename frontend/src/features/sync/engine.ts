@@ -11,6 +11,7 @@ import { ApiError, isApiError } from '@/api/errors';
 import type { AuthSession, SessionEnd } from '@/features/auth/session';
 import { COPY_UPDATED_AT, detailKey, FEED_KEY, type FeedData } from '@/features/lists/keys';
 import { listDisplayName } from '@/features/lists/format';
+import { RECURRING_KEY } from '@/features/recurring/api';
 import { CATEGORIES_KEY, categoriesQuery } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import { errorMessage } from '@/i18n/errors';
@@ -683,6 +684,10 @@ export class SyncEngine {
     });
     this.keepInCopy(userId, list);
     void this.queryClient.invalidateQueries({ queryKey: FEED_KEY });
+    // A done list's checked lines are purchases of recurring items (LIST-16): the server has
+    // recorded them with this batch, so the set's dates and due items change.
+    if (list.status === 'done')
+      void this.queryClient.invalidateQueries({ queryKey: RECURRING_KEY });
     const rejected = new Map<string, number>();
     for (const result of results) {
       if (result.status !== 'rejected') continue;
