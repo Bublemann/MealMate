@@ -242,9 +242,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   "Erledigt". They are saved on the server in the profile's `filter_hidden` (`useSaveFilter`,
   saves one after another): each change is saved at once and loads the narrowed query again, and
   the screen hides the rows it hides right away. Tests share the panel helpers in
-  `test/filters.ts`. The meal field on a list ignores the user filter on Meals: `useMealFieldMeals` asks for
-  the meals of everyone visible, under a query key of its own (MEAL-09). On
-  Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
+  `test/filters.ts`. The meal field on a list ignores the user filter on Meals:
+  `useMealFieldMeals` asks for the meals of everyone visible, under a query key of its own
+  (MEAL-09). On Lists, `disabled` turns the button off while offline, where the filters don't apply, and it
   counts nothing then. At the largest text sizes the options and buttons wrap and the panel
   scrolls, its buttons staying in view.
 - **Initial marker** (UI-02, MEAL-09, SHOP-01): whose list or meal a row is shows as
@@ -728,8 +728,8 @@ order.
 | `mealFieldCreate`        | `meal-field-create`        | "“X” as a new meal" under the meal field         |
 | `servingsDialog`         | `servings-dialog`          | Servings pop-up of a meal being added            |
 | `extraItemInput`         | `extra-item-input`         | Item field's input, top of "Items"               |
-| `itemFieldFreeText`      | `item-free-text`           | "“X” as an item" under the item field            |
-| `itemFieldNewIngredient` | `item-new-ingredient`      | "“X” as a new ingredient" under it               |
+| `itemFreeText`           | `item-free-text`           | "“X” as an item" under the item field            |
+| `itemNewIngredient`      | `item-new-ingredient`      | "“X” as a new ingredient" under it               |
 | `amountDialog`           | `amount-dialog`            | Amount pop-up of an ingredient being added       |
 | `freeTextDialog`         | `free-text-dialog`         | Free-text pop-up of an item being added          |
 | `listLines`              | `list-lines`               | Aggregated lines grouped by category             |

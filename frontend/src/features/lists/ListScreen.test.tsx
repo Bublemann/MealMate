@@ -519,7 +519,7 @@ describe('ListScreen', () => {
       for (const button of screen.getAllByRole('button', { name: /^Add/ })) {
         expect(button).toBeDisabled();
       }
-      expect(screen.queryByTestId(testIds.itemFieldFreeText)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(testIds.itemFreeText)).not.toBeInTheDocument();
     });
   });
 
@@ -826,8 +826,8 @@ describe('ListScreen', () => {
       expect(field).toHaveAttribute('placeholder', 'Search items');
       await user.type(field, 'Me');
 
-      const freeText = screen.getByTestId(testIds.itemFieldFreeText);
-      const newIngredient = screen.getByTestId(testIds.itemFieldNewIngredient);
+      const freeText = screen.getByTestId(testIds.itemFreeText);
+      const newIngredient = screen.getByTestId(testIds.itemNewIngredient);
       expect(freeText).toHaveTextContent('“Me” as an item');
       expect(newIngredient).toHaveTextContent('“Me” as a new ingredient');
       const results = await screen.findByRole('list', { name: 'Matching ingredients' });
@@ -966,7 +966,7 @@ describe('ListScreen', () => {
       const { fetchMock, user } = renderList(routes);
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'Mehl');
-      await user.click(screen.getByTestId(testIds.itemFieldFreeText));
+      await user.click(screen.getByTestId(testIds.itemFreeText));
       const dialog = await screen.findByTestId(testIds.freeTextDialog);
       // By value: user-event compares option labels as HTML (`&amp;`).
       await user.selectOptions(within(dialog).getByLabelText('Category'), 'cat-dairy_eggs');
@@ -990,7 +990,7 @@ describe('ListScreen', () => {
       });
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'Quitten');
-      await user.click(screen.getByTestId(testIds.itemFieldNewIngredient));
+      await user.click(screen.getByTestId(testIds.itemNewIngredient));
       const form = await screen.findByRole('dialog', { name: 'New ingredient' });
       expect(within(form).getByLabelText('Name')).toHaveValue('Quitten');
       await user.click(within(form).getByRole('button', { name: 'Save' }));
@@ -1027,15 +1027,15 @@ describe('ListScreen', () => {
       );
       await user.type(field, 'x');
       const options = [
-        screen.getByTestId(testIds.itemFieldFreeText),
-        screen.getByTestId(testIds.itemFieldNewIngredient),
+        screen.getByTestId(testIds.itemFreeText),
+        screen.getByTestId(testIds.itemNewIngredient),
       ];
 
       await mi.answer([found(MILK)]);
       expect(await screen.findByText('“Mix” as an item')).toBe(options[0]?.lastChild);
       expect(screen.queryByRole('list', { name: 'Matching ingredients' })).not.toBeInTheDocument();
-      expect(screen.getByTestId(testIds.itemFieldFreeText)).toBe(options[0]);
-      expect(screen.getByTestId(testIds.itemFieldNewIngredient)).toBe(options[1]);
+      expect(screen.getByTestId(testIds.itemFreeText)).toBe(options[0]);
+      expect(screen.getByTestId(testIds.itemNewIngredient)).toBe(options[1]);
     });
 
     it('sends an item again with the same id after an error, and the next one with a new id', async () => {

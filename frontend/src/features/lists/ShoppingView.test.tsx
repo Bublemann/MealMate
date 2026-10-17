@@ -98,7 +98,6 @@ async function sentOps(fetchMock: ReturnType<typeof mockApi>) {
   return bodies.flatMap((body) => body.ops);
 }
 
-/** A list of Ben's that he shares with me, his partner: I may change it, not delete it. */
 /**
  * Types `text` into the item field, takes it as free text with ＋ (Enter) and adds it from the
  * free-text pop-up, choosing `category` (an option's value) if given.
@@ -114,6 +113,7 @@ async function addFreeText(
   await user.click(within(dialog).getByRole('button', { name: 'Add' }));
 }
 
+/** A list of Ben's that he shares with me, his partner: I may change it, not delete it. */
 const SHARED_BY_BEN = { owner: BEN, is_owner: false, shared_with_partner: true };
 
 describe('start shopping (LIST-11)', () => {
@@ -843,8 +843,8 @@ describe('offline (SYNC-03)', () => {
 
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
     // Offline it searches nothing and offers only free text (SYNC-03).
-    expect(screen.getByTestId(testIds.itemFieldFreeText)).toHaveTextContent('“Feta” as an item');
-    expect(screen.queryByTestId(testIds.itemFieldNewIngredient)).not.toBeInTheDocument();
+    expect(screen.getByTestId(testIds.itemFreeText)).toHaveTextContent('“Feta” as an item');
+    expect(screen.queryByTestId(testIds.itemNewIngredient)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add “Feta”' }));
     const form = await screen.findByTestId(testIds.freeTextDialog);
     const category = within(form).getByLabelText('Category');
@@ -889,7 +889,7 @@ describe('offline (SYNC-03)', () => {
     await screen.findByTestId(testIds.shoppingLines);
 
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
-    await user.click(screen.getByTestId(testIds.itemFieldFreeText));
+    await user.click(screen.getByTestId(testIds.itemFreeText));
     const form = await screen.findByTestId(testIds.freeTextDialog);
     expect(
       within(within(form).getByLabelText('Category'))

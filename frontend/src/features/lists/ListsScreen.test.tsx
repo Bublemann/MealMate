@@ -270,7 +270,8 @@ describe('ListsScreen', () => {
       await screen.findByRole('heading', { level: 1, name: 'Shopping list (26/09/2026)' }),
     ).toBeVisible();
     await expect(requestsTo(fetchMock, 'POST /api/lists')[0]?.json()).resolves.toEqual({});
-    // The meal field's list shows, a recently used meal one tap away, the keyboard closed (MEAL-09).
+    // The meal field's list shows, a recently used meal one tap away, the keyboard closed
+    // (MEAL-09).
     const panel = await screen.findByTestId(testIds.mealFieldPanel);
     const all = await within(panel).findByRole('list', { name: 'All meals' });
     expect(within(all).getByRole('button', { name: 'Lasagne Anna' })).toBeVisible();

@@ -17,7 +17,13 @@ import { useCurrentUser } from '@/features/auth/context';
 import { useMealFieldMeals, type MealSearchResult } from '@/features/meals/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
-import { AddField, FieldOption, FieldOptions, RESULT_BUTTON_CLASS } from './AddField';
+import {
+  AddField,
+  FieldOption,
+  FieldOptions,
+  RESULT_BUTTON_CLASS,
+  RESULT_LIST_CLASS,
+} from './AddField';
 import { useAddListMeal, useRecentMeals } from './api';
 import { ServingsStepper } from './ServingsStepper';
 import { usePlus } from './usePlus';
@@ -60,7 +66,10 @@ export function MealField({ listId, disabled, openOnStart = false }: MealFieldPr
   const typed = text.trim();
   const debounced = useDebouncedValue(typed);
   const browsing = typed === '' && open;
-  const meals = useMealFieldMeals(debounced, { enabled: !disabled && (browsing || typed !== '') });
+  // Typing, it waits for the debounced text rather than load every meal once more.
+  const meals = useMealFieldMeals(debounced, {
+    enabled: !disabled && (browsing || (typed !== '' && debounced !== '')),
+  });
   const recent = useRecentMeals({ enabled: !disabled && browsing });
   // Only the answer for the text in the field (D-41): no earlier text's meals. When the search
   // failed, ＋ creates the meal.
@@ -143,7 +152,9 @@ export function MealField({ listId, disabled, openOnStart = false }: MealFieldPr
         }}
         disabled={disabled}
         onAdd={plus}
-        panelOpen={open}
+        // Typed text always shows its option (D-41); the empty field's list closes on a tap
+        // elsewhere.
+        panelOpen={open || typed !== ''}
         onOpen={() => setOpen(true)}
         onDismiss={dismiss}
         options={options}
@@ -190,7 +201,7 @@ function SearchResults({ answer, error, onChoose }: SearchResultsProps) {
   return (
     <>
       <ErrorAlert error={error} />
-      {answer && answer.length === 0 && (
+      {!error && answer && answer.length === 0 && (
         <p aria-live="polite" className="text-muted-foreground">
           {t('lists.mealField.noResults')}
         </p>
@@ -249,10 +260,7 @@ function MealSection({ title, meals, onChoose }: MealSectionProps) {
       >
         {title}
       </h3>
-      <ul
-        aria-labelledby={headingId}
-        className="flex flex-col divide-y overflow-hidden rounded-lg border"
-      >
+      <ul aria-labelledby={headingId} className={RESULT_LIST_CLASS}>
         {meals.map((meal) => (
           <MealRow key={meal.id} meal={meal} onChoose={onChoose} />
         ))}

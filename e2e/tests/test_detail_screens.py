@@ -191,7 +191,7 @@ def test_add_fields_fit_the_screen_at_the_largest_text_size(
 
     item_field = page.get_by_test_id(TEST_IDS["extraItemInput"])
     item_field.fill(f"Geburtstagskerzen {tag}")
-    fits(page.get_by_test_id(TEST_IDS["itemFieldNewIngredient"]))
+    fits(page.get_by_test_id(TEST_IDS["itemNewIngredient"]))
     item_field.press("Enter")
     free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
     expect(free_text).to_be_visible()

@@ -157,7 +157,7 @@ interface FieldOptionsProps {
 
 /** The create options, one tap target each, as the first thing under the field. */
 export function FieldOptions({ children }: FieldOptionsProps) {
-  return <ul className="flex flex-col divide-y overflow-hidden rounded-lg border">{children}</ul>;
+  return <ul className={RESULT_LIST_CLASS}>{children}</ul>;
 }
 
 interface FieldOptionProps {
@@ -181,6 +181,9 @@ export function FieldOption({ testId, onSelect, children }: FieldOptionProps) {
     </li>
   );
 }
+
+/** The class of a list of results under a field. */
+export const RESULT_LIST_CLASS = 'flex flex-col divide-y overflow-hidden rounded-lg border';
 
 /** The class of a result's button: the whole row is the tap target. */
 export const RESULT_BUTTON_CLASS =

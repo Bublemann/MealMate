@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -18,7 +18,13 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { cn } from '@/lib/utils';
 import { uuidv7 } from '@/lib/uuid';
 import { testIds } from '@/testIds';
-import { AddField, FieldOption, FieldOptions, RESULT_BUTTON_CLASS } from './AddField';
+import {
+  AddField,
+  FieldOption,
+  FieldOptions,
+  RESULT_BUTTON_CLASS,
+  RESULT_LIST_CLASS,
+} from './AddField';
 import { AmountDialog, FreeTextDialog, type AmountValue, type FreeTextValue } from './AddDialogs';
 import { shoppingOps, stampOp, useAddExtraItem, type ExtraItemCreate } from './api';
 import { usePlus } from './usePlus';
@@ -34,13 +40,7 @@ interface Retry {
 
 /** The open pop-up of the item field. */
 type ItemRequest =
-  | {
-      kind: 'amount';
-      ingredient: IngredientSummary;
-      amount: number | null;
-      unit: Unit;
-      retry: Retry | null;
-    }
+  | { kind: 'amount'; ingredient: IngredientSummary; value: AmountValue; retry: Retry | null }
   | { kind: 'freeText'; text: string; value: FreeTextValue | null; retry: Retry | null }
   | { kind: 'newIngredient'; name: string };
 
@@ -69,7 +69,6 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
   const connected = useConnected();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
-  const [open, setOpen] = useState(true);
   const [request, setRequest] = useState<ItemRequest | null>(null);
   const requestRef = useRef(request);
   const [addError, setAddError] = useState<Error | null>(null);
@@ -91,7 +90,6 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     : current
       ? (results.data ?? (results.isError ? [] : undefined))
       : undefined;
-  const dismiss = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     requestRef.current = request;
@@ -107,8 +105,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     setRequest({
       kind: 'amount',
       ingredient,
-      amount: null,
-      unit: startUnit(ingredient),
+      value: { amount: null, unit: startUnit(ingredient) },
       retry: null,
     });
   }
@@ -130,7 +127,6 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     flushSync(() => {
       setRequest(null);
       setText('');
-      setOpen(true);
     });
     inputRef.current?.focus();
   }
@@ -160,16 +156,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     setLastUnit(value.unit);
     add.mutate(item, {
       onError: (error) =>
-        reopen(
-          {
-            kind: 'amount',
-            ingredient,
-            amount: value.amount,
-            unit: value.unit,
-            retry: { sent: item, error },
-          },
-          error,
-        ),
+        reopen({ kind: 'amount', ingredient, value, retry: { sent: item, error } }, error),
     });
   }
 
@@ -182,12 +169,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     closeAndFocus();
     if (shopping) {
       // SHOP-02: into the outbox, online or offline; it says so itself if it can't be stored.
-      const payload = {
-        extra_id: uuidv7(),
-        text: name,
-        ...(value.amountText ? { amount_text: value.amountText } : {}),
-        ...(value.categoryId ? { category_id: value.categoryId } : {}),
-      };
+      const payload = { extra_id: uuidv7(), ...body };
       void queue(shoppingOps.addExtra(payload, stampOp())).then((queued) => {
         if (!queued) reopen({ kind: 'freeText', text: name, value, retry: null }, null);
       });
@@ -203,12 +185,12 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
   const matches = (answer ?? []).slice(0, MAX_RESULTS);
   const options = typed !== '' && (
     <FieldOptions>
-      <FieldOption testId={testIds.itemFieldFreeText} onSelect={chooseFreeText}>
+      <FieldOption testId={testIds.itemFreeText} onSelect={chooseFreeText}>
         {t('lists.itemField.freeText', { name: typed })}
       </FieldOption>
       {connected && (
         <FieldOption
-          testId={testIds.itemFieldNewIngredient}
+          testId={testIds.itemNewIngredient}
           onSelect={() => {
             setAddError(null);
             setRequest({ kind: 'newIngredient', name: typed });
@@ -223,10 +205,7 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
     <>
       <ErrorAlert error={searching ? results.error : null} />
       {matches.length > 0 && (
-        <ul
-          aria-label={t('lists.itemField.results')}
-          className="flex flex-col divide-y overflow-hidden rounded-lg border"
-        >
+        <ul aria-label={t('lists.itemField.results')} className={RESULT_LIST_CLASS}>
           {matches.map((ingredient) => (
             <li key={ingredient.id}>
               <button
@@ -246,6 +225,8 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
       )}
     </>
   );
+  const amountRequest = request?.kind === 'amount' ? request : null;
+  const freeTextRequest = request?.kind === 'freeText' ? request : null;
   const focusField = (event: Event) => {
     event.preventDefault();
     inputRef.current?.focus();
@@ -261,39 +242,36 @@ export function ItemField({ listId, shopping = false }: ItemFieldProps) {
         value={text}
         onValueChange={(value) => {
           setText(value);
-          setOpen(true);
           setAddError(null);
         }}
         // Offline a draft can't change (SYNC-03); while shopping free text still works.
         disabled={!connected && !shopping}
         onAdd={plus}
-        panelOpen={open && typed !== ''}
-        onOpen={() => setOpen(true)}
-        onDismiss={dismiss}
+        // While text is typed its options always show (D-41).
+        panelOpen={typed !== ''}
         options={options}
         results={resultList}
       >
         <ErrorAlert error={addError} />
       </AddField>
       <AmountDialog
-        ingredient={request?.kind === 'amount' ? request.ingredient : null}
-        initialAmount={request?.kind === 'amount' ? request.amount : null}
-        initialUnit={request?.kind === 'amount' ? request.unit : null}
-        error={request?.kind === 'amount' ? (request.retry?.error ?? null) : null}
+        ingredient={amountRequest?.ingredient ?? null}
+        initial={amountRequest?.value}
+        error={amountRequest?.retry?.error}
         disabled={!connected}
         onAdd={(value) => {
-          if (request?.kind === 'amount') addLinked(request.ingredient, value, request.retry);
+          if (amountRequest) addLinked(amountRequest.ingredient, value, amountRequest.retry);
         }}
         onCancel={() => setRequest(null)}
         onCloseAutoFocus={focusField}
       />
       <FreeTextDialog
-        text={request?.kind === 'freeText' ? request.text : null}
-        initial={request?.kind === 'freeText' ? request.value : null}
-        error={request?.kind === 'freeText' ? (request.retry?.error ?? null) : null}
+        text={freeTextRequest?.text ?? null}
+        initial={freeTextRequest?.value}
+        error={freeTextRequest?.retry?.error}
         disabled={!connected && !shopping}
         onAdd={(value) => {
-          if (request?.kind === 'freeText') addFreeText(request.text, value, request.retry);
+          if (freeTextRequest) addFreeText(freeTextRequest.text, value, freeTextRequest.retry);
         }}
         onCancel={() => setRequest(null)}
         onCloseAutoFocus={focusField}

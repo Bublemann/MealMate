@@ -19,6 +19,19 @@ import { testIds } from '@/testIds';
 import { AmountFields, FreeTextFields } from './ExtraItemFields';
 import { otherCategoryId } from './format';
 
+/**
+ * An error the pop-up has no field for (or with no field at all), shown as an alert; field errors
+ * of `shown` fields show next to them.
+ */
+function notShownHere(
+  serverFields: Partial<Record<string, string>>,
+  error: Error | null,
+  shown: readonly string[],
+): boolean {
+  const fields = Object.keys(serverFields);
+  return error !== null && (fields.length === 0 || fields.some((field) => !shown.includes(field)));
+}
+
 /** What the amount pop-up adds: no amount, or an amount in a unit. */
 export interface AmountValue {
   amount: number | null;
@@ -28,10 +41,11 @@ export interface AmountValue {
 interface AmountDialogProps {
   /** The ingredient to add; null closes the pop-up. */
   ingredient: IngredientSummary | null;
-  /** The amount it opens with (none: empty), e.g. the last amount of a due item (D-42). */
-  initialAmount?: number | null;
-  /** The unit it opens with; without one, the ingredient's base unit (REF-02). */
-  initialUnit?: Unit | null;
+  /**
+   * The amount and unit it opens with, e.g. the last amount of a due item (D-42); without them,
+   * no amount in the ingredient's base unit (REF-02).
+   */
+  initial?: AmountValue | null;
   /** Why the server refused it the last time: field errors show next to their field. */
   error?: Error | null;
   /** Offline: "Hinzufügen" is inactive (SYNC-03). */
@@ -47,8 +61,7 @@ interface AmountDialogProps {
  */
 export function AmountDialog({
   ingredient,
-  initialAmount = null,
-  initialUnit = null,
+  initial = null,
   error = null,
   disabled = false,
   onAdd,
@@ -72,8 +85,8 @@ export function AmountDialog({
           <AmountForm
             key={ingredient.id}
             ingredient={ingredient}
-            initialAmount={initialAmount}
-            initialUnit={initialUnit ?? ingredient.base_unit}
+            initialAmount={initial?.amount ?? null}
+            initialUnit={initial?.unit ?? ingredient.base_unit}
             error={error}
             disabled={disabled}
             amountRef={amountRef}
@@ -113,10 +126,7 @@ function AmountForm({
   const [unit, setUnit] = useState<Unit>(initialUnit);
   const [invalid, setInvalid] = useState(false);
   const serverFields = fieldErrorMessages(t, error);
-  const otherError =
-    error !== null &&
-    (Object.keys(serverFields).length === 0 ||
-      Object.keys(serverFields).some((field) => field !== 'amount' && field !== 'unit'));
+  const otherError = notShownHere(serverFields, error, ['amount', 'unit']);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -237,11 +247,7 @@ function FreeTextForm({ text, initial, error, disabled, amountRef, onAdd }: Free
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
   const chosenCategory = categoryId || otherCategoryId(categories.data);
   const serverFields = fieldErrorMessages(t, error);
-  const shown = ['amount_text', 'category_id'];
-  const otherError =
-    error !== null &&
-    (Object.keys(serverFields).length === 0 ||
-      Object.keys(serverFields).some((field) => !shown.includes(field)));
+  const otherError = notShownHere(serverFields, error, ['amount_text', 'category_id']);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
