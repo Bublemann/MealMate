@@ -73,7 +73,7 @@ def test_back_link_leaves_a_list_a_meal_and_an_admin_page_after_scrolling(
     sign_in(admin_page.context, admin)
     admin_page.goto("/me/admin/categories")
     categories = admin_page.get_by_test_id(TEST_IDS["adminCategoryList"])
-    leave_after_scrolling(admin_page, categories, text("nav.backToSettings"), "/me", "screenMe")
+    leave_after_scrolling(admin_page, categories, text("nav.me"), "/me", "screenMe")
 
 
 def test_long_name_is_cut_on_one_line(page: Page, api: Api, member: Account) -> None:

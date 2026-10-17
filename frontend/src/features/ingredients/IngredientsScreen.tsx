@@ -49,7 +49,7 @@ export function IngredientsScreen() {
       : null;
 
   return (
-    <Screen variant="tab" title={t('nav.ingredients')} testId={testIds.screenIngredients}>
+    <Screen variant="pinned" title={t('nav.ingredients')} testId={testIds.screenIngredients}>
       <PinnedBlock
         search={{
           label: t('ingredients.search.label'),

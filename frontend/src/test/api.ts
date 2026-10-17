@@ -54,7 +54,7 @@ export function errorResponse(status: number, code: string, fields: unknown[] = 
 
 type Handler = (request: Request) => unknown;
 
-/** Answers for the calls the signed-in app shell and the Me screen make. */
+/** Answers for the calls the signed-in app shell and the Settings screen make. */
 export const DEFAULT_ROUTES: Record<string, unknown> = {
   'GET /api/version': VERSION_INFO,
   'GET /api/me': TEST_USER,

@@ -18,6 +18,8 @@ its text (D-47).
 
 References from meals and lists go through `services.hooks`: `ingredient_references` blocks
 deletion (and is shown as the usage), and `on_ingredients_merged` repoints them when merging.
+Recurring items (LIST-16) are no references: a merge moves them, and a deletion removes them
+after `before_ingredient_deleted` has left their users a notice (D-51).
 A base-unit change or a merge that would leave amounts not fitting (`amounts_that_would_not_fit`)
 asks first (`_check_amounts_fit`, D-33).
 
@@ -538,5 +540,5 @@ async def delete(
             now=now,
             details={"name": row.name},
         )
-        await hooks.before_ingredient_deleted(session, row.id)
+        await hooks.before_ingredient_deleted(session, row.id, now=now)
         await session.delete(row)

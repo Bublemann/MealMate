@@ -17,6 +17,7 @@ from app.api import (
     me,
     meals,
     media,
+    recurring,
     reference,
     system,
     users,
@@ -33,6 +34,7 @@ for module in (
     ingredients,
     meals,
     lists,
+    recurring,
     media,
     admin,
 ):

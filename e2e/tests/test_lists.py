@@ -1,19 +1,22 @@
-"""Draft lists: build a list from meals and extra items (QA-04 journey 6), partners, copies.
+"""Draft lists: build a list from meals and extra items (QA-04 journey 6), partners, copies; the
+Lists tab's headline on a narrow screen.
 
-LIST-01..08, AGG, CPL-02/03, VIS-03/06 (plan § 12, M5a). All tests of a run share one database, so
-names get a unique tag, and the category order is read from the app (another test reorders the
-categories).
+LIST-01..08, AGG, CPL-02/03, VIS-03/06, UI-01 (plan § 12, M5a). All tests of a run share one
+database, so names get a unique tag, and the category order is read from the app (another test
+reorders the categories).
 """
 
 import re
 from collections.abc import Callable
 
-from playwright.sync_api import Locator, Page, expect
+from playwright.sync_api import Locator, Page, ViewportSize, expect
 
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
 
 LIST_URL = re.compile(r"/lists/([\w-]+)$")
+# As narrow as an iPhone SE's screen with Display Zoom.
+NARROW_SCREEN: ViewportSize = {"width": 320, "height": 568}
 
 
 def category_names(api: Api, account: Account, keys: set[str]) -> list[str]:
@@ -293,3 +296,33 @@ def test_others_list_is_read_only_and_copies_what_i_can_see(
     expect(copied).to_have_count(1)
     expect(copied).to_contain_text(soup["name"])
     expect(page.get_by_test_id(TEST_IDS["addMeals"])).to_be_visible()
+
+
+def test_pinned_headline_wraps_on_a_narrow_screen(
+    page: Page, invite_user: Callable[..., Account]
+) -> None:
+    """UI-01, D-44: at the largest iPhone text size (53 px body text, simulated here) on a screen
+    as narrow as an iPhone SE's with Display Zoom (320 px), "Einkaufslisten" is wider than the
+    content column: the headline breaks inside the word, hyphenated where the browser can, instead
+    of clipping or widening the page."""
+    sign_in(page.context, invite_user(language="de"))
+    page.set_viewport_size(NARROW_SCREEN)
+    page.goto("/lists")
+    page.add_style_tag(content="html { font-size: 53px !important; }")
+
+    block = page.get_by_test_id(TEST_IDS["pinnedBlock"])
+    headline = block.get_by_role("heading", level=1, name=text("nav.lists", "de"))
+    expect(headline).to_be_visible()
+    lines = headline.evaluate(
+        """headline => {
+          const range = document.createRange();
+          range.selectNodeContents(headline);
+          return new Set([...range.getClientRects()].map((line) => Math.round(line.top))).size;
+        }"""
+    )
+    assert lines > 1
+    assert headline.evaluate("headline => headline.scrollWidth <= headline.clientWidth")
+    box = headline.bounding_box()
+    assert box is not None
+    assert box["x"] >= 0
+    assert box["x"] + box["width"] <= NARROW_SCREEN["width"]

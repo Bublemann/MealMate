@@ -959,7 +959,11 @@ async def test_demo_shopping_and_done_lists(
     database: Database = app.state.database
     async with database.write_sessions() as session:
         seed = await demo.seed_demo(
-            session, AuthConfig.from_settings(settings), app.state.media, now=clock.now
+            session,
+            AuthConfig.from_settings(settings),
+            app.state.media,
+            now=clock.now,
+            zone=settings.zone,
         )
     users = {
         name: Account(id=user_id, username=name, display_name=name.capitalize())

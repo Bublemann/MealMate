@@ -19,7 +19,7 @@ export function useVersionInfo() {
   });
 }
 
-/** Loads the profile when Me opens, so changes made on another device show up. */
+/** Loads the profile when the Settings tab opens, so changes made on another device show up. */
 export function useMeRefresh() {
   const session = useAuthSession();
   return useQuery({
@@ -70,7 +70,7 @@ export function useRevokeSession() {
   });
 }
 
-/** Password changes and resets, for the notice in Me → Security (ACC-10). */
+/** Password changes and resets, for the notice in Settings → Security (ACC-10). */
 export function useSecurityInfo() {
   return useQuery({
     queryKey: ['me', 'security'],

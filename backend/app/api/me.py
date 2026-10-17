@@ -1,12 +1,13 @@
-"""The own account (ACC-09, ACC-10, ACC-13, VIS-02, I18N-01)."""
+"""The own account (ACC-09, ACC-10, ACC-13, VIS-02, I18N-01) and notices (D-51)."""
 
 from fastapi import APIRouter, Response, status
 
 from app.api.deps import ClientIp, Config, CurrentUser, Limits, Now
 from app.db.session import ReadSession, WriteSession
 from app.schemas.errors import ERROR_RESPONSES
+from app.schemas.notices import NoticeList
 from app.schemas.users import Me, MeUpdate, PasswordChange, SecurityInfo, SessionInfo
-from app.services import me
+from app.services import me, notices
 
 router = APIRouter(prefix="/api/me", tags=["me"], responses=ERROR_RESPONSES)
 
@@ -68,3 +69,22 @@ async def revoke_session(
 async def get_security(principal: CurrentUser, session: ReadSession) -> SecurityInfo:
     """Password change and reset notices ("Password reset by X on <date>")."""
     return await me.security_info(session, principal)
+
+
+@router.get("/notices")
+async def list_notices(principal: CurrentUser, session: ReadSession) -> NoticeList:
+    """The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a
+    recurring item."""
+    return await notices.list_unread(session, principal)
+
+
+@router.post(
+    "/notices/{notice_id}/dismiss",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def dismiss_notice(
+    notice_id: str, principal: CurrentUser, session: WriteSession, now: Now
+) -> None:
+    """Mark one of the own notices as read; dismissing it again changes nothing."""
+    await notices.dismiss(session, principal, notice_id, now=now)

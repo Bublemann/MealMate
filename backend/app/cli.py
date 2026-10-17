@@ -43,6 +43,7 @@ from app.services.demo import (
     DEMO_INGREDIENTS,
     DEMO_LISTS,
     DEMO_MEALS,
+    DEMO_RECURRING,
     DemoRefusedError,
     seed_demo,
 )
@@ -205,8 +206,8 @@ def reset_link(
 @main.command("seed-demo")
 def seed_demo_command() -> None:
     """Fill an empty installation with demo users (admin, anna + ben as a couple, carl with
-    private meals), an open invite, ingredients (some with brand and barcode), meals with photos
-    and draft lists.
+    private meals), an open invite, ingredients (some with brand and barcode), meals with photos,
+    lists and the couple's recurring items.
     Refuses to run if any user exists."""
     settings = _load_settings()
     _require_current_database(settings)
@@ -214,7 +215,10 @@ def seed_demo_command() -> None:
     config = AuthConfig.from_settings(settings)
     media = _media(settings)
     try:
-        seed = _run(settings, lambda session: seed_demo(session, config, media, now=utcnow()))
+        seed = _run(
+            settings,
+            lambda session: seed_demo(session, config, media, now=utcnow(), zone=settings.zone),
+        )
     except DemoRefusedError as exc:
         typer.echo(f"Refusing to seed demo data: {exc}.", err=True)
         raise typer.Exit(1) from None
@@ -225,6 +229,7 @@ def seed_demo_command() -> None:
     typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)} ({scanned} with a barcode)")
     typer.echo(f"Demo meals: {len(DEMO_MEALS)}")
     typer.echo(f"Demo lists: {len(DEMO_LISTS)}")
+    typer.echo(f"Demo recurring items: {len(DEMO_RECURRING)} (anna + ben)")
 
 
 @main.command("export-openapi")
