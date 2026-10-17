@@ -8,7 +8,7 @@ from playwright.sync_api import BrowserContext, Page, expect
 
 from support.api import Account, sign_in, unique
 from support.frontend import TEST_IDS, text
-from support.ui import log_in
+from support.ui import back_to_settings, log_in, settings_row
 
 
 def test_deactivated_user_is_logged_out_and_refused(
@@ -57,9 +57,10 @@ def test_system_screen_without_host_status_requests_a_backup(page: Page, admin: 
     # The E2E container has no host status files, so the screen shows its empty states.
     sign_in(page.context, admin)
     page.goto("/me")
-    page.get_by_test_id(TEST_IDS["adminEntry"]).get_by_role(
-        "link", name=text("admin.system.title")
-    ).click()
+    # The row has no value: without a backup status there is no last run to show.
+    system_row = settings_row(page, "admin.system.title")
+    expect(system_row).to_have_accessible_name(text("admin.system.title"))
+    system_row.click()
     expect(page).to_have_url(re.compile(r"/me/admin/system$"))
     expect(page.get_by_test_id(TEST_IDS["systemVersion"])).not_to_be_empty()
     expect(page.get_by_test_id(TEST_IDS["backupStatus"])).to_have_text(
@@ -73,9 +74,8 @@ def test_system_screen_without_host_status_requests_a_backup(page: Page, admin: 
     ).to_be_visible()
 
     # The request is in the activity log.
-    page.get_by_role("navigation", name=text("admin.title")).get_by_role(
-        "link", name=text("admin.events.title")
-    ).click()
+    back_to_settings(page)
+    settings_row(page, "admin.events.title").click()
     expect(
         page.get_by_test_id(TEST_IDS["eventList"])
         .get_by_role("listitem")

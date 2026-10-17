@@ -7,12 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
 import { formatDate, formatDateTime } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
 import { useCreateInvite, useInvites, useRevokeInvite, type Invite } from './api';
 import { inviteMessage } from './shareMessages';
 
@@ -21,10 +21,10 @@ export function AdminInvitesScreen() {
   const { t } = useTranslation();
 
   return (
-    <AdminScreen title={t('admin.invites.title')} testId={testIds.screenAdminInvites}>
+    <SettingsPage title={t('admin.invites.title')} testId={testIds.screenAdminInvites}>
       <CreateInvite />
       <InviteList />
-    </AdminScreen>
+    </SettingsPage>
   );
 }
 

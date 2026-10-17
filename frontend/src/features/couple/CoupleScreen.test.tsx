@@ -7,6 +7,7 @@ import {
   mockApi,
   NO_COUPLE,
   requestsTo,
+  TEST_ADMIN,
   TEST_USER,
   userRef,
 } from '@/test/api';
@@ -119,5 +120,32 @@ describe('CoupleScreen', () => {
     await user.click(within(section).getByRole('button', { name: 'Send request' }));
 
     expect(await within(section).findByText('This person is already in a couple.')).toBeVisible();
+  });
+
+  it('sends an admin to the invites when nobody else can be picked (CPL-01, D-49)', async () => {
+    mockApi({ 'GET /api/me': TEST_ADMIN, 'GET /api/users': [], 'GET /api/admin/invites': [] });
+    const { router, user } = renderApp('/me/couple', { user: TEST_ADMIN });
+
+    const section = await screen.findByTestId(testIds.coupleSection);
+    expect(await within(section).findByText('Invite your partner')).toBeVisible();
+    expect(within(section).queryByTestId(testIds.couplePicker)).not.toBeInTheDocument();
+    expect(within(section).queryByText('Ask an admin to invite your partner.')).toBeNull();
+
+    await user.click(within(section).getByRole('link', { name: 'Go to invites' }));
+
+    expect(await screen.findByTestId(testIds.screenAdminInvites)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/me/admin/invites');
+  });
+
+  it('asks a member to turn to an admin when nobody else can be picked (CPL-01, D-49)', async () => {
+    mockApi({ 'GET /api/users': [] });
+    renderApp('/me/couple');
+
+    const section = await screen.findByTestId(testIds.coupleSection);
+    expect(await within(section).findByText('Ask an admin to invite your partner.')).toBeVisible();
+    expect(within(section).queryByTestId(testIds.couplePicker)).not.toBeInTheDocument();
+    expect(within(section).queryByText('Invite your partner')).toBeNull();
+    expect(within(section).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button')).not.toBeInTheDocument();
   });
 });

@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { SettingsPage } from '@/features/me/SettingsPage';
 import { useCategories, type Category } from '@/features/reference/api';
 import {
   notDeletedCategories,
@@ -44,7 +45,6 @@ import { useLanguage } from '@/i18n';
 import { fieldErrorMessagesByPath, needsErrorAlert } from '@/i18n/errors';
 import { useTabMemory } from '@/lib/tabMemory';
 import { testIds } from '@/testIds';
-import { AdminScreen } from './AdminScreen';
 import {
   useCategoryUsage,
   useCreateCategory,
@@ -74,12 +74,12 @@ export function AdminCategoriesScreen() {
   const categories = useCategories();
 
   return (
-    <AdminScreen title={t('admin.categories.title')} testId={testIds.screenAdminCategories}>
+    <SettingsPage title={t('admin.categories.title')} testId={testIds.screenAdminCategories}>
       <p className="text-muted-foreground">{t('admin.categories.text')}</p>
       {categories.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={categories.error} />
       {categories.data && <CategoryOrder categories={categories.data} />}
-    </AdminScreen>
+    </SettingsPage>
   );
 }
 
