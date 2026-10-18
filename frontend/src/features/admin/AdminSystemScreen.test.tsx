@@ -126,13 +126,10 @@ describe('AdminSystemScreen', () => {
 
     const backup = await screen.findByTestId(testIds.backupStatus);
     expect(within(backup).getByText('Failed')).toBeVisible();
-    const lastSuccess = within(backup).getByText('Last successful backup');
-    expect(lastSuccess).toBeVisible();
-    expect(lastSuccess.nextElementSibling).toHaveTextContent(/^26\/09\/2026, \d\d:\d\d$/);
-    expect(within(backup).getByText(/26\/09\/2026/)).toHaveAttribute(
-      'datetime',
-      '2026-09-26T12:00:41Z',
-    );
+    expect(within(backup).getByText('Last successful backup')).toBeVisible();
+    const lastSuccess = within(backup).getByText(/26\/09\/2026/);
+    expect(lastSuccess).toHaveTextContent(/^26\/09\/2026, \d\d:\d\d$/);
+    expect(lastSuccess).toHaveAttribute('datetime', '2026-09-26T12:00:41Z');
     // The failed run's own details stay as they were.
     expect(within(backup).getByText(/27\/09\/2026/)).toHaveAttribute(
       'datetime',

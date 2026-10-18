@@ -55,18 +55,20 @@ finish() {
     rm -rf -- "$partial"
   fi
   if [ "$mode" = backup ]; then
-    local ok=false message size=null snap=null finished_at last_success
-    finished_at=$(mm_now)
+    local ok=false message size=null snap=null finished_at last_success=
     if [ "$status" -eq 0 ]; then
       ok=true
       size=$(du -sb -- "$MM_BACKUPS/$snapshot" | cut -f1)
       snap="\"$snapshot\""
       message="backup $snapshot ($label) complete"
-      last_success=$finished_at
     else
       message=$(tail -n 1 -- "$MM_RUNLOG" 2>/dev/null | cut -d' ' -f3- | head -c 300)
       message=${message:-backup failed}
       last_success=$(mm_last_backup_success)
+    fi
+    finished_at=$(mm_now)
+    if [ "$ok" = true ]; then
+      last_success=$finished_at
     fi
     mm_write_status backup.json "$(jq -cn --arg finished_at "$finished_at" --arg label "$label" \
       --argjson ok "$ok" --argjson snapshot "$snap" --argjson size_bytes "$size" \

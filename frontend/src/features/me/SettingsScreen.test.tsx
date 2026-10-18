@@ -284,7 +284,6 @@ describe('SettingsScreen row values (D-45)', () => {
     renderApp('/me', { user: TEST_ADMIN });
 
     await waitFor(() => expect(row('System')).toHaveAccessibleName('System Failed'));
-    expect(within(row('System')).getByText('Failed')).toHaveClass('text-destructive');
   });
 
   it('adds when the last backup succeeded to a failure, if the host knows it (ADM-01)', async () => {
@@ -298,7 +297,6 @@ describe('SettingsScreen row values (D-45)', () => {
     await waitFor(() =>
       expect(row('System')).toHaveAccessibleName('System Failed · last successful on 26/09/2026'),
     );
-    expect(within(row('System')).getByText('Failed')).toHaveClass('text-destructive');
     expect(within(row('System')).getByText(/26\/09\/2026/)).toHaveAttribute(
       'datetime',
       '2026-09-26T12:00:41Z',

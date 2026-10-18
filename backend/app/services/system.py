@@ -94,13 +94,6 @@ class _BackupFile(BackupStatus):
     def _to_utc(cls, value: datetime) -> datetime:
         return _utc(value)
 
-    @field_validator("last_success_at", mode="wrap")
-    @classmethod
-    def _tolerate_last_success(cls, value: object, handler: ValidatorFunctionWrapHandler) -> object:
-        # Only the host's ISO 8601 text: pydantic would read a number as a Unix time.
-        last_success = _null_if_invalid(value, handler) if isinstance(value, str) else None
-        return _utc(last_success) if isinstance(last_success, datetime) else None
-
     @field_validator("size_bytes", mode="wrap")
     @classmethod
     def _tolerate_size(cls, value: object, handler: ValidatorFunctionWrapHandler) -> object:
@@ -111,6 +104,13 @@ class _BackupFile(BackupStatus):
     def _tolerate_message(cls, value: object, handler: ValidatorFunctionWrapHandler) -> object:
         message = _null_if_invalid(value, handler)
         return _one_line(message) if isinstance(message, str) else None
+
+    @field_validator("last_success_at", mode="wrap")
+    @classmethod
+    def _tolerate_last_success(cls, value: object, handler: ValidatorFunctionWrapHandler) -> object:
+        # Only the host's ISO 8601 text: pydantic would read a number as a Unix time.
+        last_success = _null_if_invalid(value, handler) if isinstance(value, str) else None
+        return _utc(last_success) if isinstance(last_success, datetime) else None
 
 
 class _DiskFile(DiskStatus):

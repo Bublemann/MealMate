@@ -47,6 +47,8 @@ MM_DOCKER_KEY_FPR=9DC858229FC7DD38854AE2D88D81803C0EBFCD88
 MM_TAILSCALE_KEY_FPR=${TAILSCALE_KEY_FPR:-2596A99EAAB33821893C0A79458CA832957F5868}
 
 MM_SNAPSHOT_RE='^[0-9]{8}T[0-9]{6}Z$'
+# A UTC time as mm_now writes it into the status files.
+MM_TIME_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 MM_DIGEST_RE='^sha256:[0-9a-f]{64}$'
 # state/bad-digest keeps the most recent entries only.
 MM_BAD_DIGEST_KEEP=20
@@ -274,11 +276,11 @@ mm_latest_snapshot() {
 # previous state/status/backup.json, else the time of the newest snapshot (its name), else
 # nothing. backup.sh carries it over when a run fails.
 mm_last_backup_success() {
-  local file=$MM_STATE/status/backup.json value="" latest
+  local file=$MM_STATE/status/backup.json latest value=
   if mm_is_plain_file "$file"; then
     value=$(jq -r '.last_success_at // empty | strings' "$file" 2>/dev/null) || value=
   fi
-  if [[ $value =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+  if [[ $value =~ $MM_TIME_RE ]]; then
     printf '%s' "$value"
   elif latest=$(mm_latest_snapshot); then
     printf '%s-%s-%sT%s:%s:%sZ' "${latest:0:4}" "${latest:4:2}" "${latest:6:2}" \
