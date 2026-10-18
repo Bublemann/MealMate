@@ -14,6 +14,7 @@ from playwright.sync_api import BrowserContext, Locator, Page, expect
 from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, ingredient_label, text
 from support.images import png
+from support.ui import choose_from_menu, open_more_menu
 
 MEAL_URL = re.compile(r"/meals/([\w-]+)$")
 
@@ -232,6 +233,45 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     expect(line).to_contain_text(f"2 {text('unit.piece')}")
 
 
+def test_member_creates_an_ingredient_in_the_meal_form_with_one_tap(
+    member_page: Page, api: Api, member: Account
+) -> None:
+    """MEAL-03: "Create “…”" sits right under the picker's field, so results landing never move
+    it, and a tap made before the search has answered creates the ingredient at once."""
+    page = member_page
+    tag = unique("e2e")
+    quince = api.create_ingredient(member, f"Quitte {tag}")
+    name = f"{quince['name']} Gelee"
+
+    page.goto("/meals/new")
+    meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
+    picker = meal_form.get_by_test_id(TEST_IDS["ingredientPicker"])
+    field = picker.get_by_label(text("meals.field.addIngredient"), exact=True)
+    create = picker.get_by_test_id(TEST_IDS["ingredientPickerCreate"])
+    field.fill(quince["name"])
+    before = create.bounding_box()
+    assert before is not None
+    expect(
+        picker.get_by_role("button", name=re.compile(f"^{re.escape(quince['name'])}"))
+    ).to_be_visible()
+    after = create.bounding_box()
+    assert after is not None
+    assert after["y"] == before["y"]
+
+    # The longer name's search waits for the 250 ms debounce: the tap comes before it.
+    field.press_sequentially(" Gelee")
+    create.click()
+    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
+    expect(dialog.get_by_label(text("ingredients.field.name"), exact=True)).to_have_value(name)
+    dialog.get_by_role("button", name=text("common.save")).click()
+    expect(dialog).to_be_hidden()
+
+    # Its "Save" added the new ingredient's row, and only that one.
+    row = meal_form.get_by_test_id(TEST_IDS["mealIngredientRow"])
+    expect(row).to_have_count(1)
+    expect(row).to_have_accessible_name(text("meals.row.label", name=name))
+
+
 def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
     """Journey 5 (MEAL-07, MEAL-08, VIS-04): copy a public meal, edit the copy only."""
     tag = unique("e2e")
@@ -244,12 +284,10 @@ def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[...
     detail = page.get_by_test_id(TEST_IDS["screenMeal"])
     expect(detail.get_by_role("heading", level=1)).to_have_text(original["name"])
     expect(detail).to_contain_text(text("meals.detail.by", name=anna.display_name))
-    # Only the owner edits or deletes (VIS-04).
-    expect(page.get_by_test_id(TEST_IDS["copyMeal"])).to_be_visible()
-    expect(page.get_by_test_id(TEST_IDS["editMeal"])).to_have_count(0)
-    expect(page.get_by_test_id(TEST_IDS["deleteMeal"])).to_have_count(0)
-
-    page.get_by_test_id(TEST_IDS["copyMeal"]).click()
+    # Only the owner edits or deletes: Ben's ⋯ menu only copies (VIS-04, D-39).
+    menu = open_more_menu(page)
+    expect(menu.get_by_role("menuitem")).to_have_text([text("meals.detail.copy")])
+    menu.get_by_test_id(TEST_IDS["copyMeal"]).click()
 
     # Ben lands on his own copy, which remembers the original.
     expect(page).not_to_have_url(re.compile(f"/meals/{original['id']}$"))
@@ -261,7 +299,11 @@ def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[...
     copy_id = meal_id(page)
 
     # Ben edits his copy.
-    page.get_by_test_id(TEST_IDS["editMeal"]).click()
+    menu = open_more_menu(page)
+    expect(menu.get_by_role("menuitem")).to_have_text(
+        [text("meals.detail.edit"), text("meals.detail.copy"), text("meals.detail.delete")]
+    )
+    menu.get_by_test_id(TEST_IDS["editMeal"]).click()
     expect(page).to_have_url(re.compile(f"/meals/{copy_id}/edit$"))
     form = page.get_by_test_id(TEST_IDS["mealForm"])
     renamed = f"Bens Suppe {tag}"
@@ -275,8 +317,22 @@ def test_copy_someone_elses_meal(page: Page, api: Api, invite_user: Callable[...
     # Anna's meal is unchanged, and Ben still can't edit it.
     page.goto(f"/meals/{original['id']}")
     expect(detail.get_by_role("heading", level=1)).to_have_text(original["name"])
-    expect(page.get_by_test_id(TEST_IDS["copyMeal"])).to_be_visible()
-    expect(page.get_by_test_id(TEST_IDS["editMeal"])).to_have_count(0)
+    menu = open_more_menu(page)
+    expect(menu.get_by_test_id(TEST_IDS["copyMeal"])).to_be_visible()
+    expect(menu.get_by_test_id(TEST_IDS["editMeal"])).to_have_count(0)
+    page.keyboard.press("Escape")
+
+    # Ben deletes his copy after confirming (MEAL-07).
+    page.goto(f"/meals/{copy_id}")
+    expect(detail.get_by_role("heading", level=1)).to_have_text(renamed)
+    choose_from_menu(page, "deleteMeal")
+    page.get_by_role(
+        "alertdialog", name=text("meals.detail.deleteTitle", name=renamed)
+    ).get_by_role("button", name=text("meals.detail.deleteConfirm"), exact=True).click()
+    expect(page).to_have_url(re.compile("/meals$"))
+    meals = page.get_by_test_id(TEST_IDS["mealList"]).get_by_test_id(TEST_IDS["mealCard"])
+    expect(meals.filter(has_text=original["name"])).to_be_visible()
+    expect(meals.filter(has_text=renamed)).to_have_count(0)
 
 
 def test_private_meals_are_hidden_except_from_the_partner(
@@ -308,12 +364,13 @@ def test_private_meals_are_hidden_except_from_the_partner(
     expect(cards).to_have_count(2)
     expect(cards.filter(has_text=meal["name"])).to_have_count(1)
 
-    # Anna switches "meals public" off on Me, on her own device.
+    # Anna switches "meals public" off in Settings → Privatsphäre, on her own device.
     anna_context = new_context()
     sign_in(anna_context, anna)
     anna_page = anna_context.new_page()
-    anna_page.goto("/me")
-    switch = anna_page.get_by_test_id(TEST_IDS["mealsPublicSwitch"])
+    anna_page.goto("/me/privacy")
+    privacy = anna_page.get_by_test_id(TEST_IDS["screenPrivacy"])
+    switch = privacy.get_by_test_id(TEST_IDS["mealsPublicSwitch"])
     expect(switch).to_be_checked()
     switch.click()
     expect(switch).not_to_be_checked()

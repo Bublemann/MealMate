@@ -75,7 +75,7 @@ export function ListsScreen() {
   };
 
   return (
-    <Screen variant="tab" title={t('nav.lists')} testId={testIds.screenLists}>
+    <Screen variant="pinned" title={t('nav.lists')} testId={testIds.screenLists}>
       <ListsPinnedBlock
         filter={
           <FilterPanel
@@ -95,8 +95,8 @@ export function ListsScreen() {
 
 /**
  * The pinned block (UI-01) with the filter button and the "New list" tile (LIST-01), which
- * creates a draft right away and opens it with the meal picker. Creating a list needs the server,
- * so offline the tile is disabled rather than failing on a tap.
+ * creates a draft right away and opens it with the meal field's list showing. Creating a list
+ * needs the server, so offline the tile is disabled rather than failing on a tap.
  */
 function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
   const { t } = useTranslation();
@@ -107,7 +107,7 @@ function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
   function newList() {
     create.mutate(undefined, {
       onSuccess: (list) => {
-        const state: ListViewState = { openPicker: true };
+        const state: ListViewState = { showMeals: true };
         void navigate(`/lists/${list.id}`, { state });
       },
     });

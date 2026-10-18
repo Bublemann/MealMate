@@ -18,7 +18,7 @@ function exported(language: 'de' | 'en', list = listDetail()) {
 }
 
 describe('exportText', () => {
-  it('has name and date, meals, lines by category and the reminder, in English', () => {
+  it('has name and date, meals, and ends with the lines by category, in English (D-43)', () => {
     expect(exported('en')).toBe(
       [
         'Wochenende (26/09/2026)',
@@ -37,8 +37,6 @@ describe('exportText', () => {
         '- Geburtstagskerzen: 2 Packungen',
         '- Mehl: 850 g',
         '- Salz',
-        '',
-        "Didn't forget anything? Toilet paper? Salt?",
       ].join('\n'),
     );
   });
@@ -62,8 +60,6 @@ describe('exportText', () => {
         '- Geburtstagskerzen: 2 Packungen',
         '- Mehl: 850 g',
         '- Salz',
-        '',
-        'Nichts vergessen? Klopapier? Salz?',
       ].join('\n'),
     );
   });
@@ -118,8 +114,6 @@ describe('exportText', () => {
         '',
         'Other',
         '- Servietten',
-        '',
-        "Didn't forget anything? Toilet paper? Salt?",
       ].join('\n'),
     );
     expect(exported('de', list)).toContain('Einkaufsliste (26.09.2026)');
@@ -150,12 +144,9 @@ describe('exportText', () => {
     const list = listDetail({
       meals: [],
       lines: listDetail().lines.map((line) => ({ ...line, hidden: true })),
-      reminder_seed: 6,
     });
 
-    expect(exported('en', list)).toBe(
-      ['Wochenende (26/09/2026)', '', 'Breakfast sorted? Bread, butter, jam?'].join('\n'),
-    );
+    expect(exported('en', list)).toBe('Wochenende (26/09/2026)');
   });
 
   it('never shows the name of a meal the exporting user cannot see (VIS-06)', () => {

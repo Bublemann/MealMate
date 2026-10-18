@@ -700,7 +700,8 @@ export interface paths {
          * List Ingredients
          * @description Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
          *     then names starting with `q`, then the rest, each in dictionary order by name and brand
-         *     (Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`
+         *     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
+         *     ingredients in that order (at most 1000). `category_id`
          *     is repeatable: an ingredient matches if it is in any of the given categories.
          */
         get: operations["list_ingredients"];
@@ -983,6 +984,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lists/{list_id}/due-items/{ingredient_id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide Due Item
+         * @description Hide a due recurring item ("Fällig" box) on this list for everyone who sees it (drafts;
+         *     409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an
+         *     extra item.
+         */
+        post: operations["hide_due_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lists/{list_id}/extra-items": {
         parameters: {
             query?: never;
@@ -1230,6 +1253,47 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/me/notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notices
+         * @description The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a
+         *     recurring item.
+         */
+        get: operations["list_notices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notices/{notice_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Notice
+         * @description Mark one of the own notices as read; dismissing it again changes nothing.
+         */
+        post: operations["dismiss_notice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/password": {
         parameters: {
             query?: never;
@@ -1320,10 +1384,11 @@ export interface paths {
         /**
          * List Meals
          * @description The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags
-         *     and cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal
-         *     matches if its cuisine is any of the given ones and it has every given tag. Without
-         *     `owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are
-         *     left out; with `owner_ids` (repeatable), only those owners' meals are listed.
+         *     and cuisines ignoring case and umlauts; `exact` marks the meals whose name is `q`.
+         *     `cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given
+         *     ones and it has every given tag. Without `owner_ids`, owners you unticked in your user
+         *     filter on Meals (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only
+         *     those owners' meals are listed.
          */
         get: operations["list_meals"];
         put?: never;
@@ -1348,7 +1413,7 @@ export interface paths {
         /**
          * List Recent Meals
          * @description Up to 10 meals you recently added to lists, most recent first, as far as you can still
-         *     see them (the "recently used" meals of the meal picker).
+         *     see them (the "recently used" meals of the list's meal field).
          */
         get: operations["list_recent_meals"];
         put?: never;
@@ -1476,6 +1541,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recurring-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recurring Items
+         * @description The caller's set (their couple's while in one, else their own), due first.
+         */
+        get: operations["list_recurring_items"];
+        put?: never;
+        /**
+         * Create Recurring Item
+         * @description Make an ingredient recurring in the caller's set.
+         */
+        post: operations["create_recurring_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recurring-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Recurring Item
+         * @description Remove an item from the caller's set ("Nicht mehr regelmäßig").
+         */
+        delete: operations["delete_recurring_item"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Recurring Item
+         * @description Change an item's interval, switch it back to automatic, or correct its last purchase
+         *     date.
+         */
+        patch: operations["update_recurring_item"];
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -1578,6 +1692,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/walking-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Walking Order
+         * @description The order the caller's lists are grouped in: the admins' while it follows theirs, else
+         *     the own one.
+         */
+        get: operations["get_walking_order"];
+        /**
+         * Save Walking Order
+         * @description Keep an own order, which stops following the admins' one ("Reihenfolge der Verwaltung
+         *     übernehmen" off).
+         */
+        put: operations["save_walking_order"];
+        post?: never;
+        /**
+         * Follow Admin Walking Order
+         * @description Follow the admins' order again ("Reihenfolge der Verwaltung übernehmen" on): the own
+         *     order goes.
+         */
+        delete: operations["follow_admin_walking_order"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1644,6 +1789,8 @@ export interface components {
         /**
          * BackupStatus
          * @description The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).
+         *     `last_success_at` is when the last successful backup finished, also after failed runs;
+         *     null while the host doesn't know it (ADM-01).
          */
         BackupStatus: {
             /**
@@ -1656,6 +1803,8 @@ export interface components {
              * @enum {string}
              */
             label: "regular" | "pre-update" | "manual";
+            /** Last Success At */
+            last_success_at: string | null;
             /** Message */
             message: string | null;
             /** Ok */
@@ -1883,6 +2032,29 @@ export interface components {
             unit: components["schemas"]["Unit"];
             /** Value */
             value: number;
+        };
+        /**
+         * DueItem
+         * @description A due recurring item of the viewer's set, offered in a draft's "Fällig" box (LIST-16):
+         *     due since `due_on`, `days_until_due` from today (0 "fällig heute", -3 "fällig seit 3
+         *     Tagen"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,
+         *     only while its unit fits the ingredient's base unit (REF-02), for the amount pop-up.
+         */
+        DueItem: {
+            /** Days Until Due */
+            days_until_due: number;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            ingredient: components["schemas"]["IngredientSummary"];
+            last_amount: components["schemas"]["DisplayAmountOut"] | null;
+            /**
+             * Last Purchased On
+             * Format: date
+             */
+            last_purchased_on: string;
         };
         /**
          * ErrorCode
@@ -2130,9 +2302,11 @@ export interface components {
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
          *     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-         *     Facts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` are the
-         *     pack size from Open Food Facts (information only, never user-edited, D-38). `created_by` /
-         *     `updated_by` are null for a deleted user (ING-06).
+         *     Facts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food
+         *     Facts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from
+         *     the text when it is a plain amount and unit ("500 g", "1,5 l"), else null (D-47); one saved
+         *     before D-47 keeps Open Food Facts' amount until its text changes.
+         *     `created_by` / `updated_by` are null for a deleted user (ING-06).
          */
         Ingredient: {
             /** Barcode */
@@ -2182,7 +2356,7 @@ export interface components {
             updated_by: components["schemas"]["UserRef"] | null;
             usage: components["schemas"]["IngredientUsage"];
             /** User Edited Fields */
-            user_edited_fields: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            user_edited_fields: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
         };
         /**
          * IngredientBarcodeLink
@@ -2205,11 +2379,11 @@ export interface components {
          *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
          *     ingredient has is 409 `ingredient.barcode_taken`.
          *
-         *     With `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs
-         *     its `barcode` (422 `required` without). Only then are `quantity_text`, `pack_quantity` and
-         *     `pack_unit` taken, the pack size passed on from the proposal; without `off` they are refused
-         *     (422 `invalid`), as nobody types in a pack size (D-38). Names need not be unique: the
-         *     "similar ingredient exists" hint (`GET /api/ingredients/similar`) is only a hint.
+         *     `quantity_text` is the pack size ("500 g", "6 x 1,5 l"), at most 40 characters, for any
+         *     ingredient; its amount is taken from it (D-47). With `off`, the ingredient is from Open Food
+         *     Facts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).
+         *     Names need not be unique: the "similar ingredient exists" hint
+         *     (`GET /api/ingredients/similar`) is only a hint.
          */
         IngredientCreate: {
             /** Barcode */
@@ -2228,9 +2402,6 @@ export interface components {
             name: string;
             nutrients?: components["schemas"]["NutrientValues"] | null;
             off?: components["schemas"]["IngredientOffOrigin"] | null;
-            /** Pack Quantity */
-            pack_quantity?: number | null;
-            pack_unit?: components["schemas"]["Unit"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
             /** Quantity Text */
@@ -2258,9 +2429,39 @@ export interface components {
          */
         IngredientOffOrigin: {
             /** Edited Fields */
-            edited_fields?: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            edited_fields?: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
             /** Off Last Modified At */
             off_last_modified_at?: string | null;
+        };
+        /**
+         * IngredientSearchResult
+         * @description A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut
+         *     spelling and accents (ING-03), whatever its brand; these come first. The list's item field
+         *     takes such a result for "+" when it is the only one (D-41). False without a query.
+         */
+        IngredientSearchResult: {
+            /** Barcode */
+            barcode: string | null;
+            /**
+             * Base Unit
+             * @enum {string}
+             */
+            base_unit: "g" | "ml" | "piece";
+            /** Brand */
+            brand: string | null;
+            /** Category Id */
+            category_id: string;
+            /** Exact */
+            exact: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "off";
         };
         /**
          * IngredientSummary
@@ -2296,10 +2497,9 @@ export interface components {
          *     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
          *     only the nutrients it contains (null clears one).
          *
-         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and
-         *     the nutrients) becomes user-edited (BAR-04). The pack size (`quantity_text`, `pack_quantity`,
-         *     `pack_unit`) comes only from Open Food Facts and is refused here, even as null (422
-         *     `invalid`, D-38). A new barcode must be free (409
+         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the
+         *     pack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack
+         *     size's amount follows its text. A new barcode must be free (409
          *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
@@ -2326,6 +2526,8 @@ export interface components {
             nutrients?: components["schemas"]["NutrientValues"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
+            /** Quantity Text */
+            quantity_text?: string | null;
         };
         /**
          * IngredientUsage
@@ -2513,9 +2715,12 @@ export interface components {
          * @description A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:
          *     editors change the name, meals, servings, extra items and hidden lines; only the owner
          *     deletes the list and changes `shared_with_partner` (CPL-02/03). The display name is
-         *     `<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is
-         *     `reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`
-         *     are set once shopping started and while the list is done (LIST-10).
+         *     `<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`
+         *     and `finished_at` are set once shopping started and while the list is done (LIST-10).
+         *
+         *     `due_items` fill the "Fällig" box (LIST-16), only on a draft the viewer can edit, else
+         *     empty: the due recurring items of the viewer's set whose ingredient has no line on the list
+         *     (a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.
          */
         ListDetail: {
             /** Can Edit */
@@ -2525,6 +2730,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Due Items */
+            due_items: components["schemas"]["DueItem"][];
             /** Extra Items */
             extra_items: components["schemas"]["ExtraItem"][];
             /** Finished At */
@@ -2540,8 +2747,6 @@ export interface components {
             /** Name */
             name: string | null;
             owner: components["schemas"]["UserRef"];
-            /** Reminder Seed */
-            reminder_seed: number;
             /** Shared With Partner */
             shared_with_partner: boolean;
             /** Shopping Started At */
@@ -2991,6 +3196,33 @@ export interface components {
             url: string;
         };
         /**
+         * MealSearchResult
+         * @description A meal in the meal list. `exact`: its name is the query `q`, ignoring case, umlaut
+         *     spelling and accents (ING-03); the list's meal field takes it for "+" (D-41). False without
+         *     a query.
+         */
+        MealSearchResult: {
+            cuisine: components["schemas"]["Cuisine"] | null;
+            /** Exact */
+            exact: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            owner: components["schemas"]["UserRef"];
+            /** Servings */
+            servings: number;
+            /** Tags */
+            tags: components["schemas"]["Tag"][];
+            /** Thumb Url */
+            thumb_url: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * MealSummary
          * @description A meal in the meal list; `thumb_url` is a signed URL of the photo's thumbnail.
          */
@@ -3034,6 +3266,39 @@ export interface components {
             source_url?: string | null;
             /** Tags */
             tags?: string[] | null;
+        };
+        /**
+         * Notice
+         * @description An unread notice of the caller's.
+         */
+        Notice: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "recurring_item.ingredient_deleted";
+            /** Params */
+            params: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * NoticeList
+         * @description The caller's unread notices, newest first, and how many there are (the count on the
+         *     Settings tab, UI-07).
+         */
+        NoticeList: {
+            /** Count */
+            count: number;
+            /** Notices */
+            notices: components["schemas"]["Notice"][];
         };
         /**
          * NutrientValues
@@ -3148,7 +3413,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
+            field: "name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
             /** Proposed */
             proposed: string | number | null;
         };
@@ -3177,11 +3442,98 @@ export interface components {
             nutrition_basis: ("g" | "ml") | null;
             /** Off Last Modified At */
             off_last_modified_at: string | null;
-            /** Pack Quantity */
-            pack_quantity: number | null;
-            pack_unit: components["schemas"]["Unit"] | null;
             /** Quantity Text */
             quantity_text: string | null;
+        };
+        /**
+         * RecurringInterval
+         * @description The interval an item is due after, as the app shows it (MNT-02): below a week in days,
+         *     else in whole weeks rounded to the nearest. `automatic` while it adapts to the purchases
+         *     ("alle ~4 Wochen"); off when it was set by hand ("alle 4 Wochen").
+         */
+        RecurringInterval: {
+            /** Automatic */
+            automatic: boolean;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "day" | "week";
+            /** Value */
+            value: number;
+        };
+        /**
+         * RecurringItem
+         * @description An item of the caller's set. It is due from `due_on` on: the last purchase plus the
+         *     interval, in calendar days of the instance's time zone. `days_until_due` counts from today
+         *     (0 "fällig heute", 1 "fällig morgen", -3 "fällig seit 3 Tagen"). `interval_weeks` is the
+         *     set interval for the edit pop-up. `last_amount` is the last purchase's amount, only while
+         *     its unit fits the ingredient's base unit (REF-02).
+         */
+        RecurringItem: {
+            /** Days Until Due */
+            days_until_due: number;
+            /** Due */
+            due: boolean;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /** Id */
+            id: string;
+            ingredient: components["schemas"]["IngredientSummary"];
+            interval: components["schemas"]["RecurringInterval"];
+            /** Interval Weeks */
+            interval_weeks: number;
+            last_amount: components["schemas"]["DisplayAmountOut"] | null;
+            /**
+             * Last Purchased On
+             * Format: date
+             */
+            last_purchased_on: string;
+        };
+        /**
+         * RecurringItemCreate
+         * @description Make an ingredient recurring: every `interval_weeks` (1 to 52), last bought on
+         *     `last_purchased_on` (today if left out; not in the future, at most 730 days back:
+         *     422 `out_of_range`). An ingredient already in the set is 422 `taken`, an unknown one
+         *     `invalid`. The interval adapts automatically from the second purchase on.
+         */
+        RecurringItemCreate: {
+            /** Ingredient Id */
+            ingredient_id: string;
+            /** Interval Weeks */
+            interval_weeks: number;
+            /** Last Purchased On */
+            last_purchased_on?: string | null;
+        };
+        /**
+         * RecurringItemList
+         * @description The caller's set (their couple's while in one, else their own), sorted by due date and
+         *     then by the ingredient's name, and how many items are due.
+         */
+        RecurringItemList: {
+            /** Due Count */
+            due_count: number;
+            /** Items */
+            items: components["schemas"]["RecurringItem"][];
+        };
+        /**
+         * RecurringItemUpdate
+         * @description Only the fields that are sent change; null is refused (422 `invalid`). A new
+         *     `interval_weeks` sets the interval by hand. `automatic` true lets it adapt again, with the
+         *     set interval serving until two intervals are measured; false alone keeps the interval that
+         *     serves now, as set by hand. `last_purchased_on` corrects the last purchase date, within
+         *     the same range as on create.
+         */
+        RecurringItemUpdate: {
+            /** Automatic */
+            automatic?: boolean | null;
+            /** Interval Weeks */
+            interval_weeks?: number | null;
+            /** Last Purchased On */
+            last_purchased_on?: string | null;
         };
         /**
          * RefreshRequest
@@ -3203,7 +3555,7 @@ export interface components {
         };
         /**
          * SecurityInfo
-         * @description What *Me → Security* shows, e.g. "Password reset by X on <date>" (ACC-10).
+         * @description What *Einstellungen → Sicherheit* shows, e.g. "Password reset by X on <date>" (ACC-10).
          *
          *     `password_reset_by` is null for a reset link from the command line or a deleted admin.
          */
@@ -3306,6 +3658,46 @@ export interface components {
             source_url: string;
             /** Version */
             version: string;
+        };
+        /**
+         * WalkingOrder
+         * @description The caller's walking order: their couple's while in one, else their own. While
+         *     `follows_admin` ("Reihenfolge der Verwaltung übernehmen") it is the admins' order and follows
+         *     their changes; otherwise it is the own order. `categories` lists every category that isn't
+         *     deleted in that order.
+         */
+        WalkingOrder: {
+            /** Categories */
+            categories: components["schemas"]["WalkingOrderCategory"][];
+            /** Follows Admin */
+            follows_admin: boolean;
+        };
+        /**
+         * WalkingOrderCategory
+         * @description A category that isn't deleted, *Uncategorized* included, shown by its name in the UI
+         *     language (`names`). `new`: an admin added it after the own order was saved, so it went to
+         *     the end; it stays new until it is moved.
+         */
+        WalkingOrderCategory: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string | null;
+            names: components["schemas"]["CategoryNames"];
+            /** New */
+            new: boolean;
+        };
+        /**
+         * WalkingOrderSave
+         * @description An own order: every category that isn't deleted exactly once, *Uncategorized* included,
+         *     in the new order. `moved_id` names the category the user moved, which is no longer new;
+         *     left out or null when the switch was turned off without a move.
+         */
+        WalkingOrderSave: {
+            /** Category Ids */
+            category_ids: string[];
+            /** Moved Id */
+            moved_id?: string | null;
         };
     };
     responses: never;
@@ -4491,7 +4883,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngredientSummary"][];
+                    "application/json": components["schemas"]["IngredientSearchResult"][];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5034,6 +5426,38 @@ export interface operations {
             };
         };
     };
+    hide_due_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                ingredient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     add_extra_item: {
         parameters: {
             query?: never;
@@ -5508,6 +5932,64 @@ export interface operations {
             };
         };
     };
+    list_notices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeList"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dismiss_notice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     change_password: {
         parameters: {
             query?: never;
@@ -5646,7 +6128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MealSummary"][];
+                    "application/json": components["schemas"]["MealSearchResult"][];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5977,6 +6459,132 @@ export interface operations {
             };
         };
     };
+    list_recurring_items: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringItemList"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_recurring_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringItem"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_recurring_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_recurring_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringItem"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_tags: {
         parameters: {
             query?: {
@@ -6114,6 +6722,95 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VersionInfo"];
                 };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_walking_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalkingOrder"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    save_walking_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkingOrderSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WalkingOrder"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    follow_admin_walking_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error envelope; `code` names the error */
             default: {

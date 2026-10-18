@@ -9,6 +9,9 @@
 | Shopping (M5b) | shop again: whoever sees the done list | start, ops, reopen: list editors |
 | Meal on a list (M5a) | details if its meal is visible, else "Private meal" (VIS-06) | n/a |
 | Ingredient (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
+| Due item (LIST-16) | list editors, on drafts | hide: list editors, on drafts; holds for all |
+| Recurring item (LIST-16) | own set; the couple's set while in a couple | same (either partner) |
+| Notice (D-51) | the user it is for | dismiss: same |
 | Reference data (M3) | everyone | add a cuisine: everyone; reorder categories: admin |
 | Admin endpoints | active admin (`require_admin`) | same; never self-deactivation or deletion |
 
@@ -18,9 +21,9 @@ shared list) sees it read-only. Only the owner deletes a list and switches shari
 Ingredients are a shared household wiki, so they need no per-object check; the
 admin-only actions go through `require_admin` (via the `CurrentAdmin` dependency).
 
-A meal or list the viewer may not see answers exactly like one that does not exist (404
-`common.not_found`), so its existence never leaks; a visible meal or list the viewer may not
-change answers edits with 403 `common.forbidden`.
+A meal, list, recurring item or notice the viewer may not see answers exactly like one that
+does not exist (404 `common.not_found`), so its existence never leaks; a visible meal or list
+the viewer may not change answers edits with 403 `common.forbidden`.
 """
 
 from dataclasses import dataclass
@@ -28,10 +31,13 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ApiError, ErrorCode, not_found
-from app.models import Meal, ShoppingList
+from app.domain.owners import OwnerKey, owner_key_of
+from app.models import Meal, Notice, RecurringItem, ShoppingList
 from app.repositories import couples as couples_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
+from app.repositories import notices as notices_repo
+from app.repositories import recurring as recurring_repo
 from app.repositories import users as users_repo
 from app.schemas.users import VisibilityScope
 from app.services.principal import Principal
@@ -47,12 +53,49 @@ def require_admin(principal: Principal) -> None:
         raise _forbidden()
 
 
-async def partner_id(session: AsyncSession, user_id: str) -> str | None:
-    """The user's partner while the couple exists (deactivated partners included, CPL-07)."""
+async def couple_and_partner(session: AsyncSession, user_id: str) -> tuple[str | None, str | None]:
+    """The user's couple and partner while the couple exists (deactivated partners included,
+    CPL-07), in one query."""
     couple = await couples_repo.accepted_for(session, user_id)
     if couple is None:
-        return None
-    return couple.addressee_id if couple.requester_id == user_id else couple.requester_id
+        return None, None
+    partner = couple.addressee_id if couple.requester_id == user_id else couple.requester_id
+    return couple.id, partner
+
+
+async def partner_id(session: AsyncSession, user_id: str) -> str | None:
+    """The user's partner while the couple exists (deactivated partners included, CPL-07)."""
+    return (await couple_and_partner(session, user_id))[1]
+
+
+async def owner_key(session: AsyncSession, user_id: str) -> OwnerKey:
+    """Who owns the data the user shares with their partner now (recurring items D-42,
+    walking order D-48): their couple while they are in one (a deactivated partner included,
+    CPL-07), else the user."""
+    return owner_key_of(user_id, (await couple_and_partner(session, user_id))[0])
+
+
+async def require_recurring_item(
+    session: AsyncSession, principal: Principal, item_id: str
+) -> RecurringItem:
+    """The recurring item, if it is in the principal's current set (LIST-16): for every method
+    404 `common.not_found` otherwise, exactly as for an item that does not exist."""
+    item = await recurring_repo.get(session, item_id)
+    if item is None:
+        raise not_found()
+    owner = OwnerKey(couple_id=item.couple_id, user_id=item.user_id)
+    if owner != await owner_key(session, principal.user_id):
+        raise not_found()
+    return item
+
+
+async def require_own_notice(session: AsyncSession, principal: Principal, notice_id: str) -> Notice:
+    """The notice, if it is for the principal (D-51); 404 `common.not_found` otherwise, exactly
+    as for a notice that does not exist."""
+    notice = await notices_repo.get(session, notice_id)
+    if notice is None or notice.user_id != principal.user_id:
+        raise not_found()
+    return notice
 
 
 async def visible_owner_ids(
@@ -100,31 +143,40 @@ async def require_meal_owner(session: AsyncSession, principal: Principal, meal_i
 @dataclass(frozen=True)
 class ListRights:
     """What a viewer may do with a list they can see (CPL-02/03, VIS-03), and the viewer's
-    partner they were decided with (which meals on it the viewer may see follows from it)."""
+    partner they were decided with (which meals on it the viewer may see follows from it) and
+    couple (whose recurring items a draft offers, LIST-16)."""
 
     is_owner: bool
     can_edit: bool
     viewer_partner_id: str | None
+    viewer_couple_id: str | None
 
 
 def list_rights(
-    viewer_id: str, viewer_partner_id: str | None, shopping_list: ShoppingList, owner_public: bool
+    viewer_id: str,
+    viewer_couple: tuple[str | None, str | None],
+    shopping_list: ShoppingList,
+    owner_public: bool,
 ) -> ListRights | None:
     """The viewer's rights on a list, or None if they may not see it: the owner edits; the
     owner's partner sees every list while the couple exists and edits the shared ones
     (CPL-02/04); everyone else only sees the lists of owners whose *lists public* switch is on
-    (VIS-02/03)."""
+    (VIS-02/03). `viewer_couple` is the viewer's couple and partner (`couple_and_partner`)."""
+    couple_id, viewer_partner_id = viewer_couple
     if shopping_list.owner_id == viewer_id:
-        return ListRights(is_owner=True, can_edit=True, viewer_partner_id=viewer_partner_id)
-    if shopping_list.owner_id == viewer_partner_id:
-        return ListRights(
-            is_owner=False,
-            can_edit=shopping_list.shared_with_partner,
-            viewer_partner_id=viewer_partner_id,
-        )
-    if owner_public:
-        return ListRights(is_owner=False, can_edit=False, viewer_partner_id=viewer_partner_id)
-    return None
+        is_owner, can_edit = True, True
+    elif shopping_list.owner_id == viewer_partner_id:
+        is_owner, can_edit = False, shopping_list.shared_with_partner
+    elif owner_public:
+        is_owner, can_edit = False, False
+    else:
+        return None
+    return ListRights(
+        is_owner=is_owner,
+        can_edit=can_edit,
+        viewer_partner_id=viewer_partner_id,
+        viewer_couple_id=couple_id,
+    )
 
 
 async def require_list_view(
@@ -138,7 +190,7 @@ async def require_list_view(
     owner = await users_repo.get(session, shopping_list.owner_id)
     rights = list_rights(
         principal.user_id,
-        await partner_id(session, principal.user_id),
+        await couple_and_partner(session, principal.user_id),
         shopping_list,
         owner_public=owner is not None and owner.lists_public,
     )

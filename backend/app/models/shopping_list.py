@@ -33,15 +33,14 @@ class ShoppingList(IdMixin, TimestampMixin, Base):
     `name` null shows the translated default name (LIST-02). `version` is incremented in SQL
     (`version + 1`) on every change of the list or anything in it, together with `updated_at`
     (the local copy's order, SYNC-02). The list feed orders by `created_at`, so a list keeps
-    its place (UI-02). `reminder_seed` picks the reminder (LIST-14). `shopping_started_at` and
-    `finished_at` belong to shopping mode and done lists (M5b, SHOP-05).
+    its place (UI-02). `shopping_started_at` and `finished_at` belong to shopping mode and done
+    lists (M5b, SHOP-05).
     """
 
     __tablename__ = "shopping_lists"
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'shopping', 'done')", name="status"),
         CheckConstraint("version >= 0", name="version"),
-        CheckConstraint("reminder_seed >= 0 AND reminder_seed <= 9999", name="reminder_seed"),
     )
 
     owner_id: Mapped[str] = mapped_column(
@@ -51,7 +50,6 @@ class ShoppingList(IdMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(10), default="draft")
     shared_with_partner: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=0)
-    reminder_seed: Mapped[int] = mapped_column(Integer)
     shopping_started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
@@ -198,6 +196,25 @@ class ListLineState(Base):
     )
     checked_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ListHiddenDueItem(Base):
+    """A due recurring item hidden on one list, for everyone who sees it (✕ in the "Fällig"
+    box, LIST-16, D-42). Keyed by ingredient rather than by recurring item, so it survives a
+    couple forming or ending; there is no undo. It goes with its list or ingredient."""
+
+    __tablename__ = "list_hidden_due_items"
+
+    list_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("shopping_lists.id", ondelete="CASCADE"), primary_key=True
+    )
+    ingredient_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    hidden_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    hidden_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
 
 
 class ProcessedOp(Base):

@@ -132,7 +132,7 @@ describe('session revoked while in use (SYNC-10)', () => {
       'GET /api/couple': () => (revoked ? errorResponse(401, 'auth.session_revoked') : NO_COUPLE),
     });
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(TEST_USER));
-    const { queryClient, router } = renderApp('/me');
+    const { queryClient, router } = renderApp('/me/about');
     await screen.findByTestId(testIds.appVersion);
     expect(queryClient.getQueryData(['version'])).toEqual(VERSION_INFO);
 

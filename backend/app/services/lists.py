@@ -1,6 +1,6 @@
 """Shopping lists: the list feed, create, rename, share, delete, meals with servings, extra
-items, hidden lines, copies, starting to shop, reopening and shopping again (LIST-01..15,
-SHOP-05/06, CPL-02/03, VIS-03/06, UI-02).
+items, hidden lines, copies, starting to shop, reopening and shopping again, and the due
+recurring items a draft offers (LIST-01..16, SHOP-05/06, CPL-02/03, VIS-03/06, UI-02).
 
 Who may see or change a list is decided by `services.access`; which meals on it the viewer
 may see (VIS-06) by the meal rules. The lines come from `services.aggregation`, the rules of
@@ -13,10 +13,10 @@ done list is read-only (409 `list.done`) until it is reopened. Lines are hidden 
 only in a draft (409 `list.not_draft`).
 """
 
-import secrets
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from datetime import datetime
 from typing import cast
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,6 @@ from app.db.ids import new_id
 from app.domain.lists import (
     FEED_PAGE_SIZE,
     LIST_STATUSES,
-    REMINDER_SEED_MAX,
     DetachedReason,
     FeedPosition,
     ListStatus,
@@ -40,11 +39,20 @@ from app.domain.lists import (
     feed_position,
     raised_servings,
 )
+from app.domain.owners import owner_key_of
+from app.domain.recurring import local_date
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.units import BaseUnit, Unit, counted_unit, fits
 from app.media import urls as media_urls
 from app.media.store import MediaStore
-from app.models import Ingredient, ListExtraItem, ListLineState, ListMeal, ShoppingList
+from app.models import (
+    Ingredient,
+    ListExtraItem,
+    ListHiddenDueItem,
+    ListLineState,
+    ListMeal,
+    ShoppingList,
+)
 from app.models import Meal as MealRow
 from app.repositories import ingredients as ingredients_repo
 from app.repositories import lists as lists_repo
@@ -66,7 +74,15 @@ from app.schemas.lists import (
     ListUpdate,
 )
 from app.schemas.users import UserRef
-from app.services import access, aggregation, detach, reference, shopping
+from app.services import (
+    access,
+    aggregation,
+    detach,
+    recurring,
+    reference,
+    shopping,
+    walking_order,
+)
 from app.services.access import ListRights
 from app.services.list_cache import CachedList, ListCache
 from app.services.principal import Principal
@@ -186,8 +202,11 @@ async def list_detail(
     rights: ListRights,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
-    """The list as the viewer sees it."""
+    """The list as the viewer sees it, grouped in their walking order (REF-01, D-48); a draft
+    they can edit offers their due recurring items (LIST-16), counted in calendar days of
+    `zone`."""
     content = await aggregation.load(session, [shopping_list])
     visible = await access.owners_visible_to(session, viewer_id, rights.viewer_partner_id, "meals")
     list_meals = content.meals.get(shopping_list.id, [])
@@ -202,6 +221,25 @@ async def list_detail(
         ],
     )
     private = private_meals(list_meals, visible)
+    owner = owner_key_of(viewer_id, rights.viewer_couple_id)
+    lines = aggregation.lines(
+        content,
+        shopping_list,
+        order=await walking_order.order_of(session, owner),
+        private_meals=private,
+        refs=refs,
+    )
+    due_items = (
+        await recurring.due_items(
+            session,
+            owner,
+            shopping_list.id,
+            {line.ingredient_id for line in lines if line.ingredient_id is not None},
+            today=local_date(now, zone),
+        )
+        if shopping_list.status == "draft" and rights.can_edit
+        else []
+    )
     return ListDetail(
         id=shopping_list.id,
         name=shopping_list.name,
@@ -215,13 +253,13 @@ async def list_detail(
         is_owner=rights.is_owner,
         can_edit=rights.can_edit,
         shared_with_partner=shopping_list.shared_with_partner,
-        reminder_seed=shopping_list.reminder_seed,
         meals=[
             _meal_entry(content, media, row, refs, private=row.id in private, now=now)
             for row in list_meals
         ],
-        lines=aggregation.lines(content, shopping_list, private_meals=private, refs=refs),
+        lines=lines,
         extra_items=[_extra_item(content, row, refs) for row in extras],
+        due_items=due_items,
     )
 
 
@@ -296,11 +334,14 @@ def _detail_json(
     rights: ListRights,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> Callable[[], Awaitable[bytes]]:
     """A build of the list's response body for the list cache."""
 
     async def build() -> bytes:
-        detail = await list_detail(session, media, viewer_id, shopping_list, rights, now=now)
+        detail = await list_detail(
+            session, media, viewer_id, shopping_list, rights, now=now, zone=zone
+        )
         return detail.model_dump_json().encode()
 
     return build
@@ -314,6 +355,7 @@ async def sync_lists(
     generation: int,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> list[CachedList]:
     """The local copy for offline use (SYNC-02): the response bodies of `GET /api/lists/{id}`
     of every list the principal can edit that is a draft or being shopped (their own and those
@@ -321,7 +363,7 @@ async def sync_lists(
     the list cache (`generation` read before this starts), so the copy costs one detail build
     per list that changed since the last poll or sync of it."""
     async with session.begin():
-        partner = await access.partner_id(session, principal.user_id)
+        couple, partner = await access.couple_and_partner(session, principal.user_id)
         rows = await lists_repo.mine(session, principal.user_id, partner, COPY_STATUSES)
         entries: list[CachedList] = []
         for row in rows:
@@ -329,8 +371,9 @@ async def sync_lists(
                 is_owner=row.owner_id == principal.user_id,
                 can_edit=True,
                 viewer_partner_id=partner,
+                viewer_couple_id=couple,
             )
-            build = _detail_json(session, media, principal.user_id, row, rights, now=now)
+            build = _detail_json(session, media, principal.user_id, row, rights, now=now, zone=zone)
             key = (row.id, principal.user_id, media_urls.expiry(now))
             entries.append(await cache.get_or_build(key, generation, build))
         return entries
@@ -341,20 +384,22 @@ async def _new_list(
 ) -> tuple[ShoppingList, ListRights]:
     """A new draft of the principal, shared with their partner if they have one (CPL-02), and
     the principal's rights on it."""
-    partner = await access.partner_id(session, principal.user_id)
+    couple, partner = await access.couple_and_partner(session, principal.user_id)
     shopping_list = ShoppingList(
         owner_id=principal.user_id,
         name=name,
         status="draft",
         shared_with_partner=partner is not None,
         version=0,
-        reminder_seed=secrets.randbelow(REMINDER_SEED_MAX + 1),
         created_at=now,
         updated_at=now,
     )
     session.add(shopping_list)
     await session.flush()
-    return shopping_list, ListRights(is_owner=True, can_edit=True, viewer_partner_id=partner)
+    rights = ListRights(
+        is_owner=True, can_edit=True, viewer_partner_id=partner, viewer_couple_id=couple
+    )
+    return shopping_list, rights
 
 
 async def create_list(
@@ -364,20 +409,31 @@ async def create_list(
     body: ListCreate,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """A new, empty draft (LIST-01)."""
     async with session.begin():
         shopping_list, rights = await _new_list(session, principal, body.name, now=now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 async def get_list(
-    session: AsyncSession, media: MediaStore, principal: Principal, list_id: str, *, now: datetime
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """A list the principal may see (404 otherwise)."""
     async with session.begin():
         shopping_list, rights = await access.require_list_view(session, principal, list_id)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 async def update_list(
@@ -388,6 +444,7 @@ async def update_list(
     body: ListUpdate,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Rename (editors, LIST-02) or switch sharing (the owner, CPL-02; only on while in a
     couple); not once the list is done (LIST-10)."""
@@ -409,7 +466,9 @@ async def update_list(
             changed = True
         if changed:
             await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 async def delete_list(session: AsyncSession, principal: Principal, list_id: str) -> None:
@@ -426,6 +485,7 @@ async def _copy(
     source: ShoppingList,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListCopyResult:
     """A new draft of the principal from a list: same name, the meals that still exist and
     they may see (the current versions, live again), with their servings, and the extra items
@@ -465,36 +525,54 @@ async def _copy(
             )
         )
     await session.flush()
-    detail = await list_detail(session, media, principal.user_id, copy, rights, now=now)
+    detail = await list_detail(session, media, principal.user_id, copy, rights, now=now, zone=zone)
     return ListCopyResult(list=detail, left_out=len(list_meals) - len(kept))
 
 
 async def copy_list(
-    session: AsyncSession, media: MediaStore, principal: Principal, list_id: str, *, now: datetime
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
 ) -> ListCopyResult:
     """Copy a list the principal may see, in any state, into a new draft of theirs
     (VIS-03)."""
     async with session.begin():
         source, _ = await access.require_list_view(session, principal, list_id)
-        return await _copy(session, media, principal, source, now=now)
+        return await _copy(session, media, principal, source, now=now, zone=zone)
 
 
 async def shop_again(
-    session: AsyncSession, media: MediaStore, principal: Principal, list_id: str, *, now: datetime
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
 ) -> ListCopyResult:
     """ "Shop again" (SHOP-06): a done list the principal may see (409 `list.not_done` for
     others) into a new draft of theirs, as a copy."""
     async with session.begin():
         source, _ = await access.require_list_view(session, principal, list_id)
         _require_done(source)
-        return await _copy(session, media, principal, source, now=now)
+        return await _copy(session, media, principal, source, now=now, zone=zone)
 
 
 # --- shopping mode ------------------------------------------------------------------------
 
 
 async def start_shopping(
-    session: AsyncSession, media: MediaStore, principal: Principal, list_id: str, *, now: datetime
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """ "Start shopping" (LIST-10/11) on a draft the principal may edit (409 `list.not_draft`
     otherwise): its meals are frozen and its linked extra items snapshotted, its current lines
@@ -504,11 +582,19 @@ async def start_shopping(
         _require_draft(shopping_list)
         await shopping.start(session, shopping_list, now=now)
         await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 async def reopen_list(
-    session: AsyncSession, media: MediaStore, principal: Principal, list_id: str, *, now: datetime
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """ "Reopen" (SHOP-06): a done list the principal may edit goes back to shopping (409
     `list.not_done` for other states), with its check states."""
@@ -517,7 +603,9 @@ async def reopen_list(
         _require_done(shopping_list)
         shopping.reopen(shopping_list)
         await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 # --- meals on a list ----------------------------------------------------------------------
@@ -565,6 +653,7 @@ async def add_meal(
     body: ListMealAdd,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Add a meal the principal may see (LIST-03, else 422 `meal_id` `invalid`), with the
     meal's servings unless given; a meal already on the list gets that many more servings
@@ -591,7 +680,9 @@ async def add_meal(
                 await session.flush()
                 await detach.freeze(session, [list_meal], now=now)
         await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 async def _list_meal_of(session: AsyncSession, list_id: str, list_meal_id: str) -> ListMeal:
@@ -610,6 +701,7 @@ async def update_meal(
     body: ListMealUpdate,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Set the servings of a meal on the list (LIST-04), detached meals included."""
     async with session.begin():
@@ -619,7 +711,9 @@ async def update_meal(
             list_meal.servings = body.servings
             list_meal.updated_at = now
             await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 async def remove_meal(
@@ -630,6 +724,7 @@ async def remove_meal(
     list_meal_id: str,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Take a meal off the list, also one that is no longer available (LIST-15)."""
     async with session.begin():
@@ -637,7 +732,9 @@ async def remove_meal(
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
         await session.delete(list_meal)
         await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 # --- extra items --------------------------------------------------------------------------
@@ -726,6 +823,7 @@ async def add_extra(
     body: ExtraItemCreate,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> tuple[ListDetail, bool]:
     """Add an extra item (LIST-06) and tell whether it is new: an `id` already on this list
     changes nothing (a repeated request); one on another list is refused (422 `id` `taken`).
@@ -736,7 +834,7 @@ async def add_extra(
             if existing.list_id != shopping_list.id:
                 raise validation_error([_field("id", FieldErrorCode.TAKEN)])
             detail = await list_detail(
-                session, media, principal.user_id, shopping_list, rights, now=now
+                session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
             )
             return detail, False
         problems = _create_problems(body)
@@ -767,7 +865,7 @@ async def add_extra(
             await shopping.snapshot_extras(session, [extra])
         await touch(session, shopping_list, now)
         detail = await list_detail(
-            session, media, principal.user_id, shopping_list, rights, now=now
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )
         return detail, True
 
@@ -789,6 +887,7 @@ async def update_extra(
     body: ExtraItemUpdate,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Change the fields that were sent; a linked item stays linked and a free-text item
     stays free text (the other kind's fields are refused). While shopping, a linked item
@@ -847,7 +946,9 @@ async def update_extra(
                 await shopping.snapshot_extras(session, [extra])
             extra.updated_at = now
             await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 def _changed(extra: ListExtraItem, values: Mapping[str, object]) -> bool:
@@ -877,6 +978,7 @@ async def delete_extra(
     extra_id: str,
     *,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Delete an extra item; a tombstone stays for offline clients (SYNC)."""
     async with session.begin():
@@ -885,7 +987,9 @@ async def delete_extra(
         extra.deleted_at = now
         extra.updated_at = now
         await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
 
 
 # --- lines --------------------------------------------------------------------------------
@@ -900,6 +1004,7 @@ async def set_line_hidden(
     *,
     hidden: bool,
     now: datetime,
+    zone: ZoneInfo,
 ) -> ListDetail:
     """Remove a line for this list only, or restore it (LIST-07; in a draft). Any well-formed
     key is accepted, also one without a line right now: its state stays for when the line
@@ -918,4 +1023,42 @@ async def set_line_hidden(
         elif state is not None and state.hidden != hidden:
             state.hidden = hidden
             await touch(session, shopping_list, now)
-        return await list_detail(session, media, principal.user_id, shopping_list, rights, now=now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
+
+
+# --- due items ----------------------------------------------------------------------------
+
+
+async def hide_due_item(
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    ingredient_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
+) -> ListDetail:
+    """Hide a due recurring item on this draft for everyone who sees it (LIST-16; 409
+    `list.not_draft` otherwise), by its ingredient (404 for an unknown one). It need not be
+    due or recurring now; hiding it again changes nothing. There is no undo."""
+    async with session.begin():
+        shopping_list, rights = await access.require_list_edit(session, principal, list_id)
+        _require_draft(shopping_list)
+        if await ingredients_repo.get(session, ingredient_id) is None:
+            raise not_found()
+        if await lists_repo.get_hidden_due_item(session, shopping_list.id, ingredient_id) is None:
+            session.add(
+                ListHiddenDueItem(
+                    list_id=shopping_list.id,
+                    ingredient_id=ingredient_id,
+                    hidden_at=now,
+                    hidden_by=principal.user_id,
+                )
+            )
+            await touch(session, shopping_list, now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )

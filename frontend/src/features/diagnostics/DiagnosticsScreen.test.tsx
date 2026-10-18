@@ -1,5 +1,6 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import i18n from '@/i18n';
 import { errorResponse, mockApi, requestsTo, TEST_ADMIN } from '@/test/api';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -206,18 +207,29 @@ describe('DiagnosticsScreen', () => {
     );
   });
 
-  it('is linked from Me for admins, since a Home Screen app has no address bar', async () => {
+  it('names the way to it through About MealMate in its offline steps (D-44, D-45)', async () => {
+    mockApi(diagRoutes());
+    renderApp('/diag', { user: null });
+
+    expect(
+      await screen.findByText(/Then open Settings → About MealMate → Diagnostics:/),
+    ).toBeVisible();
+    await act(() => i18n.changeLanguage('de'));
+    expect(screen.getByText(/Dann Einstellungen → Über MealMate → Diagnose öffnen:/)).toBeVisible();
+  });
+
+  it('is linked from About MealMate for admins, since a Home Screen app has no address bar', async () => {
     mockApi({ ...diagRoutes(), 'GET /api/me': TEST_ADMIN });
-    const { user, router } = renderApp('/me', { user: TEST_ADMIN });
+    const { user, router } = renderApp('/me/about', { user: TEST_ADMIN });
 
     await user.click(await screen.findByTestId(testIds.diagnosticsLink));
     expect(await screen.findByTestId(testIds.screenDiagnostics)).toBeVisible();
     expect(router.state.location.pathname).toBe('/diag');
   });
 
-  it('is not linked from Me for other members of the household', async () => {
+  it('is not linked from About MealMate for other members of the household', async () => {
     mockApi(diagRoutes());
-    renderApp('/me');
+    renderApp('/me/about');
 
     expect(await screen.findByTestId(testIds.appVersion)).toBeVisible();
     expect(screen.queryByTestId(testIds.diagnosticsLink)).not.toBeInTheDocument();

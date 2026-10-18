@@ -1,0 +1,184 @@
+import { ShieldAlert } from 'lucide-react';
+import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadError } from '@/components/LoadError';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useSyncEngine } from '@/features/sync/context';
+import { useLanguage } from '@/i18n';
+import { formatDate, formatDateTime } from '@/i18n/format';
+import { userLabel } from '@/i18n/users';
+import { describeUserAgent } from '@/lib/userAgent';
+import { testIds } from '@/testIds';
+import {
+  useLogoutAll,
+  useRevokeSession,
+  useSecurityInfo,
+  useSessions,
+  type SessionInfo,
+} from './api';
+import { PasswordDialog } from './PasswordDialog';
+import { SettingsPage } from './SettingsPage';
+
+/**
+ * Settings → Sicherheit: security notice, password change, sessions and "log out on all devices"
+ * (ACC-09, ACC-10). The latter logs out here too: with changes still waiting it says they will be lost (SYNC-05). The
+ * outbox is read before the question is asked, so a tap right after the start (before the
+ * waiting count has loaded) can't leave that out.
+ */
+export function SecurityScreen() {
+  const { t } = useTranslation();
+  const [passwordChanged, setPasswordChanged] = useState(false);
+  const logoutAll = useLogoutAll();
+  const engine = useSyncEngine();
+  /** The waiting changes as read when the button was tapped; null while the dialog is closed. */
+  const [pending, setPending] = useState<number | null>(null);
+
+  async function onLogoutAll() {
+    setPending(await engine.waitingCount());
+  }
+
+  return (
+    <SettingsPage title={t('me.security.title')} testId={testIds.screenSecurity}>
+      <SecurityNotice />
+      <div className="flex flex-col gap-2">
+        <PasswordDialog onChanged={() => setPasswordChanged(true)} />
+        <p aria-live="polite" className="text-sm text-muted-foreground">
+          {passwordChanged && t('me.password.changed')}
+        </p>
+      </div>
+      <SessionList />
+      <Button
+        variant="outline"
+        data-testid={testIds.logoutAllButton}
+        disabled={logoutAll.isPending}
+        onClick={() => void onLogoutAll()}
+      >
+        {t('me.sessions.logoutAll')}
+      </Button>
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
+        title={
+          pending
+            ? t('me.logoutPending.title', { count: pending })
+            : t('me.sessions.logoutAllTitle')
+        }
+        description={
+          pending
+            ? `${t('me.sessions.logoutAllText')} ${t('me.logoutPending.text')}`
+            : t('me.sessions.logoutAllText')
+        }
+        confirmLabel={pending ? t('me.logoutPending.confirm') : t('me.sessions.logoutAllConfirm')}
+        onConfirm={() => logoutAll.mutate()}
+        destructive
+      />
+      <ErrorAlert error={logoutAll.error} />
+    </SettingsPage>
+  );
+}
+
+function SecurityNotice() {
+  const { t } = useTranslation();
+  const language = useLanguage();
+  const security = useSecurityInfo();
+
+  if (!security.data) return <LoadError error={security.error} />;
+  const { password_reset_at: resetAt, password_reset_by: resetBy } = security.data;
+  const changedAt = security.data.password_changed_at;
+
+  return (
+    <>
+      {resetAt && (
+        <Alert data-testid={testIds.securityNotice}>
+          <ShieldAlert aria-hidden="true" />
+          <AlertDescription>
+            {resetBy
+              ? t('me.security.resetBy', {
+                  name: userLabel(t, resetBy),
+                  date: formatDateTime(resetAt, language),
+                })
+              : t('me.security.resetByLink', { date: formatDateTime(resetAt, language) })}
+          </AlertDescription>
+        </Alert>
+      )}
+      {changedAt && (
+        <p className="text-sm text-muted-foreground">
+          {t('me.security.changedAt', { date: formatDate(changedAt, language) })}
+        </p>
+      )}
+    </>
+  );
+}
+
+function SessionList() {
+  const { t } = useTranslation();
+  const sessions = useSessions();
+  const revoke = useRevokeSession();
+  const headingId = useId();
+
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby={headingId}>
+      <h2 id={headingId} className="text-lg font-semibold">
+        {t('me.sessions.title')}
+      </h2>
+      {sessions.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      <LoadError error={sessions.error} />
+      {sessions.data && (
+        <ul data-testid={testIds.sessionList} className="flex flex-col divide-y">
+          {sessions.data.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              onRevoke={() => revoke.mutate(session.id)}
+              revoking={revoke.isPending && revoke.variables === session.id}
+            />
+          ))}
+        </ul>
+      )}
+      <ErrorAlert error={revoke.error} />
+    </section>
+  );
+}
+
+interface SessionRowProps {
+  session: SessionInfo;
+  onRevoke: () => void;
+  revoking: boolean;
+}
+
+function SessionRow({ session, onRevoke, revoking }: SessionRowProps) {
+  const { t } = useTranslation();
+  const language = useLanguage();
+  const device = describeUserAgent(session.user_agent) ?? t('me.sessions.unknownDevice');
+
+  return (
+    <li className="flex items-center justify-between gap-3 py-2">
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="flex flex-wrap items-center gap-2 font-medium">
+          {device}
+          {session.current && <Badge variant="secondary">{t('me.sessions.current')}</Badge>}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {t('me.sessions.lastUsed', { date: formatDateTime(session.last_used_at, language) })}
+        </p>
+      </div>
+      {!session.current && (
+        <Button
+          variant="outline"
+          size="compact"
+          onClick={onRevoke}
+          disabled={revoking}
+          aria-label={t('me.sessions.revokeLabel', { device })}
+        >
+          {t('me.sessions.revoke')}
+        </Button>
+      )}
+    </li>
+  );
+}

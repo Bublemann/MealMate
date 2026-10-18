@@ -247,7 +247,7 @@ async def test_one_detail_build_per_list_and_the_cache(
     per_list = await queries_of_a_sync(app, api, carl) - empty
 
     assert await queries_of_a_sync(app, api, anna) == empty + 6 * per_list
-    assert per_list <= 10
+    assert per_list <= 11
     # Nothing written since: every list from the cache.
     assert await queries_of_a_sync(app, api, anna) == empty
     # After a write, a list polled since comes from the cache, the others are built again.

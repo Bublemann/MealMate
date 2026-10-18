@@ -179,7 +179,7 @@
         "type": "object"
       },
       "BackupStatus": {
-        "description": "The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).",
+        "description": "The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).\n`last_success_at` is when the last successful backup finished, also after failed runs;\nnull while the host doesn't know it (ADM-01).",
         "properties": {
           "finished_at": {
             "format": "date-time",
@@ -194,6 +194,18 @@
             ],
             "title": "Label",
             "type": "string"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
           },
           "message": {
             "anyOf": [
@@ -228,7 +240,8 @@
           "label",
           "ok",
           "size_bytes",
-          "message"
+          "message",
+          "last_success_at"
         ],
         "title": "BackupStatus",
         "type": "object"
@@ -747,6 +760,47 @@
           "unit"
         ],
         "title": "DisplayAmountOut",
+        "type": "object"
+      },
+      "DueItem": {
+        "description": "A due recurring item of the viewer's set, offered in a draft's \"Fällig\" box (LIST-16):\ndue since `due_on`, `days_until_due` from today (0 \"fällig heute\", -3 \"fällig seit 3\nTagen\"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,\nonly while its unit fits the ingredient's base unit (REF-02), for the amount pop-up.",
+        "properties": {
+          "days_until_due": {
+            "title": "Days Until Due",
+            "type": "integer"
+          },
+          "due_on": {
+            "format": "date",
+            "title": "Due On",
+            "type": "string"
+          },
+          "ingredient": {
+            "$ref": "#/components/schemas/IngredientSummary"
+          },
+          "last_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayAmountOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_purchased_on": {
+            "format": "date",
+            "title": "Last Purchased On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ingredient",
+          "due_on",
+          "days_until_due",
+          "last_purchased_on",
+          "last_amount"
+        ],
+        "title": "DueItem",
         "type": "object"
       },
       "ErrorCode": {
@@ -1441,7 +1495,7 @@
         "type": "object"
       },
       "Ingredient": {
-        "description": "An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text`, `pack_quantity` and `pack_unit` are the\npack size from Open Food Facts (information only, never user-edited, D-38). `created_by` /\n`updated_by` are null for a deleted user (ING-06).",
+        "description": "An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food\nFacts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from\nthe text when it is a plain amount and unit (\"500 g\", \"1,5 l\"), else null (D-47); one saved\nbefore D-47 keeps Open Food Facts' amount until its text changes.\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1612,6 +1666,7 @@
               "enum": [
                 "name",
                 "brand",
+                "quantity_text",
                 "nutrients.kcal",
                 "nutrients.protein",
                 "nutrients.carbs",
@@ -1667,7 +1722,7 @@
         "type": "object"
       },
       "IngredientCreate": {
-        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per\n100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\ningredient has is 409 `ingredient.barcode_taken`.\n\nWith `off`, the ingredient is from Open Food Facts (`source` off, refreshed later) and needs\nits `barcode` (422 `required` without). Only then are `quantity_text`, `pack_quantity` and\n`pack_unit` taken, the pack size passed on from the proposal; without `off` they are refused\n(422 `invalid`), as nobody types in a pack size (D-38). Names need not be unique: the\n\"similar ingredient exists\" hint (`GET /api/ingredients/similar`) is only a hint.",
+        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per\n100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\ningredient has is 409 `ingredient.barcode_taken`.\n\n`quantity_text` is the pack size (\"500 g\", \"6 x 1,5 l\"), at most 40 characters, for any\ningredient; its amount is taken from it (D-47). With `off`, the ingredient is from Open Food\nFacts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).\nNames need not be unique: the \"similar ingredient exists\" hint\n(`GET /api/ingredients/similar`) is only a hint.",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1743,29 +1798,6 @@
               }
             ]
           },
-          "pack_quantity": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 100000.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pack Quantity"
-          },
-          "pack_unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Unit"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "piece_weight_g": {
             "anyOf": [
               {
@@ -1833,6 +1865,7 @@
               "enum": [
                 "name",
                 "brand",
+                "quantity_text",
                 "nutrients.kcal",
                 "nutrients.protein",
                 "nutrients.carbs",
@@ -1841,7 +1874,7 @@
               ],
               "type": "string"
             },
-            "maxItems": 7,
+            "maxItems": 8,
             "title": "Edited Fields",
             "type": "array"
           },
@@ -1859,6 +1892,78 @@
           }
         },
         "title": "IngredientOffOrigin",
+        "type": "object"
+      },
+      "IngredientSearchResult": {
+        "description": "A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut\nspelling and accents (ING-03), whatever its brand; these come first. The list's item field\ntakes such a result for \"+\" when it is the only one (D-41). False without a query.",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml",
+              "piece"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "exact": {
+            "title": "Exact",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "barcode",
+          "source",
+          "category_id",
+          "base_unit",
+          "exact"
+        ],
+        "title": "IngredientSearchResult",
         "type": "object"
       },
       "IngredientSummary": {
@@ -1929,7 +2034,7 @@
         "type": "object"
       },
       "IngredientUpdate": {
-        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and\nthe nutrients) becomes user-edited (BAR-04). The pack size (`quantity_text`, `pack_quantity`,\n`pack_unit`) comes only from Open Food Facts and is refused here, even as null (422\n`invalid`, D-38). A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.",
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the\npack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack\nsize's amount follows its text. A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.",
         "properties": {
           "accept_unit_mismatch": {
             "anyOf": [
@@ -2031,6 +2136,18 @@
               }
             ],
             "title": "Piece Weight G"
+          },
+          "quantity_text": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Text"
           }
         },
         "title": "IngredientUpdate",
@@ -2455,7 +2572,7 @@
         "type": "object"
       },
       "ListDetail": {
-        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02); the reminder is\n`reminder.<reminder_seed % 10 + 1>` (LIST-14). `shopping_started_at` and `finished_at`\nare set once shopping started and while the list is done (LIST-10).",
+        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`\nand `finished_at` are set once shopping started and while the list is done (LIST-10).\n\n`due_items` fill the \"Fällig\" box (LIST-16), only on a draft the viewer can edit, else\nempty: the due recurring items of the viewer's set whose ingredient has no line on the list\n(a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.",
         "properties": {
           "can_edit": {
             "title": "Can Edit",
@@ -2465,6 +2582,13 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "due_items": {
+            "items": {
+              "$ref": "#/components/schemas/DueItem"
+            },
+            "title": "Due Items",
+            "type": "array"
           },
           "extra_items": {
             "items": {
@@ -2521,10 +2645,6 @@
           "owner": {
             "$ref": "#/components/schemas/UserRef"
           },
-          "reminder_seed": {
-            "title": "Reminder Seed",
-            "type": "integer"
-          },
           "shared_with_partner": {
             "title": "Shared With Partner",
             "type": "boolean"
@@ -2573,10 +2693,10 @@
           "is_owner",
           "can_edit",
           "shared_with_partner",
-          "reminder_seed",
           "meals",
           "lines",
-          "extra_items"
+          "extra_items",
+          "due_items"
         ],
         "title": "ListDetail",
         "type": "object"
@@ -3682,6 +3802,76 @@
         "title": "MealPhoto",
         "type": "object"
       },
+      "MealSearchResult": {
+        "description": "A meal in the meal list. `exact`: its name is the query `q`, ignoring case, umlaut\nspelling and accents (ING-03); the list's meal field takes it for \"+\" (D-41). False without\na query.",
+        "properties": {
+          "cuisine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cuisine"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exact": {
+            "title": "Exact",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "servings": {
+            "title": "Servings",
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "thumb_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Url"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "owner",
+          "cuisine",
+          "tags",
+          "servings",
+          "thumb_url",
+          "updated_at",
+          "exact"
+        ],
+        "title": "MealSearchResult",
+        "type": "object"
+      },
       "MealSummary": {
         "description": "A meal in the meal list; `thumb_url` is a signed URL of the photo's thumbnail.",
         "properties": {
@@ -3847,6 +4037,69 @@
           }
         },
         "title": "MealUpdate",
+        "type": "object"
+      },
+      "Notice": {
+        "description": "An unread notice of the caller's.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "recurring_item.ingredient_deleted",
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "params",
+          "created_at"
+        ],
+        "title": "Notice",
+        "type": "object"
+      },
+      "NoticeList": {
+        "description": "The caller's unread notices, newest first, and how many there are (the count on the\nSettings tab, UI-07).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "title": "Notices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notices",
+          "count"
+        ],
+        "title": "NoticeList",
         "type": "object"
       },
       "NutrientValues": {
@@ -4159,6 +4412,7 @@
             "enum": [
               "name",
               "brand",
+              "quantity_text",
               "nutrients.kcal",
               "nutrients.protein",
               "nutrients.carbs",
@@ -4261,27 +4515,6 @@
             ],
             "title": "Off Last Modified At"
           },
-          "pack_quantity": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pack Quantity"
-          },
-          "pack_unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Unit"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "quantity_text": {
             "anyOf": [
               {
@@ -4299,14 +4532,200 @@
           "name",
           "brand",
           "quantity_text",
-          "pack_quantity",
-          "pack_unit",
           "nutrition_basis",
           "nutrients",
           "category_key",
           "off_last_modified_at"
         ],
         "title": "ProductProposal",
+        "type": "object"
+      },
+      "RecurringInterval": {
+        "description": "The interval an item is due after, as the app shows it (MNT-02): below a week in days,\nelse in whole weeks rounded to the nearest. `automatic` while it adapts to the purchases\n(\"alle ~4 Wochen\"); off when it was set by hand (\"alle 4 Wochen\").",
+        "properties": {
+          "automatic": {
+            "title": "Automatic",
+            "type": "boolean"
+          },
+          "unit": {
+            "enum": [
+              "day",
+              "week"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "unit",
+          "automatic"
+        ],
+        "title": "RecurringInterval",
+        "type": "object"
+      },
+      "RecurringItem": {
+        "description": "An item of the caller's set. It is due from `due_on` on: the last purchase plus the\ninterval, in calendar days of the instance's time zone. `days_until_due` counts from today\n(0 \"fällig heute\", 1 \"fällig morgen\", -3 \"fällig seit 3 Tagen\"). `interval_weeks` is the\nset interval for the edit pop-up. `last_amount` is the last purchase's amount, only while\nits unit fits the ingredient's base unit (REF-02).",
+        "properties": {
+          "days_until_due": {
+            "title": "Days Until Due",
+            "type": "integer"
+          },
+          "due": {
+            "title": "Due",
+            "type": "boolean"
+          },
+          "due_on": {
+            "format": "date",
+            "title": "Due On",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingredient": {
+            "$ref": "#/components/schemas/IngredientSummary"
+          },
+          "interval": {
+            "$ref": "#/components/schemas/RecurringInterval"
+          },
+          "interval_weeks": {
+            "title": "Interval Weeks",
+            "type": "integer"
+          },
+          "last_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayAmountOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_purchased_on": {
+            "format": "date",
+            "title": "Last Purchased On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ingredient",
+          "interval",
+          "interval_weeks",
+          "last_purchased_on",
+          "due_on",
+          "days_until_due",
+          "due",
+          "last_amount"
+        ],
+        "title": "RecurringItem",
+        "type": "object"
+      },
+      "RecurringItemCreate": {
+        "description": "Make an ingredient recurring: every `interval_weeks` (1 to 52), last bought on\n`last_purchased_on` (today if left out; not in the future, at most 730 days back:\n422 `out_of_range`). An ingredient already in the set is 422 `taken`, an unknown one\n`invalid`. The interval adapts automatically from the second purchase on.",
+        "properties": {
+          "ingredient_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "interval_weeks": {
+            "maximum": 52.0,
+            "minimum": 1.0,
+            "title": "Interval Weeks",
+            "type": "integer"
+          },
+          "last_purchased_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Purchased On"
+          }
+        },
+        "required": [
+          "ingredient_id",
+          "interval_weeks"
+        ],
+        "title": "RecurringItemCreate",
+        "type": "object"
+      },
+      "RecurringItemList": {
+        "description": "The caller's set (their couple's while in one, else their own), sorted by due date and\nthen by the ingredient's name, and how many items are due.",
+        "properties": {
+          "due_count": {
+            "title": "Due Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "due_count"
+        ],
+        "title": "RecurringItemList",
+        "type": "object"
+      },
+      "RecurringItemUpdate": {
+        "description": "Only the fields that are sent change; null is refused (422 `invalid`). A new\n`interval_weeks` sets the interval by hand. `automatic` true lets it adapt again, with the\nset interval serving until two intervals are measured; false alone keeps the interval that\nserves now, as set by hand. `last_purchased_on` corrects the last purchase date, within\nthe same range as on create.",
+        "properties": {
+          "automatic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automatic"
+          },
+          "interval_weeks": {
+            "anyOf": [
+              {
+                "maximum": 52.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Weeks"
+          },
+          "last_purchased_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Purchased On"
+          }
+        },
+        "title": "RecurringItemUpdate",
         "type": "object"
       },
       "RefreshRequest": {
@@ -4343,7 +4762,7 @@
         "type": "object"
       },
       "SecurityInfo": {
-        "description": "What *Me → Security* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
+        "description": "What *Einstellungen → Sicherheit* shows, e.g. \"Password reset by X on <date>\" (ACC-10).\n\n`password_reset_by` is null for a reset link from the command line or a deleted admin.",
         "properties": {
           "password_changed_at": {
             "anyOf": [
@@ -4606,6 +5025,96 @@
           "source_url"
         ],
         "title": "VersionInfo",
+        "type": "object"
+      },
+      "WalkingOrder": {
+        "description": "The caller's walking order: their couple's while in one, else their own. While\n`follows_admin` (\"Reihenfolge der Verwaltung übernehmen\") it is the admins' order and follows\ntheir changes; otherwise it is the own order. `categories` lists every category that isn't\ndeleted in that order.",
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/WalkingOrderCategory"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "follows_admin": {
+            "title": "Follows Admin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "follows_admin",
+          "categories"
+        ],
+        "title": "WalkingOrder",
+        "type": "object"
+      },
+      "WalkingOrderCategory": {
+        "description": "A category that isn't deleted, *Uncategorized* included, shown by its name in the UI\nlanguage (`names`). `new`: an admin added it after the own order was saved, so it went to\nthe end; it stays new until it is moved.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "names": {
+            "$ref": "#/components/schemas/CategoryNames"
+          },
+          "new": {
+            "title": "New",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "names",
+          "new"
+        ],
+        "title": "WalkingOrderCategory",
+        "type": "object"
+      },
+      "WalkingOrderSave": {
+        "description": "An own order: every category that isn't deleted exactly once, *Uncategorized* included,\nin the new order. `moved_id` names the category the user moved, which is no longer new;\nleft out or null when the switch was turned off without a move.",
+        "properties": {
+          "category_ids": {
+            "items": {
+              "maxLength": 36,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Category Ids",
+            "type": "array"
+          },
+          "moved_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moved Id"
+          }
+        },
+        "required": [
+          "category_ids"
+        ],
+        "title": "WalkingOrderSave",
         "type": "object"
       }
     },
@@ -6258,7 +6767,7 @@
     },
     "/api/ingredients": {
       "get": {
-        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); without `q`, all ingredients in that order (at most 1000). `category_id`\nis repeatable: an ingredient matches if it is in any of the given categories.",
+        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all\ningredients in that order (at most 1000). `category_id`\nis repeatable: an ingredient matches if it is in any of the given categories.",
         "operationId": "list_ingredients",
         "parameters": [
           {
@@ -6306,7 +6815,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/IngredientSummary"
+                    "$ref": "#/components/schemas/IngredientSearchResult"
                   },
                   "title": "Response List Ingredients",
                   "type": "array"
@@ -7202,6 +7711,64 @@
         ]
       }
     },
+    "/api/lists/{list_id}/due-items/{ingredient_id}/hide": {
+      "post": {
+        "description": "Hide a due recurring item (\"Fällig\" box) on this list for everyone who sees it (drafts;\n409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an\nextra item.",
+        "operationId": "hide_due_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "maxLength": 36,
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hide Due Item",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/api/lists/{list_id}/extra-items": {
       "post": {
         "description": "Add an extra item: linked to an ingredient or free text. With an `id` already on this\nlist nothing changes and the answer is 200 (safe to retry). While shopping, the item is\n`new` on the list.",
@@ -7997,6 +8564,84 @@
         ]
       }
     },
+    "/api/me/notices": {
+      "get": {
+        "description": "The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a\nrecurring item.",
+        "operationId": "list_notices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Notices",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/me/notices/{notice_id}/dismiss": {
+      "post": {
+        "description": "Mark one of the own notices as read; dismissing it again changes nothing.",
+        "operationId": "dismiss_notice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notice_id",
+            "required": true,
+            "schema": {
+              "title": "Notice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dismiss Notice",
+        "tags": [
+          "me"
+        ]
+      }
+    },
     "/api/me/password": {
       "post": {
         "description": "Change the password; logs out all other devices (throttled like login, ACC-11).",
@@ -8158,7 +8803,7 @@
     },
     "/api/meals": {
       "get": {
-        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts. `cuisine_id` and `tag_id` are repeatable: a meal\nmatches if its cuisine is any of the given ones and it has every given tag. Without\n`owner_ids`, owners you unticked in your user filter on Meals (`filter_hidden.meals`) are\nleft out; with `owner_ids` (repeatable), only those owners' meals are listed.",
+        "description": "The meals you can see, A-Z in dictionary order (Ä sorts as A). `q` searches names, tags\nand cuisines ignoring case and umlauts; `exact` marks the meals whose name is `q`.\n`cuisine_id` and `tag_id` are repeatable: a meal matches if its cuisine is any of the given\nones and it has every given tag. Without `owner_ids`, owners you unticked in your user\nfilter on Meals (`filter_hidden.meals`) are left out; with `owner_ids` (repeatable), only\nthose owners' meals are listed.",
         "operationId": "list_meals",
         "parameters": [
           {
@@ -8247,7 +8892,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/MealSummary"
+                    "$ref": "#/components/schemas/MealSearchResult"
                   },
                   "title": "Response List Meals",
                   "type": "array"
@@ -8325,7 +8970,7 @@
     },
     "/api/meals/recent": {
       "get": {
-        "description": "Up to 10 meals you recently added to lists, most recent first, as far as you can still\nsee them (the \"recently used\" meals of the meal picker).",
+        "description": "Up to 10 meals you recently added to lists, most recent first, as far as you can still\nsee them (the \"recently used\" meals of the list's meal field).",
         "operationId": "list_recent_meals",
         "responses": {
           "200": {
@@ -8761,6 +9406,185 @@
         ]
       }
     },
+    "/api/recurring-items": {
+      "get": {
+        "description": "The caller's set (their couple's while in one, else their own), due first.",
+        "operationId": "list_recurring_items",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringItemList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Recurring Items",
+        "tags": [
+          "recurring"
+        ]
+      },
+      "post": {
+        "description": "Make an ingredient recurring in the caller's set.",
+        "operationId": "create_recurring_item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Recurring Item",
+        "tags": [
+          "recurring"
+        ]
+      }
+    },
+    "/api/recurring-items/{item_id}": {
+      "delete": {
+        "description": "Remove an item from the caller's set (\"Nicht mehr regelmäßig\").",
+        "operationId": "delete_recurring_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Recurring Item",
+        "tags": [
+          "recurring"
+        ]
+      },
+      "patch": {
+        "description": "Change an item's interval, switch it back to automatic, or correct its last purchase\ndate.",
+        "operationId": "update_recurring_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecurringItemUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Recurring Item",
+        "tags": [
+          "recurring"
+        ]
+      }
+    },
     "/api/tags": {
       "get": {
         "description": "Tags for autocomplete: at most 20 whose name contains `q`, prefix matches first.",
@@ -8988,6 +9812,116 @@
         "summary": "Get Version",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/walking-order": {
+      "delete": {
+        "description": "Follow the admins' order again (\"Reihenfolge der Verwaltung übernehmen\" on): the own\norder goes.",
+        "operationId": "follow_admin_walking_order",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Follow Admin Walking Order",
+        "tags": [
+          "walking order"
+        ]
+      },
+      "get": {
+        "description": "The order the caller's lists are grouped in: the admins' while it follows theirs, else\nthe own one.",
+        "operationId": "get_walking_order",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalkingOrder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Walking Order",
+        "tags": [
+          "walking order"
+        ]
+      },
+      "put": {
+        "description": "Keep an own order, which stops following the admins' one (\"Reihenfolge der Verwaltung\nübernehmen\" off).",
+        "operationId": "save_walking_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WalkingOrderSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalkingOrder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save Walking Order",
+        "tags": [
+          "walking order"
         ]
       }
     }

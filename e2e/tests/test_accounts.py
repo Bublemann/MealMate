@@ -7,7 +7,7 @@ from playwright.sync_api import BrowserContext, Page, expect
 
 from support.api import CODE_REQUESTS, Account, Api, unique
 from support.frontend import TEST_IDS, text
-from support.ui import log_in, log_out
+from support.ui import log_in, log_out, settings_row
 
 REFRESH_COOKIE = "mm_refresh"
 
@@ -39,8 +39,12 @@ def test_register_with_invite_link(page: Page, api: Api, admin: Account) -> None
     expect(page).to_have_url(re.compile(r"/lists$"))
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
     page.get_by_test_id(TEST_IDS["tabMe"]).click()
-    expect(page.get_by_test_id(TEST_IDS["displayNameInput"])).to_have_value(display_name)
-    expect(page.get_by_test_id(TEST_IDS["screenMe"])).to_contain_text(username)
+    profile_row = settings_row(page, "me.profile.title")
+    expect(profile_row).to_have_accessible_name(f"{text('me.profile.title')} {display_name}")
+    profile_row.click()
+    profile = page.get_by_test_id(TEST_IDS["screenProfile"])
+    expect(profile.get_by_test_id(TEST_IDS["displayNameInput"])).to_have_value(display_name)
+    expect(profile).to_contain_text(username)
 
     # Opening a link while signed in asks to log out first; after that the link is used up.
     CODE_REQUESTS.reserve()
@@ -78,7 +82,7 @@ def test_login_survives_reload_until_logout(
     # The access token lives in memory only; the cookie brings the session back.
     page.reload()
     expect(page.get_by_test_id(TEST_IDS["screenMe"])).to_be_visible()
-    expect(page.get_by_test_id(TEST_IDS["displayNameInput"])).to_have_value(member.display_name)
+    expect(settings_row(page, "me.profile.title")).to_contain_text(member.display_name)
 
     log_out(page)
     expect(page.get_by_test_id(TEST_IDS["loginReason"])).to_have_text(

@@ -194,8 +194,8 @@ export const WEIDEHOF_MILK: Schemas['Ingredient'] = ingredient({
   base_unit: 'ml',
   nutrients: { kcal: 64, protein: 3.4, carbs: 4.8, sugar: 4.8, fat: 3.6 },
   quantity_text: '1 l',
-  pack_quantity: 1,
-  pack_unit: 'l',
+  pack_quantity: 1000,
+  pack_unit: 'ml',
   source: 'off',
   user_edited_fields: ['nutrients.fat'],
   off_last_modified_at: '2026-09-01T10:00:00Z',
@@ -212,8 +212,6 @@ export function proposal(
     name: 'Frische Vollmilch 3,5 %',
     brand: 'Weidehof',
     quantity_text: '1 l',
-    pack_quantity: 1,
-    pack_unit: 'l',
     nutrition_basis: 'ml',
     nutrients: { kcal: 64, protein: 3.4, carbs: 4.8, sugar: 4.8, fat: 3.5 },
     category_key: 'dairy_eggs',
@@ -257,3 +255,11 @@ export const REFERENCE_ROUTES: Record<string, unknown> = {
   'GET /api/categories': CATEGORIES,
   'GET /api/units': UNITS,
 };
+
+/** An ingredient as the search answers it, marked when its name is exactly the query (D-41). */
+export function found(
+  ingredient: Schemas['IngredientSummary'],
+  exact = false,
+): Schemas['IngredientSearchResult'] {
+  return { ...ingredient, exact };
+}

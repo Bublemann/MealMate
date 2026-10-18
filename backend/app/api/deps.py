@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -65,6 +66,12 @@ def get_now(request: Request) -> datetime:
     return clock()
 
 
+def get_time_zone(request: Request) -> ZoneInfo:
+    """The instance's time zone, which calendar days are counted in (LIST-16)."""
+    settings: Settings = request.app.state.settings
+    return settings.zone
+
+
 def get_client_ip(request: Request) -> str:
     """The client address. uvicorn takes it from `X-Forwarded-For` only when the request comes
     from 127.0.0.1, where `tailscale serve` connects from (plan § 2, SEC-05)."""
@@ -84,6 +91,7 @@ ListResponses = Annotated[ListCache, Depends(get_list_cache)]
 OffRefresh = Annotated[OffRefresher, Depends(get_off_refresher)]
 OffSearchCache = Annotated[SearchCache, Depends(get_off_search_cache)]
 Now = Annotated[datetime, Depends(get_now)]
+TimeZone = Annotated[ZoneInfo, Depends(get_time_zone)]
 ClientIp = Annotated[str, Depends(get_client_ip)]
 UserAgent = Annotated[str | None, Depends(get_user_agent)]
 

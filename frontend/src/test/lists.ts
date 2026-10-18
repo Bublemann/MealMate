@@ -213,12 +213,12 @@ export function listDetail(overrides: Partial<Schemas['ListDetail']> = {}): Sche
     is_owner: true,
     can_edit: true,
     shared_with_partner: false,
-    reminder_seed: 1230,
     shopping_started_at: null,
     finished_at: null,
     meals: [listMeal(), PRIVATE_MEAL, DETACHED_MEAL],
     lines: LINES,
     extra_items: EXTRA_ITEMS,
+    due_items: [],
     ...overrides,
   };
 }
@@ -231,10 +231,16 @@ export function emptyList(overrides: Partial<Schemas['ListDetail']> = {}): Schem
     meals: [],
     lines: [],
     extra_items: [],
-    reminder_seed: 4,
     ...overrides,
   });
 }
+
+/**
+ * The reminder the fixtures' lists showed before D-43 removed it, with the seed they had then:
+ * its screen-reader label ("Reminder: …") and its text (`reminder.1`). The screen tests check
+ * that neither shows any more.
+ */
+export const FORMER_REMINDER = /Reminder:|Didn't forget anything/;
 
 export function listSummary(
   overrides: Partial<Schemas['ListSummary']> = {},

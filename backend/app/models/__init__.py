@@ -10,10 +10,13 @@ from app.models.auth_session import AuthSession, SessionToken
 from app.models.couple import Couple, CoupleMember
 from app.models.ingredient import Ingredient
 from app.models.meal import Meal, MealIngredient, MealTag
+from app.models.notice import Notice
 from app.models.one_time_code import OneTimeCode
+from app.models.recurring_item import RecurringItem
 from app.models.reference import Category, Cuisine, Tag
 from app.models.shopping_list import (
     ListExtraItem,
+    ListHiddenDueItem,
     ListLineState,
     ListMeal,
     ListMealIngredient,
@@ -21,6 +24,7 @@ from app.models.shopping_list import (
     ShoppingList,
 )
 from app.models.user import User
+from app.models.walking_order import WalkingOrderEntry
 
 __all__ = [
     "AdminEvent",
@@ -33,16 +37,20 @@ __all__ = [
     "Cuisine",
     "Ingredient",
     "ListExtraItem",
+    "ListHiddenDueItem",
     "ListLineState",
     "ListMeal",
     "ListMealIngredient",
     "Meal",
     "MealIngredient",
     "MealTag",
+    "Notice",
     "OneTimeCode",
     "ProcessedOp",
+    "RecurringItem",
     "SessionToken",
     "ShoppingList",
     "Tag",
     "User",
+    "WalkingOrderEntry",
 ]

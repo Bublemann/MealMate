@@ -237,10 +237,10 @@ Dry run: `sudo python3 /srv/mealmate/bin/prune.py --dry-run /srv/mealmate/backup
 
 Before planned maintenance:
 
-- admin page → System → **Back up now** (creates `data/status/backup-request`; `mealmate-backup.path` starts the backup within seconds), or
+- Einstellungen → Verwaltung → System → **Back up now** (creates `data/status/backup-request`; `mealmate-backup.path` starts the backup within seconds), or
 - `sudo /srv/mealmate/bin/backup.sh --label manual`.
 
-The result is shown on the admin page (from `state/status/backup.json`) and pinged to `backup`.
+The result is shown on the System page and its row in Einstellungen (from `state/status/backup.json`) and pinged to `backup`.
 
 ### 7.4 Monthly test restore (OPS-07)
 
@@ -409,11 +409,11 @@ sudo /srv/mealmate/bin/setup.sh --rotate-secret
 
 - `mm-compose` is `docker compose` with the right project directory and env files; use it for every Compose command (`ps`, `logs`, `exec`, `up -d`, `stop`).
 - Health: `curl -fsS http://127.0.0.1:8080/api/health` on the Pi checks the app (database query, data directory writable); `curl -fsS https://mealmate.<tailnet>.ts.net/api/health` also checks `tailscale serve` and the certificate.
-- Admin page → System shows the version, the pinned image digest (`IMAGE_REF`, passed in by `compose.yml`), the last backup and the free disk space (from `state/status/`).
+- Einstellungen → Verwaltung → System shows the version, the pinned image digest (`IMAGE_REF`, passed in by `compose.yml`), the last backup and the free disk space (from `state/status/`).
 
 ### Diagnostics for the iPhone platform tests (M1 only)
 
-The `/diag` screen (Me → Diagnostics, admins only) needs the diagnostics endpoints, which are off by default. Switch them on for the tests and **off again afterwards**:
+The `/diag` screen (Einstellungen → Über MealMate → Diagnose, admins only) needs the diagnostics endpoints, which are off by default. Switch them on for the tests and **off again afterwards**:
 
 ```bash
 echo 'MEALMATE_DIAGNOSTICS_ENABLED=true' | sudo tee -a /srv/mealmate/.env && sudo /srv/mealmate/bin/mm-compose up -d
@@ -446,10 +446,11 @@ Written by the host into `/srv/mealmate/state/status/` (the app reads them read-
 
   ```json
   {"finished_at": "2026-09-27T12:15:04Z", "label": "regular", "ok": true,
-   "snapshot": "20260927T121500Z", "size_bytes": 12345, "message": "backup 20260927T121500Z (regular) complete"}
+   "snapshot": "20260927T121500Z", "size_bytes": 12345, "message": "backup 20260927T121500Z (regular) complete",
+   "last_success_at": "2026-09-27T12:15:04Z"}
   ```
 
-  `label` is `regular`, `pre-update` or `manual`; `snapshot` and `size_bytes` are `null` on failure; `message` is a short status line.
+  `label` is `regular`, `pre-update` or `manual`; `snapshot` and `size_bytes` are `null` on failure; `message` is a short status line. `last_success_at` is when the last successful backup finished (ADM-01): after a success the run's own `finished_at`; after a failure the previous file's value, or, if that has none, the time of the newest snapshot in `backups/` (its name); `null` when there is no snapshot either. A file written before this key existed reads as "unknown" until the next run. The System page and its row show it after a failed run.
 - `disk.json`, hourly: `{"checked_at": "2026-09-27T12:00:01Z", "free_bytes": 1234, "total_bytes": 5678, "free_percent": 21.7}` (the file system of `/`).
 
 ### 13.2 `setup.sh` modes
@@ -488,6 +489,7 @@ The deploy tests (`deploy/tests/`, `make test-deploy`, CI job "Deploy tests") ru
 | `MEALMATE_DISK_PATH` / `MEALMATE_DISK_MIN_FREE_PERCENT` | `/` / `20` | disk check |
 | `DOCKER`, `TAILSCALE`, `COSIGN`, `CURL`, `SYSTEMCTL`, `SQLITE3`, `PYTHON3`, `RSYNC`, `SETPRIV`, `APT_GET` | the real tools (`COSIGN=/usr/local/bin/cosign`) | tests use shims for `cosign`, `tailscale`, `systemctl`, `apt-get` and fault-injecting wrappers of `docker` and `curl` |
 | Mac: `MM_PULL_CONFIG` and the `MM_*` keys of the config | `~/.mealmate-backup/config` | `MM_REMOTE` may be a local path in tests |
+| Mac installer: `BREW`, `SSH`, `LAUNCHCTL`, `TAILSCALE` | the real tools | tests use shims for these, and `uname`, `fdesetup` and `plutil` on `PATH` |
 
 What the tests cannot cover is listed in § 13.5.
 
@@ -522,4 +524,4 @@ The deploy tests run the real scripts against the real image, but these can only
 5. `setpriv` reading `data/media` as uid 10001 on the Pi (every backup; a failure says *copying the photos as the app user failed*).
 6. systemd timers and `mealmate-backup.path` (the admin page's "Back up now").
 7. The update path on the Pi: a real nightly update and, once, a rollback drill (e.g. temporarily pinning a known digest).
-8. rrsync with Homebrew rsync (O-5), the Mac installer and launchd.
+8. rrsync with Homebrew rsync (O-5), and the Mac installer against the real Pi (SSH, `sudo`, the pinned host key) and launchd. The deploy tests run the installer itself with shims.

@@ -9,10 +9,16 @@ name, so they stay similar (ING-03).
 
 import re
 
-from playwright.sync_api import Locator, Page, expect
+import pytest
+from playwright.sync_api import Locator, Page, ViewportSize, expect
 
 from support.api import Account, Api, new_barcode, sign_in, unique
 from support.frontend import TEST_IDS, ingredient_label, text
+from support.ui import choose_from_menu, open_more_menu
+
+# The whole screen of an iPhone SE (2nd and 3rd generation), as the app has it from the Home
+# Screen: narrower than the default device's visible area (393 by 659 px), and a little taller.
+IPHONE_SE_SCREEN: ViewportSize = {"width": 375, "height": 667}
 
 
 def nutrient_row(page: Page, key: str) -> Locator:
@@ -105,7 +111,7 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
 
     # Its own values, changed by anyone (ING-01, NUT-02).
     page.goto(ingredient_url)
-    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    choose_from_menu(page, "editIngredient")
     dialog = page.get_by_role("dialog", name=text("ingredients.form.editTitle", name=label))
     dialog.get_by_label(text("nutrient.kcal"), exact=True).fill("60")
     dialog.get_by_role("button", name=text("common.save")).click()
@@ -114,31 +120,62 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     expect(nutrient_row(page, "fat")).to_contain_text(text("ingredients.nutrition.noValue"))
 
 
-def test_pinned_block_fits_the_largest_text_size(member_page: Page) -> None:
+@pytest.mark.parametrize(
+    "screen", [None, IPHONE_SE_SCREEN], ids=["default-device", "iphone-se-screen"]
+)
+def test_pinned_block_fits_the_largest_text_size(
+    member_page: Page, screen: ViewportSize | None
+) -> None:
     """UI-01: at the largest iPhone text size (53 px body text, simulated here) the pinned block
-    wraps a long "Create …" tile instead of clipping it or widening the page, and leaves room for
-    the content below it, because its text stops growing at about the first accessibility size
-    (D-29)."""
+    shows its headline and wraps a long "Create …" tile without clipping them or widening the
+    page, and leaves room for the content below it, as the tab opens and while the content
+    scrolls, because its text stops growing at about the first accessibility size (D-29, D-44).
+    Also on the smaller screen of an iPhone SE, where the narrower tile takes more lines.
+    test_lists.py has a headline that has to wrap."""
     page = member_page
+    if screen is not None:
+        page.set_viewport_size(screen)
     page.goto("/ingredients")
-    page.add_style_tag(content="html { font-size: 53px !important; }")
+    # How many lines the tile takes depends on the font. The browsers' default one differs by
+    # platform (wider on Linux than on a Mac), so the text is set in Arial, as wide as the
+    # iPhone's system font here (Liberation Sans has its metrics on Linux).
+    page.add_style_tag(
+        content="html { font-size: 53px !important;"
+        ' font-family: Arial, "Liberation Sans" !important; }'
+    )
     name = f"Quittengelee mit Zimt {unique('aus dem Garten')}"
     page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(name)
 
-    tile = page.get_by_test_id(TEST_IDS["newIngredient"])
+    block = page.get_by_test_id(TEST_IDS["pinnedBlock"])
+    headline = block.get_by_role("heading", level=1, name=text("nav.ingredients"))
+    tile = block.get_by_test_id(TEST_IDS["newIngredient"])
+    expect(headline).to_be_visible()
     expect(tile).to_have_text(text("ingredients.createNamed", name=name))
     reset = page.get_by_role("button", name=text("common.resetFilters"))
     expect(reset).to_be_visible()
     viewport = page.viewport_size
     assert viewport is not None
     assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
-    assert tile.evaluate("tile => tile.scrollWidth <= tile.clientWidth")
-    box = tile.bounding_box()
+    for element in (headline, tile):
+        assert element.evaluate("element => element.scrollWidth <= element.clientWidth")
+        box = element.bounding_box()
+        assert box is not None
+        assert box["x"] + box["width"] <= viewport["width"]
+    # The block leaves at least a quarter of the screen for the content, which a name this long
+    # at full text size would cover: as the tab opens, below the space above the block, and while
+    # the content scrolls, when the block is stuck at the top with its headline. (A Home Screen
+    # app sticks it below the status bar, which is never taller than the space above it as the
+    # tab opens, so the first check covers that.)
+    box = block.bounding_box()
     assert box is not None
-    assert box["x"] + box["width"] <= viewport["width"]
-    # The tile is the pinned block's last row: at least a quarter of the screen stays for the
-    # content, which a name this long at full text size would cover.
-    assert box["y"] + box["height"] < viewport["height"] * 0.75
+    assert box["y"] + box["height"] < viewport["height"] * 0.75, box
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    assert page.evaluate("window.scrollY") > 0
+    box = block.bounding_box()
+    assert box is not None
+    assert abs(box["y"]) < 1, box
+    assert box["height"] < viewport["height"] * 0.75, box
+    expect(headline).to_be_in_viewport()
 
 
 def test_member_filters_by_categories(member_page: Page, api: Api, member: Account) -> None:
@@ -374,7 +411,7 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     rows = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_test_id(TEST_IDS["ingredientRow"])
     rows.filter(has_text=gouda["name"]).click()
     detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
-    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    choose_from_menu(page, "editIngredient")
     form = page.get_by_test_id(TEST_IDS["ingredientForm"])
     form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=name)
     form.get_by_role("button", name=text("common.save")).click()
@@ -422,7 +459,7 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     # Anyone can give it a new category; until then its detail and form show "Uncategorized".
     row.click()
     expect(detail).to_contain_text(uncategorized)
-    page.get_by_test_id(TEST_IDS["editIngredient"]).click()
+    choose_from_menu(page, "editIngredient")
     field = form.get_by_label(text("ingredients.field.category"), exact=True)
     expect(field).to_have_value(built_in["id"])
     expect(field.get_by_role("option", name=uncategorized, exact=True)).to_be_disabled()
@@ -491,7 +528,17 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
     sign_in(page.context, admin)
     page.goto(f"/ingredients/{duplicate['id']}")
     expect(page.get_by_test_id(TEST_IDS["screenIngredient"])).to_contain_text(barcode)
-    page.get_by_test_id(TEST_IDS["mergeIngredient"]).click()
+    # In the ⋯ menu for admins: "Edit", "Buy regularly…", "Merge…" and, last, "Delete" (D-39).
+    menu = open_more_menu(page)
+    expect(menu.get_by_role("menuitem")).to_have_text(
+        [
+            text("ingredients.detail.edit"),
+            text("recurring.buyRegularly"),
+            text("ingredients.admin.merge"),
+            text("ingredients.admin.delete"),
+        ]
+    )
+    menu.get_by_test_id(TEST_IDS["mergeIngredient"]).click()
     dialog = page.get_by_role(
         "dialog", name=text("ingredients.admin.mergeTitle", name=duplicate["name"])
     )
@@ -519,4 +566,21 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
         page.get_by_test_id(TEST_IDS["mealIngredients"]).get_by_role("link", name=keep["name"])
     ).to_have_attribute("href", f"/ingredients/{keep['id']}")
     page.goto(f"/ingredients/{duplicate['id']}")
+    expect(page.get_by_role("alert")).to_have_text(text("error.common.not_found"))
+
+
+def test_admin_deletes_an_unused_ingredient(page: Page, api: Api, admin: Account) -> None:
+    """ING-05: an admin deletes an ingredient nothing uses from its ⋯ menu, after confirming."""
+    unused = api.create_ingredient(admin, f"Rest {unique('e2e')}", category_key="other")
+
+    sign_in(page.context, admin)
+    page.goto(f"/ingredients/{unused['id']}")
+    expect(page.get_by_role("heading", level=1)).to_have_text(unused["name"])
+    choose_from_menu(page, "deleteIngredient")
+    page.get_by_role(
+        "alertdialog", name=text("ingredients.admin.deleteTitle", name=unused["name"])
+    ).get_by_role("button", name=text("ingredients.admin.deleteConfirm"), exact=True).click()
+
+    expect(page).to_have_url(re.compile("/ingredients$"))
+    page.goto(f"/ingredients/{unused['id']}")
     expect(page.get_by_role("alert")).to_have_text(text("error.common.not_found"))

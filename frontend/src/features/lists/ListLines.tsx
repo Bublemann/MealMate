@@ -1,8 +1,9 @@
 import type { TFunction } from 'i18next';
 import { EyeOff, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import { useId, useRef, useState, type PointerEvent } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { SwipeRow } from '@/components/SwipeRow';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,7 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useLanguage } from '@/i18n';
-import { cn } from '@/lib/utils';
 import type { Category } from '@/features/reference/api';
 import { useConnected } from '@/features/sync/context';
 import { testIds } from '@/testIds';
@@ -26,10 +26,6 @@ import {
 } from './api';
 import { ExtraItemDialog } from './ExtraItemDialog';
 import { groupByCategory, lineAmount, lineLabel, sourceAmount } from './format';
-import { Reminder } from './Reminder';
-
-/** How far (px) a line has to be swiped to the left to be removed for this list (LIST-07). */
-const SWIPE_DISTANCE = 96;
 
 interface ListLinesProps {
   list: ListDetail;
@@ -37,16 +33,18 @@ interface ListLinesProps {
   categories: readonly Category[];
   /** Lines can be removed and restored, and extra items changed (editors of a draft). */
   editable: boolean;
+  /** What comes first under the heading: the item field (D-41). */
+  top?: ReactNode;
 }
 
 /**
- * The aggregated lines under their category headings, in the order the server sorted them
- * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be removed for
- * this list by swiping it to the left or with the button in that dialog, and comes back from the
- * collapsed "Removed" section (LIST-07). The reminder is the last row (LIST-14). Offline these
- * changes are disabled (SYNC-03).
+ * The Artikel section of a draft or a read-only list: what `top` holds (the item field), then
+ * the aggregated lines under their category headings, in the order the server sorted them
+ * (LIST-05, AGG). Tapping a line shows where it comes from (LIST-08); a line can be hidden for
+ * this list by swiping it to the left (D-40) or with the button in that dialog, and comes back
+ * from the collapsed "Hidden" section (LIST-07). Offline these changes are disabled (SYNC-03).
  */
-export function ListLines({ list, categories, editable }: ListLinesProps) {
+export function ListLines({ list, categories, editable, top }: ListLinesProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const offline = !useConnected();
@@ -72,6 +70,7 @@ export function ListLines({ list, categories, editable }: ListLinesProps) {
       <h2 id={headingId} className="text-xl font-semibold">
         {t('lists.lines.title')}
       </h2>
+      {top}
       <ErrorAlert error={setHidden.error} />
       {shown.length === 0 && hidden.length === 0 && (
         <p className="text-muted-foreground">{t('lists.lines.empty')}</p>
@@ -98,7 +97,6 @@ export function ListLines({ list, categories, editable }: ListLinesProps) {
           onRestore={(line) => hide(line, false)}
         />
       )}
-      <Reminder seed={list.reminder_seed} />
       <SourcesDialog
         listId={list.id}
         line={open}
@@ -143,7 +141,10 @@ function CategoryLines({ name, lines, editable, onOpen, onHide }: CategoryLinesP
       >
         {name}
       </h3>
-      <ul aria-labelledby={headingId} className="flex flex-col divide-y rounded-xl border bg-card">
+      <ul
+        aria-labelledby={headingId}
+        className="flex flex-col divide-y overflow-hidden rounded-xl border bg-card"
+      >
         {lines.map((line) => (
           <LineRow
             key={line.key}
@@ -165,87 +166,32 @@ interface LineRowProps {
   onHide: () => void;
 }
 
-/** One line; on touch screens it can be swiped to the left to remove it for this list. */
+/** One line; on touch screens a swipe to the left reveals "Hide" (LIST-07, D-40). */
 function LineRow({ line, swipeable, onOpen, onHide }: LineRowProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const amount = lineAmount(t, language, line);
-  const start = useRef<{ x: number; y: number; pointer: number } | null>(null);
-  // A swipe must not also count as a tap on the line.
-  const moved = useRef(false);
-  const [offset, setOffset] = useState(0);
-
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!swipeable || event.pointerType === 'mouse') return;
-    start.current = { x: event.clientX, y: event.clientY, pointer: event.pointerId };
-    moved.current = false;
-  }
-
-  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    const origin = start.current;
-    if (!origin || origin.pointer !== event.pointerId) return;
-    const dx = event.clientX - origin.x;
-    const dy = event.clientY - origin.y;
-    if (!moved.current && Math.abs(dy) > Math.abs(dx)) {
-      // Scrolling the page, not swiping the line.
-      start.current = null;
-      return;
-    }
-    if (Math.abs(dx) > 8) moved.current = true;
-    setOffset(Math.min(0, dx));
-  }
-
-  function onPointerEnd() {
-    if (!start.current) return;
-    start.current = null;
-    if (offset <= -SWIPE_DISTANCE) onHide();
-    setOffset(0);
-  }
 
   return (
-    <li
-      data-testid={testIds.listLine}
-      className="relative overflow-hidden first:rounded-t-xl last:rounded-b-xl"
-    >
-      {offset < 0 && (
-        <span
-          aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-end gap-2 bg-destructive px-4 text-sm font-medium text-destructive-foreground"
-        >
-          <EyeOff className="size-5" />
-          {t('lists.lines.hide')}
-        </span>
-      )}
-      <div
-        className={cn(
-          'relative touch-pan-y bg-card',
-          // Follows the finger while swiping, slides back when let go.
-          offset === 0 && 'transition-transform motion-reduce:transition-none',
-        )}
-        style={offset < 0 ? { transform: `translateX(${offset}px)` } : undefined}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={() => {
-          start.current = null;
-          setOffset(0);
-        }}
-        onClickCapture={(event) => {
-          if (!moved.current) return;
-          moved.current = false;
-          event.preventDefault();
-          event.stopPropagation();
-        }}
+    <li data-testid={testIds.listLine}>
+      <SwipeRow
+        action={{ label: t('lists.lines.hide'), icon: EyeOff, tone: 'neutral', onAction: onHide }}
+        disabled={!swipeable}
       >
+        {/* Centred in the tap target, while name and amount share a baseline. */}
         <button
           type="button"
           onClick={onOpen}
-          className="flex min-h-(--tap-target) w-full items-baseline justify-between gap-3 px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex min-h-(--tap-target) w-full items-center px-4 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <span className="min-w-0 break-words">{lineLabel(line)}</span>
-          {amount && <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>}
+          <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+            <span className="min-w-0 break-words">{lineLabel(line)}</span>
+            {amount && (
+              <span className="shrink-0 text-right font-medium tabular-nums">{amount}</span>
+            )}
+          </span>
         </button>
-      </div>
+      </SwipeRow>
     </li>
   );
 }
@@ -257,7 +203,7 @@ interface HiddenLinesProps {
   onRestore: (line: ListLine) => void;
 }
 
-/** LIST-07: lines removed for this list, collapsed; each can be restored. */
+/** LIST-07: lines hidden for this list, collapsed under "Hidden (N)"; each can be restored. */
 function HiddenLines({ lines, editable, offline, onRestore }: HiddenLinesProps) {
   const { t } = useTranslation();
   const language = useLanguage();

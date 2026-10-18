@@ -10,6 +10,14 @@ export const VERSION_INFO = {
   source_url: 'https://github.com/Bublemann/MealMate/tree/0123456789abcdef0123456789abcdef01234567',
 };
 
+/** The admin system info before the host has written any status (ADM-01). */
+export const SYSTEM_NO_STATUS: Schemas['SystemInfo'] = {
+  ...VERSION_INFO,
+  image_digest: null,
+  backup: null,
+  disk: null,
+};
+
 export const TEST_USER: Schemas['Me'] = {
   id: '0190c0de-0000-7000-8000-000000000001',
   username: 'anna',
@@ -54,7 +62,7 @@ export function errorResponse(status: number, code: string, fields: unknown[] = 
 
 type Handler = (request: Request) => unknown;
 
-/** Answers for the calls the signed-in app shell and the Me screen make. */
+/** Answers for the calls the signed-in app shell and the Settings screen make. */
 export const DEFAULT_ROUTES: Record<string, unknown> = {
   'GET /api/version': VERSION_INFO,
   'GET /api/me': TEST_USER,
@@ -74,6 +82,9 @@ export const DEFAULT_ROUTES: Record<string, unknown> = {
     password_reset_by: null,
   },
   'GET /api/couple': NO_COUPLE,
+  // The gear's count and the Regelmäßige Artikel row (D-51): no notices, no recurring items.
+  'GET /api/me/notices': { count: 0, notices: [] },
+  'GET /api/recurring-items': { due_count: 0, items: [] },
   'GET /api/users': [BEN, CARL],
   // The Lists tab, where the app opens: no lists yet, nobody else visible.
   'GET /api/lists': { lists: [], next_cursor: null },
@@ -142,6 +153,18 @@ export function heldRoute() {
     });
   };
   return { route, answer };
+}
+
+/**
+ * No signal (SYNC-03): every request of `fetchMock` fails, the browser says it is offline and
+ * fires `offline`.
+ */
+export function goOffline(fetchMock: ReturnType<typeof mockApi>) {
+  fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  act(() => {
+    window.dispatchEvent(new Event('offline'));
+  });
 }
 
 interface NodeProcess {

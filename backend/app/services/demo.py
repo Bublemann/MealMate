@@ -22,16 +22,20 @@
   that needs more (ben's meal got more servings after the onions were checked) and a new
   line (coffee, added while shopping); two done lists, finished in different weeks: anna's
   shared "Salatabend" (one line not bought) and carl's "Vorrat".
+- Recurring items (`_insert_recurring`, LIST-16): the couple's set has "Klopapier", last bought
+  five weeks ago with a four-week interval and so due, and "Zahnpasta", bought last week; both
+  are household items, the only ones in the catalog.
 
 The content is fixed; only ids, the password, the invite code and the photo keys differ
-between runs; the times of shopping and finishing are relative to the time of seeding.
+between runs; the times of shopping and finishing, and the days of the last purchases, are
+relative to the time of seeding.
 """
 
 import io
 import secrets
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 from PIL import Image, ImageDraw
 from sqlalchemy import select
@@ -41,6 +45,7 @@ from app.core.passwords import hash_password
 from app.db.ids import new_id
 from app.domain.lists import ingredient_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
+from app.domain.recurring import local_date, weeks_to_days
 from app.domain.text import normalize, sort_key
 from app.domain.units import Unit
 from app.media.store import MediaStore
@@ -55,6 +60,7 @@ from app.models import (
     Meal,
     MealIngredient,
     MealTag,
+    RecurringItem,
     ShoppingList,
     Tag,
 )
@@ -62,9 +68,9 @@ from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
 from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
-from app.services import accounts, aggregation, codes, hooks, shopping
+from app.services import access, accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
-from app.services.off_fields import set_brand, set_name
+from app.services.off_fields import set_brand, set_name, set_pack_size
 
 DEMO_USERS: tuple[tuple[str, str, Role, Language], ...] = (
     ("admin", "Admin", "admin", "de"),
@@ -92,10 +98,10 @@ class DemoIngredient:
     # Only for base unit piece (D-32).
     piece_weight_g: float | None = None
     nutrients: Mapping[str, float] = field(default_factory=dict)
-    # A branded product as if scanned: brand, barcode, and the pack as text, quantity and unit.
+    # A branded product as if scanned: brand, barcode and pack size.
     brand: str | None = None
     barcode: str | None = None
-    pack: tuple[str, float, Unit] | None = None
+    pack_size: str | None = None
 
 
 DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
@@ -117,7 +123,7 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Eier", "dairy_eggs", "carl", base_unit="piece", piece_weight_g=60,
                    nutrients=_values(155, 13.0, 1.1, 1.1, 11.0)),
     DemoIngredient("Butter", "dairy_eggs", "ben", nutrients=_values(741, 0.6, 0.6, 0.6, 82.0),
-                   brand="Kerrygold", barcode="4061453007189", pack=("250 g", 250, Unit.G)),
+                   brand="Kerrygold", barcode="4061453007189", pack_size="250 g"),
     DemoIngredient("Joghurt", "dairy_eggs", "ben"),
     DemoIngredient("Gouda", "cheese", "anna"),
     DemoIngredient("Parmesan", "cheese", "carl", nutrients=_values(392, 35.8, 3.2, 0.9, 25.8)),
@@ -128,17 +134,17 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Tofu", "plant_based", "carl"),
     DemoIngredient("Spaghetti", "pasta_rice_grains", "anna",
                    nutrients=_values(359, 12.0, 71.0, 3.5, 2.0),
-                   brand="Barilla", barcode="8005516001475", pack=("500 g", 500, Unit.G)),
+                   brand="Barilla", barcode="8005516001475", pack_size="500 g"),
     DemoIngredient("Spaghetti", "pasta_rice_grains", "ben",
                    nutrients=_values(353, 13.0, 70.0, 3.5, 1.5),
-                   brand="De Cecco", barcode="8002331045820", pack=("500 g", 500, Unit.G)),
+                   brand="De Cecco", barcode="8002331045820", pack_size="500 g"),
     DemoIngredient("Reis", "pasta_rice_grains", "ben", nutrients=_values(350, 7.0, 78.0, 0.2, 0.6)),
     DemoIngredient("Passierte Tomaten", "canned_jars", "anna",
                    nutrients=_values(36, 1.6, 5.4, 4.8, 0.2),
-                   brand="Mutti", barcode="8004207009356", pack=("700 g", 700, Unit.G)),
+                   brand="Mutti", barcode="8004207009356", pack_size="700 g"),
     DemoIngredient("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml",
                    nutrients=_values(828, 0.0, 0.0, 0.0, 92.0),
-                   brand="Bertolli", barcode="4017952000633", pack=("750 ml", 750, Unit.ML)),
+                   brand="Bertolli", barcode="4017952000633", pack_size="750 ml"),
     DemoIngredient("Salz", "sauces_spices_oils", "ben"),
     DemoIngredient("Pfeffer", "sauces_spices_oils", "carl"),
     DemoIngredient("Mehl", "baking", "carl"),
@@ -147,6 +153,8 @@ DEMO_INGREDIENTS: tuple[DemoIngredient, ...] = (
     DemoIngredient("Zartbitterschokolade", "snacks_sweets", "carl"),
     DemoIngredient("Erbsen (TK)", "frozen", "anna"),
     DemoIngredient("Kaffee", "drinks", "carl"),
+    DemoIngredient("Klopapier", "household_hygiene", "anna", base_unit="piece"),
+    DemoIngredient("Zahnpasta", "household_hygiene", "ben", base_unit="piece"),
 )  # fmt: skip
 
 
@@ -352,7 +360,6 @@ class DemoShopping:
 class DemoList:
     owner: str
     name: str | None
-    reminder_seed: int
     shared: bool = False
     meals: tuple[DemoListMeal, ...] = ()
     extras: tuple[DemoExtra, ...] = ()
@@ -363,7 +370,7 @@ class DemoList:
 
 DEMO_LISTS: tuple[DemoList, ...] = (
     DemoList(
-        "anna", "Wochenende", reminder_seed=3, shared=True,
+        "anna", "Wochenende", shared=True,
         meals=(
             DemoListMeal("anna", "Pfannkuchen", 4),
             DemoListMeal("ben", "Tomatensalat", 3),
@@ -376,14 +383,14 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         hidden=("Salz",),
     ),
     DemoList(
-        "ben", None, reminder_seed=7,
+        "ben", None,
         meals=(
             DemoListMeal("ben", "Hähnchen-Reis-Pfanne", 2),
             DemoListMeal("ben", DEMO_DELETED_MEAL.name, 4),
         ),
     ),
     DemoList(
-        "carl", "Grillabend", reminder_seed=12,
+        "carl", "Grillabend",
         meals=(
             DemoListMeal("carl", "Tofu-Gemüse-Curry", 4),
             DemoListMeal("anna", "Spaghetti Bolognese", 2),
@@ -392,7 +399,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         extras=(DemoExtra(text="Grillkohle", amount_text="2 Säcke"),),
     ),
     DemoList(
-        "anna", "Wocheneinkauf", reminder_seed=21, shared=True,
+        "anna", "Wocheneinkauf", shared=True,
         meals=(
             DemoListMeal("anna", "Spaghetti Bolognese", 4),
             DemoListMeal("ben", "Hähnchen-Reis-Pfanne", 2),
@@ -415,7 +422,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         ),
     ),
     DemoList(
-        "anna", "Salatabend", reminder_seed=4, shared=True,
+        "anna", "Salatabend", shared=True,
         meals=(DemoListMeal("ben", "Tomatensalat", 4),),
         extras=(DemoExtra(ingredient="Brot", amount=1, unit=Unit.PIECE),),
         shopping=DemoShopping(
@@ -431,7 +438,7 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         ),
     ),
     DemoList(
-        "carl", "Vorrat", reminder_seed=58,
+        "carl", "Vorrat",
         meals=(DemoListMeal("carl", "Tofu-Gemüse-Curry", 2),),
         extras=(DemoExtra(text="Spülmittel", amount_text="1 Flasche"),),
         shopping=DemoShopping(
@@ -448,6 +455,24 @@ DEMO_LISTS: tuple[DemoList, ...] = (
         ),
     ),
 )  # fmt: skip
+
+
+@dataclass(frozen=True)
+class DemoRecurring:
+    """An item of the demo couple's set: the interval typed in weeks, the last purchase so many
+    days before the day of seeding, and its amount."""
+
+    ingredient: str
+    weeks: int
+    last_bought_days_ago: int
+    amount: float | None = None
+    unit: Unit | None = None
+
+
+DEMO_RECURRING: tuple[DemoRecurring, ...] = (
+    DemoRecurring("Klopapier", 4, last_bought_days_ago=35, amount=1, unit=Unit.PIECE),
+    DemoRecurring("Zahnpasta", 6, last_bought_days_ago=7, amount=2, unit=Unit.PIECE),
+)
 
 
 class DemoRefusedError(RuntimeError):
@@ -525,15 +550,11 @@ async def _insert_catalog(
     categories = _seeded_category_ids(await reference_repo.categories_in_order(session))
     for item in DEMO_INGREDIENTS:
         creator = user_ids[item.creator]
-        quantity_text, pack_quantity, pack_unit = item.pack or (None, None, None)
         ingredient = Ingredient(
             barcode=item.barcode,
             category_id=categories[item.category],
             base_unit=item.base_unit,
             piece_weight_g=item.piece_weight_g,
-            quantity_text=quantity_text,
-            pack_quantity=pack_quantity,
-            pack_unit=None if pack_unit is None else pack_unit.value,
             source="manual",
             user_edited_fields=[],
             created_by=creator,
@@ -543,6 +564,7 @@ async def _insert_catalog(
         )
         set_name(ingredient, item.name)
         set_brand(ingredient, item.brand)
+        set_pack_size(ingredient, item.pack_size)
         ingredient.set_nutrients({key: item.nutrients.get(key) for key in NUTRIENT_KEYS})
         session.add(ingredient)
     await session.flush()
@@ -794,7 +816,6 @@ async def _insert_lists(
             status="draft",
             shared_with_partner=demo.shared,
             version=0,
-            reminder_seed=demo.reminder_seed,
             created_at=now,
             updated_at=now,
         )
@@ -839,6 +860,34 @@ async def _insert_lists(
     await session.flush()
 
 
+async def _insert_recurring(
+    session: AsyncSession, user_ids: Mapping[str, str], *, now: datetime, zone: tzinfo
+) -> None:
+    """The demo couple's recurring items, inserted directly: the couple was not formed through
+    `couples.accept`, so there are no own sets to combine. The last purchases count back from
+    today in the instance's time zone."""
+    owner = await access.owner_key(session, user_ids[DEMO_COUPLE[0]])
+    ingredient_ids = await _ingredient_ids(session)
+    today = local_date(now, zone)
+    session.add_all(
+        RecurringItem(
+            couple_id=owner.couple_id,
+            user_id=owner.user_id,
+            ingredient_id=ingredient_ids(item.ingredient),
+            interval_days=weeks_to_days(item.weeks),
+            interval_manual=False,
+            last_purchased_on=today - timedelta(days=item.last_bought_days_ago),
+            last_amount=item.amount,
+            last_unit=None if item.unit is None else item.unit.value,
+            measured_intervals=[],
+            created_at=now,
+            updated_at=now,
+        )
+        for item in DEMO_RECURRING
+    )
+    await session.flush()
+
+
 async def seed_accounts(session: AsyncSession, config: AuthConfig, *, now: datetime) -> DemoSeed:
     """The demo users (all with one random password), the couple and an open invite."""
     password, password_hash = await _demo_password(config)
@@ -847,11 +896,11 @@ async def seed_accounts(session: AsyncSession, config: AuthConfig, *, now: datet
 
 
 async def seed_demo(
-    session: AsyncSession, config: AuthConfig, media: MediaStore, *, now: datetime
+    session: AsyncSession, config: AuthConfig, media: MediaStore, *, now: datetime, zone: tzinfo
 ) -> DemoSeed:
-    """Accounts, catalog, meals and lists in one transaction: if anything fails, nothing is left
-    behind (but photo files, which `mealmate jobs cleanup` removes) and `seed-demo` can simply
-    run again."""
+    """Accounts, catalog, meals, lists and recurring items in one transaction: if anything
+    fails, nothing is left behind (but photo files, which `mealmate jobs cleanup` removes) and
+    `seed-demo` can simply run again. `zone` is the instance's time zone (LIST-16)."""
     password, password_hash = await _demo_password(config)
     photo_keys = await _write_photos(media)
     async with session.begin():
@@ -860,4 +909,5 @@ async def seed_demo(
         await session.flush()
         await _insert_meals(session, seed.user_ids, photo_keys, now=now)
         await _insert_lists(session, seed.user_ids, now=now)
+        await _insert_recurring(session, seed.user_ids, now=now, zone=zone)
     return seed

@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
@@ -8,10 +9,12 @@ import {
 import { api, unwrap, withLongTimeout } from '@/api/client';
 import { isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
+import { NOTICES_KEY, RECURRING_KEY } from '@/features/recurring/api';
 import { CATEGORIES_KEY } from '@/features/reference/api';
 
 export type Ingredient = components['schemas']['Ingredient'];
 export type IngredientSummary = components['schemas']['IngredientSummary'];
+export type IngredientSearchResult = components['schemas']['IngredientSearchResult'];
 export type IngredientCreate = components['schemas']['IngredientCreate'];
 export type IngredientUpdate = components['schemas']['IngredientUpdate'];
 export type IngredientMerge = components['schemas']['IngredientMerge'];
@@ -59,14 +62,10 @@ export function toSummary(ingredient: Ingredient): IngredientSummary {
 /**
  * Ingredients matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
  * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories.
- * The previous result stays while the next one loads.
  */
-export function useIngredients(
-  query: string,
-  { enabled = true, categoryIds = [] }: { enabled?: boolean; categoryIds?: readonly string[] } = {},
-) {
+export function ingredientsQuery(query: string, categoryIds: readonly string[] = []) {
   const q = query.trim();
-  return useQuery({
+  return queryOptions({
     queryKey: listKey(q, categoryIds),
     queryFn: ({ signal }) =>
       unwrap(
@@ -81,6 +80,16 @@ export function useIngredients(
           signal,
         }),
       ),
+  });
+}
+
+/** `ingredientsQuery` on screen: the previous result stays while the next one loads. */
+export function useIngredients(
+  query: string,
+  { enabled = true, categoryIds = [] }: { enabled?: boolean; categoryIds?: readonly string[] } = {},
+) {
+  return useQuery({
+    ...ingredientsQuery(query, categoryIds),
     placeholderData: keepPreviousData,
     enabled,
   });
@@ -231,10 +240,14 @@ export function useOffSearch() {
 /**
  * After a merge or delete: the lists reload, and the gone ingredient's own queries are only
  * marked stale (its screen is still open until the caller navigates away, so no refetch now).
+ * Recurring items move or go with it, and the admin may have kept it as one: their set and
+ * notices load again (LIST-16, D-51).
  */
 function forgetIngredient(queryClient: QueryClient, id: string) {
   invalidateSearches(queryClient);
   invalidateCategoryCounts(queryClient);
+  void queryClient.invalidateQueries({ queryKey: RECURRING_KEY });
+  void queryClient.invalidateQueries({ queryKey: NOTICES_KEY });
   void queryClient.invalidateQueries({ queryKey: detailKey(id), refetchType: 'none' });
   void queryClient.invalidateQueries({ queryKey: ['admin', 'events'] });
 }

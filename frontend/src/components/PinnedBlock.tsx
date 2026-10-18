@@ -3,7 +3,8 @@ import { useId, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { TestId } from '@/testIds';
+import { testIds, type TestId } from '@/testIds';
+import { useScreenHeading } from './screenHeading';
 
 interface SearchFieldProps {
   /** The field's name, for screen readers only: the magnifier shows what it is (A11Y-01). */
@@ -32,16 +33,31 @@ interface PinnedBlockProps {
 }
 
 /**
- * The top of the Lists, Meals and Ingredients tabs (UI-01): search, filter and the green "Neu…"
- * tile, on a frosted surface that stays below the status bar while the content scrolls under it.
- * The tab renders it at once, whether it is still loading, empty or filled (UI-03), and shows its
- * state below it. At the largest text sizes it stops growing before it crowds out the content
- * (the `pinned` utility, D-29), and its spacing is in em of its text; the tile wraps a long name.
+ * The top of the Lists, Meals and Ingredients tabs (UI-01): the tab's headline (D-44), search,
+ * filter and the green "Neu…" tile, on a frosted surface that stays below the status bar while
+ * the content scrolls under it. The tab renders it at once, whether it is still loading, empty or
+ * filled (UI-03), and shows its state below it. At the largest text sizes it stops growing before
+ * it crowds out the content (the `pinned` utility, D-29), and its sizes are in em of its text;
+ * the headline and the tile wrap. It goes inside a `<Screen variant="pinned">`, whose headline it
+ * shows.
  */
 export function PinnedBlock({ search, filter, newTile }: PinnedBlockProps) {
+  const heading = useScreenHeading();
+
   return (
     // Spans the content column across the Layout's px-4, so nothing shows beside it.
-    <div className="frosted pinned sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em]">
+    <div
+      data-testid={testIds.pinnedBlock}
+      className="frosted pinned sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex flex-col gap-[0.75em] border-b border-frosted-border px-4 py-[0.75em]"
+    >
+      {/* Sized by --pinned-headline-size, under the block's cap (D-29). A long one wraps,
+          hyphenated in the UI language (<html lang>). */}
+      <h1
+        id={heading.id}
+        className="text-(length:--pinned-headline-size) leading-[1.2] font-bold tracking-tight hyphens-auto wrap-anywhere"
+      >
+        {heading.title}
+      </h1>
       {search && (
         // The filter button stays beside the search field, which gives way at large text sizes.
         <div className="flex gap-[0.5em]">
@@ -84,17 +100,21 @@ function SearchField({ label, placeholder, value, onChange, testId }: SearchFiel
   );
 }
 
-/** Shaped like a row of the tab's list, in the primary green; a long name wraps. */
+/**
+ * Shaped like a row of the tab's list, in the primary green; a long name wraps. Its lines sit
+ * closer than the button text's usual 1.5, with the difference in the padding, so a one-line tile
+ * keeps its height and a long name takes less of the screen (UI-01).
+ */
 function NewTile({ label, onClick, disabled = false, testId }: NewTileProps) {
   return (
     <Button
       data-testid={testId}
       onClick={onClick}
       disabled={disabled}
-      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.75em] text-left text-[1em]"
+      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em]"
     >
       <Plus aria-hidden="true" className="size-[1.25em]" />
-      <span className="min-w-0 wrap-anywhere">{label}</span>
+      <span className="min-w-0 leading-[1.25] wrap-anywhere">{label}</span>
     </Button>
   );
 }

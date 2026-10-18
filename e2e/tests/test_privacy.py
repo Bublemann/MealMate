@@ -7,13 +7,13 @@ from playwright.sync_api import Page, Request, expect
 
 from support.api import CODE_REQUESTS, Account, Api, unique
 from support.frontend import TEST_IDS, text
-from support.ui import log_in, log_out
+from support.ui import back_to_settings, log_in, log_out, open_settings_page, settings_row
 
 LOCAL_SCHEMES = frozenset({"data", "blob"})
 
 
 def test_no_request_leaves_the_origin(page: Page, base_url: str, api: Api, admin: Account) -> None:
-    """Every screen so far: join, the four tabs, Me, login and the admin screens."""
+    """Every screen so far: join, the four tabs, login and the admin screens."""
     origin = urlsplit(base_url)
     requested: list[str] = []
 
@@ -41,23 +41,29 @@ def test_no_request_leaves_the_origin(page: Page, base_url: str, api: Api, admin
     ]:
         page.get_by_test_id(tab).click()
         expect(page.get_by_test_id(screen)).to_be_visible()
-    page.goto("/me")
-    expect(page.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
-    expect(page.get_by_test_id(TEST_IDS["sessionList"])).to_be_visible()
+    # The Settings pages that load something of their own.
+    about = open_settings_page(page, "me.about", "screenAbout")
+    expect(about.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
+    security = open_settings_page(page, "me.security.title", "screenSecurity")
+    expect(security.get_by_test_id(TEST_IDS["sessionList"])).to_be_visible()
+    open_settings_page(page, "me.profile.title", "screenProfile")
     page.get_by_test_id(TEST_IDS["languageSelect"]).select_option("de")
     page.reload()
-    expect(page.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
+    about = open_settings_page(page, "me.about", "screenAbout", language="de")
+    expect(about.get_by_test_id(TEST_IDS["appVersion"])).to_be_visible()
 
     log_out(page)
     log_in(page, admin, language="de")
-    page.get_by_test_id(TEST_IDS["tabMe"]).click()
-    admin_links = page.get_by_test_id(TEST_IDS["adminEntry"])
-    admin_links.get_by_role("link", name=text("admin.users.title")).click()
-    expect(page.get_by_test_id(TEST_IDS["adminUserList"])).to_be_visible()
-    page.get_by_role("link", name=text("admin.invites.title")).click()
+    # The admin pages through the Verwaltung rows: a page, back to Settings, the next row (D-45).
+    users = open_settings_page(page, "admin.users.title", "screenAdminUsers")
+    expect(users.get_by_test_id(TEST_IDS["adminUserList"])).to_be_visible()
+    expect(page.get_by_role("navigation", name=text("admin.title"))).to_have_count(0)
+    back_to_settings(page)
+    settings_row(page, "admin.invites.title").click()
     page.get_by_test_id(TEST_IDS["createInviteButton"]).click()
     expect(page.get_by_test_id(TEST_IDS["shareLinkUrl"])).to_be_visible()
-    page.get_by_role("link", name=text("admin.events.title")).click()
+    back_to_settings(page)
+    settings_row(page, "admin.events.title").click()
     expect(page.get_by_test_id(TEST_IDS["eventList"])).to_be_visible()
     expect(page).to_have_url(re.compile(r"/me/admin/events$"))
 

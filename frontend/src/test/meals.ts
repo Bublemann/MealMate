@@ -137,3 +137,11 @@ export const MEAL_ROUTES: Record<string, unknown> = {
   'GET /api/users/visible': [ME, BEN, userRef(CARL.display_name, CARL.id, true)],
   'GET /api/ingredients/similar': [],
 };
+
+/** A meal as the meal list answers it, marked when its name is exactly the query (D-41). */
+export function foundMeal(
+  meal: Schemas['MealSummary'],
+  exact = false,
+): Schemas['MealSearchResult'] {
+  return { ...meal, exact };
+}

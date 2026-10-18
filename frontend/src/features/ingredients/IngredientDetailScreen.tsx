@@ -1,23 +1,18 @@
-import type { TFunction } from 'i18next';
-import { ChevronLeft, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { Screen } from '@/components/Screen';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useCurrentUser } from '@/features/auth/context';
 import { useCategories } from '@/features/reference/api';
 import { categoryName, unitLabel } from '@/features/reference/labels';
-import { useLanguage, type Language } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { formatDate, formatNumber } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { testIds } from '@/testIds';
 import { useIngredient, type Ingredient } from './api';
-import { IngredientAdminActions } from './IngredientAdminActions';
-import { IngredientFormDialog } from './IngredientFormDialog';
+import { IngredientMenu } from './IngredientMenu';
 import { ingredientLabel } from './label';
 import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, nutritionUnit } from './nutrients';
 import { OffAttribution } from './OffAttribution';
@@ -25,13 +20,19 @@ import { PendingUpdateHint } from './PendingUpdateHint';
 
 /**
  * One ingredient: its details (brand, barcode, package, source, use), nutrition, newer values
- * from Open Food Facts (BAR-06), who created and changed it, and the admin actions.
+ * from Open Food Facts (BAR-06), and who created and changed it; editing and the admin actions
+ * are in the ⋯ menu (`IngredientMenu`), their errors below the title.
  */
 export function IngredientDetailScreen() {
-  const { t } = useTranslation();
   const { id = '' } = useParams();
+  // A fresh screen per ingredient, so an error of one ingredient's menu doesn't stay on the next.
+  return <IngredientDetail key={id} id={id} />;
+}
+
+function IngredientDetail({ id }: { id: string }) {
+  const { t } = useTranslation();
   const ingredient = useIngredient(id);
-  const user = useCurrentUser();
+  const [actionError, setActionError] = useState<unknown>(null);
 
   return (
     <Screen
@@ -41,14 +42,12 @@ export function IngredientDetailScreen() {
           : t('nav.ingredients')
       }
       testId={testIds.screenIngredient}
+      back={{ to: '/ingredients', label: t('ingredients.detail.back') }}
+      action={
+        ingredient.data && <IngredientMenu ingredient={ingredient.data} onError={setActionError} />
+      }
     >
-      <Link
-        to="/ingredients"
-        className="-mt-3 inline-flex min-h-(--tap-target) items-center gap-1 self-start font-medium text-primary underline-offset-4 hover:underline"
-      >
-        <ChevronLeft aria-hidden="true" className="size-5" />
-        {t('ingredients.detail.back')}
-      </Link>
+      <ErrorAlert error={actionError} />
       {ingredient.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
       <LoadError error={ingredient.error} />
       {ingredient.data && (
@@ -61,7 +60,6 @@ export function IngredientDetailScreen() {
           )}
           <PropertiesCard ingredient={ingredient.data} />
           <NutritionCard ingredient={ingredient.data} />
-          {user.role === 'admin' && <IngredientAdminActions ingredient={ingredient.data} />}
         </>
       )}
     </Screen>
@@ -72,12 +70,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
   const { t } = useTranslation();
   const language = useLanguage();
   const categories = useCategories();
-  const [editing, setEditing] = useState(false);
   const category = categories.data?.find(({ id }) => id === ingredient.category_id);
   const notSet = <span className="text-muted-foreground">{t('ingredients.detail.notSet')}</span>;
-
-  const label = ingredientLabel(ingredient.name, ingredient.brand);
-  const pack = packText(t, language, ingredient);
 
   const rows = [
     { label: t('ingredients.detail.brand'), value: ingredient.brand ?? notSet },
@@ -107,7 +101,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
         ]
       : []),
     { label: t('ingredients.detail.barcode'), value: ingredient.barcode ?? notSet },
-    { label: t('ingredients.detail.pack'), value: pack ?? notSet },
+    // The pack size is its text alone, as in the edit pop-up (D-47).
+    { label: t('ingredients.detail.pack'), value: ingredient.quantity_text ?? notSet },
     {
       label: t('ingredients.detail.source'),
       value: t(`ingredients.detail.source.${ingredient.source}`),
@@ -120,18 +115,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between gap-3">
+      <CardHeader>
         <CardTitle>{t('ingredients.detail.properties')}</CardTitle>
-        <Button
-          size="compact"
-          variant="outline"
-          data-testid={testIds.editIngredient}
-          aria-label={t('ingredients.detail.editLabel', { name: label })}
-          onClick={() => setEditing(true)}
-        >
-          <Pencil aria-hidden="true" />
-          {t('ingredients.detail.edit')}
-        </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <dl className="flex flex-col divide-y">
@@ -159,23 +144,8 @@ function PropertiesCard({ ingredient }: { ingredient: Ingredient }) {
           </p>
         </div>
       </CardContent>
-      <IngredientFormDialog open={editing} onOpenChange={setEditing} ingredient={ingredient} />
     </Card>
   );
-}
-
-/**
- * The pack size as Open Food Facts gave it (D-38): the printed text ("6 × 1,5 l"), else the
- * contents with their unit; null when neither is known. Information only (nothing is computed
- * from it).
- */
-function packText(t: TFunction, language: Language, ingredient: Ingredient): string | null {
-  if (ingredient.quantity_text) return ingredient.quantity_text;
-  if (ingredient.pack_quantity === null) return null;
-  const value = formatNumber(ingredient.pack_quantity, language, { maximumFractionDigits: 3 });
-  return ingredient.pack_unit
-    ? t('common.amount', { value, unit: unitLabel(t, ingredient.pack_unit) })
-    : value;
 }
 
 /**

@@ -22,7 +22,7 @@ from app.core.errors import FieldErrorCode, FieldProblem, validation_error
 from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
 from app.domain.nutrition import meal_nutrition
-from app.domain.text import normalize, sort_key
+from app.domain.text import normalize, same_name, sort_key
 from app.domain.units import Unit, counted_unit, fits
 from app.media.store import MediaStore
 from app.models import Meal as MealRow
@@ -41,6 +41,7 @@ from app.schemas.meals import (
     MealNutrition,
     MealNutritionMissing,
     MealPhoto,
+    MealSearchResult,
     MealSummary,
     MealUpdate,
 )
@@ -299,15 +300,16 @@ async def list_meals(
     tag_ids: Sequence[str],
     owner_ids: Sequence[str] | None,
     now: datetime,
-) -> list[MealSummary]:
+) -> list[MealSearchResult]:
     """The meals the principal may see (VIS-01/02, CPL-04), A-Z (MEAL-09).
 
     Without `owner_ids`, the owners the principal unticked in their user filter on Meals are
     left out (MEAL-10); with them, only those owners' meals are listed (as far as visible).
-    `query` matches the name, a tag or the cuisine, ignoring case, umlauts and accents. With
-    `cuisine_ids`, a meal's cuisine must be any of them; with `tag_ids`, it must have all of
-    them (MEAL-09).
+    `query` matches the name, a tag or the cuisine, ignoring case, umlauts and accents; the
+    meals whose name is the query are marked exact (D-41). With `cuisine_ids`, a meal's cuisine
+    must be any of them; with `tag_ids`, it must have all of them (MEAL-09).
     """
+    query_norm = normalize(query or "")
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         if owner_ids is not None:
@@ -317,19 +319,23 @@ async def list_meals(
         rows = await meals_repo.search(
             session,
             owner_ids=owners,
-            query=normalize(query or ""),
+            query=query_norm,
             cuisine_ids=cuisine_ids,
             tag_ids=tag_ids,
         )
-        return await _summaries(session, media, rows, now=now)
+        summaries = await _summaries(session, media, rows, now=now)
+    return [
+        MealSearchResult(**meal.model_dump(), exact=same_name(row.name_norm, query_norm))
+        for meal, row in zip(summaries, rows, strict=True)
+    ]
 
 
 async def recent_meals(
     session: AsyncSession, media: MediaStore, principal: Principal, *, now: datetime
 ) -> list[MealSummary]:
     """The meals the principal added to lists, most recently added first and each once, as
-    far as they still exist and are visible to them (MEAL-09: "recently used" in the meal
-    picker); at most 10. The user filter on Meals does not apply."""
+    far as they still exist and are visible to them (MEAL-09: "recently used" in the list's
+    meal field); at most 10. The user filter on Meals does not apply."""
     async with session.begin():
         visible = await access.visible_owner_ids(session, principal.user_id, "meals")
         meal_ids = await lists_repo.recent_meal_ids(

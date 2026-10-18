@@ -17,9 +17,11 @@ from app.api import (
     me,
     meals,
     media,
+    recurring,
     reference,
     system,
     users,
+    walking_order,
 )
 
 api_router = APIRouter()
@@ -33,6 +35,8 @@ for module in (
     ingredients,
     meals,
     lists,
+    recurring,
+    walking_order,
     media,
     admin,
 ):

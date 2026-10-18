@@ -120,6 +120,7 @@ async def accept(
         )
         couples_repo.add_members(session, request)
         await session.flush()
+        await hooks.on_couple_accepted(session, request, now=now)
         return await _state(session, principal.user_id)
 
 
@@ -147,7 +148,9 @@ async def cancel(session: AsyncSession, principal: Principal, request_id: str) -
 
 async def end_couple(session: AsyncSession, couple: Couple, *, now: datetime) -> None:
     """End a couple inside the caller's transaction (CPL-05): hook first, then the rows."""
-    await hooks.on_couple_ended(session, couple.requester_id, couple.addressee_id, now=now)
+    await hooks.on_couple_ended(
+        session, couple.requester_id, couple.addressee_id, couple_id=couple.id, now=now
+    )
     await couples_repo.delete_couple(session, couple)
 
 

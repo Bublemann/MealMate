@@ -1,6 +1,6 @@
 """Queries on `couples` and `couple_members`."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +59,14 @@ async def delete_pending_involving(session: AsyncSession, *user_ids: str) -> Non
             or_(Couple.requester_id.in_(user_ids), Couple.addressee_id.in_(user_ids)),
         )
     )
+
+
+async def member_ids(session: AsyncSession, couple_ids: Collection[str]) -> Sequence[str]:
+    """The users in these couples."""
+    result = await session.execute(
+        select(CoupleMember.user_id).where(CoupleMember.couple_id.in_(couple_ids))
+    )
+    return result.scalars().all()
 
 
 def add_members(session: AsyncSession, couple: Couple) -> None:

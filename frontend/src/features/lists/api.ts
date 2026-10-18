@@ -1,4 +1,5 @@
 import {
+  queryOptions,
   replaceEqualDeep,
   useInfiniteQuery,
   useMutation,
@@ -146,6 +147,22 @@ function isFinal(error: unknown): boolean {
 }
 
 /**
+ * How list `id` is loaded, the same for every screen that shows it (one query): with the ETag of
+ * the cached copy (SYNC-08), starting from the local copy until the server answers (SYNC-09).
+ */
+function useListQuery(id: string) {
+  const queryClient = useQueryClient();
+  const engine = useSyncEngine();
+  return queryOptions({
+    queryKey: detailKey(id),
+    queryFn: ({ signal }) => loadList(queryClient, id, signal),
+    initialData: () => engine.copied(id),
+    initialDataUpdatedAt: () => engine.copiedAt(id),
+    structuralSharing: shareWithEtag,
+  });
+}
+
+/**
  * One list with its meals and the aggregated lines, as the server computed them (AGG-01). While
  * it is on screen and the app is visible it is checked for changes every 5 seconds, and at once
  * when the app comes back to the foreground (SYNC-08, LIST-09). Until the server answers, the
@@ -153,17 +170,20 @@ function isFinal(error: unknown): boolean {
  * the user's waiting ops on top (`usePendingList`).
  */
 export function useList(id: string) {
-  const queryClient = useQueryClient();
-  const engine = useSyncEngine();
   return useQuery({
-    queryKey: detailKey(id),
-    queryFn: ({ signal }) => loadList(queryClient, id, signal),
-    initialData: () => engine.copied(id),
-    initialDataUpdatedAt: () => engine.copiedAt(id),
+    ...useListQuery(id),
     refetchOnWindowFocus: 'always',
     refetchInterval: (query) => (isFinal(query.state.error) ? false : POLL_INTERVAL_MS),
-    structuralSharing: shareWithEtag,
   });
+}
+
+/**
+ * List `id` as another screen names it, e.g. the meal form's back link (D-46): the cached list or
+ * the local copy as it is, else loaded once. Unlike `useList` it isn't polled, nor loaded again
+ * on its own while that screen shows. An empty id loads nothing.
+ */
+export function useListOnce(id: string) {
+  return useQuery({ ...useListQuery(id), staleTime: Infinity, enabled: id !== '' });
 }
 
 /**
@@ -318,30 +338,58 @@ export function useSetListMealServings(listId: string) {
   );
 }
 
-/** Also removes detached meals ("no longer available", LIST-15). */
+/**
+ * Also removes detached meals ("no longer available", LIST-15). The row goes at once, the lines
+ * change when the server answered (LIST-04, D-40).
+ */
 export function useRemoveListMeal(listId: string) {
-  return useListChange(listId, (listMealId: string) =>
-    unwrap(
-      api.DELETE('/api/lists/{list_id}/meals/{list_meal_id}', {
-        params: { path: { list_id: listId, list_meal_id: listMealId } },
+  return useListChange(
+    listId,
+    (listMealId: string) =>
+      unwrap(
+        api.DELETE('/api/lists/{list_id}/meals/{list_meal_id}', {
+          params: { path: { list_id: listId, list_meal_id: listMealId } },
+        }),
+      ),
+    {
+      optimistic: (listMealId) => (list) => ({
+        ...list,
+        meals: list.meals.filter((meal) => meal.id !== listMealId),
       }),
-    ),
+    },
   );
+}
+
+/** The list without the due item of `ingredientId`: it leaves the "Fällig" box (LIST-16). */
+function withoutDue(list: ListDetail, ingredientId: string): ListDetail {
+  return {
+    ...list,
+    due_items: list.due_items.filter((item) => item.ingredient.id !== ingredientId),
+  };
 }
 
 /**
  * LIST-06: a linked or free-text extra item. Its id comes with it (made by the input, which keeps
  * it while the item is sent again), so a retry after a lost answer doesn't add it twice. While
  * shopping, a free-text item is an `extra.add` op of the outbox instead (SHOP-02, SYNC-03).
+ * A linked item's ingredient leaves the "Fällig" box at once: it is on the list now (LIST-16).
  */
 export function useAddExtraItem(listId: string) {
-  return useListChange(listId, (item: ExtraItemCreate) =>
-    unwrap(
-      api.POST('/api/lists/{list_id}/extra-items', {
-        params: { path: { list_id: listId } },
-        body: item,
-      }),
-    ),
+  return useListChange(
+    listId,
+    (item: ExtraItemCreate) =>
+      unwrap(
+        api.POST('/api/lists/{list_id}/extra-items', {
+          params: { path: { list_id: listId } },
+          body: item,
+        }),
+      ),
+    {
+      optimistic:
+        ({ ingredient_id }) =>
+        (list) =>
+          ingredient_id ? withoutDue(list, ingredient_id) : list,
+    },
   );
 }
 
@@ -390,6 +438,25 @@ export function useSetLineHidden(listId: string) {
           ...list,
           lines: list.lines.map((line) => (line.key === key ? { ...line, hidden } : line)),
         }),
+    },
+  );
+}
+
+/**
+ * LIST-16: hides a due item of the "Fällig" box on this draft, for everyone who sees it (the
+ * partner too); it leaves the box at once. There is no undo: the item field can still add it.
+ */
+export function useHideDueItem(listId: string) {
+  return useListChange(
+    listId,
+    (ingredientId: string) =>
+      unwrap(
+        api.POST('/api/lists/{list_id}/due-items/{ingredient_id}/hide', {
+          params: { path: { list_id: listId, ingredient_id: ingredientId } },
+        }),
+      ),
+    {
+      optimistic: (ingredientId) => (list) => withoutDue(list, ingredientId),
     },
   );
 }
@@ -467,7 +534,7 @@ export function useShopAgain(listId: string) {
   });
 }
 
-/** MEAL-09: meals I added to lists lately, for the top of the meal picker. */
+/** MEAL-09: meals I added to lists lately, for the top of the meal field's list. */
 export function useRecentMeals({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: RECENT_MEALS_KEY,

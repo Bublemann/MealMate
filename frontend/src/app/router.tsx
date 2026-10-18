@@ -3,6 +3,7 @@ import { JoinScreen } from '@/features/auth/JoinScreen';
 import { LoginScreen } from '@/features/auth/LoginScreen';
 import { RequireAdmin, RequireAuth } from '@/features/auth/RequireAuth';
 import { ResetScreen } from '@/features/auth/ResetScreen';
+import { CoupleScreen } from '@/features/couple/CoupleScreen';
 import { IngredientDetailScreen } from '@/features/ingredients/IngredientDetailScreen';
 import { IngredientsScreen } from '@/features/ingredients/IngredientsScreen';
 import { ListScreen } from '@/features/lists/ListScreen';
@@ -10,7 +11,13 @@ import { ListsScreen } from '@/features/lists/ListsScreen';
 import { MealDetailScreen } from '@/features/meals/MealDetailScreen';
 import { MealFormScreen } from '@/features/meals/MealFormScreen';
 import { MealsScreen } from '@/features/meals/MealsScreen';
-import { MeScreen } from '@/features/me/MeScreen';
+import { AboutScreen } from '@/features/me/AboutScreen';
+import { PrivacyScreen } from '@/features/me/PrivacyScreen';
+import { ProfileScreen } from '@/features/me/ProfileScreen';
+import { SecurityScreen } from '@/features/me/SecurityScreen';
+import { SettingsScreen } from '@/features/me/SettingsScreen';
+import { RecurringScreen } from '@/features/recurring/RecurringScreen';
+import { WalkingOrderScreen } from '@/features/walkingOrder/WalkingOrderScreen';
 import { Layout } from './Layout';
 
 /**
@@ -23,8 +30,9 @@ export const routes: RouteObject[] = [
   { path: '/reset', element: <ResetScreen /> },
   // The temporary diagnostics screen of the M1 platform spike (removed in M9); a separate chunk
   // with the scanner. Public, so Safari can open it before any login. A Home Screen app has no
-  // address bar and reaches it only through Me → Diagnostics, i.e. signed in; signing in doesn't
-  // touch the mm_diag cookie, so the cookie test (O-10) still works after it.
+  // address bar and reaches it only through Einstellungen → Über MealMate → Diagnose, i.e.
+  // signed in; signing in doesn't touch the mm_diag cookie, so the cookie test (O-10) still
+  // works after it.
   {
     path: '/diag',
     lazy: async () => ({
@@ -51,7 +59,15 @@ export const routes: RouteObject[] = [
           { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
           // The former scan page; scanning is inside "New ingredient" now (BAR-01, D-37).
           { path: 'scan', element: <Navigate to="/ingredients" replace /> },
-          { path: 'me', element: <MeScreen /> },
+          // The Settings tab and the pages its rows open (D-45); see features/me/settingsRows.ts.
+          { path: 'me', element: <SettingsScreen /> },
+          { path: 'me/profile', element: <ProfileScreen /> },
+          { path: 'me/privacy', element: <PrivacyScreen /> },
+          { path: 'me/couple', element: <CoupleScreen /> },
+          { path: 'me/security', element: <SecurityScreen /> },
+          { path: 'me/recurring', element: <RecurringScreen /> },
+          { path: 'me/walking-order', element: <WalkingOrderScreen /> },
+          { path: 'me/about', element: <AboutScreen /> },
           {
             path: 'me/admin',
             element: <RequireAdmin />,

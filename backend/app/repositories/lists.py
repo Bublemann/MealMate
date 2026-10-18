@@ -1,5 +1,5 @@
-"""Queries on `shopping_lists`, `list_meals`, `list_meal_ingredients`, `list_extra_items` and
-`list_line_states`.
+"""Queries on `shopping_lists`, `list_meals`, `list_meal_ingredients`, `list_extra_items`,
+`list_line_states` and `list_hidden_due_items`.
 
 The content of lists (meals, frozen rows, extra items, line states) is loaded in batches per
 list id, so reading a list or many summaries takes a fixed number of queries (PERF).
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.lists import FeedPosition, ListStatus
 from app.models import (
     ListExtraItem,
+    ListHiddenDueItem,
     ListLineState,
     ListMeal,
     ListMealIngredient,
@@ -249,6 +250,12 @@ async def get_state(session: AsyncSession, list_id: str, line_key: str) -> ListL
     return await session.get(ListLineState, (list_id, line_key))
 
 
+async def get_hidden_due_item(
+    session: AsyncSession, list_id: str, ingredient_id: str
+) -> ListHiddenDueItem | None:
+    return await session.get(ListHiddenDueItem, (list_id, ingredient_id))
+
+
 # --- ops ------------------------------------------------------------------------------------
 
 
@@ -393,6 +400,36 @@ async def repoint_ingredient(session: AsyncSession, from_id: str, into_id: str) 
         .where(ListExtraItem.ingredient_id == from_id)
         .values(ingredient_id=into_id)
     )
+
+
+async def move_hidden_due_items(session: AsyncSession, from_id: str, into_id: str) -> set[str]:
+    """Due items hidden as one ingredient are hidden as another (merge, ING-05); on a list
+    that hid both, one stays. The ids of the lists whose hides moved."""
+    moved = set(
+        (
+            await session.scalars(
+                select(ListHiddenDueItem.list_id).where(ListHiddenDueItem.ingredient_id == from_id)
+            )
+        ).all()
+    )
+    if not moved:
+        return moved
+    into = (
+        select(ListHiddenDueItem.list_id)
+        .where(ListHiddenDueItem.ingredient_id == into_id)
+        .scalar_subquery()
+    )
+    await session.execute(
+        delete(ListHiddenDueItem).where(
+            ListHiddenDueItem.ingredient_id == from_id, ListHiddenDueItem.list_id.in_(into)
+        )
+    )
+    await session.execute(
+        update(ListHiddenDueItem)
+        .where(ListHiddenDueItem.ingredient_id == from_id)
+        .values(ingredient_id=into_id)
+    )
+    return moved
 
 
 async def states_with_key(

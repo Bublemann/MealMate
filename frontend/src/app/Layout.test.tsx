@@ -1,19 +1,39 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { mockApi } from '@/test/api';
+import i18n from '@/i18n';
+import { mockApi, TEST_USER } from '@/test/api';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
 const TABS = [
-  { tab: testIds.tabLists, screen: testIds.screenLists, path: '/lists', title: 'Lists' },
-  { tab: testIds.tabMeals, screen: testIds.screenMeals, path: '/meals', title: 'Meals' },
+  {
+    tab: testIds.tabLists,
+    screen: testIds.screenLists,
+    path: '/lists',
+    title: 'Shopping lists',
+    de: 'Einkaufslisten',
+  },
+  {
+    tab: testIds.tabMeals,
+    screen: testIds.screenMeals,
+    path: '/meals',
+    title: 'Meals',
+    de: 'Gerichte',
+  },
   {
     tab: testIds.tabIngredients,
     screen: testIds.screenIngredients,
     path: '/ingredients',
     title: 'Ingredients',
+    de: 'Zutaten',
   },
-  { tab: testIds.tabMe, screen: testIds.screenMe, path: '/me', title: 'Me' },
+  {
+    tab: testIds.tabMe,
+    screen: testIds.screenMe,
+    path: '/me',
+    title: 'Settings',
+    de: 'Einstellungen',
+  },
 ];
 
 describe('Layout', () => {
@@ -43,7 +63,7 @@ describe('Layout', () => {
     }
   });
 
-  it('navigates between the tabs', async () => {
+  it('navigates between the tabs, each with its headline as its one level-1 heading (D-44)', async () => {
     mockApi();
     const { router, user } = renderApp('/lists');
 
@@ -51,15 +71,36 @@ describe('Layout', () => {
       await user.click(screen.getByTestId(tab));
 
       expect(router.state.location.pathname).toBe(path);
-      // The headline is visually hidden on the tab screens but still labels them (UI-01).
+      // The headline, the same text as the tab's name, also labels the screen (UI-01).
       const current = screen.getByTestId(screenId);
-      expect(within(current).getByRole('heading', { level: 1 })).toHaveTextContent(title);
+      expect(screen.getAllByRole('heading', { level: 1 })).toEqual([
+        within(current).getByRole('heading', { level: 1, name: title }),
+      ]);
       expect(screen.getByRole('region', { name: title })).toBe(current);
       for (const other of TABS) {
         const link = screen.getByTestId(other.tab);
         if (other.tab === tab) expect(link).toHaveAttribute('aria-current', 'page');
         else expect(link).not.toHaveAttribute('aria-current');
       }
+    }
+  });
+
+  it('names the tabs and their screens by the German headlines (D-44)', async () => {
+    const anna = { ...TEST_USER, language: 'de' as const };
+    mockApi({ 'GET /api/me': anna });
+    await i18n.changeLanguage('de');
+    const { user } = renderApp('/lists', { user: anna });
+
+    expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();
+    for (const { tab, screen: screenId, de } of [...TABS].reverse()) {
+      expect(screen.getByTestId(tab)).toHaveAccessibleName(de);
+      await user.click(screen.getByTestId(tab));
+
+      const current = screen.getByTestId(screenId);
+      expect(screen.getAllByRole('heading', { level: 1 })).toEqual([
+        within(current).getByRole('heading', { level: 1, name: de }),
+      ]);
+      expect(screen.getByRole('region', { name: de })).toBe(current);
     }
   });
 

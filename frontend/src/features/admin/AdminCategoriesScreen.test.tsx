@@ -64,17 +64,12 @@ async function sentOrders(fetchMock: ReturnType<typeof mockApi>) {
 }
 
 describe('AdminCategoriesScreen', () => {
-  it('lists the categories in their order, reachable from the admin navigation', async () => {
+  it('lists the categories in their order', async () => {
     renderCategories();
 
     expect(await screen.findByTestId(testIds.screenAdminCategories)).toBeVisible();
     await screen.findByTestId(testIds.adminCategoryList);
     expect(names()).toEqual(['1Fruit & vegetables', '2Dairy & eggs', '3Cheese', '4Other']);
-    const nav = screen.getByRole('navigation', { name: 'Administration' });
-    expect(within(nav).getByRole('link', { name: 'Categories' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
     expect(screen.getByRole('button', { name: 'Move Fruit & vegetables up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move Other down' })).toBeDisabled();
     // Each name opens the category's dialog; there is no "Save order" any more.
@@ -156,7 +151,7 @@ describe('AdminCategoriesScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
     await user.click(screen.getByRole('button', { name: 'Move Other up' }));
-    await user.click(screen.getByRole('link', { name: 'Back to Me' }));
+    await user.click(screen.getByTestId(testIds.backLink));
     expect(await screen.findByTestId(testIds.screenMe)).toBeVisible();
     await waitFor(() => expect(answers).toHaveLength(1));
 
