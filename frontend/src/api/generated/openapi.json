@@ -179,7 +179,7 @@
         "type": "object"
       },
       "BackupStatus": {
-        "description": "The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).",
+        "description": "The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).\n`last_success_at` is when the last successful backup finished, also after failed runs;\nnull while the host doesn't know it (ADM-01).",
         "properties": {
           "finished_at": {
             "format": "date-time",
@@ -194,6 +194,18 @@
             ],
             "title": "Label",
             "type": "string"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
           },
           "message": {
             "anyOf": [
@@ -228,7 +240,8 @@
           "label",
           "ok",
           "size_bytes",
-          "message"
+          "message",
+          "last_success_at"
         ],
         "title": "BackupStatus",
         "type": "object"

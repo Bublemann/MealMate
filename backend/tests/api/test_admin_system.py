@@ -26,6 +26,7 @@ BACKUP = {
     "snapshot": "20260927T121500Z",
     "size_bytes": 12345,
     "message": "backup 20260927T121500Z done",
+    "last_success_at": "2026-09-27T12:15:04Z",
 }
 DISK = {
     "checked_at": "2026-09-27T12:00:02Z",
@@ -113,6 +114,7 @@ async def test_system_info_reads_the_status_files(
             "ok": True,
             "size_bytes": 12345,
             "message": "backup 20260927T121500Z done",
+            "last_success_at": "2026-09-27T12:15:04Z",
         },
         "disk": DISK,
     }
@@ -131,6 +133,7 @@ async def test_a_failed_backup_in_another_time_zone(
             "snapshot": None,
             "size_bytes": None,
             "message": "rsync failed",
+            "last_success_at": "2026-09-27T08:00:41+02:00",
         },
     )
     write_status(status_dir, "disk.json", DISK | {"checked_at": "2026-09-27T13:00:02+01:00"})
@@ -143,21 +146,30 @@ async def test_a_failed_backup_in_another_time_zone(
         "ok": False,
         "size_bytes": None,
         "message": "rsync failed",
+        "last_success_at": "2026-09-27T06:00:41Z",
     }
     assert info["disk"]["checked_at"] == "2026-09-27T12:00:02Z"
+
+
+NO_OPTIONAL = {"size_bytes": None, "message": None, "last_success_at": None}
 
 
 @pytest.mark.parametrize(
     ("optional", "expected"),
     [
-        ({}, {"size_bytes": None, "message": None}),
-        ({"size_bytes": -1, "message": 42}, {"size_bytes": None, "message": None}),
-        ({"size_bytes": "a lot", "message": " \n\t "}, {"size_bytes": None, "message": None}),
+        # Also a file written before the host recorded the last successful backup.
+        ({}, NO_OPTIONAL),
+        ({"size_bytes": -1, "message": 42, "last_success_at": 42}, NO_OPTIONAL),
+        (
+            {"size_bytes": "a lot", "message": " \n\t ", "last_success_at": "yesterday"},
+            NO_OPTIONAL,
+        ),
+        ({"last_success_at": "2026-09-27T12:15:04"}, NO_OPTIONAL),  # no time zone
         (
             {"size_bytes": 0, "message": "<b>one</b>\nline\x1b[31m\ttwo  "},
-            {"size_bytes": 0, "message": "<b>one</b> line [31m two"},
+            NO_OPTIONAL | {"size_bytes": 0, "message": "<b>one</b> line [31m two"},
         ),
-        ({"message": "x" * 300}, {"size_bytes": None, "message": "x" * 200}),
+        ({"message": "x" * 300}, NO_OPTIONAL | {"message": "x" * 200}),
     ],
 )
 async def test_invalid_optional_values_become_null(

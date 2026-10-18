@@ -248,6 +248,8 @@
   "admin.system.backupOk": "Successful",
   "admin.system.backupFailed": "Failed",
   "admin.system.backupAt": "Last backup",
+  "admin.system.backupLastSuccess": "Last successful backup",
+  "admin.system.backupLastSuccessOn": "last successful on {{date}}",
   "admin.system.backupKind": "Type",
   "admin.system.backupLabel.regular": "Scheduled",
   "admin.system.backupLabel.preUpdate": "Before an update",

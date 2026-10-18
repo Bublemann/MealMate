@@ -9,7 +9,10 @@ JSON files in their own `state/status/`, which the container sees read-only at
 
     {"finished_at": "2026-09-27T12:15:04Z", "label": "regular" | "pre-update" | "manual",
      "ok": true, "snapshot": "20260927T121500Z" | null, "size_bytes": 12345 | null,
-     "message": "short status line" | null}
+     "message": "short status line" | null, "last_success_at": "2026-09-27T12:15:04Z" | null}
+
+  `last_success_at` is when the last successful backup finished: this run's `finished_at` after a
+  success, carried over while runs fail. Files written before the host recorded it lack the key.
 
 - `disk.json`, hourly from `disk-check.sh`::
 
@@ -38,6 +41,7 @@ from pathlib import Path
 
 import anyio
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     Field,
     ValidationError,
@@ -83,11 +87,19 @@ class _BackupFile(BackupStatus):
 
     size_bytes: int | None = Field(default=None, ge=0)
     message: str | None = None
+    last_success_at: AwareDatetime | None = None
 
     @field_validator("finished_at")
     @classmethod
     def _to_utc(cls, value: datetime) -> datetime:
         return _utc(value)
+
+    @field_validator("last_success_at", mode="wrap")
+    @classmethod
+    def _tolerate_last_success(cls, value: object, handler: ValidatorFunctionWrapHandler) -> object:
+        # Only the host's ISO 8601 text: pydantic would read a number as a Unix time.
+        last_success = _null_if_invalid(value, handler) if isinstance(value, str) else None
+        return _utc(last_success) if isinstance(last_success, datetime) else None
 
     @field_validator("size_bytes", mode="wrap")
     @classmethod

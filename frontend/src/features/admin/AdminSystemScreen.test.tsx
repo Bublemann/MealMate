@@ -22,6 +22,7 @@ const WITH_STATUS: SystemInfo = {
     ok: true,
     size_bytes: 4_200_000,
     message: '<b>backup</b> 20260927T121500Z done',
+    last_success_at: '2026-09-27T12:15:04Z',
   },
   disk: {
     checked_at: '2026-09-27T12:00:02Z',
@@ -72,6 +73,8 @@ describe('AdminSystemScreen', () => {
     expect(backup).toHaveTextContent('4.2 MB');
     // The host's message is plain text, never markup.
     expect(within(backup).getByText('<b>backup</b> 20260927T121500Z done')).toBeVisible();
+    // The last successful backup is this run.
+    expect(backup).not.toHaveTextContent('Last successful backup');
     expect(screen.getByText('sha256:0123abcd')).toBeVisible();
 
     const disk = screen.getByTestId(testIds.diskStatus);
@@ -90,6 +93,7 @@ describe('AdminSystemScreen', () => {
           label: 'regular',
           size_bytes: null,
           message: null,
+          last_success_at: null,
         },
         disk: { ...WITH_STATUS.disk, free_bytes: 6_000_000_000, free_percent: 10 },
       },
@@ -99,9 +103,43 @@ describe('AdminSystemScreen', () => {
     expect(within(backup).getByText('Failed')).toBeVisible();
     expect(backup).toHaveTextContent('Scheduled');
     expect(backup).not.toHaveTextContent('Size');
+    // The host doesn't know when a backup last succeeded.
+    expect(backup).not.toHaveTextContent('Last successful backup');
     expect(screen.getByTestId(testIds.diskStatus)).toHaveTextContent(
       'Space is running low: less than 20% is free.',
     );
+  });
+
+  it('after a failed run, shows when the last backup succeeded (ADM-01)', async () => {
+    renderSystem({
+      'GET /api/admin/system': {
+        ...WITH_STATUS,
+        backup: {
+          ...WITH_STATUS.backup,
+          ok: false,
+          size_bytes: null,
+          message: 'rsync failed',
+          last_success_at: '2026-09-26T12:00:41Z',
+        },
+      },
+    });
+
+    const backup = await screen.findByTestId(testIds.backupStatus);
+    expect(within(backup).getByText('Failed')).toBeVisible();
+    const lastSuccess = within(backup).getByText('Last successful backup');
+    expect(lastSuccess).toBeVisible();
+    expect(lastSuccess.nextElementSibling).toHaveTextContent(/^26\/09\/2026, \d\d:\d\d$/);
+    expect(within(backup).getByText(/26\/09\/2026/)).toHaveAttribute(
+      'datetime',
+      '2026-09-26T12:00:41Z',
+    );
+    // The failed run's own details stay as they were.
+    expect(within(backup).getByText(/27\/09\/2026/)).toHaveAttribute(
+      'datetime',
+      '2026-09-27T12:15:04Z',
+    );
+    expect(backup).toHaveTextContent('Before an update');
+    expect(within(backup).getByText('rsync failed')).toBeVisible();
   });
 
   it('requests a backup and says so', async () => {

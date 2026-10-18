@@ -270,6 +270,23 @@ mm_latest_snapshot() {
   [ -n "$latest" ] && printf '%s' "$latest"
 }
 
+# When the last successful backup finished, as known before this run (ADM-01): the value in the
+# previous state/status/backup.json, else the time of the newest snapshot (its name), else
+# nothing. backup.sh carries it over when a run fails.
+mm_last_backup_success() {
+  local file=$MM_STATE/status/backup.json value="" latest
+  if mm_is_plain_file "$file"; then
+    value=$(jq -r '.last_success_at // empty | strings' "$file" 2>/dev/null) || value=
+  fi
+  if [[ $value =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    printf '%s' "$value"
+  elif latest=$(mm_latest_snapshot); then
+    printf '%s-%s-%sT%s:%s:%sZ' "${latest:0:4}" "${latest:4:2}" "${latest:6:2}" \
+      "${latest:9:2}" "${latest:11:2}" "${latest:13:2}"
+  fi
+  return 0
+}
+
 mm_find_prune() {
   local here
   here=$(dirname -- "${BASH_SOURCE[0]}")

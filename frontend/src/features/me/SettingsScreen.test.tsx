@@ -210,16 +210,21 @@ function requestFrom(from: ReturnType<typeof userRef>, id = `r-${from.id}`) {
   };
 }
 
-/** The system info after a backup run that succeeded or failed. */
-function systemWithBackup(ok: boolean): SystemInfo {
+/**
+ * The system info after a backup run that succeeded, or failed with the last successful backup
+ * known or not.
+ */
+function systemWithBackup(ok: boolean, lastSuccessAt: string | null = null): SystemInfo {
+  const finishedAt = '2026-09-27T12:15:04Z';
   return {
     ...SYSTEM_NO_STATUS,
     backup: {
-      finished_at: '2026-09-27T12:15:04Z',
+      finished_at: finishedAt,
       label: 'regular',
       ok,
       size_bytes: ok ? 4_200_000 : null,
       message: null,
+      last_success_at: ok ? finishedAt : lastSuccessAt,
     },
   };
 }
@@ -279,6 +284,32 @@ describe('SettingsScreen row values (D-45)', () => {
     renderApp('/me', { user: TEST_ADMIN });
 
     await waitFor(() => expect(row('System')).toHaveAccessibleName('System Failed'));
+    expect(within(row('System')).getByText('Failed')).toHaveClass('text-destructive');
+  });
+
+  it('adds when the last backup succeeded to a failure, if the host knows it (ADM-01)', async () => {
+    let admin = TEST_ADMIN;
+    mockApi({
+      'GET /api/me': () => admin,
+      'GET /api/admin/system': systemWithBackup(false, '2026-09-26T12:00:41Z'),
+    });
+    const first = renderApp('/me', { user: admin });
+
+    await waitFor(() =>
+      expect(row('System')).toHaveAccessibleName('System Failed · last successful on 26/09/2026'),
+    );
+    expect(within(row('System')).getByText('Failed')).toHaveClass('text-destructive');
+    expect(within(row('System')).getByText(/26\/09\/2026/)).toHaveAttribute(
+      'datetime',
+      '2026-09-26T12:00:41Z',
+    );
+    first.unmount();
+
+    admin = { ...TEST_ADMIN, language: 'de' };
+    renderApp('/me', { user: admin });
+    await waitFor(() =>
+      expect(row('System')).toHaveAccessibleName('System Fehlgeschlagen · zuletzt am 26.09.2026'),
+    );
   });
 
   it('shows no backup on System while the host has written none, or while it loads', async () => {

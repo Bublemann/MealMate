@@ -196,8 +196,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
   name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
   (`waitingRequests`) or else the partner (`userLabel`), Regelmäßige Artikel "1 Hinweis" and
-  "2 fällig" (`RecurringValue`), System (admins) when the last backup
-  ran, or "Fehlgeschlagen" in words after a failed run, and Über MealMate the version. Only their
+  "2 fällig" (`RecurringValue`), System (admins) when the last backup ran, or "Fehlgeschlagen" in
+  words after a failed run, followed by the day of the last successful backup when the host knows
+  it ("Fehlgeschlagen · zuletzt am 26.09.2026"), and Über MealMate the version. Only their
   addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03); the System
   value's query (`useSystemInfo`) sits in `features/me/api.ts` for that reason, shared with the
   System page. Abmelden is a red, centred button: with changes still waiting it asks first with

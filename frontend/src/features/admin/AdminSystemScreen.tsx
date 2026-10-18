@@ -104,6 +104,14 @@ function BackupCard({ backup }: { backup: BackupStatus | null }) {
                     {formatDateTime(backup.finished_at, language)}
                   </time>
                 </Row>
+                {/* After a success it is this run (ADM-01). */}
+                {!backup.ok && backup.last_success_at && (
+                  <Row label={t('admin.system.backupLastSuccess')}>
+                    <time dateTime={backup.last_success_at}>
+                      {formatDateTime(backup.last_success_at, language)}
+                    </time>
+                  </Row>
+                )}
                 <Row label={t('admin.system.backupKind')}>{t(BACKUP_LABELS[backup.label])}</Row>
                 {backup.size_bytes !== null && (
                   <Row label={t('admin.system.backupSize')}>

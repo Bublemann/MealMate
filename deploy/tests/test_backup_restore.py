@@ -110,6 +110,7 @@ def test_setup_backup_and_restore_round_trip(
     assert status["ok"] is True and status["label"] == "regular"
     assert status["snapshot"] == second and status["size_bytes"] > 0
     assert status["finished_at"].endswith("Z") and isinstance(status["message"], str)
+    assert status["last_success_at"] == status["finished_at"]
     assert status_mode(old.state / "status" / "backup.json") == 0o644
     assert old.hc.last(old.check("backup")).path == f"/{old.check('backup')}"
 
@@ -244,3 +245,12 @@ def test_backup_timer_retention_and_status_files(make_pi, images: Images, regist
     pi.setup("--rotate-secret")
     assert (pi.root / ".env").read_text() != key
     run(["curl", "-fsS", "--noproxy", "*", f"http://127.0.0.1:{pi.port}/api/health"])
+
+    # A failed run keeps the time of the last successful backup (ADM-01); test_backup_status.py
+    # covers failed runs in detail.
+    succeeded = pi.backup_status()
+    pi.compose("stop")
+    assert pi.script("backup.sh", check=False).returncode == 1
+    failed = pi.backup_status()
+    assert failed["ok"] is False and failed["finished_at"] >= succeeded["finished_at"]
+    assert failed["last_success_at"] == succeeded["finished_at"]
