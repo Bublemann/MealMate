@@ -105,13 +105,16 @@ class AdminEvent(BaseModel):
 
 
 class BackupStatus(BaseModel):
-    """The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01)."""
+    """The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).
+    `last_success_at` is when the last successful backup finished, also after failed runs;
+    null while the host doesn't know it (ADM-01)."""
 
     finished_at: AwareDatetime
     label: BackupLabel
     ok: bool
     size_bytes: int | None = Field(ge=0)
     message: str | None
+    last_success_at: AwareDatetime | None
 
 
 class DiskStatus(BaseModel):

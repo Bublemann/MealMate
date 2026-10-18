@@ -9,8 +9,9 @@
 # A snapshot is written to backups/.partial-<ts>/ and renamed when complete: db.sqlite3,
 # media/ (read as the app user through media-mirror/; unchanged photos hard-linked to the
 # previous snapshot), secrets/ (.env, Tailscale state, SSH host keys, the backup key) and
-# manifest.json. Then retention (prune.py), state/status/backup.json for the admin page and the
-# healthchecks.io ping. On success the snapshot name is the last line on stdout.
+# manifest.json. Then retention (prune.py), state/status/backup.json for the admin page (also
+# when the last successful backup finished, kept while runs fail) and the healthchecks.io ping.
+# On success the snapshot name is the last line on stdout.
 set -euo pipefail
 
 here=$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -54,7 +55,7 @@ finish() {
     rm -rf -- "$partial"
   fi
   if [ "$mode" = backup ]; then
-    local ok=false message size=null snap=null
+    local ok=false message size=null snap=null finished_at last_success=
     if [ "$status" -eq 0 ]; then
       ok=true
       size=$(du -sb -- "$MM_BACKUPS/$snapshot" | cut -f1)
@@ -63,12 +64,18 @@ finish() {
     else
       message=$(tail -n 1 -- "$MM_RUNLOG" 2>/dev/null | cut -d' ' -f3- | head -c 300)
       message=${message:-backup failed}
+      last_success=$(mm_last_backup_success)
     fi
-    mm_write_status backup.json "$(jq -cn --arg finished_at "$(mm_now)" --arg label "$label" \
+    finished_at=$(mm_now)
+    if [ "$ok" = true ]; then
+      last_success=$finished_at
+    fi
+    mm_write_status backup.json "$(jq -cn --arg finished_at "$finished_at" --arg label "$label" \
       --argjson ok "$ok" --argjson snapshot "$snap" --argjson size_bytes "$size" \
-      --arg message "$message" \
+      --arg message "$message" --arg last_success_at "$last_success" \
       '{finished_at: $finished_at, label: $label, ok: $ok, snapshot: $snapshot,
-        size_bytes: $size_bytes, message: $message}')" || true
+        size_bytes: $size_bytes, message: $message,
+        last_success_at: ($last_success_at | select(. != "") // null)}')" || true
   fi
   if [ "$status" -eq 0 ]; then
     mm_ping "$hc_url" ok

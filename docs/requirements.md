@@ -493,7 +493,7 @@ The domain terms (ingredient, meal, shopping list, line, couple and the rest) ar
   - Über MealMate (UI-06), then Abmelden as a red, centred row that keeps the question about unsent changes (SYNC-05);
   - the tab's gear icon shows a small count of incoming couple requests and unread notices (D-51), which screen readers hear in its name.
 
-  A row shows a short value where it helps: the display name, the partner or "1 Anfrage" for an incoming couple request, how many recurring items are due and "1 Hinweis" for unread notices, the last backup (or "Fehlgeschlagen" after a failed run), the version. The headline scrolls with the page.
+  A row shows a short value where it helps: the display name, the partner or "1 Anfrage" for an incoming couple request, how many recurring items are due and "1 Hinweis" for unread notices, the last backup (or "Fehlgeschlagen" after a failed run, with the day of the last successful backup when the host knows it), the version. The headline scrolls with the page.
 
 ## 5. Non-functional requirements
 

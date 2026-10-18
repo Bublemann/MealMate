@@ -1789,6 +1789,8 @@ export interface components {
         /**
          * BackupStatus
          * @description The host's last backup run (`backup.json`); `ok` false means it failed (OPS-01).
+         *     `last_success_at` is when the last successful backup finished, also after failed runs;
+         *     null while the host doesn't know it (ADM-01).
          */
         BackupStatus: {
             /**
@@ -1801,6 +1803,8 @@ export interface components {
              * @enum {string}
              */
             label: "regular" | "pre-update" | "manual";
+            /** Last Success At */
+            last_success_at: string | null;
             /** Message */
             message: string | null;
             /** Ok */

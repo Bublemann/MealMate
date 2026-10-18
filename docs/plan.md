@@ -740,7 +740,7 @@ The script is idempotent. It:
 3. `secrets/`: copies of `.env`, `/var/lib/tailscale/tailscaled.state`, `/etc/ssh/ssh_host_*` and `~mmbackup/.ssh/authorized_keys`, mode `0640`, group `mmbackup`.
 4. `manifest.json`: app version, image digest, Alembic revision, timestamp, SHA-256 of `db.sqlite3`, and the label (`regular` / `pre-update` / `manual`).
 5. **Retention** (OPS-02): the shared `prune.py` (`deploy/common/`, unit-tested, also used on the Mac). Only `regular` snapshots count toward the 7/4/6 buckets; labelled ones are kept for 7 days.
-6. Writes `state/status/backup.json` (shown on the admin page), then pings `HC_BACKUP_URL`, or its `/fail` endpoint with the script's own last lines.
+6. Writes `state/status/backup.json` (shown on the admin page), then pings `HC_BACKUP_URL`, or its `/fail` endpoint with the script's own last lines. Besides the run's own result, `backup.json` keeps `last_success_at`, when the last successful backup finished (ADM-01): this run's finish time after a success; after a failure it is carried over from the previous file, else taken from the newest snapshot, else `null`.
 
 **`--verify-latest`** (monthly, OPS-07): runs `sqlite3 "file:<latest>/db.sqlite3?mode=ro&immutable=1" 'PRAGMA integrity_check'` on the host, so nothing is written into the snapshot, and compares the checksum with the manifest. The result goes to the `backup` check.
 

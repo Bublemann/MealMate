@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useCurrentUser } from '@/features/auth/context';
 import { useCouple, waitingRequests } from '@/features/couple/api';
 import { useLanguage } from '@/i18n';
-import { formatDateTime } from '@/i18n/format';
+import { formatDate, formatDateTime } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
 import { useSystemInfo, useVersionInfo } from './api';
 
@@ -30,14 +30,33 @@ export function VersionValue() {
 }
 
 /**
- * System, for admins: when the last backup ran, or "Fehlgeschlagen" in words after a failed run
- * (A11Y-01); nothing while the host has written no backup status (ADM-01).
+ * System, for admins: when the last backup ran; after a failed run "Fehlgeschlagen" in words
+ * (A11Y-01) and the day of the last successful backup if the host knows it; nothing while the
+ * host has written no backup status (ADM-01).
  */
 export function SystemValue() {
   const { t } = useTranslation();
   const language = useLanguage();
   const backup = useSystemInfo().data?.backup;
   if (!backup) return null;
-  if (!backup.ok) return <span className="text-destructive">{t('admin.system.backupFailed')}</span>;
-  return <time dateTime={backup.finished_at}>{formatDateTime(backup.finished_at, language)}</time>;
+  if (backup.ok) {
+    return (
+      <time dateTime={backup.finished_at}>{formatDateTime(backup.finished_at, language)}</time>
+    );
+  }
+  return (
+    <>
+      <span className="text-destructive">{t('admin.system.backupFailed')}</span>
+      {backup.last_success_at && (
+        <>
+          {' · '}
+          <time dateTime={backup.last_success_at}>
+            {t('admin.system.backupLastSuccessOn', {
+              date: formatDate(backup.last_success_at, language),
+            })}
+          </time>
+        </>
+      )}
+    </>
+  );
 }

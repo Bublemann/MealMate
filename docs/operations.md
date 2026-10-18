@@ -446,10 +446,11 @@ Written by the host into `/srv/mealmate/state/status/` (the app reads them read-
 
   ```json
   {"finished_at": "2026-09-27T12:15:04Z", "label": "regular", "ok": true,
-   "snapshot": "20260927T121500Z", "size_bytes": 12345, "message": "backup 20260927T121500Z (regular) complete"}
+   "snapshot": "20260927T121500Z", "size_bytes": 12345, "message": "backup 20260927T121500Z (regular) complete",
+   "last_success_at": "2026-09-27T12:15:04Z"}
   ```
 
-  `label` is `regular`, `pre-update` or `manual`; `snapshot` and `size_bytes` are `null` on failure; `message` is a short status line.
+  `label` is `regular`, `pre-update` or `manual`; `snapshot` and `size_bytes` are `null` on failure; `message` is a short status line. `last_success_at` is when the last successful backup finished (ADM-01): after a success the run's own `finished_at`; after a failure the previous file's value, or, if that has none, the time of the newest snapshot in `backups/` (its name); `null` when there is no snapshot either. A file written before this key existed reads as "unknown" until the next run. The System page and its row show it after a failed run.
 - `disk.json`, hourly: `{"checked_at": "2026-09-27T12:00:01Z", "free_bytes": 1234, "total_bytes": 5678, "free_percent": 21.7}` (the file system of `/`).
 
 ### 13.2 `setup.sh` modes
