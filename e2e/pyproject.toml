@@ -7,16 +7,16 @@ license = "AGPL-3.0-or-later"
 dependencies = [
     "pytest==9.1.1",
     "pytest-playwright==0.10.0",
-    "playwright==1.63.0",
+    "playwright==1.64.1",
     "axe-playwright-python==0.1.8",
     "httpx==0.28.1",
     # fake_off/: the Open Food Facts stand-in (plan § 9)
-    "fastapi==0.143.0",
+    "fastapi==0.162.0",
     "uvicorn==0.54.0",
 ]
 
 [dependency-groups]
-dev = ["ruff==0.17.0"]
+dev = ["ruff==0.17.2"]
 
 # Not a package: the suite runs from this directory with `uv run pytest`.
 [tool.uv]
