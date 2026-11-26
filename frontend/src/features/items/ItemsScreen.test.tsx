@@ -579,7 +579,6 @@ describe('ItemFormDialog (create)', () => {
 
     const barcode = within(form).getByLabelText('Barcode');
     const brand = within(form).getByLabelText('Marke');
-    const pack = within(form).getByLabelText('Packung');
     const nutrition = within(form).getByRole('group', { name: 'Nährwerte pro 100 g (optional)' });
     const footer = within(dialog).getByTestId(testIds.itemFormFooter);
     expectInPageOrder([
@@ -589,7 +588,6 @@ describe('ItemFormDialog (create)', () => {
       barcode,
       similar,
       brand,
-      pack,
       within(form).getByLabelText('Kategorie'),
       baseUnit,
       within(form).getByLabelText('Gewicht pro Stück (g)'),
@@ -598,14 +596,13 @@ describe('ItemFormDialog (create)', () => {
     ]);
     // Placeholders instead of hints, and no hints at the base unit and the nutrition either.
     expect(brand).toHaveAttribute('placeholder', 'optional, z. B. REWE');
-    expect(pack).toHaveAttribute('placeholder', 'optional, z. B. 500 g');
     expect(barcode).toHaveAttribute('placeholder', '8, 12 oder 13 Ziffern');
-    for (const field of [name, barcode, brand, pack]) {
+    for (const field of [name, barcode, brand]) {
       expect(field).not.toHaveAccessibleDescription();
     }
     expect(brand).toHaveValue('');
-    expect(pack).toHaveValue('');
-    expect(pack).toHaveAttribute('maxlength', '40');
+    // There is no pack size any more (D-54).
+    expect(within(form).queryByLabelText('Packung')).not.toBeInTheDocument();
     expect(barcode).toHaveValue('');
     expect(baseUnit).toHaveTextContent(/^BasiseinheitGramm \(g\)Milliliter \(ml\)Stück \(Stk\.\)$/);
     expect(nutrition).toHaveTextContent(/^Nährwerte pro 100 g \(optional\)Kalorien/);
@@ -668,27 +665,6 @@ describe('ItemFormDialog (create)', () => {
       nutrients: { kcal: 57.5, fat: 0.4 },
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Birnen (Hofgut)' })).toBeVisible();
-  });
-
-  it('takes a pack size typed in (ING-02, D-47)', async () => {
-    const { fetchMock, user } = renderItems({
-      'POST /api/items': Response.json(itemDetail({ id: 'ing-wasser' }), { status: 201 }),
-      'GET /api/items/ing-wasser': itemDetail({ id: 'ing-wasser' }),
-    });
-
-    await user.click(await screen.findByTestId(testIds.newItem));
-    const form = within(await screen.findByRole('dialog')).getByTestId(testIds.itemForm);
-    await user.type(within(form).getByLabelText('Name'), 'Wasser');
-    await user.type(within(form).getByLabelText('Package'), ' 6 × 1,5 l ');
-    await user.click(within(form).getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1));
-    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
-      name: 'Wasser',
-      base_unit: 'g',
-      category_id: 'cat-other',
-      quantity_text: '6 × 1,5 l',
-    });
   });
 
   it('counts an ingredient in pieces: “Pieces” shows the weight per piece, nutrition per 100 g (ING-02)', async () => {
@@ -1029,7 +1005,6 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     );
     // What Open Food Facts has no value for keeps what was typed.
     expect(within(form).getByLabelText('Brand')).toHaveValue('Hofgut');
-    expect(within(form).getByLabelText('Package')).toHaveValue('1 l');
     expect(within(form).getByLabelText('Protein')).toHaveValue('3,3');
     expect(within(form).getByLabelText('Calories')).toHaveValue('64');
     await waitFor(() =>
@@ -1052,38 +1027,12 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
       category_id: 'cat-dairy_eggs',
       brand: 'Hofgut',
       barcode: BARCODE,
-      quantity_text: '1 l',
       nutrients: { kcal: 64, protein: 3.3, carbs: 4.8, sugar: 4.8, fat: 3.5 },
       // What the user typed is theirs: a refresh keeps it.
       off: {
         off_last_modified_at: '2026-09-01T10:00:00Z',
         edited_fields: ['brand', 'nutrients.protein'],
       },
-    });
-  });
-
-  it('takes a corrected pack size as the user’s, so a refresh keeps it (BAR-04, D-47)', async () => {
-    await i18n.changeLanguage('de');
-    const hit = proposal({ name: 'Kartoffel-Gnocchi', brand: 'Henglein', quantity_text: '250 g' });
-    const { fetchMock, user } = renderItems({
-      [LOOKUP]: lookupResult({ found_in: 'off', proposal: hit }),
-      'POST /api/items': Response.json(itemDetail({ id: 'ing-gnocchi' }), { status: 201 }),
-      'GET /api/items/ing-gnocchi': itemDetail({ id: 'ing-gnocchi' }),
-    });
-
-    const dialog = await openNew(user, 'Neuer Artikel');
-    await scanInForm(user, dialog, BARCODE);
-    const pack = await within(dialog).findByDisplayValue('250 g');
-    expect(pack).toBe(within(dialog).getByLabelText('Packung'));
-    await user.clear(pack);
-    await user.type(pack, '500 g');
-    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
-
-    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1));
-    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toMatchObject({
-      name: 'Kartoffel-Gnocchi',
-      quantity_text: '500 g',
-      off: { edited_fields: ['quantity_text'] },
     });
   });
 

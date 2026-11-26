@@ -250,7 +250,7 @@ const ENTRY_CLASS =
   'flex min-h-(--tap-target) w-full flex-col items-start gap-0.5 px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset';
 
 /**
- * One product: name, brand, package size and calories, as text only (BAR-10). A product that is
+ * One product: name, brand and calories, as text only (BAR-10). A product that is
  * already in MealMate picks (or opens) that item instead of filling the form again.
  */
 function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntryProps) {
@@ -259,23 +259,19 @@ function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntry
   const { proposal } = result;
   const name = proposal.name ?? t('items.offSearch.unnamed');
   const kcal = proposal.nutrients.kcal;
-  const details = [
-    proposal.quantity_text,
+  const calories =
     kcal !== null && kcal !== undefined && proposal.nutrition_basis
       ? t('items.offSearch.kcal', {
           value: formatNutrient(t, language, 'kcal', kcal),
           unit: unitLabel(t, proposal.nutrition_basis),
         })
-      : null,
-  ].filter(Boolean);
+      : null;
   const existing = result.in_mealmate ? result.item : null;
 
   const content = (
     <>
       <span className="font-medium break-words">{itemLabel(name, proposal.brand)}</span>
-      {details.length > 0 && (
-        <span className="text-sm text-muted-foreground">{details.join(' · ')}</span>
-      )}
+      {calories && <span className="text-sm text-muted-foreground">{calories}</span>}
       {existing && <Badge variant="secondary">{t('items.offSearch.inMealMate')}</Badge>}
     </>
   );

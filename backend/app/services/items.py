@@ -11,10 +11,8 @@ an admin, which the API checks. Barcode uniqueness is checked inside the write t
 which holds the write lock (`BEGIN IMMEDIATE`).
 
 On an item from Open Food Facts (`source` off), every Open Food Facts field a user sets
-(`OFF_FIELDS`: name, brand, pack size, nutrients) is marked user-edited, so that a refresh
+(`OFF_FIELDS`: name, brand, nutrients) is marked user-edited, so that a refresh
 (`services.off_refresh`) never overwrites it; see `services.off_fields` for the pending update.
-Any item may have a pack size, typed in or from Open Food Facts; its amount is taken from
-its text (D-47).
 
 References from meals and lists go through `services.hooks`: `item_references` blocks
 deletion (and is shown as the usage), and `on_items_merged` repoints them when merging.
@@ -49,7 +47,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
 from app.domain.text import normalize, same_name
-from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit, fits, stops_fitting
+from app.domain.units import NUTRITION_BASIS, BaseUnit, fits, stops_fitting
 from app.models import Item as ItemRow
 from app.repositories import items as items_repo
 from app.repositories import reference as reference_repo
@@ -78,7 +76,6 @@ from app.services.off_fields import (
     set_brand,
     set_field_value,
     set_name,
-    set_pack_size,
     unmark_edited,
 )
 from app.services.principal import Principal
@@ -118,9 +115,6 @@ async def detail(session: AsyncSession, row: ItemRow) -> Item:
         base_unit=base_unit_name(row.base_unit),
         piece_weight_g=row.attrs().piece_weight_g,
         nutrients=NutrientValues.model_validate(row.nutrients()),
-        quantity_text=row.quantity_text,
-        pack_quantity=row.pack_quantity,
-        pack_unit=None if row.pack_unit is None else Unit(row.pack_unit),
         source=source_name(row.source),
         user_edited_fields=edited_fields(row),
         off_last_modified_at=row.off_last_modified_at,
@@ -273,7 +267,6 @@ async def create_item(
         )
         set_name(row, body.name)
         set_brand(row, body.brand)
-        set_pack_size(row, body.quantity_text)
         row.set_nutrients((body.nutrients or NutrientValues()).model_dump())
         session.add(row)
         await session.flush()
@@ -291,7 +284,7 @@ def _make_manual(row: ItemRow) -> None:
     """Turn an item from Open Food Facts whose barcode was cleared or changed into a
     manual one, with its values as they are. Without a barcode there is nothing to refresh it
     by; with another one, a refresh would fetch another product and overwrite the name, brand,
-    pack and nutrients with its data. So its Open Food Facts data goes as well."""
+    and nutrients with its data. So its Open Food Facts data goes as well."""
     row.source = "manual"
     row.user_edited_fields = []
     row.pending_update = None
@@ -351,9 +344,6 @@ async def update_item(
         if "brand" in sent:
             set_brand(row, body.brand)
             edited.append("brand")
-        if "quantity_text" in sent:
-            set_pack_size(row, body.quantity_text)
-            edited.append("quantity_text")
         for key in _nutrient_keys(body.nutrients):
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
@@ -376,7 +366,6 @@ async def update_item(
             if row.source == "off":
                 _make_manual(row)
         if row.source == "off":
-            # Marks on the pack size's amount from before D-38 stay as they are (`edited_fields`).
             row.user_edited_fields = [
                 *row.user_edited_fields,
                 *(field for field in edited if field not in row.user_edited_fields),

@@ -63,9 +63,9 @@ SCREENS = [
     ),
     Screen("/meals", "member", (TEST_IDS["screenMeals"],)),
     Screen("/items", "member", (TEST_IDS["screenItems"],)),
-    # An item with brand, barcode and package is created in the test: /items/<id>.
+    # An item with brand and barcode is created in the test: /items/<id>.
     Screen("/items/:id", "member", (TEST_IDS["itemNutrition"],)),
-    # The item form of "New item", with "More" (the package) opened in the test.
+    # The item form of "New item", opened in the test, counted in pieces.
     Screen("/items/new", "member", (TEST_IDS["itemForm"],)),
     # The filter panel, opened in the test, with a category ticked.
     Screen("/items/filter", "member", (TEST_IDS["filterPanel"],)),
@@ -130,13 +130,12 @@ def test_no_serious_violations(
         path = f"/join#{code_from_link(link)}"
     if path == "/items/:id":
         api = request.getfixturevalue("api")
-        # From Open Food Facts, so the page also shows the pack size and the attribution (D-47).
+        # From Open Food Facts, so the page also shows the attribution (BAR-09).
         item = api.create_item(
             account,
             unique("A11y"),
             brand=unique("Brand"),
             barcode=new_barcode(),
-            quantity_text="1 kg",
             nutrients={"kcal": 52},
             off={"edited_fields": []},
         )

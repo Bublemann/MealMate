@@ -3,7 +3,7 @@
 - M2: an admin, a couple, a single user and one open invite (`seed_accounts`);
 - M3: items across most categories, about half of them with nutrition (`_insert_catalog`):
   most are generic, without a brand or barcode ("Zwiebeln"); butter, passata and olive oil have
-  a brand, a barcode and pack sizes as if scanned (entered by hand, so nothing is refreshed from
+  a brand and a barcode as if scanned (entered by hand, so nothing is refreshed from
   Open Food Facts in development); spaghetti comes in two brands, Barilla and De Cecco, two
   items of the same name.
 - M4: meals of every demo user (`_insert_meals`) with cuisines, tags and rows in all kinds of
@@ -70,7 +70,7 @@ from app.repositories import users as users_repo
 from app.schemas.users import Language, Role
 from app.services import access, accounts, aggregation, codes, hooks, shopping
 from app.services.context import AuthConfig
-from app.services.off_fields import set_brand, set_name, set_pack_size
+from app.services.off_fields import set_brand, set_name
 
 DEMO_USERS: tuple[tuple[str, str, Role, Language], ...] = (
     ("admin", "Admin", "admin", "de"),
@@ -98,10 +98,9 @@ class DemoItem:
     # Only for base unit piece (D-32).
     piece_weight_g: float | None = None
     nutrients: Mapping[str, float] = field(default_factory=dict)
-    # A branded product as if scanned: brand, barcode and pack size.
+    # A branded product as if scanned: brand and barcode.
     brand: str | None = None
     barcode: str | None = None
-    pack_size: str | None = None
 
 
 DEMO_ITEMS: tuple[DemoItem, ...] = (
@@ -123,7 +122,7 @@ DEMO_ITEMS: tuple[DemoItem, ...] = (
     DemoItem("Eier", "dairy_eggs", "carl", base_unit="piece", piece_weight_g=60,
                    nutrients=_values(155, 13.0, 1.1, 1.1, 11.0)),
     DemoItem("Butter", "dairy_eggs", "ben", nutrients=_values(741, 0.6, 0.6, 0.6, 82.0),
-                   brand="Kerrygold", barcode="4061453007189", pack_size="250 g"),
+                   brand="Kerrygold", barcode="4061453007189"),
     DemoItem("Joghurt", "dairy_eggs", "ben"),
     DemoItem("Gouda", "cheese", "anna"),
     DemoItem("Parmesan", "cheese", "carl", nutrients=_values(392, 35.8, 3.2, 0.9, 25.8)),
@@ -134,17 +133,17 @@ DEMO_ITEMS: tuple[DemoItem, ...] = (
     DemoItem("Tofu", "plant_based", "carl"),
     DemoItem("Spaghetti", "pasta_rice_grains", "anna",
                    nutrients=_values(359, 12.0, 71.0, 3.5, 2.0),
-                   brand="Barilla", barcode="8005516001475", pack_size="500 g"),
+                   brand="Barilla", barcode="8005516001475"),
     DemoItem("Spaghetti", "pasta_rice_grains", "ben",
                    nutrients=_values(353, 13.0, 70.0, 3.5, 1.5),
-                   brand="De Cecco", barcode="8002331045820", pack_size="500 g"),
+                   brand="De Cecco", barcode="8002331045820"),
     DemoItem("Reis", "pasta_rice_grains", "ben", nutrients=_values(350, 7.0, 78.0, 0.2, 0.6)),
     DemoItem("Passierte Tomaten", "canned_jars", "anna",
                    nutrients=_values(36, 1.6, 5.4, 4.8, 0.2),
-                   brand="Mutti", barcode="8004207009356", pack_size="700 g"),
+                   brand="Mutti", barcode="8004207009356"),
     DemoItem("Olivenöl", "sauces_spices_oils", "ben", base_unit="ml",
                    nutrients=_values(828, 0.0, 0.0, 0.0, 92.0),
-                   brand="Bertolli", barcode="4017952000633", pack_size="750 ml"),
+                   brand="Bertolli", barcode="4017952000633"),
     DemoItem("Salz", "sauces_spices_oils", "ben"),
     DemoItem("Pfeffer", "sauces_spices_oils", "carl"),
     DemoItem("Mehl", "baking", "carl"),
@@ -564,7 +563,6 @@ async def _insert_catalog(
         )
         set_name(item, demo_item.name)
         set_brand(item, demo_item.brand)
-        set_pack_size(item, demo_item.pack_size)
         item.set_nutrients({key: demo_item.nutrients.get(key) for key in NUTRIENT_KEYS})
         session.add(item)
     await session.flush()

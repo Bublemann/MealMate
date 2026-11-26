@@ -20,11 +20,10 @@ write transaction (plan § 5.1). Unavailable, removed or busy: the values and `f
 so the next refresh tries again (BAR-07). Found, field by field (BAR-06):
 
 - a value Open Food Facts does not know (any more) never replaces a known one;
-- not user-edited: updated silently, the pack size's amount along with its text (D-47);
-- user-edited (`off_fields.edited_fields`, where a mark on the pack size's amount from before
-  D-38 counts for the pack size) and different: collected into `pending_update`, unless the user
-  ignored this very Open Food Facts version (`ignored_off_modified_at`) or, for an item
-  without a version, this very value (the ignored entries kept in `pending_update`, see
+- not user-edited: updated silently;
+- user-edited (`off_fields.edited_fields`) and different: collected into `pending_update`,
+  unless the user ignored this very Open Food Facts version (`ignored_off_modified_at`) or, for
+  an item without a version, this very value (the ignored entries kept in `pending_update`, see
   `services.off_fields`);
 - nutrients only while Open Food Facts gives them per what the item's are per: 100 g,
   or 100 ml for an ml item (`NUTRITION_BASIS`);

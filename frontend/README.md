@@ -522,17 +522,12 @@ two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) an
 ("Barcode scannen"), each at least 44 pt and wrapping below the name at large text sizes; the
 barcode (placeholder "8, 12 oder 13 Ziffern") with a message line for scan notices; the
 similar-items hint, only while there are matches; the brand (placeholder "optional, z. B.
-REWE"); the pack size "Packung" (placeholder "optional, z. B. 500 g", D-47); the category; the
-base unit as three radio options, Gramm, Milliliter and Stück; the piece weight, only for Stück;
-the nutrition values in two columns. "Speichern" sits in a footer pinned
-below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels. Labels
-stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
+REWE"); the category; the base unit as three radio options, Gramm, Milliliter and Stück; the
+piece weight, only for Stück; the nutrition values in two columns. "Speichern" sits in a footer
+pinned below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels.
+Labels stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
 empty, so "„Quitten“ anlegen" opens without the keyboard covering the icons. There is no density
-field. The pack size is free text that may stay empty: a scan or a chosen search result fills it,
-and the edit pop-up corrects or clears it. On an Open Food Facts item a changed pack size is
-user-edited like the name, so its "In MealMate geändert" mark and the "Packung: 250 g → 500 g" line
-of the newer-values hint work as for the other fields (BAR-04, BAR-06). The server takes its
-amount from the text.
+field.
 
 ## Barcode scanner
 
@@ -564,9 +559,9 @@ opens "Neuer Artikel" with it, which looks it up as its own scan icon does (MEAL
   - A barcode that belongs to an item fills in nothing; the barcode's message line says
     "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that item) or, in the
     meal form's picker, "nehmen" (takes it into the meal).
-  - An Open Food Facts proposal fills the form like a chosen search result (name, brand, pack
-    size, category guess, base unit, nutrients, barcode, read-only), keeping what was typed where
-    the proposal has no value. One "Speichern" creates the item in one request, with an
+  - An Open Food Facts proposal fills the form like a chosen search result (name, brand,
+    category guess, base unit, nutrients, barcode, read-only), keeping what was typed where the
+    proposal has no value. One "Speichern" creates the item in one request, with an
     `off` block naming only the values the user changed (`edited_fields`, BAR-04).
   - A barcode Open Food Facts doesn't know fills in only the barcode, with a notice. A timeout or
     `off.busy` does the same, with "Nochmal versuchen".
@@ -591,7 +586,7 @@ picker, never when editing) opens `OffSearchDialog` with the typed name and sear
 with an empty search field when no name is typed (BAR-11). Further searches
 (`GET /api/items/off-search?q=&page=`, 25 s timeout) run only when the user taps "Search" or
 presses Enter, never while typing (BAR-08); the server rate-limits and caches them. A result shows
-name, brand, pack size and calories per 100 g/ml; choosing one fills the form like a scanned
+name, brand and calories per 100 g/ml; choosing one fills the form like a scanned
 proposal (with its barcode, read-only). A product that is already in MealMate picks that
 item in the picker and links to it elsewhere. "More results" loads the next page.
 
