@@ -400,6 +400,8 @@
   "sync.waitingTooLong": "Manche Änderungen warten schon länger als eine Stunde. Öffne MealMate mit Verbindung, damit sie gesendet werden.",
   "sync.offline.shopping": "Du bist offline. Abhaken, Extra-Artikel und Einkauf beenden gehen trotzdem; alles andere braucht eine Verbindung.",
   "sync.offline.list": "Du bist offline. Änderungen an dieser Liste brauchen eine Verbindung.",
+  "sync.offline.shoppingLeftovers": "Du bist offline. Abhaken (auch übrige Gerichte), Extra-Artikel und Einkauf beenden gehen trotzdem; alles andere braucht eine Verbindung.",
+  "sync.offline.listLeftovers": "Du bist offline. Übrige Gerichte abhaken geht trotzdem; alles andere an dieser Liste braucht eine Verbindung.",
   "sync.offline.page": "Du bist offline. Diese Seite braucht eine Verbindung.",
   "sync.noStorage": "MealMate kann auf diesem Gerät gerade nichts speichern: Änderungen ohne Verbindung gehen verloren, wenn die App geschlossen wird.",
   "sync.rejected_one": "Eine Änderung an „{{name}}“ konnte nicht gespeichert werden: {{reason}}",

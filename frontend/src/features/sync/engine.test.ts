@@ -6,10 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, connectAuth } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { createAuthSession, type AuthSession } from '@/features/auth/session';
+import { shoppingOps, stampOp } from '@/features/lists/api';
 import { detailKey, FEED_KEY } from '@/features/lists/keys';
 import i18n from '@/i18n';
 import { BEN, errorResponse, loginResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { doneList, LIST_ID, listDetail, shoppingList } from '@/test/lists';
+import {
+  CHILI_SOURCE_ID,
+  doneList,
+  leftoverChili,
+  LIST_ID,
+  listDetail,
+  listMeal,
+  shoppingList,
+} from '@/test/lists';
 import { dueItem } from '@/test/recurring';
 import { SyncEngine } from './engine';
 import {
@@ -251,6 +260,73 @@ describe('outbox (SYNC-03/04)', () => {
     },
   );
 
+  describe('a leftover ticked offline (LIST-17)', () => {
+    const pancakes = listMeal();
+    const one = listDetail({ meals: [leftoverChili(), pancakes] });
+    const two = listDetail({
+      id: OTHER_LIST,
+      meals: [leftoverChili({ id: 'lm-chili-2' }), pancakes],
+    });
+
+    /** Both drafts are in the copy; the tick on the first waits offline, then is sent. */
+    async function tickedAndSent(status: Schemas['OpResult']['status']) {
+      let synced = 0;
+      const fetchMock = mockApi({
+        // The server answers for each op by its id.
+        [`POST /api/lists/${LIST_ID}/ops`]: async (request: Request) => {
+          const { ops } = (await request.json()) as Schemas['OpsRequest'];
+          const answer = opsAnswer(
+            status === 'rejected' ? one : { ...one, version: 4, meals: [pancakes] },
+            [status],
+            'common.not_found',
+          );
+          return {
+            ...answer,
+            results: answer.results.map((result, i) => ({ ...result, op_id: ops[i]!.op_id })),
+          };
+        },
+        // The copy is stored at the start; later the signal is too weak to load it again.
+        'GET /api/lists/sync': () =>
+          synced++ === 0 ? syncAnswer(one, two) : new Promise(() => {}),
+      });
+      const harness = await startEngine();
+      await vi.waitFor(() => expect(harness.engine.copied(OTHER_LIST)).toEqual(two));
+      goOffline();
+      harness.queryClient.setQueryData(detailKey(LIST_ID), one);
+      harness.queryClient.setQueryData(detailKey(OTHER_LIST), two);
+      const tick = shoppingOps.eatLeftover(CHILI_SOURCE_ID, true, stampOp());
+      await harness.engine.enqueue(LIST_ID, tick);
+
+      goOnline();
+      await vi.waitFor(() => expect(harness.engine.outbox.get()).toEqual([]));
+
+      expect((await sentBodies(fetchMock)).map((body) => body.ops)).toEqual([[tick]]);
+      const names = (id: string) =>
+        harness.queryClient
+          .getQueryData<Schemas['ListDetail']>(detailKey(id))
+          ?.meals.map((meal) => meal.name);
+      return { ...harness, names };
+    }
+
+    it('keeps it off the other drafts, cached and stored, until they load again', async () => {
+      const { engine, names } = await tickedAndSent('applied');
+
+      expect(names(LIST_ID)).toEqual(['Pfannkuchen']);
+      expect(names(OTHER_LIST)).toEqual(['Pfannkuchen']);
+      expect(engine.copied(OTHER_LIST)?.meals.map((meal) => meal.name)).toEqual(['Pfannkuchen']);
+    });
+
+    it('leaves the other drafts as they are when the server turned it down', async () => {
+      const { engine, names } = await tickedAndSent('rejected');
+
+      expect(names(OTHER_LIST)).toEqual(['Chili', 'Pfannkuchen']);
+      expect(engine.copied(OTHER_LIST)?.meals.map((meal) => meal.name)).toEqual([
+        'Chili',
+        'Pfannkuchen',
+      ]);
+    });
+  });
+
   it('keeps everything when the network is gone, and says the server can’t be reached', async () => {
     const fetchMock = mockApi();
     const { engine, storage } = await startEngine();
@@ -466,6 +542,7 @@ describe('local copy (SYNC-02, SYNC-10)', () => {
         const before: Partial<typeof meal> = { ...meal };
         delete before.eaten;
         delete before.leftover;
+        delete before.leftover_of;
         return before;
       }),
     } as unknown as Schemas['ListDetail'];

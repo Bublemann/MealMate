@@ -1,6 +1,6 @@
 """The ops of shopping mode (plan § 5.8, SYNC-05/06, SHOP-02/04): check-off, free-text extra
-items and finishing. The online UI sends them like an offline client (M6) will, so both take
-one code path.
+items and finishing, and ticking a leftover meal (LIST-17, D-60), which a draft takes too. The
+online UI sends them like an offline client (M6) will, so both take one code path.
 
 A request's ops run in order in one write transaction (`BEGIN IMMEDIATE`), so parallel requests
 never lose an update. Each op takes effect at most once: an op id the same user sent before
@@ -30,6 +30,7 @@ from app.schemas.lists import (
     ExtraAddPayload,
     ExtraDeleteOp,
     ExtraUpdateOp,
+    LeftoverEatenOp,
     LineCheckOp,
     ListFinishOp,
     OpResult,
@@ -41,7 +42,9 @@ from app.services.principal import Principal
 
 # What an op did: changed the list, took effect without a change, or had been done before.
 type Outcome = Literal["changed", "unchanged", "duplicate"]
-type AnyOp = LineCheckOp | ExtraAddOp | ExtraUpdateOp | ExtraDeleteOp | ListFinishOp
+type AnyOp = (
+    LineCheckOp | ExtraAddOp | ExtraUpdateOp | ExtraDeleteOp | ListFinishOp | LeftoverEatenOp
+)
 
 
 class OpRejectedError(Exception):
@@ -59,10 +62,14 @@ class _Batch:
 
     session: AsyncSession
     shopping_list: ShoppingList
-    user_id: str
+    principal: Principal
     now: datetime
     _lines: dict[str, Line] | None = field(default=None, init=False)
     _extras: dict[str, ListExtraItem] = field(default_factory=dict, init=False)
+
+    @property
+    def user_id(self) -> str:
+        return self.principal.user_id
 
     def content_changed(self) -> None:
         self._lines = None
@@ -205,6 +212,28 @@ def _finish(batch: _Batch, op: ListFinishOp) -> Outcome:
     return "changed"
 
 
+async def _leftover_eaten(batch: _Batch, op: LeftoverEatenOp) -> Outcome:
+    """Tick a leftover of the list, or untick it: sets its source meal's flag (LIST-17), on
+    any list status. The flag has no dates (D-55), so the last change to arrive wins (D-60)."""
+    leftover = await lists_repo.leftover_on_list(
+        batch.session, batch.shopping_list.id, op.payload.leftover_of
+    )
+    if leftover is None:
+        raise OpRejectedError(ErrorCode.NOT_FOUND)
+    try:
+        changed = await lists.mark_leftover_eaten(
+            batch.session,
+            batch.principal,
+            leftover,
+            op.payload.eaten,
+            batch.shopping_list.id,
+            batch.now,
+        )
+    except ApiError as refused:
+        raise OpRejectedError(refused.code) from refused
+    return "changed" if changed else "unchanged"
+
+
 async def _apply(batch: _Batch, op: AnyOp) -> Outcome:
     match op:
         case LineCheckOp():
@@ -217,6 +246,8 @@ async def _apply(batch: _Batch, op: AnyOp) -> Outcome:
             return await _delete_extra(batch, op)
         case ListFinishOp():
             return _finish(batch, op)
+        case LeftoverEatenOp():
+            return await _leftover_eaten(batch, op)
 
 
 async def apply_ops(
@@ -243,7 +274,7 @@ async def apply_ops(
         processed = await lists_repo.processed_op_ids(
             session, principal.user_id, (op.root.op_id for op in body.ops)
         )
-        batch = _Batch(session, shopping_list, principal.user_id, now)
+        batch = _Batch(session, shopping_list, principal, now)
         results: list[OpResult] = []
         changed = purchases = False
         for item in body.ops:

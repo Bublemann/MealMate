@@ -97,7 +97,9 @@ class ListMealEntry(BaseModel):
     `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
     A `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,
     its servings are what was bought and can't change, and `eaten` is its source meal's; on a
-    draft or while shopping it is shown only while that is not eaten.
+    draft or while shopping it is shown only while that is not eaten. `leftover_of` is the id of
+    that source meal (on the done list it came from), the same for every leftover of it; null
+    for a meal that is not a leftover.
     """
 
     id: str
@@ -111,6 +113,7 @@ class ListMealEntry(BaseModel):
     detached: DetachedReason | None
     eaten: bool
     leftover: bool
+    leftover_of: str | None
 
 
 class LineSource(BaseModel):
@@ -391,6 +394,14 @@ class ListFinishPayload(BaseModel):
     """No fields."""
 
 
+class LeftoverEatenPayload(BaseModel):
+    """Mark the source meal of a leftover on this list eaten, or clear that (LIST-17):
+    `leftover_of` as in `ListMealEntry.leftover_of`."""
+
+    leftover_of: IdInput
+    eaten: bool
+
+
 class _OpBase(BaseModel):
     """`op_id`: a UUID chosen by the client (UUIDv7), unique per action, so sending it again
     has no effect (SYNC-05). `at`: when the action happened on the client, with a time zone
@@ -445,10 +456,26 @@ class ListFinishOp(_OpBase):
     payload: ListFinishPayload
 
 
+class LeftoverEatenOp(_OpBase):
+    """Ticking a leftover, which also works offline in a draft (SYNC-03, D-60): sets `eaten`
+    on its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The
+    flag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't
+    count. Rejected with `common.not_found` when the list has no leftover of that meal (any
+    more), and `common.forbidden` without edit rights on the source's list."""
+
+    type: Literal["leftover.eaten"]
+    payload: LeftoverEatenPayload
+
+
 class Op(
     RootModel[
         Annotated[
-            LineCheckOp | ExtraAddOp | ExtraUpdateOp | ExtraDeleteOp | ListFinishOp,
+            LineCheckOp
+            | ExtraAddOp
+            | ExtraUpdateOp
+            | ExtraDeleteOp
+            | ListFinishOp
+            | LeftoverEatenOp,
             Field(discriminator="type"),
         ]
     ]

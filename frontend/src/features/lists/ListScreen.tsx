@@ -161,7 +161,12 @@ function ListContent({ list, categories, showMeals, onRefresh }: ListContentProp
     <>
       {/* SYNC-07, SHOP-03; "Refresh" while shopping, when the partner's changes matter most. */}
       <SyncIndicator onRefresh={list.status === 'shopping' ? onRefresh : undefined} />
-      <ListOfflineBanner shopping={list.status === 'shopping' && list.can_edit} />
+      <ListOfflineBanner
+        shopping={list.status === 'shopping' && list.can_edit}
+        leftovers={
+          list.can_edit && list.status !== 'done' && list.meals.some((meal) => meal.leftover)
+        }
+      />
       {!list.can_edit && (
         <Card data-testid={testIds.listReadOnly} className="px-5 py-4">
           <p>{t('lists.detail.readOnly', { name: userLabel(t, list.owner) })}</p>

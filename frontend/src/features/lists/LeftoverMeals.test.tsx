@@ -1,23 +1,50 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { errorResponse, goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
-import { doneList, LIST_ID, LIST_ROUTES, listDetail, listMeal, shoppingList } from '@/test/lists';
+import { goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
+import type { components } from '@/api/generated/schema';
+import {
+  CHILI_SOURCE_ID,
+  doneList,
+  leftoverChili,
+  LIST_ID,
+  LIST_ROUTES,
+  listDetail,
+  listMeal,
+  shoppingList,
+} from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import { UNDO_TOAST_MS } from './ListMeals';
 
 const BASE = `/api/lists/${LIST_ID}`;
 
+type Schemas = components['schemas'];
+
 /** A leftover from the last done list (LIST-17). */
-const CHILI = listMeal({
-  id: 'lm-chili',
-  meal_id: 'meal-chili',
-  name: 'Chili',
-  thumb_url: null,
-  servings: 2,
-  leftover: true,
-});
+const CHILI = leftoverChili();
 const PANCAKES = listMeal();
+
+function opsAnswer(
+  list: Schemas['ListDetail'],
+  status: Schemas['OpResult']['status'] = 'applied',
+  code: Schemas['OpResult']['code'] = null,
+) {
+  return { results: [{ op_id: 'op', status, code }], list };
+}
+
+/** The ops sent so far, in order, without their ids and times. */
+async function sentOps(fetchMock: ReturnType<typeof mockApi>) {
+  const bodies = await Promise.all(
+    requestsTo(fetchMock, `POST ${BASE}/ops`).map(
+      (request) => request.clone().json() as Promise<Schemas['OpsRequest']>,
+    ),
+  );
+  return bodies.flatMap((body) => body.ops).map(({ type, payload }) => ({ type, payload }));
+}
+
+function eatenOp(eaten: boolean) {
+  return { type: 'leftover.eaten', payload: { leftover_of: CHILI_SOURCE_ID, eaten } };
+}
 
 function renderList(routes: Record<string, unknown> = {}) {
   const fetchMock = mockApi({
@@ -30,12 +57,6 @@ function renderList(routes: Record<string, unknown> = {}) {
 
 function chiliRow() {
   return screen.getByRole('listitem', { name: 'Chili' });
-}
-
-async function bodyOf(fetchMock: ReturnType<typeof mockApi>, route: string) {
-  const [request] = requestsTo(fetchMock, route);
-  if (!request) throw new Error(`no request to ${route}`);
-  return (await request.json()) as unknown;
 }
 
 describe('leftover meals in a draft (LIST-17)', () => {
@@ -62,12 +83,14 @@ describe('leftover meals in a draft (LIST-17)', () => {
     expect(screen.queryByRole('checkbox', { name: 'Pfannkuchen eaten' })).not.toBeInTheDocument();
   });
 
-  it('takes a ticked leftover off the draft at once and offers to undo it', async () => {
+  it('takes a ticked leftover off the draft at once, queued as a change, and offers to undo it', async () => {
     const { user, fetchMock } = renderList({
-      [`PUT ${BASE}/meals/lm-chili/eaten`]: async (request: Request) =>
-        ((await request.json()) as { eaten: boolean }).eaten
-          ? listDetail({ version: 4, meals: [PANCAKES] })
-          : listDetail({ version: 5, meals: [CHILI, PANCAKES] }),
+      [`POST ${BASE}/ops`]: async (request: Request) => {
+        const [op] = ((await request.json()) as Schemas['OpsRequest']).ops;
+        return op?.payload && 'eaten' in op.payload && op.payload.eaten
+          ? opsAnswer(listDetail({ version: 4, meals: [PANCAKES] }))
+          : opsAnswer(listDetail({ version: 5, meals: [CHILI, PANCAKES] }));
+      },
     });
 
     await user.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
@@ -75,21 +98,65 @@ describe('leftover meals in a draft (LIST-17)', () => {
     expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument();
     const toast = await screen.findByTestId(testIds.leftoverToast);
     expect(toast).toHaveTextContent('Chili eaten');
-    expect(await bodyOf(fetchMock, `PUT ${BASE}/meals/lm-chili/eaten`)).toEqual({ eaten: true });
+    await waitFor(async () => expect(await sentOps(fetchMock)).toEqual([eatenOp(true)]));
 
     await user.click(within(toast).getByRole('button', { name: 'Undo' }));
 
     expect(await screen.findByRole('checkbox', { name: 'Chili eaten' })).not.toBeChecked();
-    const requests = requestsTo(fetchMock, `PUT ${BASE}/meals/lm-chili/eaten`);
-    expect(requests).toHaveLength(2);
-    expect(await requests[1]?.json()).toEqual({ eaten: false });
+    await waitFor(async () =>
+      expect(await sentOps(fetchMock)).toEqual([eatenOp(true), eatenOp(false)]),
+    );
     expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-chili/eaten`)).toHaveLength(0);
+  });
+
+  it('ticks a leftover offline, and the undo too, and sends both once online (SYNC-03)', async () => {
+    const { user, fetchMock } = renderList({
+      [`POST ${BASE}/ops`]: opsAnswer(listDetail({ version: 5, meals: [CHILI, PANCAKES] })),
+    });
+    const box = await screen.findByRole('checkbox', { name: 'Chili eaten' });
+    const answer = fetchMock.getMockImplementation();
+    goOffline(fetchMock);
+    await waitFor(() => expect(screen.getByTestId(testIds.offlineBanner)).toBeVisible());
+    expect(box).toBeEnabled();
+    expect(screen.getByTestId(testIds.offlineBanner)).toHaveTextContent(
+      "You're offline. Ticking leftovers still works; everything else on this list needs a connection.",
+    );
+
+    await user.click(box);
+
+    expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent(
+        'Offline – 1 change waiting',
+      ),
+    );
+    await user.click(
+      within(await screen.findByTestId(testIds.leftoverToast)).getByRole('button', {
+        name: 'Undo',
+      }),
+    );
+    expect(await screen.findByRole('checkbox', { name: 'Chili eaten' })).not.toBeChecked();
+    expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent('Offline – 2 changes waiting');
+    expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(0);
+
+    // The connection is back.
+    fetchMock.mockImplementation(answer!);
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(async () =>
+      expect(await sentOps(fetchMock)).toEqual([eatenOp(true), eatenOp(false)]),
+    );
+    await waitFor(() => expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent('Saved'));
   });
 
   it('closes the undo toast by itself, or when it is closed', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { user } = renderList({
-      [`PUT ${BASE}/meals/lm-chili/eaten`]: listDetail({ version: 4, meals: [PANCAKES] }),
+      [`POST ${BASE}/ops`]: opsAnswer(listDetail({ version: 4, meals: [PANCAKES] })),
     });
     await user.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
     expect(await screen.findByTestId(testIds.leftoverToast)).toBeVisible();
@@ -104,7 +171,7 @@ describe('leftover meals in a draft (LIST-17)', () => {
 
   it('closes the undo toast with its close button', async () => {
     const { user, fetchMock } = renderList({
-      [`PUT ${BASE}/meals/lm-chili/eaten`]: listDetail({ version: 4, meals: [PANCAKES] }),
+      [`POST ${BASE}/ops`]: opsAnswer(listDetail({ version: 4, meals: [PANCAKES] })),
     });
     await user.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
     const toast = await screen.findByTestId(testIds.leftoverToast);
@@ -112,19 +179,23 @@ describe('leftover meals in a draft (LIST-17)', () => {
     await user.click(within(toast).getByRole('button', { name: 'Close' }));
 
     expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
-    expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-chili/eaten`)).toHaveLength(1);
+    await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/ops`)).toHaveLength(1));
   });
 
-  it('says when ticking fails and shows the leftover again', async () => {
+  it('shows the leftover again and says why when the server turns the tick down', async () => {
+    // The couple ended: the done list is no longer mine to mark.
     const { user } = renderList({
-      [`PUT ${BASE}/meals/lm-chili/eaten`]: errorResponse(403, 'common.forbidden'),
+      [`POST ${BASE}/ops`]: opsAnswer(
+        listDetail({ version: 4, meals: [CHILI, PANCAKES] }),
+        'rejected',
+        'common.forbidden',
+      ),
     });
 
     await user.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
 
-    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(await screen.findByTestId(testIds.syncToast)).toHaveTextContent('could not be saved');
     expect(await screen.findByRole('checkbox', { name: 'Chili eaten' })).not.toBeChecked();
-    expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
   });
 
   it('shops for a leftover after all from its menu', async () => {
@@ -180,13 +251,19 @@ describe('leftover meals in a draft (LIST-17)', () => {
     );
   });
 
-  it('needs a connection', async () => {
+  it('can’t be ticked by those who may only see the draft', async () => {
+    renderList({ [`GET ${BASE}`]: listDetail({ can_edit: false, meals: [CHILI, PANCAKES] }) });
+
+    expect(await screen.findByRole('checkbox', { name: 'Chili eaten' })).toBeDisabled();
+  });
+
+  it('needs a connection for its menu', async () => {
     const { fetchMock, user } = renderList();
-    const box = await screen.findByRole('checkbox', { name: 'Chili eaten' });
+    await screen.findByRole('checkbox', { name: 'Chili eaten' });
 
     goOffline(fetchMock);
 
-    await waitFor(() => expect(box).toBeDisabled());
+    await waitFor(() => expect(screen.getByTestId(testIds.offlineBanner)).toBeVisible());
     // The ⋮ button stays enabled; its items need a connection (D-39).
     await user.click(screen.getByRole('button', { name: 'Actions: Chili' }));
     const menu = await screen.findByRole('menu');
@@ -232,5 +309,9 @@ describe('leftover meals in a draft (LIST-17)', () => {
     expect(chiliRow()).toBeVisible();
     expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Meals/ })).toHaveTextContent('Meals 1 of 2 eaten');
+
+    // Done lists aren't in the local copy: their boxes need a connection (D-60).
+    goOffline(fetchMock);
+    await waitFor(() => expect(box).toBeDisabled());
   });
 });

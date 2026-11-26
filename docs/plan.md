@@ -325,6 +325,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   | `extra.update` | `{extra_id, text, amount_text?}` | Ignored if the item was deleted (delete wins) |
   | `extra.delete` | `{extra_id}` | Soft delete (tombstone) |
   | `list.finish` | `{}` | No-op if already `done`. Records the purchases of recurring items (below) |
+  | `leftover.eaten` | `{leftover_of, eaten}` | LIST-17, D-60: sets `eaten` on the source meal `leftover_of` of a leftover on this list, on any list status, needing edit rights on the source's list (`common.forbidden` otherwise); no leftover of it on the list: `common.not_found`. No dates (D-55): the last op to arrive wins, `at` doesn't count. Bumps every list that shows the source |
 
 - **Purchases of recurring items** (LIST-16, D-42): at the end of a batch in which a `list.finish` or a `line.check` changed something and whose list is `done` afterwards, one service function records the done list's purchases. Every line the done list shows as checked (a line that needs more since, LIST-12, doesn't count) with an item key `i:<item_id>` whose item is in the list owner's current set (the couple's while in one, so a partner's finish counts for the same set, CPL-03) is a purchase. Free-text lines never count.
   - Its date is the calendar day of the line's `checked_at` (the clamped tap time) in `TIME_ZONE`, at most today, not the day the op arrived, so a list finished offline counts on the right day.
@@ -527,7 +528,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - an IndexedDB store `lists` for the offline copy (SYNC-02), refreshed from `GET /lists/sync` on start, `visibilitychange`, `online` and after each mutation;
   - the copy seeds the first page of the list feed: online, the Lists tab waits for that page with the spinner and shows the copy, sorted like the feed, only once about 3 seconds have passed, until it arrives (D-57), and offline it shows only the copy, ignoring the saved filters (UI-02). A list finished on this phone whose finish wasn't sent yet is left out;
   - the category list, cached per user in the `meta` store with every category's names, deleted ones included (D-30), so stored lists show every heading offline (LIST-11). It is loaded again with the copy once it is stale, whichever screen is open; a cached list without names (stored by an app version before D-31) is not used;
-  - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id. A pending free-text item (`extra.add`) sends its category's id;
+  - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id. A pending free-text item (`extra.add`) sends its category's id. A view applies its own list's waiting ops and every waiting `leftover.eaten`, which hides that leftover on every stored draft at once (D-60); once sent, the other cached lists keep it hidden until they are loaded again;
   - a flush loop that runs on start, `visibilitychange→visible` and `online`, in order, stopping at the first network error or timeout;
   - a status store feeding the indicator (SYNC-07);
   - `navigator.storage.persist()` requested after login;

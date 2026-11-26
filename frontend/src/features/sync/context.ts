@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { useCurrentUser } from '@/features/auth/context';
 import { useCategories } from '@/features/reference/api';
-import { applyPending, type PendingList } from './applyPending';
+import { applyPending, opsForList, type PendingList } from './applyPending';
 import type { SyncEngine } from './engine';
 import { isConnected, untilWaitingTooLong, type SyncStatus } from './status';
 import type { Category, ListDetail, Op } from './types';
@@ -50,14 +50,14 @@ export function useWaitingTooLong(): boolean {
   return left !== null && left <= 0;
 }
 
-/** The waiting ops of the signed-in user for one list, in order. */
+/**
+ * The waiting ops of the signed-in user that show on one list, in order: its own, and leftovers
+ * ticked on any list (LIST-17), which leave this one too.
+ */
 export function usePendingOps(listId: string): Op[] {
   const engine = useSyncEngine();
   const entries = useSyncExternalStore(engine.outbox.subscribe, engine.outbox.get);
-  return useMemo(
-    () => entries.filter((entry) => entry.listId === listId).map((entry) => entry.op),
-    [entries, listId],
-  );
+  return useMemo(() => opsForList(entries, listId), [entries, listId]);
 }
 
 /** Lists finished here whose *Finish* hasn't been sent yet: they are done already on screen. */

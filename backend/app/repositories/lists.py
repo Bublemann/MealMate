@@ -137,6 +137,16 @@ async def meal_on_list(session: AsyncSession, list_id: str, meal_id: str) -> Lis
     return result.scalar_one_or_none()
 
 
+async def leftover_on_list(session: AsyncSession, list_id: str, source_id: str) -> ListMeal | None:
+    """The list's leftover of the source meal, if it has one."""
+    result = await session.execute(
+        select(ListMeal)
+        .where(ListMeal.list_id == list_id, ListMeal.leftover_of_id == source_id)
+        .order_by(ListMeal.id)
+    )
+    return result.scalars().first()
+
+
 async def meals_by_ids(session: AsyncSession, list_meal_ids: Iterable[str]) -> dict[str, ListMeal]:
     """List meals by id, on any list."""
     ids = set(list_meal_ids)

@@ -342,13 +342,11 @@ export function useSetListMealServings(listId: string) {
 }
 
 /**
- * SHOP-07: marks a meal on a done list eaten, or clears that. The box and the count change at
- * once; the server refuses it on drafts and lists being shopped, and for those who may only see
- * the list. Needs a connection, like the rest of a done list.
- *
- * A leftover (LIST-17) is marked on any list, and that marks the meal it comes from: ticked on a
- * draft or a list being shopped, it leaves the list at once; unticked, it comes back with the
- * server's answer.
+ * SHOP-07: marks a meal on a done list eaten, or clears that, its leftovers too (LIST-17). The
+ * box and the count change at once; the server refuses it on drafts and lists being shopped, and
+ * for those who may only see the list. Needs a connection, like the rest of a done list. A
+ * leftover on a draft or a list being shopped is ticked with an op instead
+ * (`shoppingOps.eatLeftover`).
  */
 export function useSetListMealEaten(listId: string) {
   return useListChange(
@@ -365,12 +363,7 @@ export function useSetListMealEaten(listId: string) {
         ({ listMealId, eaten }) =>
         (list) => ({
           ...list,
-          meals: list.meals
-            .filter(
-              (meal) =>
-                !(meal.id === listMealId && meal.leftover && eaten && list.status !== 'done'),
-            )
-            .map((meal) => (meal.id === listMealId ? { ...meal, eaten } : meal)),
+          meals: list.meals.map((meal) => (meal.id === listMealId ? { ...meal, eaten } : meal)),
         }),
     },
   );
@@ -565,6 +558,16 @@ export const shoppingOps = {
   }),
   /** SHOP-04: stamped when *Finish* was tapped: the list counts as finished then. */
   finish: ({ opId, at }: OpStamp): Op => ({ type: 'list.finish', payload: {}, op_id: opId, at }),
+  /**
+   * LIST-17: tick a leftover of a draft or a list being shopped, or untick it (the undo), by its
+   * source meal (`leftover_of`); it leaves every local draft at once and works offline (D-60).
+   */
+  eatLeftover: (sourceId: string, eaten: boolean, { opId, at }: OpStamp): Op => ({
+    type: 'leftover.eaten',
+    payload: { leftover_of: sourceId, eaten },
+    op_id: opId,
+    at,
+  }),
 };
 
 /** SHOP-06: a done list goes back to shopping, e.g. after finishing by mistake. */

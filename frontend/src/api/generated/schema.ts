@@ -2659,6 +2659,40 @@ export interface components {
             username: string;
         };
         /**
+         * LeftoverEatenOp
+         * @description Ticking a leftover, which also works offline in a draft (SYNC-03, D-60): sets `eaten`
+         *     on its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The
+         *     flag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't
+         *     count. Rejected with `common.not_found` when the list has no leftover of that meal (any
+         *     more), and `common.forbidden` without edit rights on the source's list.
+         */
+        LeftoverEatenOp: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Op Id */
+            op_id: string;
+            payload: components["schemas"]["LeftoverEatenPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "leftover.eaten";
+        };
+        /**
+         * LeftoverEatenPayload
+         * @description Mark the source meal of a leftover on this list eaten, or clear that (LIST-17):
+         *     `leftover_of` as in `ListMealEntry.leftover_of`.
+         */
+        LeftoverEatenPayload: {
+            /** Eaten */
+            eaten: boolean;
+            /** Leftover Of */
+            leftover_of: string;
+        };
+        /**
          * LineCheckOp
          * @description Last write wins by `at` (clamped to at most 5 minutes after the server's time), ties by
          *     the higher `op_id`; a losing op is `applied` without effect. While shopping; on a done list
@@ -2943,7 +2977,9 @@ export interface components {
          *     `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
          *     A `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,
          *     its servings are what was bought and can't change, and `eaten` is its source meal's; on a
-         *     draft or while shopping it is shown only while that is not eaten.
+         *     draft or while shopping it is shown only while that is not eaten. `leftover_of` is the id of
+         *     that source meal (on the done list it came from), the same for every leftover of it; null
+         *     for a meal that is not a leftover.
          */
         ListMealEntry: {
             /** Detached */
@@ -2954,6 +2990,8 @@ export interface components {
             id: string;
             /** Leftover */
             leftover: boolean;
+            /** Leftover Of */
+            leftover_of: string | null;
             /** Meal Id */
             meal_id: string | null;
             /** Meal Servings */
@@ -3428,7 +3466,7 @@ export interface components {
          * Op
          * @description One action of shopping mode, by `type`, with its typed `payload`.
          */
-        Op: components["schemas"]["LineCheckOp"] | components["schemas"]["ExtraAddOp"] | components["schemas"]["ExtraUpdateOp"] | components["schemas"]["ExtraDeleteOp"] | components["schemas"]["ListFinishOp"];
+        Op: components["schemas"]["LineCheckOp"] | components["schemas"]["ExtraAddOp"] | components["schemas"]["ExtraUpdateOp"] | components["schemas"]["ExtraDeleteOp"] | components["schemas"]["ListFinishOp"] | components["schemas"]["LeftoverEatenOp"];
         /**
          * OpResult
          * @description What became of an op: `applied` (also when it had no effect, e.g. an older check-off

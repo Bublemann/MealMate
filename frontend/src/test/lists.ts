@@ -26,6 +26,7 @@ export function listMeal(
     detached: null,
     eaten: false,
     leftover: false,
+    leftover_of: null,
     ...overrides,
   };
 }
@@ -40,6 +41,25 @@ export const PRIVATE_MEAL = listMeal({
   servings: 3,
   meal_servings: 3,
 });
+
+/** The id of Chili on last week's done list, which leftovers of it name (LIST-17). */
+export const CHILI_SOURCE_ID = 'lm-chili-source';
+
+/** A leftover of Chili from the last done list (LIST-17). */
+export function leftoverChili(
+  overrides: Partial<Schemas['ListMealEntry']> = {},
+): Schemas['ListMealEntry'] {
+  return listMeal({
+    id: 'lm-chili',
+    meal_id: 'meal-chili',
+    name: 'Chili',
+    thumb_url: null,
+    servings: 2,
+    leftover: true,
+    leftover_of: CHILI_SOURCE_ID,
+    ...overrides,
+  });
+}
 
 export const DETACHED_MEAL = listMeal({
   id: 'lm-detached',

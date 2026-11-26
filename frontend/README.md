@@ -477,9 +477,12 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   ops never named an item (a line is `i:<id>`, extra items are free text). The copy seeds the
   query cache (`initialData` of `useList` and of the list feed's first page on the Lists tab), so
   they show at once and stay when the server can't be reached.
-- **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
-  queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
-  user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush
+- **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items, _Finish_ and a ticked
+  leftover meal in a draft or while shopping (`leftover.eaten`, D-60) are always queued, online or
+  offline — stored in IndexedDB first, then shown (`applyPending()` layers the user's waiting ops on
+  the list; waiting lines are faded with "not sent yet"), then sent. A ticked leftover names its
+  source meal, so `opsForList` applies it to every list: it leaves every stored draft at once; once
+  sent, the other cached and stored lists keep it applied until they are loaded again. The flush
   sends consecutive ops of a list in batches of up to 100, in order, under
   `navigator.locks.request('mm-outbox')` across tabs, and only with a session the server confirmed
   for the ops' user (SYNC-10): the request's fetch checks right before each attempt (also the

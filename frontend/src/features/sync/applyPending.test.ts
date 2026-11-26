@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { BEN } from '@/test/api';
 import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/items';
-import { CANDLES_EXTRA_ID, checkedBy, doneList, listDetail, shoppingList } from '@/test/lists';
+import {
+  CANDLES_EXTRA_ID,
+  CHILI_SOURCE_ID,
+  checkedBy,
+  doneList,
+  leftoverChili,
+  listDetail,
+  listMeal,
+  shoppingList,
+} from '@/test/lists';
 import { ME } from '@/test/meals';
 import { applyPending, extraLineKey, type PendingList } from './applyPending';
 
@@ -338,6 +347,57 @@ describe('applyPending', () => {
       expect(lineOf(shown, 'Zwiebeln')).toMatchObject({ checked: false });
       expect(lineOf(shown, 'Zwiebeln')).not.toHaveProperty('pending');
       expect(lineOf(shown, 'Mehl')).toMatchObject({ checked: true, pending: true });
+    });
+  });
+
+  describe('a ticked leftover (LIST-17, SYNC-03)', () => {
+    const PANCAKES = listMeal();
+    const tick = (eaten = true) => op('leftover.eaten', { leftover_of: CHILI_SOURCE_ID, eaten });
+
+    function mealNames(list: PendingList) {
+      return list.meals.map((meal) => meal.name);
+    }
+
+    it.each([
+      { status: 'a draft', list: listDetail({ meals: [leftoverChili(), PANCAKES] }) },
+      {
+        status: 'a list being shopped',
+        list: shoppingList({ meals: [leftoverChili(), PANCAKES] }),
+      },
+    ])('leaves $status, whichever list it was ticked on', ({ list }) => {
+      // Ticked on another draft: its own leftover has another id but the same source.
+      const shown = applyPending(list, [tick()], OPTIONS);
+
+      expect(mealNames(shown)).toEqual(['Pfannkuchen']);
+    });
+
+    it('comes back when it is unticked again, as the undo does', () => {
+      const list = listDetail({ meals: [leftoverChili(), PANCAKES] });
+
+      const shown = applyPending(list, [tick(), tick(false)], OPTIONS);
+
+      expect(mealNames(shown)).toEqual(['Chili', 'Pfannkuchen']);
+    });
+
+    it('leaves other meals of the same name alone', () => {
+      const other = leftoverChili({ id: 'lm-chili-2', leftover_of: 'lm-other-source' });
+      const list = listDetail({ meals: [other, listMeal({ id: CHILI_SOURCE_ID })] });
+
+      const shown = applyPending(list, [tick()], OPTIONS);
+
+      expect(shown.meals).toEqual(list.meals);
+    });
+
+    it('is ticked on a done list, as its source meal there is', () => {
+      const source = listMeal({ id: CHILI_SOURCE_ID, name: 'Chili' });
+      const list = doneList({ meals: [source, PANCAKES] });
+
+      const shown = applyPending(list, [tick()], OPTIONS);
+
+      expect(shown.meals.map((meal) => [meal.name, meal.eaten])).toEqual([
+        ['Chili', true],
+        ['Pfannkuchen', false],
+      ]);
     });
   });
 });
