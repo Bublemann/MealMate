@@ -1,4 +1,4 @@
-"""Eaten meals on done lists (SHOP-07, D-54): anyone who may edit a done list marks its meals
+"""Eaten meals on done lists (SHOP-07, D-55): anyone who may edit a done list marks its meals
 eaten and clears that again; nothing else on it changes, and drafts and lists being shopped
 refuse it."""
 

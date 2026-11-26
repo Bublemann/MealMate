@@ -65,7 +65,7 @@ class ListMeal(IdMixin, TimestampMixin, Base):
     a detached meal's details (VIS-06). A meal is on a list at most once while it exists.
     `added_by` and `last_added_at` say who added it last and when, also when it was added again
     (LIST-04): the "recently used" meals (MEAL-09). `eaten` is set and cleared on done lists only
-    (SHOP-07, D-54), an on/off flag with no history; it stays when the list is reopened.
+    (SHOP-07, D-55), an on/off flag with no history; it stays when the list is reopened.
     """
 
     __tablename__ = "list_meals"

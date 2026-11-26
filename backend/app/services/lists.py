@@ -749,7 +749,7 @@ async def set_meal_eaten(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """Mark a meal on a done list eaten, or clear that (SHOP-07, D-54): editors of the list
+    """Mark a meal on a done list eaten, or clear that (SHOP-07, D-55): editors of the list
     only (CPL-03), and only once it is done (409 `list.not_done` in a draft or while shopping).
     It is the one change a done list takes; its lines stay as they are."""
     async with session.begin():

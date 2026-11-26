@@ -1459,6 +1459,8 @@ describe('eaten meals on a done list (SHOP-07)', () => {
       expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 3 eaten'),
     );
     expect(second).toBeChecked();
+    // The first tap's failure is said, although the second one went through.
+    expect(screen.getByRole('alert')).toBeVisible();
   });
 
   it('has no boxes on drafts and while shopping', async () => {

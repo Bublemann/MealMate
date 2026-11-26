@@ -53,6 +53,8 @@ export function ListMeals({
   const setServings = useSetListMealServings(list.id);
   const remove = useRemoveListMeal(list.id);
   const setEaten = useSetListMealEaten(list.id);
+  // Kept here: the mutation's own `error` follows only the latest tap.
+  const [eatenError, setEatenError] = useState<unknown>(null);
   const offline = !useConnected();
   const eatenCount = list.meals.filter((meal) => meal.eaten).length;
 
@@ -81,11 +83,13 @@ export function ListMeals({
                       disabled: !list.can_edit || offline,
                       // The promise settles for every tap; `mutate`'s own callbacks only for
                       // the latest, which would leave an earlier box as it was tapped.
-                      onChange: (eaten, settled) =>
+                      onChange: (eaten, settled) => {
+                        setEatenError(null);
                         void setEaten
                           .mutateAsync({ listMealId: entry.id, eaten })
-                          .catch(() => undefined)
-                          .finally(settled),
+                          .catch(setEatenError)
+                          .finally(settled);
+                      },
                     }
                   : undefined
               }
@@ -93,7 +97,7 @@ export function ListMeals({
           ))}
         </ul>
       )}
-      <ErrorAlert error={setServings.error ?? remove.error ?? setEaten.error} />
+      <ErrorAlert error={setServings.error ?? remove.error ?? eatenError} />
     </>
   );
 

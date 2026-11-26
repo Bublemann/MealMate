@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
  * box, e.g. faded while a change waits.
  */
 function TapCheckbox({
+  checked,
   boxClassName,
   ...props
 }: Omit<React.ComponentProps<'input'>, 'type' | 'className'> & { boxClassName?: string }) {
@@ -17,6 +18,7 @@ function TapCheckbox({
     <span className="relative flex size-(--tap-target) shrink-0 items-center justify-center">
       <input
         type="checkbox"
+        checked={checked}
         className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
         {...props}
       />
@@ -27,7 +29,7 @@ function TapCheckbox({
           boxClassName,
         )}
       >
-        {props.checked && <Check className="size-6" strokeWidth={3} />}
+        {checked && <Check className="size-6" strokeWidth={3} />}
       </span>
     </span>
   );
