@@ -1030,7 +1030,7 @@
         "type": "object"
       },
       "ExtraItem": {
-        "description": "An extra item (LIST-06): linked to an item (`item_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).\n\nA linked item's `base_unit` is the one its line is calculated with: its item's, or\nthe one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false\nfor an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,\nor left by a base-unit change or a merge, and is kept as it is (D-33). Free text always\nfits.",
+        "description": "An extra item (LIST-06): linked to an item (`item_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).\n\nA linked extra item's `base_unit` is the one its line is calculated with: its item's, or\nthe one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false\nfor an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,\nor left by a base-unit change or a merge, and is kept as it is (D-33). Free text always\nfits.",
         "properties": {
           "added_by": {
             "anyOf": [
@@ -1247,7 +1247,7 @@
         "type": "object"
       },
       "ExtraItemUpdate": {
-        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nitem cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `item_id`, `text` and `category_id`. A linked\nitem whose amount doesn't fit stays as it is while its item, amount and unit stay the\nsame; changing any of them needs a unit that fits (D-33).",
+        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nextra item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `item_id`, `text` and `category_id`. A linked\nextra item whose amount doesn't fit stays as it is while its item, amount and unit stay the\nsame; changing any of them needs a unit that fits (D-33).",
         "properties": {
           "amount": {
             "anyOf": [
@@ -4664,7 +4664,7 @@
         "type": "object"
       },
       "RecurringItemList": {
-        "description": "The caller's set (their couple's while in one, else their own), sorted by due date and\nthen by the item's name, and how many items are due.",
+        "description": "The caller's set (their couple's while in one, else their own), sorted by due date and\nthen by the item's name, and how many recurring items are due.",
         "properties": {
           "due_count": {
             "title": "Due Count",
