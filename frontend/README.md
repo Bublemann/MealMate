@@ -512,11 +512,11 @@ two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) an
 barcode (placeholder "8, 12 oder 13 Ziffern") with a message line for scan notices; the
 similar-items hint, only while there are matches; the brand (placeholder "optional, z. B.
 REWE"); the category; the base unit as three radio options, Gramm, Milliliter and Stück; the
-piece weight, only for Stück; the nutrition values in two columns. "Speichern" sits in a footer pinned
-below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels. Labels
-stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
+piece weight, only for Stück; the nutrition values in two columns. "Speichern" sits in a footer
+pinned below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels.
+Labels stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
 empty, so "„Quitten“ anlegen" opens without the keyboard covering the icons. There is no density
-field and no pack size (D-54).
+field.
 
 ## Barcode scanner
 
@@ -548,9 +548,9 @@ opens "Neuer Artikel" with it, which looks it up as its own scan icon does (MEAL
   - A barcode that belongs to an item fills in nothing; the barcode's message line says
     "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that item) or, in the
     meal form's picker, "nehmen" (takes it into the meal).
-  - An Open Food Facts proposal fills the form like a chosen search result (name, brand, pack
-    size, category guess, base unit, nutrients, barcode, read-only), keeping what was typed where
-    the proposal has no value. One "Speichern" creates the item in one request, with an
+  - An Open Food Facts proposal fills the form like a chosen search result (name, brand,
+    category guess, base unit, nutrients, barcode, read-only), keeping what was typed where the
+    proposal has no value. One "Speichern" creates the item in one request, with an
     `off` block naming only the values the user changed (`edited_fields`, BAR-04).
   - A barcode Open Food Facts doesn't know fills in only the barcode, with a notice. A timeout or
     `off.busy` does the same, with "Nochmal versuchen".

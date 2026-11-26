@@ -52,7 +52,7 @@ class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
     fields a user changed (`name`, `nutrients.kcal`, ...), which a refresh never overwrites
     (BAR-04); `pending_update` holds newer Open Food Facts values for those (BAR-06), see
-    `services.off_fields`. There is no pack size (D-54).
+    `services.off_fields`.
     """
 
     __tablename__ = "items"

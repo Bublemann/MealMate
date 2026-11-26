@@ -207,9 +207,9 @@ interface Proposed {
  * D-35, D-36). Top to bottom: the Open Food Facts attribution while its values are shown; the
  * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
  * the barcode with the scan's notice; the similar-items hint; brand; category; base unit (g, ml
- * or pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. "Save" sits in a footer below the fields, which scroll on their own. A product chosen
- * in the search or scanned is saved in one request, with the fields the user changed named as
- * edited (BAR-04).
+ * or pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. "Save" sits in
+ * a footer below the fields, which scroll on their own. A product chosen in the search or scanned
+ * is saved in one request, with the fields the user changed named as edited (BAR-04).
  *
  * The scan looks the barcode up (BAR-02/03): a barcode another item has fills in nothing
  * and offers that one instead; one Open Food Facts knows fills the form like a chosen product;

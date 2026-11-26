@@ -2343,7 +2343,7 @@ export interface components {
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
          *     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-         *     Facts values for them (BAR-06). There is no pack size (D-54).
+         *     Facts values for them (BAR-06).
          *     `created_by` / `updated_by` are null for a deleted user (ING-06).
          */
         Item: {
@@ -2412,10 +2412,9 @@ export interface components {
          *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
          *     item has is 409 `item.barcode_taken`.
          *
-         *     With `off`, the item is from Open Food
-         *     Facts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).
-         *     Names need not be unique: the "similar item exists" hint
-         *     (`GET /api/items/similar`) is only a hint.
+         *     With `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its
+         *     `barcode` (422 `required` without). Names need not be unique: the "similar item exists"
+         *     hint (`GET /api/items/similar`) is only a hint.
          */
         ItemCreate: {
             /** Barcode */

@@ -138,6 +138,22 @@ describe('OffSearchDialog', () => {
     );
   });
 
+  it('shows name and brand alone for a product without calories (BAR-10)', async () => {
+    const { user } = renderSearch({
+      'GET /api/items/off-search': page([
+        found({ ...MILK, nutrients: { ...MILK.nutrients, kcal: null } }),
+        found({ ...OATS, nutrition_basis: null }),
+      ]),
+    });
+    const dialog = await openSearch(user);
+
+    const results = await within(dialog).findAllByTestId(testIds.offSearchResult);
+    expect(results.map((result) => result.textContent)).toEqual([
+      'Frische Vollmilch 3,5 % (Weidehof)',
+      'Haferflocken zart (Kornmühle)',
+    ]);
+  });
+
   it('fills the form with the chosen product, saved in one request (BAR-04)', async () => {
     const created = itemDetail({ id: 'ing-vollmilch', name: 'Frische Vollmilch 3,5 %' });
     const { fetchMock, user, router } = renderSearch({

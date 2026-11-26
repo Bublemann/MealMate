@@ -27,8 +27,7 @@ NAME_NORM_FACTOR = 4
 # The fields of an item that Open Food Facts provides and refreshes (BAR-04..06), other
 # than the nutrients: the name and the brand. Each one a user changes on an item from Open
 # Food Facts is recorded as user-edited, nutrients as `nutrients.<key>`. The barcode, category,
-# base unit and piece weight are the user's alone: a refresh never touches them. There is no
-# pack size (D-54).
+# base unit and piece weight are the user's alone: a refresh never touches them.
 OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand")
 
 

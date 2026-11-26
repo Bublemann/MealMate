@@ -13,7 +13,6 @@ which holds the write lock (`BEGIN IMMEDIATE`).
 On an item from Open Food Facts (`source` off), every Open Food Facts field a user sets
 (`OFF_FIELDS`: name, brand, nutrients) is marked user-edited, so that a refresh
 (`services.off_refresh`) never overwrites it; see `services.off_fields` for the pending update.
-An item has no pack size (D-54).
 
 References from meals and lists go through `services.hooks`: `item_references` blocks
 deletion (and is shown as the usage), and `on_items_merged` repoints them when merging.

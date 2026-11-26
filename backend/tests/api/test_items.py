@@ -124,6 +124,8 @@ async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
 async def test_empty_optional_texts_are_null(api: AsyncClient, anna: Account) -> None:
     body = await create_item(api, anna, "Eier", brand="  ")
     assert body["brand"] is None
+    body = await create_from_off(api, anna, "Milch", EAN_13, brand=" ")
+    assert body["brand"] is None
 
 
 async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Account) -> None:
@@ -452,7 +454,8 @@ async def test_there_is_no_pack_size(api: AsyncClient, anna: Account) -> None:
 
 
 async def test_the_pack_size_is_no_open_food_facts_field(api: AsyncClient, anna: Account) -> None:
-    """Nothing can mark it user-edited any more (D-54)."""
+    """Nothing can mark it user-edited any more (D-54): an older app that still names it among
+    the edited fields is refused, like any field that isn't from Open Food Facts."""
     response = await post(
         api, anna, name="Gnocchi", barcode=EAN_13, off={"edited_fields": ["quantity_text"]}
     )

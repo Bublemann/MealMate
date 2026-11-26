@@ -1602,7 +1602,7 @@
         "type": "object"
       },
       "Item": {
-        "description": "An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). There is no pack size (D-54).\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
+        "description": "An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06).\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1793,7 +1793,7 @@
         "type": "object"
       },
       "ItemCreate": {
-        "description": "A new item (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per\n100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\nitem has is 409 `item.barcode_taken`.\n\nWith `off`, the item is from Open Food\nFacts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).\nNames need not be unique: the \"similar item exists\" hint\n(`GET /api/items/similar`) is only a hint.",
+        "description": "A new item (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per\n100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\nitem has is 409 `item.barcode_taken`.\n\nWith `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its\n`barcode` (422 `required` without). Names need not be unique: the \"similar item exists\"\nhint (`GET /api/items/similar`) is only a hint.",
         "properties": {
           "barcode": {
             "anyOf": [
