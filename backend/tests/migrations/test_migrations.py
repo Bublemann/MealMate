@@ -40,7 +40,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0019"
+HEAD = "0020"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -65,7 +65,8 @@ LIST_TABLES = {
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
-# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one.
+# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one;
+# 0020 drops columns.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
@@ -161,6 +162,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0018")
     assert tables(database_path) == TABLES_0018
     command.upgrade(config, "0019")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0020")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0019")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0018")
     assert tables(database_path) == TABLES_0018
@@ -1910,6 +1915,127 @@ def test_the_0019_downgrade_restores_the_ingredients(tmp_path: Path) -> None:
     assert_clean(path)
     command.upgrade(config, "0019")
     assert sorted(dump_without(path, "alembic_version")) == at_0019
+
+
+# --- 0020 -----------------------------------------------------------------------------------
+
+PACK_SIZE_COLUMNS = ("quantity_text", "pack_quantity", "pack_unit")
+# The marks of the demo's hand-typed branded items, without those on the pack size.
+DEMO_MARKS = (
+    '["name", "brand", "nutrients.kcal", "nutrients.protein", "nutrients.carbs",'
+    ' "nutrients.sugar", "nutrients.fat"]'
+)
+
+
+def items_without_pack_size(path: Path) -> dict[str, dict[str, object]]:
+    """The items by name, without the pack size's columns."""
+    return {
+        str(row["name"]): {
+            column: value for column, value in row.items() if column not in PACK_SIZE_COLUMNS
+        }
+        for row in rows_of(path, "items")
+    }
+
+
+def demo_at_0019_with_pack_size_marks(path: Path) -> Config:
+    """The demo at 0019. Six branded items have a pack size and a mark on it and on its amount;
+    Butter also has newer values for its name and its pack size, Milch only a mark on its
+    amount (from before D-38) and an ignored pending pack size, and Kaffee a pending update
+    stored as JSON null."""
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0019")
+    butter_pending = {
+        "name": {"current": "Butter", "proposed": "Irische Butter"},
+        "quantity_text": {"current": "250 g", "proposed": "500 g"},
+    }
+    milk_pending = {"quantity_text": {"current": "1 l", "proposed": "1,5 l", "ignored": True}}
+    with closing(sqlite3.connect(path)) as connection, connection:
+        for name, marks, pending in (
+            ("Butter", None, json.dumps(butter_pending)),
+            ("Milch", '["pack_quantity"]', json.dumps(milk_pending)),
+            ("Kaffee", None, "null"),
+        ):
+            changed = connection.execute(
+                "UPDATE items SET user_edited_fields = coalesce(?, user_edited_fields),"
+                " pending_update = ? WHERE name = ?",
+                (marks, pending, name),
+            ).rowcount
+            assert changed == 1, name
+    return config
+
+
+def sorted_dump_without_items(path: Path) -> list[str]:
+    """The database as sorted SQL, without the items' table and rows (their indexes stay)."""
+    schema = ('CREATE TABLE "items"', "CREATE TABLE items")
+    lines = dump_without(path, "items", "alembic_version")
+    return sorted(line for line in lines if not line.startswith(schema))
+
+
+def test_0020_drops_the_pack_size_and_changes_nothing_else(tmp_path: Path) -> None:
+    """The pack size goes (D-54): its text, its amount and its unit, so their values are lost,
+    as intended, and so are the user-edited marks and pending values that name them. Nothing
+    else changes: no other value of an item (`updated_at` included: this is nobody's edit), no
+    other row, reference, constraint or index."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0019_with_pack_size_marks(path)
+    assert query(path, "SELECT count(*) FROM items WHERE quantity_text IS NOT NULL") == [(7,)]
+    items = items_without_pack_size(path)
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    names, rest = constraint_and_index_names(path, "items"), sorted_dump_without_items(path)
+
+    command.upgrade(config, "0020")
+
+    columns = {name for (name,) in query(path, "SELECT name FROM pragma_table_info('items')")}
+    assert columns.isdisjoint(PACK_SIZE_COLUMNS)
+    for name in ("Butter", "Passierte Tomaten", "Olivenöl", "Spaghetti n.5", "Spaghetti n.12"):
+        items[name]["user_edited_fields"] = DEMO_MARKS
+    items["Butter"]["pending_update"] = (
+        '{"name": {"current": "Butter", "proposed": "Irische Butter"}}'
+    )
+    items["Milch"]["user_edited_fields"] = "[]"
+    items["Milch"]["pending_update"] = "null"  # as the app stores None
+    assert items_without_pack_size(path) == items
+    assert constraint_and_index_names(path, "items") == names
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+
+
+def test_the_0020_downgrade_brings_back_empty_pack_sizes(tmp_path: Path) -> None:
+    """The pack sizes are gone for good: the downgrade adds the columns again, empty, and
+    changes nothing else; up again, the items are as they were at 0020."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0019_with_pack_size_marks(path)
+    names = constraint_and_index_names(path, "items")
+    command.upgrade(config, "0020")
+    items, rest = items_without_pack_size(path), sorted_dump_without_items(path)
+    at_0020 = rows_of(path, "items")
+
+    command.downgrade(config, "0019")
+
+    columns = query(
+        path,
+        "SELECT name, type, \"notnull\" FROM pragma_table_info('items')"
+        " WHERE name IN ('quantity_text', 'pack_quantity', 'pack_unit') ORDER BY name",
+    )
+    assert columns == [
+        ("pack_quantity", "FLOAT", 0),
+        ("pack_unit", "VARCHAR(10)", 0),
+        ("quantity_text", "VARCHAR(40)", 0),
+    ]
+    assert query(
+        path,
+        "SELECT count(*) FROM items"
+        " WHERE coalesce(quantity_text, pack_quantity, pack_unit) IS NOT NULL",
+    ) == [(0,)]
+    assert items_without_pack_size(path) == items
+    assert constraint_and_index_names(path, "items") == names
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0020")
+    assert rows_of(path, "items") == at_0020
+    assert sorted_dump_without_items(path) == rest
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

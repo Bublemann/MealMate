@@ -104,7 +104,6 @@ async def test_results_are_proposals_like_a_scan(
                     "barcode": OATS,
                     "name": "Haferflocken",
                     "brand": "MealMate Test Kitchen",
-                    "quantity_text": "500 g",
                     "nutrition_basis": "g",
                     "nutrients": {
                         "kcal": 372,
@@ -124,7 +123,6 @@ async def test_results_are_proposals_like_a_scan(
                     "barcode": MILK,
                     "name": "Frische Vollmilch",
                     "brand": "Weihenstephan",
-                    "quantity_text": "1 l",
                     "nutrition_basis": "ml",
                     "nutrients": {
                         "kcal": 64,

@@ -80,7 +80,6 @@ from app.domain.barcodes import normalize_barcode
 from app.domain.catalog import (
     BRAND_MAX_LENGTH,
     ITEM_NAME_MAX_LENGTH,
-    QUANTITY_TEXT_MAX_LENGTH,
     clean_text,
     cut_at_word,
     nutrient_field,
@@ -107,7 +106,6 @@ FIELDS = ",".join(
         "generic_name",
         *(f"generic_name_{language}" for language in LANGUAGES),
         "brands",
-        "quantity",
         "product_quantity_unit",
         "nutriments",
         "nutrition_data_per",
@@ -238,9 +236,6 @@ class OffProduct(BaseModel):
     brands: Annotated[str | None, BeforeValidator(partial(_text, max_length=BRAND_MAX_LENGTH))] = (
         None
     )
-    quantity: Annotated[
-        str | None, BeforeValidator(partial(_text, max_length=QUANTITY_TEXT_MAX_LENGTH))
-    ] = None
     product_quantity_unit: Annotated[BaseUnit | None, BeforeValidator(_quantity_unit)] = None
     nutrition_data_per: Annotated[str | None, BeforeValidator(_per)] = None
     nutriments: Annotated[dict[str, float], BeforeValidator(_nutrients)] = {}
@@ -293,7 +288,6 @@ class OffProduct(BaseModel):
         values: dict[str, str | float | None] = {
             "name": self.name(language),
             "brand": self.brands,
-            "quantity_text": self.quantity,
         }
         if self.nutrition_basis is not None:
             for key, value in self.nutrients.items():

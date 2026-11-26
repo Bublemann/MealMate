@@ -12,7 +12,6 @@ import { formatNutrient, NUTRIENT_KEYS, nutrientLabel, type NutrientKey } from '
 const TEXT_FIELD_LABELS = {
   name: 'items.field.name',
   brand: 'items.field.brand',
-  quantity_text: 'items.field.packSize',
 } as const;
 
 function nutrientKeyOf(field: string): NutrientKey | null {

@@ -53,7 +53,6 @@ import {
   editedFields,
   emptyValues,
   NAME_MAX_LENGTH,
-  PACK_SIZE_MAX_LENGTH,
   proposalValues,
   typedValues,
   valuesFromItem,
@@ -88,7 +87,6 @@ const INLINE_LINK =
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'name',
   'brand',
-  'quantity_text',
   'category_id',
   'base_unit',
   'barcode',
@@ -208,9 +206,8 @@ interface Proposed {
  * One form for every item, new or existing, typed by hand, searched or scanned (ING-04,
  * D-35, D-36). Top to bottom: the Open Food Facts attribution while its values are shown; the
  * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
- * the barcode with the scan's notice; the similar-items hint; brand; pack size (D-47);
- * category; base unit (g, ml or pieces) with the piece weight for pieces only; the nutrition per
- * 100 g/ml. "Save" sits in a footer below the fields, which scroll on their own. A product chosen
+ * the barcode with the scan's notice; the similar-items hint; brand; category; base unit (g, ml
+ * or pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. "Save" sits in a footer below the fields, which scroll on their own. A product chosen
  * in the search or scanned is saved in one request, with the fields the user changed named as
  * edited (BAR-04).
  *
@@ -390,7 +387,6 @@ function ItemForm({
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
-      quantity_text: values.quantity_text.trim() || null,
       barcode: barcode || null,
     };
 
@@ -398,7 +394,6 @@ function ItemForm({
       const body: ItemCreate = { name: texts.name, base_unit: values.baseUnit };
       if (selectedCategory) body.category_id = selectedCategory;
       if (texts.brand !== null) body.brand = texts.brand;
-      if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
       if (texts.barcode !== null) body.barcode = texts.barcode;
       if (pieceWeight !== null) body.piece_weight_g = pieceWeight;
       const given: Partial<NutrientValues> = {};
@@ -423,7 +418,6 @@ function ItemForm({
     const body: ItemUpdate = {};
     if (texts.name !== item.name) body.name = texts.name;
     if (texts.brand !== item.brand) body.brand = texts.brand;
-    if (texts.quantity_text !== item.quantity_text) body.quantity_text = texts.quantity_text;
     if (selectedCategory !== item.category_id) body.category_id = selectedCategory;
     if (values.baseUnit !== item.base_unit) body.base_unit = values.baseUnit;
     if (texts.barcode !== item.barcode) body.barcode = texts.barcode;
@@ -573,23 +567,6 @@ function ItemForm({
               placeholder={t('items.field.brandPlaceholder')}
               value={values.brand}
               onChange={(event) => set('brand', event.target.value)}
-            />
-          )}
-        </FormField>
-        <FormField
-          label={t('items.field.packSize')}
-          hint={editedHint('quantity_text')}
-          error={fieldError('quantity_text')}
-        >
-          {(control) => (
-            <Input
-              {...control}
-              name="quantity_text"
-              autoComplete="off"
-              maxLength={PACK_SIZE_MAX_LENGTH}
-              placeholder={t('items.field.packSizePlaceholder')}
-              value={values.quantity_text}
-              onChange={(event) => set('quantity_text', event.target.value)}
             />
           )}
         </FormField>

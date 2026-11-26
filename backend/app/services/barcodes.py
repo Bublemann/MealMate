@@ -37,7 +37,6 @@ def proposal(found: OffProduct, barcode: str, language: str) -> ProductProposal:
         barcode=barcode,
         name=found.name(language),
         brand=found.brands,
-        quantity_text=found.quantity,
         nutrition_basis=_nutrition_basis_name(found.nutrition_basis),
         nutrients=NutrientValues.model_validate(found.nutrients),
         category_key=found.category_key,

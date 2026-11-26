@@ -19,7 +19,6 @@ const OATS = proposal({
   barcode: '2000000000015',
   name: 'Haferflocken zart',
   brand: 'Kornmühle',
-  quantity_text: '500 g',
   nutrition_basis: 'g',
   nutrients: { kcal: 372, protein: 13.5, carbs: 58.7, sugar: 0.7, fat: 7 },
   category_key: 'other',
@@ -126,20 +125,20 @@ describe('OffSearchDialog', () => {
     expect(searches(fetchMock)).toEqual([]);
   });
 
-  it('shows name, brand, package size, calories and the attribution (BAR-09, BAR-10)', async () => {
+  it('shows name, brand, calories and the attribution, no pack size (BAR-09, BAR-10, D-54)', async () => {
     const { user } = renderSearch({
       'GET /api/items/off-search': page([found({ ...MILK, name: '<b>Milch</b>' })]),
     });
     const dialog = await openSearch(user);
 
     const [result] = await within(dialog).findAllByTestId(testIds.offSearchResult);
-    expect(result).toHaveTextContent('<b>Milch</b> (Weidehof)1 l · 64 kcal per 100 ml');
+    expect(result).toHaveTextContent('<b>Milch</b> (Weidehof)64 kcal per 100 ml');
     expect(within(dialog).getByTestId(testIds.offAttribution)).toHaveTextContent(
       /^Nutrition data: Open Food Facts.*\(ODbL\)$/,
     );
   });
 
-  it('fills the form with the chosen product, saved in one request with its pack size (BAR-04, D-47)', async () => {
+  it('fills the form with the chosen product, saved in one request (BAR-04)', async () => {
     const created = itemDetail({ id: 'ing-vollmilch', name: 'Frische Vollmilch 3,5 %' });
     const { fetchMock, user, router } = renderSearch({
       'POST /api/items': Response.json(created, { status: 201 }),
@@ -177,7 +176,6 @@ describe('OffSearchDialog', () => {
       category_id: 'cat-dairy_eggs',
       brand: 'Weidehof',
       barcode: '4006381333931',
-      quantity_text: '1 l',
       nutrients: { kcal: 64, protein: 3.4, carbs: 4.8, sugar: 4.8, fat: 3.6 },
       off: { off_last_modified_at: '2026-09-01T10:00:00Z', edited_fields: ['nutrients.fat'] },
     });
@@ -380,7 +378,7 @@ describe('OffSearchDialog', () => {
       expect(within(dialog).getAllByTestId(testIds.offSearchResult)).toHaveLength(2),
     );
     expect(within(dialog).getAllByTestId(testIds.offSearchResult)[1]).toHaveTextContent(
-      'Haferflocken zart (Kornmühle)500 g · 372 kcal per 100 g',
+      'Haferflocken zart (Kornmühle)372 kcal per 100 g',
     );
     expect(within(dialog).queryByTestId(testIds.offSearchMore)).not.toBeInTheDocument();
     expect(searches(fetchMock)).toEqual([
@@ -411,8 +409,8 @@ describe('OffSearchDialog', () => {
         .getAllByTestId(testIds.offSearchResult)
         .map((result) => result.textContent),
     ).toEqual([
-      'Frische Vollmilch 3,5 % (Weidehof)1 l · 64 kcal per 100 ml',
-      'Haferflocken zart (Kornmühle)500 g · 372 kcal per 100 g',
+      'Frische Vollmilch 3,5 % (Weidehof)64 kcal per 100 ml',
+      'Haferflocken zart (Kornmühle)372 kcal per 100 g',
     ]);
   });
 
