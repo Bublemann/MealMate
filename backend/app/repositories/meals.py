@@ -128,6 +128,16 @@ async def count_with_item(session: AsyncSession, item_id: str) -> int:
     return result.scalar_one()
 
 
+async def with_item(session: AsyncSession, item_id: str) -> list[tuple[str, str]]:
+    """The owner and name of every meal with a row of the item, in dictionary order."""
+    result = await session.execute(
+        select(Meal.owner_id, Meal.name)
+        .where(exists().where(MealIngredient.meal_id == Meal.id, MealIngredient.item_id == item_id))
+        .order_by(Meal.name_sort, Meal.id)
+    )
+    return [(owner_id, name) for owner_id, name in result]
+
+
 async def amounts_of(
     session: AsyncSession, item_id: str
 ) -> list[tuple[str, float | None, str | None]]:

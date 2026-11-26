@@ -41,9 +41,10 @@ for _key in NUTRIENT_KEYS:
 
 
 class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
-    """A shared item, editable by everyone like a wiki (ING-01, ING-02). There is one kind
-    of item: typed by hand ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and
-    taken from Open Food Facts with its barcode.
+    """A shared item, editable by everyone like a wiki (ING-01, ING-02): typed by hand
+    ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and taken from Open Food Facts with
+    its barcode. Its `kind` is food or a supply (D-54), which has no nutrients and no piece
+    weight and is never an ingredient in a meal.
 
     The nutrient columns are the item's own values per 100 g, or per 100 ml for base unit
     `ml` (NUT-02); null is unknown. A `piece` item's pieces count through its piece weight
@@ -62,6 +63,7 @@ class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     __table_args__ = (
         CheckConstraint("base_unit IN ('g', 'ml', 'piece')", name="base_unit"),
         CheckConstraint("source IN ('off', 'manual')", name="source"),
+        CheckConstraint("kind IN ('food', 'supply')", name="kind"),
     )
 
     name: Mapped[str] = mapped_column(String(ITEM_NAME_MAX_LENGTH))
@@ -79,6 +81,8 @@ class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
+    # Food, or a supply: no nutrients, no piece weight and never in a meal (D-54).
+    kind: Mapped[str] = mapped_column(String(10), default="food")
     base_unit: Mapped[str] = mapped_column(String(5), default="g")
     # Only for `piece` (D-32); migration 0014 cleared it on g and ml items and dropped
     # the density (D-34). See `attrs()`.

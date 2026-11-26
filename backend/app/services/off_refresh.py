@@ -27,8 +27,8 @@ so the next refresh tries again (BAR-07). Found, field by field (BAR-06):
   without a version, this very value (the ignored entries kept in `pending_update`, see
   `services.off_fields`);
 - nutrients only while Open Food Facts gives them per what the item's are per: 100 g,
-  or 100 ml for an ml item (`NUTRITION_BASIS`);
-- the category, base unit, piece weight and barcode are never touched.
+  or 100 ml for an ml item (`NUTRITION_BASIS`), and never for a supply, which has none (D-54);
+- the kind, category, base unit, piece weight and barcode are never touched.
 """
 
 import logging
@@ -45,7 +45,7 @@ from app.core.config import Settings
 from app.core.ratelimit import Clock
 from app.db.base import utcnow
 from app.db.session import Database
-from app.domain.catalog import OFF_DATA_FIELDS
+from app.domain.catalog import OFF_DATA_FIELDS, SUPPLY
 from app.domain.units import NUTRITION_BASIS, BaseUnit
 from app.integrations.off import OffClient, OffProduct
 from app.models import Item as ItemRow
@@ -107,7 +107,7 @@ def apply_refresh(row: ItemRow, found: OffProduct, *, language: str, now: dateti
     """Merge a product's current Open Food Facts values into the item `row` (BAR-06), see
     the module docstring; runs inside the caller's write transaction."""
     proposed = found.fields(language)
-    if found.nutrition_basis != NUTRITION_BASIS[BaseUnit(row.base_unit)]:
+    if row.kind == SUPPLY or found.nutrition_basis != NUTRITION_BASIS[BaseUnit(row.base_unit)]:
         proposed = {field: value for field, value in proposed.items() if field in OFF_DATA_FIELDS}
     edited = set(edited_fields(row))
     ignored = (

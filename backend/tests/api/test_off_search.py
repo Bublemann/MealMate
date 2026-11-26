@@ -193,6 +193,7 @@ async def test_products_already_in_mealmate_are_flagged(
                 "brand": "Weihenstephan",
                 "barcode": MILK,
                 "source": "manual",
+                "kind": "food",
                 "category_id": known["category_id"],
                 "base_unit": "g",
             },

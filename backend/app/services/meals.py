@@ -19,6 +19,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import FieldErrorCode, FieldProblem, validation_error
+from app.domain.catalog import SUPPLY
 from app.domain.lists import RECENT_MEALS_LIMIT
 from app.domain.nutrition import MealRow as NutritionRow
 from app.domain.nutrition import meal_nutrition
@@ -196,9 +197,9 @@ async def _check_references(
     problems: list[FieldProblem],
     kept: Collection[RowKey] = (),
 ) -> None:
-    """Refuse (422) unknown cuisines and items, and rows whose unit doesn't fit their item's
-    base unit (REF-02, MEAL-02), together with the other `problems`. A row that doesn't fit
-    is kept when the meal already has it with the same item, amount and unit
+    """Refuse (422) unknown cuisines and items, supplies (`supply`, D-54), and rows whose unit
+    doesn't fit their item's base unit (REF-02, MEAL-02), together with the other `problems`. A
+    row that doesn't fit is kept when the meal already has it with the same item, amount and unit
     (`kept`): it was entered before the rule, or left by a base-unit change or a merge (D-33)."""
     found: list[FieldProblem] = []
     if cuisine_id is not None and await reference_repo.get_cuisine(session, cuisine_id) is None:
@@ -209,6 +210,8 @@ async def _check_references(
             item = known.get(row.item_id)
             if item is None:
                 found.append(_row_field(index, "item_id", FieldErrorCode.INVALID))
+            elif item.kind == SUPPLY:
+                found.append(_row_field(index, "item_id", FieldErrorCode.SUPPLY))
             elif not fits(row.amount, row.unit, item.base_unit) and _input_key(row) not in kept:
                 found.append(_row_field(index, "unit", FieldErrorCode.UNIT_MISMATCH))
     if found or problems:

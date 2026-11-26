@@ -150,6 +150,28 @@ async def test_fields_not_edited_update_silently(
     assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
 
 
+async def test_a_supply_takes_no_nutrients_and_keeps_its_kind(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """A supply has no nutrients, so a refresh brings none, and Open Food Facts never sets the
+    kind (D-54)."""
+    product = await saved_oats(api, anna, edited=[], kind="supply", nutrients=None)
+    newer = oats(product_name_de="Zarte Haferflocken", last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=newer)
+    await later(api, clock, anna, days=40)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert (body["name"], body["kind"]) == ("Zarte Haferflocken", "supply")
+    assert set(body["nutrients"].values()) == {None}
+    assert body["pending_update"] is None
+
+
 async def test_user_edited_fields_become_a_pending_update(
     app: FastAPI,
     api: AsyncClient,

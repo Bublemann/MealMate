@@ -15,6 +15,9 @@ from app.domain.text import normalize
 from app.domain.units import UNIT_FACTOR, UNIT_KIND, BaseUnit, Unit, UnitKind
 
 ITEM_NAME_MAX_LENGTH = 60
+# An item's kind (D-54): a supply has no nutrients and no piece weight and is never in a meal.
+FOOD = "food"
+SUPPLY = "supply"
 CATEGORY_NAME_MAX_LENGTH = 40
 CUISINE_NAME_MAX_LENGTH = 40
 TAG_NAME_MAX_LENGTH = 30

@@ -87,6 +87,7 @@ def summary(ingredient: Any) -> dict[str, Any]:
         "brand": ingredient["brand"],
         "barcode": ingredient["barcode"],
         "source": ingredient["source"],
+        "kind": ingredient["kind"],
     }
 
 
