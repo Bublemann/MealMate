@@ -345,6 +345,10 @@ export function useSetListMealServings(listId: string) {
  * SHOP-07: marks a meal on a done list eaten, or clears that. The box and the count change at
  * once; the server refuses it on drafts and lists being shopped, and for those who may only see
  * the list. Needs a connection, like the rest of a done list.
+ *
+ * A leftover (LIST-17) is marked on any list, and that marks the meal it comes from: ticked on a
+ * draft or a list being shopped, it leaves the list at once; unticked, it comes back with the
+ * server's answer.
  */
 export function useSetListMealEaten(listId: string) {
   return useListChange(
@@ -361,8 +365,33 @@ export function useSetListMealEaten(listId: string) {
         ({ listMealId, eaten }) =>
         (list) => ({
           ...list,
-          meals: list.meals.map((meal) => (meal.id === listMealId ? { ...meal, eaten } : meal)),
+          meals: list.meals
+            .filter(
+              (meal) =>
+                !(meal.id === listMealId && meal.leftover && eaten && list.status !== 'done'),
+            )
+            .map((meal) => (meal.id === listMealId ? { ...meal, eaten } : meal)),
         }),
+    },
+  );
+}
+
+/**
+ * LIST-17 "Doch einkaufen": a leftover becomes a normal meal of the list, whose ingredients go
+ * on it; the row changes when the server answered.
+ */
+export function useShopLeftover(listId: string) {
+  return useListChange(
+    listId,
+    (listMealId: string) =>
+      unwrap(
+        api.POST('/api/lists/{list_id}/meals/{list_meal_id}/shop', {
+          params: { path: { list_id: listId, list_meal_id: listMealId } },
+        }),
+      ),
+    {
+      onSuccess: (queryClient) =>
+        void queryClient.invalidateQueries({ queryKey: RECENT_MEALS_KEY }),
     },
   );
 }

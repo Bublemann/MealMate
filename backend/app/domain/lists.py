@@ -26,6 +26,9 @@ OPS_MAX = 100
 FEED_PAGE_SIZE = 30
 # Longer than any cursor `feed_cursor` makes.
 FEED_CURSOR_MAX_LENGTH = 120
+# A done list brings its uneaten meals into new drafts this long after it was finished
+# (LIST-17, D-58).
+LEFTOVER_DAYS = 14
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
 ListStatus = Literal["draft", "shopping", "done"]

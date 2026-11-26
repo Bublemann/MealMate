@@ -9,7 +9,8 @@ the frontend (AGG-01).
    item attributes (`Item.attrs()`: no density, a piece weight only for pieces,
    D-32); a frozen or detached one its `list_meal_ingredients` with the attributes captured
    then, which before D-32 included a density and a g or ml item's piece weight (LIST-11).
-   Each row is scaled by `servings ÷ meal servings` (LIST-04).
+   Each row is scaled by `servings ÷ meal servings` (LIST-04). A leftover meal (LIST-17) is
+   frozen without rows, so it contributes nothing.
 2. A linked extra item contributes to its item's line with its `attrs_snapshot` once it
    has one (taken when shopping starts or when it is added while shopping), else with the live
    attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
@@ -80,13 +81,15 @@ from app.schemas.users import UserRef
 class ListContent:
     """Everything the lines of some lists are computed from.
 
-    `meals`, `extras` (not deleted) and `states` are per list id; `linked_meals` per meal id
-    (the meals list meals still link to, frozen or not); `meal_rows` per meal id (live list
-    meals only); `frozen_rows` per list meal id; `items` only those whose live data is
-    used (see `load`).
+    `meals`, `extras` (not deleted) and `states` are per list id; `meals` holds only the
+    leftovers that are shown (see `shown_meals`), and `sources` their source meals by id;
+    `linked_meals` per meal id (the meals list meals still link to, frozen or not); `meal_rows`
+    per meal id (live list meals only); `frozen_rows` per list meal id; `items` only those whose
+    live data is used (see `load`).
     """
 
     meals: dict[str, list[ListMeal]]
+    sources: dict[str, ListMeal]
     linked_meals: dict[str, Meal]
     meal_rows: dict[str, list[MealIngredient]]
     frozen_rows: dict[str, list[ListMealIngredient]]
@@ -105,6 +108,12 @@ class ListContent:
         """The meal a list meal still links to (live or frozen); None once it is detached."""
         return None if list_meal.meal_id is None else self.linked_meals.get(list_meal.meal_id)
 
+    def eaten(self, list_meal: ListMeal) -> bool:
+        """Whether the meal is eaten: a leftover is when its source is (LIST-17)."""
+        if list_meal.leftover_of_id is None:
+            return list_meal.eaten
+        return self.sources[list_meal.leftover_of_id].eaten
+
     def other_category_id(self) -> str:
         return next(row.id for row in self.categories.values() if row.key == OTHER_CATEGORY)
 
@@ -113,8 +122,34 @@ def is_live(list_meal: ListMeal) -> bool:
     return list_meal.frozen_at is None and list_meal.meal_id is not None
 
 
+async def shown_meals(
+    session: AsyncSession, lists: Iterable[ShoppingList]
+) -> tuple[dict[str, list[ListMeal]], dict[str, ListMeal]]:
+    """The meals of the lists, per list id, and the source meals of their leftovers by id.
+
+    A leftover whose source is eaten is left out of drafts and lists being shopped (it has left
+    them, LIST-17); a done list shows it, eaten, as it shows its other eaten meals."""
+    status = {row.id: row.status for row in lists}
+    meals = await lists_repo.meals_for(session, status)
+    sources = await lists_repo.meals_by_ids(
+        session,
+        (row.leftover_of_id for group in meals.values() for row in group if row.leftover_of_id),
+    )
+    shown = {
+        list_id: [
+            row
+            for row in group
+            if row.leftover_of_id is None
+            or status[list_id] == "done"
+            or not sources[row.leftover_of_id].eaten
+        ]
+        for list_id, group in meals.items()
+    }
+    return shown, sources
+
+
 async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListContent:
-    """The content of the given lists, in eight queries whatever their size.
+    """The content of the given lists, in nine queries whatever their size.
 
     Items are loaded only where their live data is shown: for live meals, linked extra
     items without a snapshot, and the frozen rows of drafts (a detached meal's line shows the
@@ -123,7 +158,7 @@ async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListCont
     lists = list(lists)
     ids = {row.id for row in lists}
     drafts = {row.id for row in lists if row.status == "draft"}
-    meals = await lists_repo.meals_for(session, ids)
+    meals, sources = await shown_meals(session, lists)
     list_meals = [list_meal for group in meals.values() for list_meal in group]
     linked_meals = await meals_repo.by_ids(session, (row.meal_id for row in list_meals))
     live_ids = {list_meal.meal_id for list_meal in list_meals if is_live(list_meal)}
@@ -156,6 +191,7 @@ async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListCont
     states = await lists_repo.states_for(session, ids)
     return ListContent(
         meals=meals,
+        sources=sources,
         linked_meals=linked_meals,
         meal_rows=meal_rows,
         frozen_rows=frozen_rows,

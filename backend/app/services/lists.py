@@ -11,10 +11,15 @@ The states (LIST-10): meals, servings and extra items change in a draft and whil
 (LIST-12: a meal added while shopping is frozen at once, a linked extra item snapshotted); a
 done list is read-only (409 `list.done`) until it is reopened, except that its meals are marked
 eaten (SHOP-07). Lines are hidden and restored only in a draft (409 `list.not_draft`).
+
+Leftover meals (LIST-17, D-58): a new draft gets the uneaten meals of the last done list the
+principal can edit, if it was finished at most `LEFTOVER_DAYS` ago, as leftovers of the meal
+they come from (the source; a leftover of a leftover is one of its source). Marking a leftover
+eaten, on any list, marks its source, and bumps every list that shows it.
 """
 
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 from zoneinfo import ZoneInfo
 
@@ -31,6 +36,7 @@ from app.core.errors import (
 from app.db.ids import new_id
 from app.domain.lists import (
     FEED_PAGE_SIZE,
+    LEFTOVER_DAYS,
     LIST_STATUSES,
     DetachedReason,
     FeedPosition,
@@ -148,7 +154,8 @@ def _meal_entry(
             servings=list_meal.servings,
             meal_servings=meal_servings,
             detached=detached,
-            eaten=list_meal.eaten,
+            eaten=content.eaten(list_meal),
+            leftover=list_meal.leftover_of_id is not None,
         )
     owner_id = list_meal.meal_owner_id_snapshot
     return ListMealEntry(
@@ -165,7 +172,8 @@ def _meal_entry(
         servings=list_meal.servings,
         meal_servings=meal_servings,
         detached=detached,
-        eaten=list_meal.eaten,
+        eaten=content.eaten(list_meal),
+        leftover=list_meal.leftover_of_id is not None,
     )
 
 
@@ -403,6 +411,53 @@ async def _new_list(
     return shopping_list, rights
 
 
+async def _add_leftovers(
+    session: AsyncSession,
+    principal: Principal,
+    shopping_list: ShoppingList,
+    partner: str | None,
+    *,
+    now: datetime,
+) -> None:
+    """Give a new draft the leftovers of the last done list the principal can edit (their own
+    or one their partner shares with them), unless it was finished more than `LEFTOVER_DAYS`
+    ago: one per meal on it that isn't eaten, leftovers on it included, in its order (LIST-17).
+    A leftover copies its source's servings and snapshots and is frozen without rows."""
+    source = await lists_repo.last_finished(session, principal.user_id, partner)
+    if (
+        source is None
+        or source.finished_at is None
+        or source.finished_at < now - timedelta(days=LEFTOVER_DAYS)
+    ):
+        return
+    meals, sources = await aggregation.shown_meals(session, [source])
+    roots: set[str] = set()
+    for row in meals.get(source.id, []):
+        root = row if row.leftover_of_id is None else sources[row.leftover_of_id]
+        if root.eaten or root.id in roots:
+            continue
+        roots.add(root.id)
+        session.add(
+            ListMeal(
+                list_id=shopping_list.id,
+                meal_id=row.meal_id,
+                servings=row.servings,
+                meal_servings_snapshot=row.meal_servings_snapshot,
+                meal_name_snapshot=row.meal_name_snapshot,
+                meal_owner_id_snapshot=row.meal_owner_id_snapshot,
+                added_by=row.added_by,
+                last_added_at=row.last_added_at,
+                frozen_at=now,
+                detached_reason=row.detached_reason,
+                position=len(roots) - 1,
+                leftover_of_id=root.id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    await session.flush()
+
+
 async def create_list(
     session: AsyncSession,
     media: MediaStore,
@@ -412,9 +467,10 @@ async def create_list(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """A new, empty draft (LIST-01)."""
+    """A new draft (LIST-01), with the leftovers of the last done list (LIST-17)."""
     async with session.begin():
         shopping_list, rights = await _new_list(session, principal, body.name, now=now)
+        await _add_leftovers(session, principal, shopping_list, rights.viewer_partner_id, now=now)
         return await list_detail(
             session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )
@@ -472,10 +528,16 @@ async def update_list(
         )
 
 
-async def delete_list(session: AsyncSession, principal: Principal, list_id: str) -> None:
-    """Delete a list in any state (the owner, LIST-13); its content goes with it."""
+async def delete_list(
+    session: AsyncSession, principal: Principal, list_id: str, *, now: datetime
+) -> None:
+    """Delete a list in any state (the owner, LIST-13); its content goes with it, and so do the
+    leftovers of its meals on other lists, which change (LIST-17)."""
     async with session.begin():
         shopping_list, _ = await access.require_list_owner(session, principal, list_id)
+        meal_ids = [row.id for row in (await lists_repo.meals_for(session, [list_id]))[list_id]]
+        showing = await lists_repo.lists_with_leftovers_of(session, meal_ids)
+        await lists_repo.bump(session, showing - {list_id}, now)
         await session.delete(shopping_list)
 
 
@@ -492,19 +554,26 @@ async def _copy(
     they may see (the current versions, live again), with their servings, and the extra items
     (unchecked, without snapshots; a free-text item whose category was deleted goes to *Other*,
     LIST-06). `left_out` counts the other meals (VIS-06). Hidden lines and check states are not
-    copied (LIST-07)."""
+    copied (LIST-07). The leftovers it shows come as normal meals, and a meal on it both as a
+    leftover and as a normal meal comes once, with both servings; the copy gets no leftovers of
+    its own (LIST-17)."""
     visible = await access.visible_owner_ids(session, principal.user_id, "meals")
-    list_meals = (await lists_repo.meals_for(session, [source.id]))[source.id]
+    list_meals = (await aggregation.shown_meals(session, [source]))[0].get(source.id, [])
     meals = await meals_repo.by_ids(session, (row.meal_id for row in list_meals))
-    kept = [
-        (row, meals[row.meal_id])
-        for row in list_meals
-        if row.meal_id in meals and meals[row.meal_id].owner_id in visible
-    ]
+    kept: dict[str, tuple[MealRow, int]] = {}
+    left_out = 0
+    for row in list_meals:
+        meal = None if row.meal_id is None else meals.get(row.meal_id)
+        if meal is None or meal.owner_id not in visible:
+            left_out += 1
+        elif meal.id in kept:
+            kept[meal.id] = (meal, raised_servings(kept[meal.id][1], row.servings))
+        else:
+            kept[meal.id] = (meal, row.servings)
     extras = (await lists_repo.extras_for(session, [source.id]))[source.id]
     copy, rights = await _new_list(session, principal, source.name, now=now)
-    for position, (row, meal) in enumerate(kept):
-        session.add(_list_meal(copy, meal, row.servings, position, principal, now=now))
+    for position, (meal, servings) in enumerate(kept.values()):
+        session.add(_list_meal(copy, meal, servings, position, principal, now=now))
     for extra in extras:
         session.add(
             ListExtraItem(
@@ -527,7 +596,7 @@ async def _copy(
         )
     await session.flush()
     detail = await list_detail(session, media, principal.user_id, copy, rights, now=now, zone=zone)
-    return ListCopyResult(list=detail, left_out=len(list_meals) - len(kept))
+    return ListCopyResult(list=detail, left_out=left_out)
 
 
 async def copy_list(
@@ -704,10 +773,13 @@ async def update_meal(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """Set the servings of a meal on the list (LIST-04), detached meals included."""
+    """Set the servings of a meal on the list (LIST-04), detached meals included; not a
+    leftover's (409 `list_meal.leftover`, LIST-17)."""
     async with session.begin():
         shopping_list, rights = await _editable(session, principal, list_id)
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
+        if list_meal.leftover_of_id is not None:
+            raise ApiError(ErrorCode.LIST_MEAL_LEFTOVER, status_code=409)
         if list_meal.servings != body.servings:
             list_meal.servings = body.servings
             list_meal.updated_at = now
@@ -727,10 +799,13 @@ async def remove_meal(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """Take a meal off the list, also one that is no longer available (LIST-15)."""
+    """Take a meal off the list, also one that is no longer available (LIST-15); its leftovers
+    on other lists go with it, and those lists change (LIST-17)."""
     async with session.begin():
         shopping_list, rights = await _editable(session, principal, list_id)
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
+        showing = await lists_repo.lists_with_leftovers_of(session, [list_meal.id])
+        await lists_repo.bump(session, showing - {shopping_list.id}, now)
         await session.delete(list_meal)
         await touch(session, shopping_list, now)
         return await list_detail(
@@ -751,15 +826,95 @@ async def set_meal_eaten(
 ) -> ListDetail:
     """Mark a meal on a done list eaten, or clear that (SHOP-07, D-55): editors of the list
     only (CPL-03), and only once it is done (409 `list.not_done` in a draft or while shopping).
-    It is the one change a done list takes; its lines stay as they are."""
+    It is the one change a done list takes; its lines stay as they are.
+
+    A leftover is marked on any list, and marks its source meal (LIST-17), which needs edit
+    rights on the source's list too (403 otherwise, e.g. once the couple ended). That changes
+    every list that shows the source: its own and those with a leftover of it, so all are
+    bumped."""
     async with session.begin():
         shopping_list, rights = await access.require_list_edit(session, principal, list_id)
-        _require_done(shopping_list)
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
-        if list_meal.eaten != body.eaten:
-            list_meal.eaten = body.eaten
-            list_meal.updated_at = now
+        if list_meal.leftover_of_id is None:
+            _require_done(shopping_list)
+            target = list_meal
+        else:
+            target = await _source_of(session, list_meal)
+            try:
+                await access.require_list_edit(session, principal, target.list_id)
+            except ApiError as refused:
+                raise ApiError(ErrorCode.FORBIDDEN, status_code=403) from refused
+        if target.eaten != body.eaten:
+            target.eaten = body.eaten
+            target.updated_at = now
+            showing = {
+                target.list_id,
+                *await lists_repo.lists_with_leftovers_of(session, [target.id]),
+            }
+            await lists_repo.bump(session, showing - {shopping_list.id}, now)
             await touch(session, shopping_list, now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
+
+
+async def _source_of(session: AsyncSession, leftover: ListMeal) -> ListMeal:
+    """A leftover's source meal (it goes with its source, so it always has one)."""
+    source = (
+        None
+        if leftover.leftover_of_id is None
+        else await session.get(ListMeal, leftover.leftover_of_id)
+    )
+    if source is None:  # pragma: no cover -- a leftover goes with its source (foreign key)
+        raise RuntimeError("a leftover's source meal is missing")
+    return source
+
+
+async def shop_leftover(
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    list_meal_id: str,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
+) -> ListDetail:
+    """ "Doch einkaufen" (LIST-17): a leftover becomes a normal meal of the list, with its
+    servings, live in a draft and frozen at once while shopping, so its rows go on the list; if
+    the meal is on the list already, that one gets its servings instead (LIST-04). Either way it
+    counts as added by the principal now (MEAL-09). 409 `list_meal.not_leftover` for a normal
+    meal, `list_meal.unavailable` once the meal is deleted or the principal may no longer see
+    it."""
+    async with session.begin():
+        shopping_list, rights = await _editable(session, principal, list_id)
+        list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
+        if list_meal.leftover_of_id is None:
+            raise ApiError(ErrorCode.LIST_MEAL_NOT_LEFTOVER, status_code=409)
+        meal = (
+            None if list_meal.meal_id is None else await meals_repo.get(session, list_meal.meal_id)
+        )
+        if meal is None or not await access.may_view_meals_of(
+            session, principal.user_id, meal.owner_id
+        ):
+            raise ApiError(ErrorCode.LIST_MEAL_UNAVAILABLE, status_code=409)
+        existing = await lists_repo.meal_on_list(session, shopping_list.id, meal.id)
+        if existing is not None:
+            existing.servings = raised_servings(existing.servings, list_meal.servings)
+            existing.added_by, existing.last_added_at = principal.user_id, now
+            existing.updated_at = now
+            await session.delete(list_meal)
+        else:
+            list_meal.leftover_of_id = None
+            list_meal.frozen_at = None
+            list_meal.meal_servings_snapshot = meal.servings
+            list_meal.meal_name_snapshot = meal.name
+            list_meal.added_by, list_meal.last_added_at = principal.user_id, now
+            list_meal.updated_at = now
+            if shopping_list.status != "draft":
+                await session.flush()
+                await detach.freeze(session, [list_meal], now=now)
+        await touch(session, shopping_list, now)
         return await list_detail(
             session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )

@@ -152,9 +152,11 @@ async def update_list(
 
 
 @router.delete("/{list_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-async def delete_list(list_id: str, principal: CurrentUser, session: WriteSession) -> None:
+async def delete_list(
+    list_id: str, principal: CurrentUser, session: WriteSession, now: Now
+) -> None:
     """Delete your list, whatever its state."""
-    await lists.delete_list(session, principal, list_id)
+    await lists.delete_list(session, principal, list_id, now=now)
 
 
 @router.post("/{list_id}/copy", status_code=status.HTTP_201_CREATED)
@@ -291,9 +293,28 @@ async def set_list_meal_eaten(
     zone: TimeZone,
 ) -> ListDetail:
     """Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change
-    a done list takes. 409 `list.not_done` in a draft or while shopping."""
+    a done list takes. 409 `list.not_done` in a draft or while shopping. A leftover is marked on
+    any list, and that marks the meal it comes from, on every list showing it (LIST-17)."""
     return await lists.set_meal_eaten(
         session, media, principal, list_id, list_meal_id, body, now=now, zone=zone
+    )
+
+
+@router.post("/{list_id}/meals/{list_meal_id}/shop")
+async def shop_leftover_meal(
+    list_id: str,
+    list_meal_id: str,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
+) -> ListDetail:
+    """ "Doch einkaufen": a leftover becomes a normal meal of the list, whose ingredients go on
+    it (LIST-17); in a draft or while shopping. 409 `list_meal.not_leftover` for a normal meal,
+    `list_meal.unavailable` if its meal was deleted or can't be seen any more."""
+    return await lists.shop_leftover(
+        session, media, principal, list_id, list_meal_id, now=now, zone=zone
     )
 
 

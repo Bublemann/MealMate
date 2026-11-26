@@ -226,7 +226,9 @@ def test_no_serious_violations(
             ingredients=[{"item_id": flour["id"], "amount": 200, "unit": "g"}],
         )
         shopping = api.create_list(account, unique("A11y shopping"))
-        entry = api.add_list_meal(account, shopping["id"], meal["id"])["meals"][0]
+        # The account's done list above brings leftovers (LIST-17): take the meal itself.
+        meals = api.add_list_meal(account, shopping["id"], meal["id"])["meals"]
+        entry = next(row for row in meals if row["meal_id"] == meal["id"] and not row["leftover"])
         candles = api.add_extra_item(account, shopping["id"], text=unique("A11y candles"))
         api.start_shopping(account, shopping["id"])
         api.check_line(account, shopping["id"], f"x:{candles['extra_items'][0]['id']}")

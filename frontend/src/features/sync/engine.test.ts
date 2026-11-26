@@ -458,13 +458,14 @@ describe('local copy (SYNC-02, SYNC-10)', () => {
     expect(engine.copied(LIST_ID)).toEqual(list);
   });
 
-  it('reads a list stored before meals could be eaten as not eaten (SHOP-07)', async () => {
+  it('reads a list stored before meals could be eaten or left over as not so (SHOP-07, LIST-17)', async () => {
     const list = shoppingList();
     const stored = {
       ...list,
       meals: list.meals.map((meal) => {
         const before: Partial<typeof meal> = { ...meal };
         delete before.eaten;
+        delete before.leftover;
         return before;
       }),
     } as unknown as Schemas['ListDetail'];

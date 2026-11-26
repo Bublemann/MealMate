@@ -9,7 +9,17 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Subquery, and_, delete, func, or_, select, union, update
+from sqlalchemy import (
+    ColumnElement,
+    Subquery,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+    union,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import FeedPosition, ListStatus
@@ -30,20 +40,25 @@ async def get(session: AsyncSession, list_id: str) -> ShoppingList | None:
     return await session.get(ShoppingList, list_id)
 
 
+def _editable_by(user_id: str, partner_id: str | None) -> ColumnElement[bool]:
+    """The lists the user can edit: their own and those their partner shares with them."""
+    condition = ShoppingList.owner_id == user_id
+    if partner_id is None:
+        return condition
+    return or_(
+        condition,
+        (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
+    )
+
+
 async def mine(
     session: AsyncSession, user_id: str, partner_id: str | None, statuses: Collection[ListStatus]
 ) -> Sequence[ShoppingList]:
     """The user's own lists and those their partner shares with them, most recently edited
     first."""
-    condition = ShoppingList.owner_id == user_id
-    if partner_id is not None:
-        condition = or_(
-            condition,
-            (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
-        )
     result = await session.execute(
         select(ShoppingList)
-        .where(condition, ShoppingList.status.in_(statuses))
+        .where(_editable_by(user_id, partner_id), ShoppingList.status.in_(statuses))
         .order_by(ShoppingList.updated_at.desc(), ShoppingList.id.desc())
     )
     return result.scalars().all()
@@ -111,8 +126,49 @@ async def get_meal(session: AsyncSession, list_id: str, list_meal_id: str) -> Li
 
 
 async def meal_on_list(session: AsyncSession, list_id: str, meal_id: str) -> ListMeal | None:
+    """The meal's normal list meal on the list (not a leftover of it)."""
     result = await session.execute(
-        select(ListMeal).where(ListMeal.list_id == list_id, ListMeal.meal_id == meal_id)
+        select(ListMeal).where(
+            ListMeal.list_id == list_id,
+            ListMeal.meal_id == meal_id,
+            ListMeal.leftover_of_id.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def meals_by_ids(session: AsyncSession, list_meal_ids: Iterable[str]) -> dict[str, ListMeal]:
+    """List meals by id, on any list."""
+    ids = set(list_meal_ids)
+    if not ids:
+        return {}
+    result = await session.execute(select(ListMeal).where(ListMeal.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}
+
+
+async def lists_with_leftovers_of(session: AsyncSession, list_meal_ids: Iterable[str]) -> set[str]:
+    """The lists that have a leftover of one of the list meals."""
+    ids = set(list_meal_ids)
+    if not ids:
+        return set()
+    result = await session.execute(select(ListMeal.list_id).where(ListMeal.leftover_of_id.in_(ids)))
+    return set(result.scalars())
+
+
+async def last_finished(
+    session: AsyncSession, user_id: str, partner_id: str | None
+) -> ShoppingList | None:
+    """The done list finished last of the user's own and those their partner shares with them
+    (ties: the one created last)."""
+    result = await session.execute(
+        select(ShoppingList)
+        .where(_editable_by(user_id, partner_id), ShoppingList.status == "done")
+        .order_by(
+            ShoppingList.finished_at.desc(),
+            ShoppingList.created_at.desc(),
+            ShoppingList.id.desc(),
+        )
+        .limit(1)
     )
     return result.scalar_one_or_none()
 

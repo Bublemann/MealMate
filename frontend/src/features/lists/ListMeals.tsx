@@ -1,11 +1,15 @@
-import { CookingPot, Trash2 } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import type { TFunction } from 'i18next';
+import { CookingPot, EllipsisVertical, ShoppingCart, Trash2, X } from 'lucide-react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { MoreMenu, MoreMenuItem } from '@/components/MoreMenu';
 import { SwipeRow } from '@/components/SwipeRow';
+import { useMoreMenuFocus } from '@/components/useMoreMenuFocus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { TapCheckbox } from '@/components/ui/tap-checkbox';
 import { useConnected } from '@/features/sync/context';
 import { cn } from '@/lib/utils';
@@ -14,10 +18,14 @@ import {
   useRemoveListMeal,
   useSetListMealEaten,
   useSetListMealServings,
+  useShopLeftover,
   type ListDetail,
   type ListMealEntry,
 } from './api';
 import { ServingsStepper } from './ServingsStepper';
+
+/** How long the undo toast of a ticked leftover stays (LIST-17). */
+export const UNDO_TOAST_MS = 8000;
 
 interface ListMealsProps {
   list: ListDetail;
@@ -40,6 +48,11 @@ interface ListMealsProps {
  * see is only "Private meal (N servings)" (VIS-06); a detached one is marked "no longer
  * available" and can be removed (LIST-15). Changing meals needs a connection: offline the controls
  * are disabled (SYNC-03). On a done list, a meal is ticked eaten and then struck through (SHOP-07).
+ *
+ * A leftover (LIST-17) shows "übrig", "Zutaten nicht auf der Liste" and an eaten box on every
+ * list, its servings without a stepper, and for editors of a draft or a list being shopped a ⋮
+ * menu with "Doch einkaufen" and "Entfernen". Ticked there, it leaves the list and a toast offers
+ * to undo it.
  */
 export function ListMeals({
   list,
@@ -53,10 +66,32 @@ export function ListMeals({
   const setServings = useSetListMealServings(list.id);
   const remove = useRemoveListMeal(list.id);
   const setEaten = useSetListMealEaten(list.id);
+  const shopLeftover = useShopLeftover(list.id);
   // Kept here: the mutation's own `error` follows only the latest tap.
   const [eatenError, setEatenError] = useState<unknown>(null);
+  // The leftover just ticked on a draft or a list being shopped, whose tick can be undone.
+  const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
   const offline = !useConnected();
   const eatenCount = list.meals.filter((meal) => meal.eaten).length;
+  const leavesList = list.status !== 'done';
+
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
+  function sendEaten(listMealId: string, eaten: boolean, settled?: () => void) {
+    setEatenError(null);
+    return setEaten
+      .mutateAsync({ listMealId, eaten })
+      .then(() => true)
+      .catch((error: unknown) => {
+        setEatenError(error);
+        return false;
+      })
+      .finally(settled);
+  }
 
   const content = (
     <>
@@ -77,18 +112,20 @@ export function ListMeals({
               offline={offline}
               onServings={(servings) => setServings.mutate({ listMealId: entry.id, servings })}
               onRemove={() => remove.mutate(entry.id)}
+              onShop={() => shopLeftover.mutate(entry.id)}
               eatenBox={
-                eatenBoxes
+                eatenBoxes || entry.leftover
                   ? {
                       disabled: !list.can_edit || offline,
                       // The promise settles for every tap; `mutate`'s own callbacks only for
                       // the latest, which would leave an earlier box as it was tapped.
                       onChange: (eaten, settled) => {
-                        setEatenError(null);
-                        void setEaten
-                          .mutateAsync({ listMealId: entry.id, eaten })
-                          .catch(setEatenError)
-                          .finally(settled);
+                        if (entry.leftover && leavesList && eaten)
+                          setUndo({ id: entry.id, label: mealLabel(t, entry) });
+                        void sendEaten(entry.id, eaten, settled).then((ok) => {
+                          if (!ok)
+                            setUndo((current) => (current?.id === entry.id ? null : current));
+                        });
                       },
                     }
                   : undefined
@@ -97,7 +134,17 @@ export function ListMeals({
           ))}
         </ul>
       )}
-      <ErrorAlert error={setServings.error ?? remove.error ?? eatenError} />
+      <ErrorAlert error={setServings.error ?? remove.error ?? shopLeftover.error ?? eatenError} />
+      {undo && (
+        <UndoToast
+          text={t('lists.meals.eaten', { name: undo.label })}
+          onUndo={() => {
+            setUndo(null);
+            void sendEaten(undo.id, false);
+          }}
+          onDismiss={() => setUndo(null)}
+        />
+      )}
     </>
   );
 
@@ -133,6 +180,13 @@ export function ListMeals({
   );
 }
 
+/** What a meal is called on the list: its name, or "Private meal (N servings)" (VIS-06). */
+function mealLabel(t: TFunction, entry: ListMealEntry): string {
+  return !entry.private && entry.name !== null
+    ? entry.name
+    : t('lists.meals.privateServings', { count: entry.servings });
+}
+
 interface MealEntryProps {
   entry: ListMealEntry;
   editable: boolean;
@@ -140,7 +194,9 @@ interface MealEntryProps {
   offline: boolean;
   onServings: (servings: number) => void;
   onRemove: () => void;
-  /** The eaten checkbox of a done list (SHOP-07). */
+  /** "Doch einkaufen" of a leftover (LIST-17). */
+  onShop: () => void;
+  /** The eaten checkbox of a done list (SHOP-07) or of a leftover (LIST-17). */
   eatenBox?: { disabled: boolean; onChange: (eaten: boolean, settled: () => void) => void };
 }
 
@@ -149,12 +205,22 @@ interface MealEntryProps {
  * stepper, or the servings for those who can't change them. "Remove" shows on focus and hover and
  * is always there for screen readers.
  */
-function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }: MealEntryProps) {
+function MealEntry({
+  entry,
+  editable,
+  offline,
+  onServings,
+  onRemove,
+  onShop,
+  eatenBox,
+}: MealEntryProps) {
   const { t } = useTranslation();
   const visible = !entry.private && entry.name !== null;
   const name = visible ? (entry.name ?? '') : t('lists.meals.private');
-  const label = visible ? name : t('lists.meals.privateServings', { count: entry.servings });
+  const label = mealLabel(t, entry);
   const struck = eatenBox !== undefined && entry.eaten && 'text-muted-foreground line-through';
+  // A leftover's servings are what was bought (LIST-17).
+  const stepper = editable && !entry.leftover;
 
   return (
     <li data-testid={testIds.listMeal} aria-label={label}>
@@ -203,9 +269,15 @@ function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }:
             ) : (
               <span className={cn('min-w-0 font-medium break-words', struck)}>{label}</span>
             )}
+            {entry.leftover && <Badge variant="secondary">{t('lists.meals.leftover')}</Badge>}
             {entry.detached && <Badge variant="secondary">{t('lists.meals.detached')}</Badge>}
+            {entry.leftover && (
+              <span className="w-full text-sm text-muted-foreground">
+                {t('lists.meals.leftoverHint')}
+              </span>
+            )}
           </span>
-          {editable && (
+          {stepper && (
             // Visually hidden until the row has focus or the pointer is over it (D-40).
             <span className="sr-only group-focus-within:not-sr-only group-hover:not-sr-only">
               <Button
@@ -222,7 +294,7 @@ function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }:
               </Button>
             </span>
           )}
-          {editable ? (
+          {stepper ? (
             <ServingsStepper
               value={entry.servings}
               name={name}
@@ -235,6 +307,16 @@ function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }:
                 {t('lists.meals.servings', { count: entry.servings })}
               </span>
             )
+          )}
+          {editable && entry.leftover && (
+            <LeftoverMenu
+              label={label}
+              // Not once the meal is gone or can't be seen (VIS-06, LIST-15).
+              canShop={visible && entry.meal_id !== null}
+              offline={offline}
+              onShop={onShop}
+              onRemove={onRemove}
+            />
           )}
         </div>
       </SwipeRow>
@@ -271,5 +353,79 @@ function EatenBox({ label, eaten, disabled, onChange }: EatenBoxProps) {
         onChange(value, () => setTapped((current) => (current === value ? null : current)));
       }}
     />
+  );
+}
+
+interface LeftoverMenuProps {
+  label: string;
+  canShop: boolean;
+  /** Without a connection: the items are disabled, the button stays enabled (D-39). */
+  offline: boolean;
+  onShop: () => void;
+  onRemove: () => void;
+}
+
+/** A leftover's ⋮ menu (LIST-17): "Doch einkaufen" and, red and last, "Entfernen". */
+function LeftoverMenu({ label, canShop, offline, onShop, onRemove }: LeftoverMenuProps) {
+  const { t } = useTranslation();
+  const { trigger } = useMoreMenuFocus();
+
+  return (
+    <MoreMenu
+      trigger={trigger}
+      label={t('lists.meals.actions', { name: label })}
+      testId={testIds.leftoverMenu}
+      icon={<EllipsisVertical aria-hidden="true" />}
+      danger={
+        <MoreMenuItem
+          testId={testIds.removeLeftover}
+          icon={<Trash2 aria-hidden="true" />}
+          disabled={offline}
+          onSelect={onRemove}
+        >
+          {t('lists.meals.removeAction')}
+        </MoreMenuItem>
+      }
+    >
+      <MoreMenuItem
+        testId={testIds.shopLeftover}
+        icon={<ShoppingCart aria-hidden="true" />}
+        disabled={offline || !canShop}
+        onSelect={onShop}
+      >
+        {t('lists.meals.shopAfterAll')}
+      </MoreMenuItem>
+    </MoreMenu>
+  );
+}
+
+interface UndoToastProps {
+  text: string;
+  onUndo: () => void;
+  onDismiss: () => void;
+}
+
+/** "Chili gegessen · Rückgängig", above the tab bar until it is used, dismissed or times out. */
+function UndoToast({ text, onUndo, onDismiss }: UndoToastProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      role="status"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tab-bar-clearance)+0.5rem)] z-30 flex justify-center px-4"
+    >
+      <Card
+        data-testid={testIds.leftoverToast}
+        className="pointer-events-auto w-full max-w-xl flex-row items-center gap-2 py-2 pr-2 pl-4 shadow-lg"
+      >
+        <p className="min-w-0 flex-1 text-sm">{text}</p>
+        <Button variant="ghost" onClick={onUndo} className="text-primary">
+          {t('lists.meals.undo')}
+        </Button>
+        <Button variant="ghost" size="icon" aria-label={t('common.close')} onClick={onDismiss}>
+          <X aria-hidden="true" />
+        </Button>
+      </Card>
+    </div>
   );
 }

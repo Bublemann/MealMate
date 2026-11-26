@@ -264,7 +264,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   admin added since shows "neu" until it is moved. Offline the page's controls are disabled.
 - **⋯ menu** (D-39): a list, a meal and an item keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
-  buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `ItemMenu` pass
+  buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`), `ItemMenu` and a leftover
+  meal's row menu (⋮, `LeftoverMenu` in `ListMeals`, LIST-17, whose `label`, `testId` and `icon`
+  replace the button's name, test ID and icon) pass
   their items, each keeping its action's test ID, and the red `danger` item ("Löschen"), which
   the menu puts last after a separator. The ⋯ button ("Weitere Aktionen", `moreActions`) is always
   enabled; items that need a connection are disabled offline, not hidden (SYNC-03), and "Als
@@ -803,6 +805,10 @@ order.
 | `listMeals`             | `list-meals`              | Meals of the list with their servings            |
 | `listMeal`              | `list-meal`               | One meal on the list                             |
 | `removeListMeal`        | `remove-list-meal`        | "Remove" button of a meal on the list            |
+| `leftoverMenu`          | `leftover-menu`           | ⋮ button of a leftover meal (LIST-17)            |
+| `shopLeftover`          | `shop-leftover`           | "Doch einkaufen" in a leftover's ⋮ menu          |
+| `removeLeftover`        | `remove-leftover`         | "Entfernen" in a leftover's ⋮ menu               |
+| `leftoverToast`         | `leftover-toast`          | "Chili gegessen · Rückgängig" toast              |
 | `mealField`             | `meal-field`              | Meal field's input, top of "Meals"               |
 | `mealFieldPanel`        | `meal-field-panel`        | Meal field's panel: create option, meals         |
 | `mealFieldCreate`       | `meal-field-create`       | "“X” as a new meal" under the meal field         |

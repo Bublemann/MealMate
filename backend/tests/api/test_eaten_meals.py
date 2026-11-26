@@ -102,11 +102,12 @@ async def test_who_may_mark_meals_eaten(
     api: AsyncClient, anna: Account, ben: Account, carl: Account, meals: list[Any]
 ) -> None:
     await make_couple(api, anna, ben)
-    shared = await done_list(api, anna, meals)
+    # Made before the shared list is done, so it brings no leftovers (LIST-17).
     unshared = await create_list(api, anna, "Privat")
     await api.patch(
         f"/api/lists/{unshared['id']}", json={"shared_with_partner": False}, headers=anna.headers
     )
+    shared = await done_list(api, anna, meals)
     await added(api, anna, unshared["id"], meals[0]["id"])
     await start_shopping(api, anna, unshared["id"])
     unshared = await applied(api, anna, unshared["id"], op("list.finish"))
