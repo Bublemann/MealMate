@@ -28,7 +28,7 @@ export function SignedInGate({ children }: { children: ReactNode }) {
       </Alert>
       <Button
         variant="outline"
-        disabled={logout.isPending}
+        pending={logout.isPending}
         onClick={() => logout.mutate()}
         className="self-start"
       >

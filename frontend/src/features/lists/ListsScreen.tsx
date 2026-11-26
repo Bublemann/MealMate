@@ -120,7 +120,8 @@ function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
         newTile={{
           label: t('lists.new'),
           onClick: newList,
-          disabled: !connected || create.isPending,
+          disabled: !connected,
+          pending: create.isPending,
           testId: testIds.newList,
         }}
       />
@@ -212,8 +213,7 @@ interface FeedEndProps {
  * still in view.
  */
 function FeedEnd({ onReached, paused, loading }: FeedEndProps) {
-  const { t } = useTranslation();
-  const end = useRef<HTMLParagraphElement>(null);
+  const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const target = end.current;
@@ -228,11 +228,7 @@ function FeedEnd({ onReached, paused, loading }: FeedEndProps) {
     return () => observer.disconnect();
   }, [onReached, paused]);
 
-  return (
-    <p ref={end} role="status" className="text-muted-foreground">
-      {loading ? t('common.loading') : null}
-    </p>
-  );
+  return <div ref={end}>{loading && <LoadingState />}</div>;
 }
 
 /**

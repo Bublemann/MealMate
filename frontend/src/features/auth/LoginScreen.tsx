@@ -83,7 +83,7 @@ export function LoginScreen() {
           )}
         </FormField>
         <ErrorAlert error={login.error} />
-        <Button type="submit" disabled={login.isPending}>
+        <Button type="submit" pending={login.isPending}>
           {login.isPending ? t('auth.login.submitting') : t('auth.login.submit')}
         </Button>
       </form>

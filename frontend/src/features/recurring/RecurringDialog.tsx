@@ -181,7 +181,8 @@ function EditForm({
             variant="ghost"
             data-testid={testIds.recurringRemove}
             className="text-destructive hover:text-destructive"
-            disabled={!connected || update.isPending || remove.isPending}
+            pending={remove.isPending}
+            disabled={!connected || update.isPending}
             onClick={() => setConfirming(true)}
           >
             {t('recurring.dialog.remove')}
@@ -314,7 +315,7 @@ function RecurringForm({
       </FormField>
       {error !== null && needsErrorAlert(fields, SHOWN_FIELDS) && <ErrorAlert error={error} />}
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pending || !connected}>
+        <Button type="submit" pending={pending} disabled={!connected}>
           {submitLabel}
         </Button>
         {extra}

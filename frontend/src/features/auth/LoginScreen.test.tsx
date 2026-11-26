@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   errorResponse,
+  heldRoute,
   loginResponse,
   mockApi,
   NO_COUPLE,
@@ -25,10 +26,13 @@ describe('route guard', () => {
   });
 
   it('shows the app after a successful start-up refresh', async () => {
-    mockApi({ 'POST /api/auth/refresh': loginResponse() });
+    const refresh = heldRoute();
+    mockApi({ 'POST /api/auth/refresh': refresh.route });
     renderApp('/lists', { user: null });
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+    // A start-up that takes a moment shows the spinner (UI-08).
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Loading…'));
+    await refresh.answer(loginResponse());
     expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();
   });
 

@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { isApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
+import { LoadingState } from '@/components/LoadingState';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -171,8 +172,9 @@ export function OffSearchDialog({
           </Button>
         </form>
         <div aria-live="polite" className="flex flex-col gap-3">
-          {search.isPending && (
-            <p className="text-muted-foreground">{t('items.offSearch.searching')}</p>
+          {/* A further page shows its spinner in "Weitere Ergebnisse". */}
+          {search.isPending && search.variables.page === 1 && (
+            <LoadingState label={t('items.offSearch.searching')} />
           )}
           {nothingFound && !search.isPending && (
             <p data-testid={testIds.offSearchEmpty}>{t('items.offSearch.empty')}</p>
@@ -222,7 +224,7 @@ export function OffSearchDialog({
             variant="outline"
             className="self-start"
             data-testid={testIds.offSearchMore}
-            disabled={search.isPending}
+            pending={search.isPending}
             onClick={() => run(shown.query, shown.page + 1)}
           >
             {t('items.offSearch.more')}

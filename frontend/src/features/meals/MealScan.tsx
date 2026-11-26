@@ -3,6 +3,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fieldErrorCodes } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import { toSummary, type ItemSummary } from '@/features/items/api';
 import { ItemFormDialog } from '@/features/items/ItemFormDialog';
@@ -70,7 +71,10 @@ export function MealScan({ onItem }: MealScanProps) {
       {/* Without a message the live region stays for screen readers but takes no room. */}
       <div aria-live="polite" className="mt-3 text-sm empty:mt-0">
         {lookup.isPending && (
-          <p className="text-muted-foreground">{t('scanner.lookingUp', { barcode })}</p>
+          <LoadingState
+            label={t('scanner.lookingUp', { barcode })}
+            className="justify-start py-0"
+          />
         )}
         {invalid && (
           <p className="flex items-start gap-1.5 font-medium text-destructive">

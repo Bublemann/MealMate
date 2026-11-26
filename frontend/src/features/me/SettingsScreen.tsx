@@ -5,9 +5,11 @@ import { Link } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Screen } from '@/components/Screen';
+import { Spinner } from '@/components/ui/spinner';
 import { useLogout } from '@/features/auth/api';
 import { useCurrentUser } from '@/features/auth/context';
 import { useSyncEngine, useSyncStatus } from '@/features/sync/context';
+import { useDelayed } from '@/lib/useDelayed';
 import { testIds } from '@/testIds';
 import { useMeRefresh } from './api';
 import { SETTINGS_PANEL, SETTINGS_ROW_FOCUS } from './settingsPanel';
@@ -98,6 +100,7 @@ function RowLink({ row: { label, to, value: Value } }: { row: SettingsRow }) {
 function LogoutRow() {
   const { t } = useTranslation();
   const logout = useLogout();
+  const loggingOut = useDelayed(logout.isPending);
   const engine = useSyncEngine();
   const { pending } = useSyncStatus();
   const [confirming, setConfirming] = useState(false);
@@ -114,9 +117,11 @@ function LogoutRow() {
           type="button"
           data-testid={testIds.logoutButton}
           disabled={logout.isPending}
+          aria-busy={logout.isPending || undefined}
           onClick={() => void onLogout()}
-          className={`min-h-(--tap-target) px-4 py-3 text-center font-medium text-destructive disabled:opacity-50 ${SETTINGS_ROW_FOCUS}`}
+          className={`inline-flex min-h-(--tap-target) items-center justify-center gap-2 px-4 py-3 text-center font-medium text-destructive disabled:opacity-50 ${SETTINGS_ROW_FOCUS}`}
         >
+          {loggingOut && <Spinner size="small" />}
           {t('me.logout')}
         </button>
       </div>

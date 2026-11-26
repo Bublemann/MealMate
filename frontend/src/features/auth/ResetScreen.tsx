@@ -97,7 +97,7 @@ function ResetForm({
         )}
       </FormField>
       {!fields.password && <ErrorAlert error={reset.error} />}
-      <Button type="submit" disabled={reset.isPending || status === 'loading'}>
+      <Button type="submit" pending={reset.isPending} disabled={status === 'loading'}>
         {t('auth.reset.submit')}
       </Button>
     </form>

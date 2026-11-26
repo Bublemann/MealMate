@@ -3,6 +3,8 @@ import { useId, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
+import { useDelayed } from '@/lib/useDelayed';
 import { testIds, type TestId } from '@/testIds';
 import { useScreenHeading } from './screenHeading';
 
@@ -21,6 +23,8 @@ interface NewTileProps {
   onClick: () => void;
   /** E.g. "Neue Liste" offline: creating it needs the server (UI-02). */
   disabled?: boolean;
+  /** Creating runs ("Neue Liste"): the tile ignores presses, its spinner replaces the ＋ (UI-08). */
+  pending?: boolean;
   testId: TestId;
 }
 
@@ -105,15 +109,22 @@ function SearchField({ label, placeholder, value, onChange, testId }: SearchFiel
  * closer than the button text's usual 1.5, with the difference in the padding, so a one-line tile
  * keeps its height and a long name takes less of the screen (UI-01).
  */
-function NewTile({ label, onClick, disabled = false, testId }: NewTileProps) {
+function NewTile({ label, onClick, disabled = false, pending = false, testId }: NewTileProps) {
+  const spinning = useDelayed(pending);
+
   return (
     <Button
       data-testid={testId}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || pending}
+      aria-busy={pending || undefined}
       className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em]"
     >
-      <Plus aria-hidden="true" className="size-[1.25em]" />
+      {spinning ? (
+        <Spinner className="size-[1.25em] text-current" />
+      ) : (
+        <Plus aria-hidden="true" className="size-[1.25em]" />
+      )}
       <span className="min-w-0 leading-[1.25] wrap-anywhere">{label}</span>
     </Button>
   );

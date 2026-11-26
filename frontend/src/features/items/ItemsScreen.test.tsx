@@ -1154,6 +1154,8 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
       const dialog = await openNew(user);
       await scanInForm(user, dialog, BARCODE);
       const notice = () => within(dialog).getByTestId(testIds.itemScanNotice);
+      // The spinner and its text show once the lookup takes longer than 300 ms (UI-08).
+      await act(() => vi.advanceTimersByTimeAsync(300));
       expect(notice()).toHaveTextContent(`Looking up ${BARCODE}…`);
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));

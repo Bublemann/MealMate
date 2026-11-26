@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import { ItemName } from '@/features/items/ItemName';
 import { itemLabel } from '@/features/items/label';
@@ -59,7 +60,7 @@ export function RecurringScreen() {
         disabled={!connected || !items.data}
         inputRef={fieldRef}
       />
-      {items.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {items.isPending && <LoadingState />}
       <LoadError error={items.error} />
       {items.data && items.data.items.length > 0 && (
         <ItemList
@@ -144,6 +145,7 @@ function NoticeList({ notices }: { notices: readonly Notice[] }) {
                 size="icon"
                 data-testid={testIds.dismissNotice}
                 aria-label={t('recurring.dismissNotice', { name })}
+                pending={dismiss.isPending && dismiss.variables === notice.id}
                 disabled={dismiss.isPending}
                 onClick={() => dismiss.mutate(notice.id)}
                 className="text-muted-foreground"

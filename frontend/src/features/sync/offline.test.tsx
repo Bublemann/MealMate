@@ -194,7 +194,7 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' }),
     ).toBeVisible();
-    expect(screen.getByText('Loading…')).toBeVisible();
+    expect(await screen.findByText('Loading…')).toBeVisible();
     await categories.answer(CATEGORIES);
     const lines = await screen.findByTestId(testIds.listLines);
     expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');

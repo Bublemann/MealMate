@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { InitialMarker } from '@/components/InitialMarker';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -234,7 +235,7 @@ function BrowseResults({ recent, all, error, pending, onChoose }: BrowseResultsP
         <MealSection title={t('lists.mealField.recent')} meals={recent} onChoose={onChoose} />
       )}
       <ErrorAlert error={error} />
-      {pending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {pending && <LoadingState />}
       {none && <p className="text-muted-foreground">{t('lists.mealField.none')}</p>}
       {rest && rest.length > 0 && (
         <MealSection title={t('lists.mealField.all')} meals={rest} onChoose={onChoose} />

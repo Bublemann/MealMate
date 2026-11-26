@@ -312,6 +312,7 @@ function SourcesDialog({
                         variant="outline"
                         size="compact"
                         aria-label={t('lists.item.removeLabel', { name: lineLabel(line) })}
+                        pending={removeItem.isPending && removeItem.variables === source.extra_id}
                         disabled={removeItem.isPending || offline}
                         onClick={() => source.extra_id && removeItem.mutate(source.extra_id)}
                       >

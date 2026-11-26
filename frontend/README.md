@@ -157,7 +157,7 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   it. It holds the tab's headline (D-44, handed over by its `<Screen variant="pinned">`), the
   search field (its label only for screen readers), the filter button and the green, row-shaped
   "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is present and opens the new
-  form with that name. A tab renders it at once and puts its state below it: `LoadingState` until
+  form with that name. A tab renders it at once and puts its state below it: `LoadingState` (UI-08) until
   the first answer, then the content, `EmptyLine` ("Noch keine Artikel") on an empty tab, or
   `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which clears the search and the
   filters) when they hide everything. Like the tab bar, the block must
@@ -364,6 +364,15 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `src/app/queryClient.ts`), also when the browser reports being offline, so a screen shows "can't
   reach MealMate" instead of waiting, and a change fails at once and is undone on screen. The
   shopping actions don't fail offline: they go through the outbox (see "Offline and sync").
+- **Loading** (UI-08): whatever waits for data shows `LoadingState` (`components/LoadingState.tsx`)
+  in its place: the shared `Spinner` (`ui/spinner.tsx`), centred, in a `role="status"` region
+  that reads "Wird geladen …" (visually hidden) or the `label` it is given, shown next to it
+  ("Suche bei Open Food Facts …"). Both appear only after `LOADING_DELAY_MS` (300 ms,
+  `lib/useDelayed.ts`), so a quick load shows nothing. Never write a loading text of your own. A
+  button whose save or other change runs gets `pending` (`ui/button.tsx`): it is disabled and
+  `aria-busy` at once and shows the small spinner before its label after the same delay (an icon
+  button shows it instead of its icon). When one mutation serves several buttons, only the one
+  that was pressed is `pending` (compare the mutation's `variables`); the others are `disabled`.
 - **Load errors of a screen** go through `LoadError`: no answer at all (offline, lie-fi timeout)
   shows the friendly "You're offline. This page needs a connection." (SYNC-09), anything else the
   translated error.
@@ -813,7 +822,8 @@ order.
 | `syncStatus`            | `sync-status`             | Sync indicator ("Saved", "Offline – …")          |
 | `offlineBanner`         | `offline-banner`          | Offline banner on a list view                    |
 | `offlineNotice`         | `offline-notice`          | "This page needs a connection" message           |
-| `loadingState`          | `loading-state`           | Placeholder while a tab's first load runs        |
+| `loadingState`          | `loading-state`           | Spinner placeholder while something loads        |
+| `spinner`               | `spinner`                 | The spinner itself (also inside a button)        |
 | `waitingBanner`         | `waiting-banner`          | "Waiting for more than an hour" banner           |
 | `noStorageBanner`       | `no-storage-banner`       | "Can't store anything on this device" note       |
 | `syncToast`             | `sync-toast`              | Message about changes that weren't saved         |

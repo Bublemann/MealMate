@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FloatingBar, FloatingBarButton } from '@/components/FloatingBar';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Screen } from '@/components/Screen';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
@@ -119,9 +120,7 @@ function ListView({ id }: { id: string }) {
           </AlertDescription>
         </Alert>
       )}
-      {(list.isPending || categories.isPending) && (
-        <p className="text-muted-foreground">{t('common.loading')}</p>
-      )}
+      {(list.isPending || categories.isPending) && <LoadingState />}
       <LoadError error={loadError ?? categories.error} />
       {shown && categories.data && (
         <ListContent
@@ -195,7 +194,8 @@ function ListContent({ list, categories, showMeals, onRefresh }: ListContentProp
           <ErrorAlert error={start.error} />
           <FloatingBarButton
             data-testid={testIds.startShopping}
-            disabled={start.isPending || !connected}
+            pending={start.isPending}
+            disabled={!connected}
             onClick={() => start.mutate()}
           >
             <ShoppingCart aria-hidden="true" />

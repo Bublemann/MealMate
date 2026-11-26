@@ -209,7 +209,7 @@ export function ItemMenu({ item, onError }: ItemMenuProps) {
               )}
               <AlertDialogFooter>
                 <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                <Button variant="destructive" disabled={merge.isPending} onClick={onMerge}>
+                <Button variant="destructive" pending={merge.isPending} onClick={onMerge}>
                   {mismatch ? t('items.admin.mergeAnyway') : t('items.admin.mergeConfirm')}
                 </Button>
               </AlertDialogFooter>
