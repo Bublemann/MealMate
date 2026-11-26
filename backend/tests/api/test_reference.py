@@ -95,7 +95,7 @@ async def test_categories_have_a_name_per_language(api: AsyncClient, anna: Accou
 async def test_categories_count_their_ingredients(
     api: AsyncClient, anna: Account, admin: Account
 ) -> None:
-    """Each category says how many ingredients it holds, so that the Ingredients tab offers
+    """Each category says how many ingredients it holds, so that the Items tab offers
     *Uncategorized* only while it holds some (ING-03). The answers of a new order and a rename
     count them too."""
     categories = await category_ids(api, anna)

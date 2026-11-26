@@ -24,7 +24,7 @@ interface RecurringItemFieldProps {
   /** The typed text, kept by the page so it can empty the field once an item is added. */
   value: string;
   onValueChange: (value: string) => void;
-  /** A picked item, also one just created through "Neue Zutat". */
+  /** A picked item, also one just created through "Neuer Artikel". */
   onPick: (item: ItemSummary) => void;
   disabled: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
@@ -36,7 +36,7 @@ interface RecurringItemFieldProps {
  * (ING-04) first in the list so late results never move it. There is no free text: only
  * items can be recognised on later lists. ＋ or Enter (`usePlus`, which waits for the
  * results of the typed text) takes the one item the server marked `exact`, whatever its
- * brand; with several it leaves the choice to the results, and with none it opens "Neue Zutat".
+ * brand; with several it leaves the choice to the results, and with none it opens "Neuer Artikel".
  * When the search failed it does nothing; the error shows below the field.
  */
 export function RecurringItemField({
