@@ -42,7 +42,7 @@ function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 
   });
   return {
     fetchMock,
-    ...renderApp(`/ingredients/${id}`, admin ? { user: TEST_ADMIN } : {}),
+    ...renderApp(`/items/${id}`, admin ? { user: TEST_ADMIN } : {}),
   };
 }
 
@@ -79,10 +79,7 @@ describe('ItemDetailScreen', () => {
     expect(screenEl).toHaveTextContent('Created by Deleted user on 20/09/2026');
     expect(screenEl).toHaveTextContent('Last changed by Anna on 26/09/2026');
     expect(within(screenEl).queryByTestId(testIds.offAttribution)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'All ingredients' })).toHaveAttribute(
-      'href',
-      '/ingredients',
-    );
+    expect(screen.getByRole('link', { name: 'All items' })).toHaveAttribute('href', '/items');
   });
 
   it('shows brand, barcode, package and Open Food Facts as the source (BAR-09)', async () => {
@@ -227,7 +224,7 @@ describe('ItemDetailScreen', () => {
       );
 
       expect(await within(hint).findByRole('alert')).toHaveTextContent(
-        'There are no newer values for this ingredient (any more).',
+        'There are no newer values for this item (any more).',
       );
       expect(requestsTo(fetchMock, `POST ${MILK_PATH}/pending-update/ignore`)).toHaveLength(1);
     });
@@ -498,7 +495,7 @@ describe('ItemDetailScreen', () => {
     expect(barcode).not.toHaveAccessibleDescription();
     await user.clear(barcode);
     expect(barcode).toHaveAccessibleDescription(
-      'With the barcode changed, this ingredient no longer gets updates from Open Food Facts.',
+      'With the barcode changed, this item no longer gets updates from Open Food Facts.',
     );
     await user.type(barcode, ' 4006381 333931');
     // The same barcode again, in another spelling: no warning.
@@ -556,9 +553,7 @@ describe('ItemDetailScreen', () => {
     expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
     await user.click(within(notice).getByRole('link', { name: 'open' }));
 
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/ingredients/${WEIDEHOF_MILK.id}`),
-    );
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/items/${WEIDEHOF_MILK.id}`));
     expect(dialog).not.toBeInTheDocument();
     expect(requestsTo(fetchMock, 'PATCH /api/items/ing-aepfel')).toHaveLength(0);
   });
@@ -625,7 +620,7 @@ describe('ItemDetailScreen', () => {
 
     await waitFor(() =>
       expect(within(dialog).getByLabelText('Barcode')).toHaveAccessibleDescription(
-        /^Another ingredient already has this barcode/,
+        /^Another item already has this barcode/,
       ),
     );
   });
@@ -691,7 +686,7 @@ describe('ItemMenu (D-39)', () => {
     await chooseFromMenu(user, testIds.mergeItem);
     const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
     const picker = within(dialog).getByTestId(testIds.itemPicker);
-    await user.type(within(picker).getByLabelText('Ingredient that stays'), 'Apf');
+    await user.type(within(picker).getByLabelText('Item that stays'), 'Apf');
     const option = await within(picker).findByRole('button', { name: /^Apfel/ });
     // The ingredient itself can't be picked, and nothing is created here.
     expect(within(picker).queryByRole('button', { name: /^Äpfel/ })).not.toBeInTheDocument();
@@ -702,7 +697,7 @@ describe('ItemMenu (D-39)', () => {
     expect(confirm).toHaveTextContent('All uses of Äpfel in meals and lists move to Apfel');
     await user.click(within(confirm).getByRole('button', { name: 'Merge' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${apfel.id}`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/items/${apfel.id}`));
     await expect(
       requestsTo(fetchMock, 'POST /api/admin/items/ing-aepfel/merge')[0]?.json(),
     ).resolves.toEqual({ into_id: apfel.id });
@@ -726,7 +721,7 @@ describe('ItemMenu (D-39)', () => {
 
     await chooseFromMenu(user, testIds.mergeItem);
     const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
-    await user.type(within(dialog).getByLabelText('Ingredient that stays'), 'Eie');
+    await user.type(within(dialog).getByLabelText('Item that stays'), 'Eie');
     await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
     const confirm = await screen.findByRole('alertdialog', { name: 'Merge Äpfel into Eier?' });
     expect(within(confirm).queryByTestId(testIds.mergeUnitMismatch)).not.toBeInTheDocument();
@@ -736,14 +731,14 @@ describe('ItemMenu (D-39)', () => {
     const count = await within(confirm).findByTestId(testIds.mergeUnitMismatch);
     expect(count).toHaveTextContent("4 amounts won't fit Eier afterwards.");
     expect(count).toHaveAttribute('role', 'alert');
-    expect(router.state.location.pathname).toBe('/ingredients/ing-aepfel');
+    expect(router.state.location.pathname).toBe('/items/ing-aepfel');
     await user.click(within(confirm).getByRole('button', { name: 'Merge anyway' }));
 
     // While it merges, the count stays and the button waits.
     expect(within(confirm).getByTestId(testIds.mergeUnitMismatch)).toBeVisible();
     expect(within(confirm).getByRole('button', { name: 'Merge anyway' })).toBeDisabled();
     await accepted.answer({ ...APPLES, id: eggs.id, name: 'Eier', base_unit: 'piece' });
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${eggs.id}`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/items/${eggs.id}`));
     const bodies = await Promise.all(
       requestsTo(fetchMock, path).map((request) => request.json() as Promise<unknown>),
     );
@@ -771,7 +766,7 @@ describe('ItemMenu (D-39)', () => {
 
     await chooseFromMenu(user, testIds.mergeItem);
     const dialog = await screen.findByRole('dialog', { name: 'Äpfel zusammenführen mit …' });
-    await user.type(within(dialog).getByLabelText('Zutat, die bleibt'), 'Eie');
+    await user.type(within(dialog).getByLabelText('Artikel, der bleibt'), 'Eie');
     await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
     const confirm = await screen.findByRole('alertdialog', {
       name: 'Äpfel mit Eier zusammenführen?',
@@ -802,7 +797,7 @@ describe('ItemMenu (D-39)', () => {
     // In an alert below the title.
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
-      'This ingredient is still in use (meals: 1, lists: 3). Merge it into another ingredient instead.',
+      'This item is still in use (meals: 1, lists: 3). Merge it into another item instead.',
     );
     const heading = screen.getByRole('heading', { level: 1, name: 'Äpfel' });
     expect(heading.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -819,7 +814,7 @@ describe('ItemMenu (D-39)', () => {
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
     );
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items'));
   });
 });
 
@@ -917,7 +912,7 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
     );
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items'));
     await waitFor(() =>
       expect(screen.getByTestId(testIds.tabMe)).toHaveAccessibleName('Settings, 1 new'),
     );

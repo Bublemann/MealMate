@@ -66,7 +66,7 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
         </ol>
       )}
       {/* Enter in the search field picks nothing and must not save the whole meal. Dialogs
-          opened from the picker and the scan (the ingredient form, the Open Food Facts search,
+          opened from the picker and the scan (the item form, the Open Food Facts search,
           the scanner) are portals: their key events bubble through here in React, but their
           Enter must still submit. */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}

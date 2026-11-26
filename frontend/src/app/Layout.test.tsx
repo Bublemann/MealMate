@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
 import { mockApi, TEST_USER } from '@/test/api';
@@ -23,9 +23,9 @@ const TABS = [
   {
     tab: testIds.tabItems,
     screen: testIds.screenItems,
-    path: '/ingredients',
-    title: 'Ingredients',
-    de: 'Zutaten',
+    path: '/items',
+    title: 'Items',
+    de: 'Artikel',
   },
   {
     tab: testIds.tabMe,
@@ -110,6 +110,23 @@ describe('Layout', () => {
 
     expect(await screen.findByTestId(testIds.screenLists)).toBeVisible();
     expect(router.state.location.pathname).toBe('/lists');
+  });
+
+  it('sends old ingredient links, with any sub-path and query, to the same place under /items', async () => {
+    mockApi();
+    const { router } = renderApp('/ingredients/ing-milch?from=bookmark#top');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/ing-milch'));
+    expect(router.state.location.search).toBe('?from=bookmark');
+    expect(router.state.location.hash).toBe('#top');
+  });
+
+  it('sends the old ingredients tab to the Items tab', async () => {
+    mockApi();
+    const { router } = renderApp('/ingredients');
+
+    expect(await screen.findByTestId(testIds.screenItems)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/items');
   });
 
   it('shows an empty /lists with its "New list" tile', async () => {

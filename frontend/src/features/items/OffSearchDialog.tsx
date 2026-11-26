@@ -280,7 +280,7 @@ function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntry
   if (existing && linkExisting) {
     return (
       <Link
-        to={`/ingredients/${existing.id}`}
+        to={`/items/${existing.id}`}
         data-testid={testIds.offSearchResult}
         onClick={onNavigate}
         className={ENTRY_CLASS}

@@ -1,4 +1,4 @@
-"""Test setup through the app's own API: accounts, couples, ingredients, meals, lists (plan § 9).
+"""Test setup through the app's own API: accounts, couples, items, meals, lists (plan § 9).
 
 The journeys drive the UI; everything they merely need to exist (an admin, invited users, a couple)
 is created here over HTTP, which is faster and keeps each test about one thing.
@@ -199,8 +199,8 @@ class Api:
         return [c for c in self.ordered_categories(account) if c["key"] != "uncategorized"]
 
     def filterable_categories(self, account: Account) -> list[dict[str, Any]]:
-        """The categories the Ingredients tab's filter panel offers, in walking order: those
-        pickers offer, and *Uncategorized* while it holds ingredients (ING-03)."""
+        """The categories the Items tab's filter panel offers, in walking order: those
+        pickers offer, and *Uncategorized* while it holds items (ING-03)."""
         return [
             c
             for c in self.ordered_categories(account)
@@ -242,7 +242,7 @@ class Api:
     ) -> dict[str, Any]:
         """POST /api/items in the category `category_key` (or `category_id`, for one an
         admin added), e.g. with `brand="REWE"`, `barcode=new_barcode()` or
-        `nutrients={"kcal": 52}`; the created Ingredient."""
+        `nutrients={"kcal": 52}`; the created Item."""
         token = self.token(account)
         if category_id is None:
             categories = self.call("GET", "/api/categories", token=token)

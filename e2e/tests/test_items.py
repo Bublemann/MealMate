@@ -1,8 +1,8 @@
-"""Ingredients: create with brand and barcode, search, similar hint, own values, admin categories
+"""Items: create with brand and barcode, search, similar hint, own values, admin categories
 (order seen on a shopping list, adding, renaming, deleting and finding the uncategorized
-ingredients), merge.
+items), merge.
 
-ING-01..05, NUT-02, REF-01 (plan § 12, M3; one kind of ingredient since 2026-09-28). All tests of
+ING-01..05, NUT-02, REF-01 (plan § 12, M3; one kind of item since 2026-09-28). All tests of
 a run share one database, so names get a unique tag; the tag is the same in both spellings of a
 name, so they stay similar (ING-03).
 """
@@ -22,14 +22,14 @@ IPHONE_SE_SCREEN: ViewportSize = {"width": 375, "height": 667}
 
 
 def nutrient_row(page: Page, key: str) -> Locator:
-    """The row of nutrient `key` in the nutrition table of the open ingredient."""
+    """The row of nutrient `key` in the nutrition table of the open item."""
     table = page.get_by_test_id(TEST_IDS["itemNutrition"])
     return table.get_by_role("row").filter(
         has=page.get_by_role("rowheader", name=text(f"nutrient.{key}"), exact=True)
     )
 
 
-def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Account) -> None:
+def test_member_builds_up_an_item(member_page: Page, api: Api, member: Account) -> None:
     """Create with brand and barcode, find by brand and by another spelling, similar hint, a
     second brand of the same thing, own nutrition values (ING-01..03, NUT-02)."""
     page = member_page
@@ -38,9 +38,9 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     brand = f"Hofgut {tag}"
     barcode = new_barcode()
 
-    page.goto("/ingredients")
+    page.goto("/items")
     expect(page.get_by_test_id(TEST_IDS["screenItems"])).to_be_visible()
-    # The "New ingredient" tile, also while there are no ingredients yet (UI-03).
+    # The "New item" tile, also while there are no items yet (UI-03).
     page.get_by_test_id(TEST_IDS["newItem"]).click()
     dialog = page.get_by_role("dialog", name=text("items.form.createTitle"))
     form = dialog.get_by_test_id(TEST_IDS["itemForm"])
@@ -58,8 +58,8 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
         "button", name=text("common.save")
     ).click()
 
-    # The new ingredient opens, named with its brand.
-    expect(page).to_have_url(re.compile(r"/ingredients/[\w-]+$"))
+    # The new item opens, named with its brand.
+    expect(page).to_have_url(re.compile(r"/items/[\w-]+$"))
     detail = page.get_by_test_id(TEST_IDS["screenItem"])
     label = item_label(name, brand)
     expect(detail.get_by_role("heading", level=1)).to_have_text(label)
@@ -67,7 +67,7 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     expect(detail).to_contain_text(barcode)
     expect(detail).to_contain_text(text("items.detail.source.manual"))
     expect(nutrient_row(page, "kcal")).to_contain_text("52 kcal")
-    ingredient_url = page.url
+    item_url = page.url
 
     # Search covers the brand, and ignores umlaut spellings (ING-03).
     page.get_by_test_id(TEST_IDS["tabItems"]).click()
@@ -89,7 +89,7 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
     expect(name_field).to_have_value(f"aepfel {tag}")
 
     # Creating "Apfel …" points to the existing "Äpfel …", a hint only: another brand of the
-    # same thing is another ingredient, with the same name.
+    # same thing is another item, with the same name.
     name_field.fill(f"Apfel {tag}")
     hint = dialog.get_by_test_id(TEST_IDS["itemSimilar"])
     expect(hint).to_contain_text(text("items.similar.title"))
@@ -109,8 +109,9 @@ def test_member_builds_up_an_ingredient(member_page: Page, api: Api, member: Acc
         )
     ).to_have_count(2)
 
-    # Its own values, changed by anyone (ING-01, NUT-02).
-    page.goto(ingredient_url)
+    # Its own values, changed by anyone (ING-01, NUT-02). An old link to it still opens it.
+    page.goto(item_url.replace("/items/", "/ingredients/"))
+    expect(page).to_have_url(item_url)
     choose_from_menu(page, "editItem")
     dialog = page.get_by_role("dialog", name=text("items.form.editTitle", name=label))
     dialog.get_by_label(text("nutrient.kcal"), exact=True).fill("60")
@@ -135,7 +136,7 @@ def test_pinned_block_fits_the_largest_text_size(
     page = member_page
     if screen is not None:
         page.set_viewport_size(screen)
-    page.goto("/ingredients")
+    page.goto("/items")
     # How many lines the tile takes depends on the font. The browsers' default one differs by
     # platform (wider on Linux than on a Mac), so the text is set in Arial, as wide as the
     # iPhone's system font here (Liberation Sans has its metrics on Linux).
@@ -180,8 +181,8 @@ def test_pinned_block_fits_the_largest_text_size(
 
 def test_member_filters_by_categories(member_page: Page, api: Api, member: Account) -> None:
     """UI-01, UI-03, ING-03, D-23: the filter panel lists every category that can be picked,
-    and *Uncategorized* while it holds ingredients; ticked ones apply at once and show the
-    ingredients of any of them; the button counts the group; "Reset" and "Reset filters" clear
+    and *Uncategorized* while it holds items; ticked ones apply at once and show the
+    items of any of them; the button counts the group; "Reset" and "Reset filters" clear
     them; the choice stays while the app is open."""
     page = member_page
     tag = unique("e2e")
@@ -195,7 +196,7 @@ def test_member_filters_by_categories(member_page: Page, api: Api, member: Accou
     dairy = api.category_name(member, "dairy_eggs")
     sauces = api.category_name(member, "sauces_spices_oils")
 
-    page.goto("/ingredients")
+    page.goto("/items")
     page.get_by_test_id(TEST_IDS["itemSearch"]).fill(tag)
     rows = page.get_by_test_id(TEST_IDS["itemList"]).get_by_test_id(TEST_IDS["itemRow"])
     expect(rows).to_have_count(3)
@@ -233,7 +234,7 @@ def test_member_filters_by_categories(member_page: Page, api: Api, member: Accou
     expect(button).to_have_accessible_name(text("filter.buttonActive_one", count="1"))
     expect(rows).to_contain_text([f"Senf {tag}"])
 
-    # Kept while the app is open: open the ingredient and come back.
+    # Kept while the app is open: open the item and come back.
     rows.first.click()
     expect(page.get_by_test_id(TEST_IDS["screenItem"])).to_be_visible()
     page.get_by_test_id(TEST_IDS["tabItems"]).click()
@@ -256,7 +257,7 @@ def test_filter_panel_fits_the_largest_text_size(
     panel's groups, "Reset" and "Done" wrap instead of being clipped or widening the page, and
     the panel scrolls; its buttons stay in view."""
     page = member_page
-    page.goto("/ingredients")
+    page.goto("/items")
     page.add_style_tag(content="html { font-size: 53px !important; }")
     button = page.get_by_test_id(TEST_IDS["filterButton"])
     search = page.get_by_test_id(TEST_IDS["itemSearch"])
@@ -298,7 +299,7 @@ def test_filter_panel_fits_the_largest_text_size(
 def test_filter_panel_does_not_slide_under_reduce_motion(member_page: Page) -> None:
     """UI-01, A11Y-02: the panel slides up, but not under Reduce Motion."""
     page = member_page
-    page.goto("/ingredients")
+    page.goto("/items")
     button = page.get_by_test_id(TEST_IDS["filterButton"])
     panel = page.get_by_test_id(TEST_IDS["filterPanel"])
 
@@ -316,16 +317,16 @@ def test_filter_panel_does_not_slide_under_reduce_motion(member_page: Page) -> N
 
 def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> None:
     """REF-01, ADM-01: each arrow tap saves the order, and a shopping list's lines follow it; a
-    new category goes last, is renamed from its name and is offered in the ingredient form at
+    new category goes last, is renamed from its name and is offered in the item form at
     once."""
     original = [category["id"] for category in api.ordered_categories(admin)]
     first, second = api.ordered_categories(admin)[:2]
     tag = unique("e2e")
-    ingredient_a = api.create_item(admin, f"Order A {tag}", category_key=first["key"])
-    ingredient_b = api.create_item(admin, f"Order B {tag}", category_key=second["key"])
+    item_a = api.create_item(admin, f"Order A {tag}", category_key=first["key"])
+    item_b = api.create_item(admin, f"Order B {tag}", category_key=second["key"])
     draft = api.create_list(admin, f"Order {tag}")
-    for ingredient in (ingredient_a, ingredient_b):
-        api.add_extra_item(admin, draft["id"], item_id=ingredient["id"], amount=100, unit="g")
+    for item in (item_a, item_b):
+        api.add_extra_item(admin, draft["id"], item_id=item["id"], amount=100, unit="g")
     first_name, second_name = first["names"]["en"], second["names"]["en"]
     added, renamed = f"Counter {tag}", f"Cheese counter {tag}"
 
@@ -361,10 +362,10 @@ def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> Non
 
         page.goto(f"/lists/{draft['id']}")
         lines = page.get_by_test_id(TEST_IDS["listLines"]).get_by_test_id(TEST_IDS["listLine"])
-        expect(lines).to_contain_text([ingredient_b["name"], ingredient_a["name"]])
+        expect(lines).to_contain_text([item_b["name"], item_a["name"]])
 
-        # The new category is the last choice in the ingredient form, and takes an ingredient.
-        page.goto("/ingredients")
+        # The new category is the last choice in the item form, and takes an item.
+        page.goto("/items")
         page.get_by_test_id(TEST_IDS["newItem"]).click()
         form = page.get_by_role("dialog", name=text("items.form.createTitle")).get_by_test_id(
             TEST_IDS["itemForm"]
@@ -382,9 +383,9 @@ def test_admin_maintains_categories(page: Page, api: Api, admin: Account) -> Non
 
 
 def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
-    """REF-01, D-30, ING-03: an admin adds a category and gives it to an ingredient, then deletes
-    it after a confirmation naming what moves. "Show" opens the Ingredients tab filtered to
-    *Uncategorized*, where the ingredient waits for a new category and gets one, while a done
+    """REF-01, D-30, ING-03: an admin adds a category and gives it to an item, then deletes
+    it after a confirmation naming what moves. "Show" opens the Items tab filtered to
+    *Uncategorized*, where the item waits for a new category and gets one, while a done
     list keeps the deleted category's heading."""
     tag = unique("e2e")
     name = f"Cheese bar {tag}"
@@ -441,7 +442,7 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     expect(screen.get_by_role("status")).to_have_text(text("admin.categories.deleted", name=name))
     expect(order.get_by_role("button", name=name, exact=True)).to_have_count(0)
 
-    # "Show": the Ingredients tab with *Uncategorized* as its only category and no search.
+    # "Show": the Items tab with *Uncategorized* as its only category and no search.
     show = text("admin.categories.showUncategorized")
     screen.get_by_role("button", name=show, exact=True).click()
     expect(page.get_by_test_id(TEST_IDS["screenItems"])).to_be_visible()
@@ -510,8 +511,8 @@ def test_categories_fit_the_largest_text_size(page: Page, admin: Account) -> Non
 
 
 def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
-    """ING-05: merging moves the duplicate's meal rows (and its barcode, as the ingredient that
-    stays has none) to the ingredient that stays."""
+    """ING-05: merging moves the duplicate's meal rows (and its barcode, as the item that
+    stays has none) to the item that stays."""
     tag = unique("e2e")
     keep = api.create_item(admin, f"Tomaten {tag}", category_key="fruit_vegetables")
     barcode = new_barcode()
@@ -526,7 +527,7 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
     )
 
     sign_in(page.context, admin)
-    page.goto(f"/ingredients/{duplicate['id']}")
+    page.goto(f"/items/{duplicate['id']}")
     expect(page.get_by_test_id(TEST_IDS["screenItem"])).to_contain_text(barcode)
     # In the ⋯ menu for admins: "Edit", "Buy regularly…", "Merge…" and, last, "Delete" (D-39).
     menu = open_more_menu(page)
@@ -552,33 +553,33 @@ def test_admin_merges_a_duplicate(page: Page, api: Api, admin: Account) -> None:
     )
     confirm.get_by_role("button", name=text("items.admin.mergeConfirm")).click()
 
-    expect(page).to_have_url(re.compile(f"/ingredients/{keep['id']}$"))
+    expect(page).to_have_url(re.compile(f"/items/{keep['id']}$"))
     detail = page.get_by_test_id(TEST_IDS["screenItem"])
     expect(detail.get_by_role("heading", level=1)).to_have_text(keep["name"])
     expect(detail).to_contain_text(barcode)
     expect(detail).to_contain_text(text("items.detail.meals_one", count="1"))
 
-    # The meal uses the ingredient that stays; the duplicate is gone.
+    # The meal uses the item that stays; the duplicate is gone.
     page.goto(f"/meals/{meal['id']}")
     expect(
         page.get_by_test_id(TEST_IDS["mealIngredients"]).get_by_role("link", name=keep["name"])
-    ).to_have_attribute("href", f"/ingredients/{keep['id']}")
-    page.goto(f"/ingredients/{duplicate['id']}")
+    ).to_have_attribute("href", f"/items/{keep['id']}")
+    page.goto(f"/items/{duplicate['id']}")
     expect(page.get_by_role("alert")).to_have_text(text("error.common.not_found"))
 
 
-def test_admin_deletes_an_unused_ingredient(page: Page, api: Api, admin: Account) -> None:
-    """ING-05: an admin deletes an ingredient nothing uses from its ⋯ menu, after confirming."""
+def test_admin_deletes_an_unused_item(page: Page, api: Api, admin: Account) -> None:
+    """ING-05: an admin deletes an item nothing uses from its ⋯ menu, after confirming."""
     unused = api.create_item(admin, f"Rest {unique('e2e')}", category_key="other")
 
     sign_in(page.context, admin)
-    page.goto(f"/ingredients/{unused['id']}")
+    page.goto(f"/items/{unused['id']}")
     expect(page.get_by_role("heading", level=1)).to_have_text(unused["name"])
     choose_from_menu(page, "deleteItem")
     page.get_by_role(
         "alertdialog", name=text("items.admin.deleteTitle", name=unused["name"])
     ).get_by_role("button", name=text("items.admin.deleteConfirm"), exact=True).click()
 
-    expect(page).to_have_url(re.compile("/ingredients$"))
-    page.goto(f"/ingredients/{unused['id']}")
+    expect(page).to_have_url(re.compile("/items$"))
+    page.goto(f"/items/{unused['id']}")
     expect(page.get_by_role("alert")).to_have_text(text("error.common.not_found"))

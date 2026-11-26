@@ -38,7 +38,7 @@ function ItemDetail({ id }: { id: string }) {
     <Screen
       title={item.data ? itemLabel(item.data.name, item.data.brand) : t('nav.items')}
       testId={testIds.screenItem}
-      back={{ to: '/ingredients', label: t('items.detail.back') }}
+      back={{ to: '/items', label: t('items.detail.back') }}
       action={item.data && <ItemMenu item={item.data} onError={setActionError} />}
     >
       <ErrorAlert error={actionError} />

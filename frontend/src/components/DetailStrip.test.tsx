@@ -83,15 +83,15 @@ const SCREENS: DetailScreen[] = [
   },
   {
     name: 'an ingredient',
-    path: `/ingredients/${APPLES.id}`,
+    path: `/items/${APPLES.id}`,
     routes: {
       ...REFERENCE_ROUTES,
       [`GET /api/items/${APPLES.id}`]: APPLES,
       'GET /api/items': [],
     },
     title: 'Äpfel',
-    back: 'All ingredients',
-    to: '/ingredients',
+    back: 'All items',
+    to: '/items',
     parent: testIds.screenItems,
     actions: true,
   },

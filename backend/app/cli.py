@@ -226,7 +226,7 @@ def seed_demo_command() -> None:
     typer.echo(f"Demo password (all users): {seed.password}")
     typer.echo(f"Open invite: {seed.invite_url}")
     scanned = sum(1 for item in DEMO_ITEMS if item.barcode is not None)
-    typer.echo(f"Demo ingredients: {len(DEMO_ITEMS)} ({scanned} with a barcode)")
+    typer.echo(f"Demo items: {len(DEMO_ITEMS)} ({scanned} with a barcode)")
     typer.echo(f"Demo meals: {len(DEMO_MEALS)}")
     typer.echo(f"Demo lists: {len(DEMO_LISTS)}")
     typer.echo(f"Demo recurring items: {len(DEMO_RECURRING)} (anna + ben)")
@@ -318,7 +318,7 @@ def jobs_off_refresh() -> None:
     outcomes = asyncio.run(run())
     kept = outcomes[off_refresh.Outcome.UNAVAILABLE] + outcomes[off_refresh.Outcome.NOT_FOUND]
     typer.echo(
-        f"Refreshed {outcomes.total()} ingredients from Open Food Facts: "
+        f"Refreshed {outcomes.total()} items from Open Food Facts: "
         f"{outcomes[off_refresh.Outcome.UPDATED]} updated, "
         f"{outcomes[off_refresh.Outcome.PENDING]} with newer values for user-edited fields, "
         f"{outcomes[off_refresh.Outcome.UNCHANGED]} unchanged, "

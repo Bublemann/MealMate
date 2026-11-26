@@ -203,7 +203,7 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     )
     assert members == [("anna",), ("ben",)]
     assert query(database, "SELECT kind, used_at FROM one_time_codes") == [("invite", None)]
-    assert "Demo ingredients: 32 (5 with a barcode)" in result.output
+    assert "Demo items: 32 (5 with a barcode)" in result.output
 
     ingredients = query(database, "SELECT name, brand, barcode, source FROM items")
     assert len(ingredients) == 32
@@ -422,7 +422,7 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
     assert result.exit_code == 0, result.output
     assert (
-        "Refreshed 3 ingredients from Open Food Facts: 1 updated, 0 with newer values for "
+        "Refreshed 3 items from Open Food Facts: 1 updated, 0 with newer values for "
         "user-edited fields, 0 unchanged, 1 kept for the next run (1 unavailable, 0 not found), "
         "1 failed with an error (see the log)."
     ) in result.output

@@ -9,7 +9,7 @@ from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
 from support.ui import open_more_menu
 
-# The largest iPhone text size (53 px body text, simulated as in test_ingredients.py): the
+# The largest iPhone text size (53 px body text, simulated as in test_items.py): the
 # content grows, so every screen scrolls, while the strip stops growing (D-29).
 LARGEST_TEXT = "html { font-size: 53px !important; }"
 

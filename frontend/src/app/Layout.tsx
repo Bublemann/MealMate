@@ -22,7 +22,7 @@ interface Tab {
 const TABS: readonly Tab[] = [
   { to: '/lists', label: 'nav.lists', icon: ListChecks, testId: testIds.tabLists },
   { to: '/meals', label: 'nav.meals', icon: CookingPot, testId: testIds.tabMeals },
-  { to: '/ingredients', label: 'nav.items', icon: Carrot, testId: testIds.tabItems },
+  { to: '/items', label: 'nav.items', icon: Carrot, testId: testIds.tabItems },
   // The Settings tab keeps the address and test ID it had as "Me" (D-44).
   { to: '/me', label: 'nav.me', icon: Settings, testId: testIds.tabMe, countLabel: 'nav.meCount' },
 ];
