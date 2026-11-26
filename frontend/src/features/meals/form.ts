@@ -1,5 +1,5 @@
-import type { IngredientSummary } from '@/features/ingredients/api';
-import { numberInputValue, parseOptionalAmount } from '@/features/ingredients/nutrients';
+import type { ItemSummary } from '@/features/items/api';
+import { numberInputValue, parseOptionalAmount } from '@/features/items/nutrients';
 import type { Unit } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import type { Meal, MealCreate, MealIngredientInput, MealUpdate } from './api';
@@ -13,7 +13,7 @@ export const MAX_TAG_LENGTH = 30;
 export interface RowState {
   /** Stable React key, also for rows not saved yet. */
   key: string;
-  ingredient: IngredientSummary;
+  item: ItemSummary;
   amountText: string;
   /** The amount the row was loaded with, and how the field showed it. */
   initialAmount: number | null;
@@ -31,11 +31,11 @@ function rowKey(): string {
   return `row-${nextKey}`;
 }
 
-/** A new row for a picked ingredient: no amount and no unit yet ("to taste" is fine). */
-export function newRow(ingredient: IngredientSummary): RowState {
+/** A new row for a picked item: no amount and no unit yet ("to taste" is fine). */
+export function newRow(item: ItemSummary): RowState {
   return {
     key: rowKey(),
-    ingredient,
+    item,
     amountText: '',
     initialAmount: null,
     initialAmountText: '',
@@ -50,7 +50,7 @@ export function rowsOf(meal: Meal, language: Language): RowState[] {
     const text = numberInputValue(row.amount, language);
     return {
       key: rowKey(),
-      ingredient: row.ingredient,
+      item: row.item,
       amountText: text,
       initialAmount: row.amount,
       initialAmountText: text,
@@ -69,7 +69,7 @@ export function rowsOf(meal: Meal, language: Language): RowState[] {
  */
 export function withAmountText(row: RowState, amountText: string): RowState {
   if (row.unitChosen) return { ...row, amountText };
-  const unit = amountText.trim() === '' ? '' : row.unit || row.ingredient.base_unit;
+  const unit = amountText.trim() === '' ? '' : row.unit || row.item.base_unit;
   return { ...row, amountText, unit };
 }
 
@@ -142,7 +142,7 @@ export function checkValues(values: FormValues): Checked {
       else problems.add(`ingredients.${index}.amount`);
     }
     return {
-      ingredient_id: row.ingredient.id,
+      item_id: row.item.id,
       amount,
       unit: row.unit === '' ? null : row.unit,
       note: row.note.trim() === '' ? null : row.note.trim(),
@@ -183,7 +183,7 @@ export function createBody(
 
 function sameIngredients(meal: Meal, inputs: MealIngredientInput[]): boolean {
   const stored = meal.ingredients.map((row): MealIngredientInput => ({
-    ingredient_id: row.ingredient.id,
+    item_id: row.item.id,
     amount: row.amount,
     unit: row.unit,
     note: row.note,
@@ -219,7 +219,7 @@ export function updateBody(
 
 /** The server's field paths the form shows next to an input; anything else goes to the alert. */
 const SHOWN_PATH =
-  /^(name|servings|cuisine_id|instructions|source_url|tags(\.\d+)?|ingredients(\.\d+(\.(ingredient_id|amount|unit|note))?)?)$/;
+  /^(name|servings|cuisine_id|instructions|source_url|tags(\.\d+)?|ingredients(\.\d+(\.(item_id|amount|unit|note))?)?)$/;
 
 export function isShownPath(path: string): boolean {
   return SHOWN_PATH.test(path);

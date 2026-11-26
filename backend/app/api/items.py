@@ -1,4 +1,4 @@
-"""Ingredients, shared by everyone like a wiki (ING-01..06, NUT-02), with their barcode and Open
+"""Items, shared by everyone like a wiki (ING-01..06, NUT-02), with their barcode and Open
 Food Facts data: the barcode lookup (BAR-02, BAR-03), the name search (BAR-08) and pending
 updates (BAR-06)."""
 
@@ -11,19 +11,19 @@ from app.api.deps import CurrentUser, Db, Now, OffRefresh, OffSearchCache
 from app.db.session import ReadSession, WriteSession
 from app.domain.catalog import BARCODE_INPUT_MAX_LENGTH, BRAND_MAX_LENGTH
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.ingredients import (
+from app.schemas.items import (
     BarcodeLookup,
-    Ingredient,
-    IngredientBarcodeLink,
-    IngredientCreate,
-    IngredientSearchResult,
-    IngredientSummary,
-    IngredientUpdate,
+    Item,
+    ItemBarcodeLink,
+    ItemCreate,
+    ItemSearchResult,
+    ItemSummary,
+    ItemUpdate,
     OffSearchPage,
 )
 from app.services import barcodes, items, off_refresh, off_search
 
-router = APIRouter(prefix="/api/ingredients", tags=["ingredients"], responses=ERROR_RESPONSES)
+router = APIRouter(prefix="/api/items", tags=["items"], responses=ERROR_RESPONSES)
 
 OffSearchQuery = Annotated[
     str,
@@ -40,28 +40,28 @@ CategoryId = Annotated[str, StringConstraints(max_length=36)]
 
 
 @router.get("")
-async def list_ingredients(
+async def list_items(
     principal: CurrentUser,
     session: ReadSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     category_id: Annotated[list[CategoryId] | None, Query(max_length=100)] = None,
-) -> list[IngredientSearchResult]:
+) -> list[ItemSearchResult]:
     """Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
     then names starting with `q`, then the rest, each in dictionary order by name and brand
     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
-    ingredients in that order (at most 1000). `category_id`
-    is repeatable: an ingredient matches if it is in any of the given categories."""
+    items in that order (at most 1000). `category_id`
+    is repeatable: an item matches if it is in any of the given categories."""
     return await items.search(session, query=q, category_ids=category_id or [])
 
 
 @router.get("/similar")
-async def list_similar_ingredients(
+async def list_similar_items(
     principal: CurrentUser,
     session: ReadSession,
     name: Annotated[str, Query(max_length=100)],
     brand: Annotated[str | None, Query(max_length=BRAND_MAX_LENGTH)] = None,
-) -> list[IngredientSummary]:
-    """Up to five ingredients with a similar name, for the "similar ingredient exists" hint
+) -> list[ItemSummary]:
+    """Up to five items with a similar name, for the "similar item exists" hint
     (only a hint: names need not be unique); those with the same name and `brand` first."""
     return await items.similar(session, name, brand)
 
@@ -77,14 +77,14 @@ async def lookup_barcode(
     barcode: Annotated[str, Query(max_length=BARCODE_INPUT_MAX_LENGTH)],
     own_only: Annotated[bool, Query()] = False,
 ) -> BarcodeLookup:
-    """Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a
-    proposal, not saved). With `own_only`, only our own ingredients: `none` then means that
-    no ingredient has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
+    """Look a scanned or typed barcode up: our own items first, then Open Food Facts (a
+    proposal, not saved). With `own_only`, only our own items: `none` then means that
+    no item has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
     barcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open
-    Food Facts. A stale ingredient from Open Food Facts is refreshed after the response."""
+    Food Facts. A stale item from Open Food Facts is refreshed after the response."""
     result = await barcodes.lookup(session, refresh.off, principal, barcode, own_only=own_only)
-    if result.ingredient is not None:
-        off_refresh.schedule_if_stale(background, refresh, database, [result.ingredient], now=now)
+    if result.item is not None:
+        off_refresh.schedule_if_stale(background, refresh, database, [result.item], now=now)
     return result
 
 
@@ -106,74 +106,74 @@ async def search_open_food_facts(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_ingredient(
-    body: IngredientCreate, principal: CurrentUser, session: WriteSession, now: Now
-) -> Ingredient:
-    """Add an ingredient, by hand or from an Open Food Facts proposal (`off`) in one request;
-    409 `ingredient.barcode_taken` if another ingredient has the barcode."""
+async def create_item(
+    body: ItemCreate, principal: CurrentUser, session: WriteSession, now: Now
+) -> Item:
+    """Add an item, by hand or from an Open Food Facts proposal (`off`) in one request;
+    409 `item.barcode_taken` if another item has the barcode."""
     return await items.create_item(session, principal, body, now=now)
 
 
-@router.get("/{ingredient_id}")
-async def get_ingredient(
-    ingredient_id: str,
+@router.get("/{item_id}")
+async def get_item(
+    item_id: str,
     principal: CurrentUser,
     session: ReadSession,
     refresh: OffRefresh,
     database: Db,
     background: BackgroundTasks,
     now: Now,
-) -> Ingredient:
-    """An ingredient with its values, barcode, Open Food Facts data and usage; a stale one from
+) -> Item:
+    """An item with its values, barcode, Open Food Facts data and usage; a stale one from
     Open Food Facts is refreshed after the response."""
-    result = await items.get_item(session, ingredient_id)
+    result = await items.get_item(session, item_id)
     off_refresh.schedule_if_stale(background, refresh, database, [result], now=now)
     return result
 
 
-@router.patch("/{ingredient_id}")
-async def update_ingredient(
-    ingredient_id: str,
-    body: IngredientUpdate,
+@router.patch("/{item_id}")
+async def update_item(
+    item_id: str,
+    body: ItemUpdate,
     principal: CurrentUser,
     session: WriteSession,
     now: Now,
-) -> Ingredient:
-    """Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.
+) -> Item:
+    """Change an item (anyone may); Open Food Facts fields sent become user-edited.
     Clearing or changing the barcode of one from Open Food Facts makes it manual. 409
-    `ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit
+    `item.unit_mismatch` with the number of meals and drafts affected when a base-unit
     change would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33)."""
-    return await items.update_item(session, principal, ingredient_id, body, now=now)
+    return await items.update_item(session, principal, item_id, body, now=now)
 
 
-@router.post("/{ingredient_id}/barcode")
+@router.post("/{item_id}/barcode")
 async def link_barcode(
-    ingredient_id: str,
-    body: IngredientBarcodeLink,
+    item_id: str,
+    body: ItemBarcodeLink,
     principal: CurrentUser,
     session: WriteSession,
     now: Now,
-) -> Ingredient:
-    """Give an ingredient without a barcode a scanned one (the scanner's "already in
-    MealMate"); it never replaces one: 409 `ingredient.has_barcode` if it has a barcode, 409
-    `ingredient.barcode_taken` if another ingredient has this one. The edit form changes a
+) -> Item:
+    """Give an item without a barcode a scanned one (the scanner's "already in
+    MealMate"); it never replaces one: 409 `item.has_barcode` if it has a barcode, 409
+    `item.barcode_taken` if another item has this one. The edit form changes a
     barcode with PATCH instead."""
-    return await items.link_barcode(session, principal, ingredient_id, body, now=now)
+    return await items.link_barcode(session, principal, item_id, body, now=now)
 
 
-@router.post("/{ingredient_id}/pending-update/apply")
+@router.post("/{item_id}/pending-update/apply")
 async def apply_pending_update(
-    ingredient_id: str, principal: CurrentUser, session: WriteSession, now: Now
-) -> Ingredient:
+    item_id: str, principal: CurrentUser, session: WriteSession, now: Now
+) -> Item:
     """Take the newer Open Food Facts values (BAR-06); those fields are no longer
-    user-edited. 409 `ingredient.no_pending_update` if there are none."""
-    return await items.apply_pending_update(session, principal, ingredient_id, now=now)
+    user-edited. 409 `item.no_pending_update` if there are none."""
+    return await items.apply_pending_update(session, principal, item_id, now=now)
 
 
-@router.post("/{ingredient_id}/pending-update/ignore")
+@router.post("/{item_id}/pending-update/ignore")
 async def ignore_pending_update(
-    ingredient_id: str, principal: CurrentUser, session: WriteSession, now: Now
-) -> Ingredient:
+    item_id: str, principal: CurrentUser, session: WriteSession, now: Now
+) -> Item:
     """Keep the user's values (BAR-06); the same Open Food Facts version is not proposed
-    again. 409 `ingredient.no_pending_update` if there is nothing to ignore."""
-    return await items.ignore_pending_update(session, principal, ingredient_id, now=now)
+    again. 409 `item.no_pending_update` if there is nothing to ignore."""
+    return await items.ignore_pending_update(session, principal, item_id, now=now)

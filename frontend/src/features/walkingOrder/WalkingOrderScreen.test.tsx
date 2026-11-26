@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { errorResponse, goOffline, mockApi, requestsTo } from '@/test/api';
-import { CATEGORIES_WITH_UNCATEGORIZED, CHEESE_COUNTER } from '@/test/ingredients';
+import { CATEGORIES_WITH_UNCATEGORIZED, CHEESE_COUNTER } from '@/test/items';
 import { renderApp } from '@/test/render';
 import { savedOrder, walkingOrder } from '@/test/walkingOrder';
 import { testIds } from '@/testIds';

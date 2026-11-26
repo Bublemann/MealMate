@@ -22,7 +22,7 @@ export function nutrientLabel(t: TFunction, key: NutrientKey): string {
 }
 
 /**
- * What an ingredient's nutrition values are per 100 of: g, or ml for an ingredient counted in
+ * What an item's nutrition values are per 100 of: g, or ml for an item counted in
  * ml. Pieces count through the piece weight, so their values are per 100 g (ING-02).
  */
 export function nutritionUnit(baseUnit: BaseUnit): 'g' | 'ml' {

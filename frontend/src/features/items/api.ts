@@ -12,20 +12,20 @@ import type { components } from '@/api/generated/schema';
 import { NOTICES_KEY, RECURRING_KEY } from '@/features/recurring/api';
 import { CATEGORIES_KEY } from '@/features/reference/api';
 
-export type Ingredient = components['schemas']['Ingredient'];
-export type IngredientSummary = components['schemas']['IngredientSummary'];
-export type IngredientSearchResult = components['schemas']['IngredientSearchResult'];
-export type IngredientCreate = components['schemas']['IngredientCreate'];
-export type IngredientUpdate = components['schemas']['IngredientUpdate'];
-export type IngredientMerge = components['schemas']['IngredientMerge'];
-export type BaseUnit = Ingredient['base_unit'];
+export type Item = components['schemas']['Item'];
+export type ItemSummary = components['schemas']['ItemSummary'];
+export type ItemSearchResult = components['schemas']['ItemSearchResult'];
+export type ItemCreate = components['schemas']['ItemCreate'];
+export type ItemUpdate = components['schemas']['ItemUpdate'];
+export type ItemMerge = components['schemas']['ItemMerge'];
+export type BaseUnit = Item['base_unit'];
 export type NutrientValues = components['schemas']['NutrientValues'];
 export type PendingUpdateField = components['schemas']['PendingUpdateField'];
 export type OffProposal = components['schemas']['ProductProposal'];
 export type OffSearchPage = components['schemas']['OffSearchPage'];
 export type OffSearchResult = OffSearchPage['results'][number];
 /** A field that came from Open Food Facts and was changed by a user (BAR-04). */
-export type EditedField = Ingredient['user_edited_fields'][number];
+export type EditedField = Item['user_edited_fields'][number];
 
 /**
  * An Open Food Facts search waits for Open Food Facts like a barcode lookup does (up to about 15 s
@@ -34,42 +34,42 @@ export type EditedField = Ingredient['user_edited_fields'][number];
  */
 export const OFF_TIMEOUT_MS = 25_000;
 
-export const INGREDIENTS_KEY = ['ingredients'] as const;
+export const ITEMS_KEY = ['items'] as const;
 const listKey = (query: string, categoryIds: readonly string[]) =>
-  [...INGREDIENTS_KEY, 'list', query, categoryIds] as const;
-const detailKey = (id: string) => [...INGREDIENTS_KEY, 'detail', id] as const;
+  [...ITEMS_KEY, 'list', query, categoryIds] as const;
+const detailKey = (id: string) => [...ITEMS_KEY, 'detail', id] as const;
 
 /** Lists and similarity hints show names, categories and counts, which may have changed. */
 function invalidateSearches(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: [...INGREDIENTS_KEY, 'list'] });
-  void queryClient.invalidateQueries({ queryKey: [...INGREDIENTS_KEY, 'similar'] });
+  void queryClient.invalidateQueries({ queryKey: [...ITEMS_KEY, 'list'] });
+  void queryClient.invalidateQueries({ queryKey: [...ITEMS_KEY, 'similar'] });
 }
 
 /**
- * The categories count their ingredients, which decides whether the filter panel offers
- * *Uncategorized* (ING-03): a saved, merged or deleted ingredient may have changed the counts.
+ * The categories count their items, which decides whether the filter panel offers
+ * *Uncategorized* (ING-03): a saved, merged or deleted item may have changed the counts.
  */
 function invalidateCategoryCounts(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: CATEGORIES_KEY });
 }
 
-/** A summary as the lists show it, from a full ingredient (e.g. one just created). */
-export function toSummary(ingredient: Ingredient): IngredientSummary {
-  const { id, name, brand, barcode, source, category_id, base_unit } = ingredient;
+/** A summary as the lists show it, from a full item (e.g. one just created). */
+export function toSummary(item: Item): ItemSummary {
+  const { id, name, brand, barcode, source, category_id, base_unit } = item;
   return { id, name, brand, barcode, source, category_id, base_unit };
 }
 
 /**
- * Ingredients matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
+ * Items matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
  * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories.
  */
-export function ingredientsQuery(query: string, categoryIds: readonly string[] = []) {
+export function itemsQuery(query: string, categoryIds: readonly string[] = []) {
   const q = query.trim();
   return queryOptions({
     queryKey: listKey(q, categoryIds),
     queryFn: ({ signal }) =>
       unwrap(
-        api.GET('/api/ingredients', {
+        api.GET('/api/items', {
           // Left out when empty: `category_id=a&category_id=b` for several (ING-03).
           params: {
             query: {
@@ -83,49 +83,49 @@ export function ingredientsQuery(query: string, categoryIds: readonly string[] =
   });
 }
 
-/** `ingredientsQuery` on screen: the previous result stays while the next one loads. */
-export function useIngredients(
+/** `itemsQuery` on screen: the previous result stays while the next one loads. */
+export function useItems(
   query: string,
   { enabled = true, categoryIds = [] }: { enabled?: boolean; categoryIds?: readonly string[] } = {},
 ) {
   return useQuery({
-    ...ingredientsQuery(query, categoryIds),
+    ...itemsQuery(query, categoryIds),
     placeholderData: keepPreviousData,
     enabled,
   });
 }
 
-/** Ingredients with a name like `name`, for the "similar ingredient exists" hint (ING-03). */
-export function useSimilarIngredients(name: string) {
+/** Items with a name like `name`, for the "similar item exists" hint (ING-03). */
+export function useSimilarItems(name: string) {
   const trimmed = name.trim();
   return useQuery({
-    queryKey: [...INGREDIENTS_KEY, 'similar', trimmed],
+    queryKey: [...ITEMS_KEY, 'similar', trimmed],
     queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/ingredients/similar', { params: { query: { name: trimmed } }, signal })),
+      unwrap(api.GET('/api/items/similar', { params: { query: { name: trimmed } }, signal })),
     enabled: trimmed.length > 0,
   });
 }
 
-export function useIngredient(id: string) {
+export function useItem(id: string) {
   return useQuery({
     queryKey: detailKey(id),
     queryFn: ({ signal }) =>
       unwrap(
-        api.GET('/api/ingredients/{ingredient_id}', {
-          params: { path: { ingredient_id: id } },
+        api.GET('/api/items/{item_id}', {
+          params: { path: { item_id: id } },
           signal,
         }),
       ),
   });
 }
 
-/** ING-01: anyone can create an ingredient. */
-export function useCreateIngredient() {
+/** ING-01: anyone can create an item. */
+export function useCreateItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: IngredientCreate) => unwrap(api.POST('/api/ingredients', { body })),
-    onSuccess: (ingredient) => {
-      queryClient.setQueryData(detailKey(ingredient.id), ingredient);
+    mutationFn: (body: ItemCreate) => unwrap(api.POST('/api/items', { body })),
+    onSuccess: (item) => {
+      queryClient.setQueryData(detailKey(item.id), item);
       invalidateSearches(queryClient);
       invalidateCategoryCounts(queryClient);
     },
@@ -133,21 +133,21 @@ export function useCreateIngredient() {
 }
 
 /**
- * ING-01/02: anyone can edit any ingredient. Only changed fields are sent: a changed field that
+ * ING-01/02: anyone can edit any item. Only changed fields are sent: a changed field that
  * came from Open Food Facts is marked as edited by a user (BAR-04).
  */
-export function useUpdateIngredient(id: string) {
+export function useUpdateItem(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: IngredientUpdate) =>
+    mutationFn: (body: ItemUpdate) =>
       unwrap(
-        api.PATCH('/api/ingredients/{ingredient_id}', {
-          params: { path: { ingredient_id: id } },
+        api.PATCH('/api/items/{item_id}', {
+          params: { path: { item_id: id } },
           body,
         }),
       ),
-    onSuccess: (ingredient) => {
-      queryClient.setQueryData(detailKey(id), ingredient);
+    onSuccess: (item) => {
+      queryClient.setQueryData(detailKey(id), item);
       invalidateSearches(queryClient);
       invalidateCategoryCounts(queryClient);
     },
@@ -156,7 +156,7 @@ export function useUpdateIngredient(id: string) {
 
 /**
  * What a base-unit change or a merge would leave not fitting (D-33): the amounts, and the meals
- * and drafts they are on. The server refuses such a change (409 `ingredient.unit_mismatch`) until
+ * and drafts they are on. The server refuses such a change (409 `item.unit_mismatch`) until
  * the request accepts it (`accept_unit_mismatch`); nothing is converted then.
  */
 export interface UnitMismatch {
@@ -167,7 +167,7 @@ export interface UnitMismatch {
 
 /** The counts of a base-unit change or merge refused for amounts that won't fit, else null. */
 export function unitMismatch(error: unknown): UnitMismatch | null {
-  if (!isApiError(error) || error.code !== 'ingredient.unit_mismatch') return null;
+  if (!isApiError(error) || error.code !== 'item.unit_mismatch') return null;
   const count = (key: keyof UnitMismatch) => {
     const value = error.params[key];
     return typeof value === 'number' ? value : 0;
@@ -176,9 +176,9 @@ export function unitMismatch(error: unknown): UnitMismatch | null {
 }
 
 /**
- * Gives an existing ingredient the scanned barcode ("This is already in MealMate"): the next scan
- * finds it (BAR-02). Only for an ingredient without a barcode: the caller checks what it shows,
- * and the server refuses to replace one (409 `ingredient.has_barcode`) in case that was stale.
+ * Gives an existing item the scanned barcode ("This is already in MealMate"): the next scan
+ * finds it (BAR-02). Only for an item without a barcode: the caller checks what it shows,
+ * and the server refuses to replace one (409 `item.has_barcode`) in case that was stale.
  * The edit form changes a barcode with PATCH instead.
  */
 export function useLinkBarcode() {
@@ -186,13 +186,13 @@ export function useLinkBarcode() {
   return useMutation({
     mutationFn: ({ id, barcode }: { id: string; barcode: string }) =>
       unwrap(
-        api.POST('/api/ingredients/{ingredient_id}/barcode', {
-          params: { path: { ingredient_id: id } },
+        api.POST('/api/items/{item_id}/barcode', {
+          params: { path: { item_id: id } },
           body: { barcode },
         }),
       ),
-    onSuccess: (ingredient) => {
-      queryClient.setQueryData(detailKey(ingredient.id), ingredient);
+    onSuccess: (item) => {
+      queryClient.setQueryData(detailKey(item.id), item);
       invalidateSearches(queryClient);
     },
   });
@@ -206,15 +206,15 @@ export function usePendingUpdate(id: string, action: 'apply' | 'ignore') {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => {
-      const params = { params: { path: { ingredient_id: id } } };
+      const params = { params: { path: { item_id: id } } };
       return unwrap(
         action === 'apply'
-          ? api.POST('/api/ingredients/{ingredient_id}/pending-update/apply', params)
-          : api.POST('/api/ingredients/{ingredient_id}/pending-update/ignore', params),
+          ? api.POST('/api/items/{item_id}/pending-update/apply', params)
+          : api.POST('/api/items/{item_id}/pending-update/ignore', params),
       );
     },
-    onSuccess: (ingredient) => {
-      queryClient.setQueryData(detailKey(id), ingredient);
+    onSuccess: (item) => {
+      queryClient.setQueryData(detailKey(id), item);
       invalidateSearches(queryClient);
     },
   });
@@ -229,7 +229,7 @@ export function useOffSearch() {
   return useMutation({
     mutationFn: ({ q, page }: { q: string; page: number }) =>
       unwrap(
-        api.GET('/api/ingredients/off-search', {
+        api.GET('/api/items/off-search', {
           params: { query: { q, page } },
           ...withLongTimeout(OFF_TIMEOUT_MS),
         }),
@@ -238,12 +238,12 @@ export function useOffSearch() {
 }
 
 /**
- * After a merge or delete: the lists reload, and the gone ingredient's own queries are only
+ * After a merge or delete: the lists reload, and the gone item's own queries are only
  * marked stale (its screen is still open until the caller navigates away, so no refetch now).
  * Recurring items move or go with it, and the admin may have kept it as one: their set and
  * notices load again (LIST-16, D-51).
  */
-function forgetIngredient(queryClient: QueryClient, id: string) {
+function forgetItem(queryClient: QueryClient, id: string) {
   invalidateSearches(queryClient);
   invalidateCategoryCounts(queryClient);
   void queryClient.invalidateQueries({ queryKey: RECURRING_KEY });
@@ -256,33 +256,33 @@ function forgetIngredient(queryClient: QueryClient, id: string) {
  * ING-05 (admin): moves every reference of `id` to `into_id`, then deletes `id`; refused while
  * amounts of `id` wouldn't fit `into_id`, unless the body accepts that (`unitMismatch`).
  */
-export function useMergeIngredient(id: string) {
+export function useMergeItem(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: IngredientMerge) =>
+    mutationFn: (body: ItemMerge) =>
       unwrap(
-        api.POST('/api/admin/ingredients/{ingredient_id}/merge', {
-          params: { path: { ingredient_id: id } },
+        api.POST('/api/admin/items/{item_id}/merge', {
+          params: { path: { item_id: id } },
           body,
         }),
       ),
     onSuccess: (target) => {
-      forgetIngredient(queryClient, id);
+      forgetItem(queryClient, id);
       queryClient.setQueryData(detailKey(target.id), target);
     },
   });
 }
 
-/** ING-05 (admin): only while nothing references the ingredient (`ingredient.in_use`). */
-export function useDeleteIngredient(id: string) {
+/** ING-05 (admin): only while nothing references the item (`item.in_use`). */
+export function useDeleteItem(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
       unwrap(
-        api.DELETE('/api/admin/ingredients/{ingredient_id}', {
-          params: { path: { ingredient_id: id } },
+        api.DELETE('/api/admin/items/{item_id}', {
+          params: { path: { item_id: id } },
         }),
       ),
-    onSuccess: () => forgetIngredient(queryClient, id),
+    onSuccess: () => forgetItem(queryClient, id),
   });
 }

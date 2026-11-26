@@ -95,13 +95,13 @@ class Session:
 def ingredient_ids(api: Session) -> list[str]:
     """The ids of `Perf 000` … `Perf 149`, created where missing."""
     categories = [item["id"] for item in api.call("GET", "/api/categories")]
-    existing = {item["name"]: item["id"] for item in api.call("GET", "/api/ingredients")}
+    existing = {item["name"]: item["id"] for item in api.call("GET", "/api/items")}
     ids = []
     for index in range(INGREDIENTS):
         name = f"Perf {index:03d}"
         if name not in existing:
             body = {"name": name, "category_id": categories[index % len(categories)]}
-            existing[name] = api.call("POST", "/api/ingredients", 201, json=body)["id"]
+            existing[name] = api.call("POST", "/api/items", 201, json=body)["id"]
         ids.append(existing[name])
     return ids
 
@@ -111,7 +111,7 @@ def meal_rows(ingredients: list[str], meal: int) -> list[dict[str, Any]]:
     chosen = [0, 1, *(index for index in range(2, INGREDIENTS) if index % MEALS == meal)]
     return [
         {
-            "ingredient_id": ingredients[index],
+            "item_id": ingredients[index],
             "amount": 1 + index % 4 if index % 3 == 0 else 100 + index,
             "unit": "piece" if index % 3 == 0 else "g",
         }

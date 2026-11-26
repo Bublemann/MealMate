@@ -2,15 +2,15 @@ import { useMutation } from '@tanstack/react-query';
 import { api, unwrap, withLongTimeout } from '@/api/client';
 import { isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
-import { OFF_TIMEOUT_MS } from '@/features/ingredients/api';
+import { OFF_TIMEOUT_MS } from '@/features/items/api';
 
 export type BarcodeLookup = components['schemas']['BarcodeLookup'];
 
 export interface LookupRequest {
   barcode: string;
   /**
-   * Only our own ingredients, without asking Open Food Facts: the edit pop-up's scan (BAR-03) and
-   * the meal form's (BAR-02) only need to know whether an ingredient has the barcode.
+   * Only our own items, without asking Open Food Facts: the edit pop-up's scan (BAR-03) and
+   * the meal form's (BAR-02) only need to know whether an item has the barcode.
    */
   ownOnly?: boolean;
 }
@@ -21,14 +21,14 @@ export interface LookupRequest {
  */
 export const LOOKUP_TIMEOUT_MS = OFF_TIMEOUT_MS;
 
-/** BAR-02/03: our own ingredients first, then Open Food Facts; nothing is saved. */
+/** BAR-02/03: our own items first, then Open Food Facts; nothing is saved. */
 export function useBarcodeLookup() {
   return useMutation({
     mutationFn: ({ barcode, ownOnly = false }: LookupRequest) =>
       unwrap(
-        api.GET('/api/ingredients/lookup', {
+        api.GET('/api/items/lookup', {
           params: { query: ownOnly ? { barcode, own_only: true } : { barcode } },
-          // Our own ingredients alone answer as fast as any other read.
+          // Our own items alone answer as fast as any other read.
           ...(ownOnly ? {} : withLongTimeout(LOOKUP_TIMEOUT_MS)),
         }),
       ),

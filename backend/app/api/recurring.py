@@ -32,7 +32,7 @@ async def create_recurring_item(
     now: Now,
     zone: TimeZone,
 ) -> RecurringItem:
-    """Make an ingredient recurring in the caller's set."""
+    """Make an item recurring in the caller's set."""
     return await recurring.create_item(session, principal, body, now=now, zone=zone)
 
 

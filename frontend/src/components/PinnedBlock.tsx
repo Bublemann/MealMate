@@ -33,7 +33,7 @@ interface PinnedBlockProps {
 }
 
 /**
- * The top of the Lists, Meals and Ingredients tabs (UI-01): the tab's headline (D-44), search,
+ * The top of the Lists, Meals and Items tabs (UI-01): the tab's headline (D-44), search,
  * filter and the green "Neu…" tile, on a frosted surface that stays below the status bar while
  * the content scrolls under it. The tab renders it at once, whether it is still loading, empty or
  * filled (UI-03), and shows its state below it. At the largest text sizes it stops growing before

@@ -51,7 +51,7 @@ from app.integrations.off import OffClient, OffProduct
 from app.models import Item as ItemRow
 from app.repositories import items as items_repo
 from app.repositories import users as users_repo
-from app.schemas.ingredients import Ingredient
+from app.schemas.items import Item
 from app.services.off_fields import edited_fields, field_value, ignored_entries, set_field_value
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ _FAILED = frozenset({Outcome.UNAVAILABLE, Outcome.NOT_FOUND, Outcome.ERROR})
 def _log_failure(message: str, item_id: str, exc: Exception) -> None:
     """Log a failed refresh by item id and error type only: the error's message may quote
     Open Food Facts' data or SQL parameters."""
-    logger.warning(message, extra={"ingredient_id": item_id, "error": type(exc).__name__})
+    logger.warning(message, extra={"item_id": item_id, "error": type(exc).__name__})
 
 
 def is_stale(
@@ -194,7 +194,7 @@ async def refresh_stale(
                 fetched_before=fetched_before,
             )
         except Exception as exc:
-            _log_failure("refreshing an ingredient from open food facts failed", item_id, exc)
+            _log_failure("refreshing an item from open food facts failed", item_id, exc)
             outcome = Outcome.ERROR
         outcomes[outcome] += 1
     return outcomes
@@ -259,7 +259,7 @@ def schedule_if_stale(
     background: BackgroundTasks,
     refresher: OffRefresher,
     database: Database,
-    items: Iterable[Ingredient],
+    items: Iterable[Item],
     *,
     now: datetime,
 ) -> None:

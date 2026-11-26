@@ -89,7 +89,7 @@ def _view(recurring_item: RecurringItemRow, item: ItemRow, today: date) -> Recur
     )
     return RecurringItem(
         id=recurring_item.id,
-        ingredient=item_summary(item),
+        item=item_summary(item),
         interval=RecurringInterval(
             value=plan.interval.value, unit=plan.interval.unit, automatic=plan.interval.automatic
         ),
@@ -143,7 +143,7 @@ async def due_items(
     due = sorted((view for view in views if view.due), key=lambda view: view.days_until_due)
     return [
         DueItem(
-            ingredient=view.ingredient,
+            item=view.item,
             due_on=view.due_on,
             days_until_due=view.days_until_due,
             last_purchased_on=view.last_purchased_on,
@@ -167,12 +167,12 @@ async def create_item(
     last_purchased_on = body.last_purchased_on or today
     async with session.begin():
         key = await access.owner_key(session, principal.user_id)
-        item = await items_repo.get(session, body.ingredient_id)
+        item = await items_repo.get(session, body.item_id)
         problems = _last_purchase_problems(last_purchased_on, today=today)
         if item is None:
-            problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
+            problems.append(_field("item_id", FieldErrorCode.INVALID))
         elif await recurring_repo.in_set(session, key, item.id) is not None:
-            problems.append(_field("ingredient_id", FieldErrorCode.TAKEN))
+            problems.append(_field("item_id", FieldErrorCode.TAKEN))
         if item is None or problems:
             raise validation_error(problems)
         recurring_item = RecurringItemRow(
@@ -273,9 +273,7 @@ async def record_purchases(
     content = await aggregation.load(session, [shopping_list])
     lines = aggregation.lines(content, shopping_list, order=ADMINS_ORDER, private_meals=(), refs={})
     for line in lines:
-        recurring_item = (
-            None if line.ingredient_id is None else recurring_items.get(line.ingredient_id)
-        )
+        recurring_item = None if line.item_id is None else recurring_items.get(line.item_id)
         if recurring_item is None or not line.checked:
             continue
         after = recurring.record_purchase(

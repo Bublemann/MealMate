@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { errorResponse, mockApi, requestsTo } from '@/test/api';
-import { REFERENCE_ROUTES } from '@/test/ingredients';
+import { REFERENCE_ROUTES } from '@/test/items';
 import { recurringItem, recurringList, stubResizeObserver } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';

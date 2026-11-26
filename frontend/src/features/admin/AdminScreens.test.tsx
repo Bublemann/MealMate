@@ -9,7 +9,7 @@ import {
   TEST_ADMIN,
   userRef,
 } from '@/test/api';
-import { CATEGORIES } from '@/test/ingredients';
+import { CATEGORIES } from '@/test/items';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import type { AdminEvent, AdminUser, Invite } from './api';

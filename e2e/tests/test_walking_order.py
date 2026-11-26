@@ -48,8 +48,8 @@ def test_a_list_follows_the_own_walking_order(
     first_name, second_name = first["names"]["en"], second["names"]["en"]
     shopping_list = api.create_list(anna, f"Laden {tag}")
     for name, category in (("Erste", first), ("Zweite", second)):
-        ingredient = api.create_ingredient(anna, f"{name} {tag}", category_id=category["id"])
-        api.add_extra_item(anna, shopping_list["id"], ingredient_id=ingredient["id"])
+        ingredient = api.create_item(anna, f"{name} {tag}", category_id=category["id"])
+        api.add_extra_item(anna, shopping_list["id"], item_id=ingredient["id"])
     sign_in(page.context, anna)
     page.goto(f"/lists/{shopping_list['id']}")
     expect(headings(page)).to_have_text([first_name, second_name])

@@ -19,7 +19,7 @@ interface BarcodeScanDialogProps {
 }
 
 /**
- * The plain scanner over the ingredient pop-up or the meal form (BAR-01): it hands the scanned or
+ * The plain scanner over the item pop-up or the meal form (BAR-01): it hands the scanned or
  * typed digits back and looks nothing up; the pop-up and the meal form do that (BAR-02/03), so
  * the scanner never imports the form. A lazy-loaded chunk with the decoder (PERF-03).
  */

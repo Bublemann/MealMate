@@ -57,7 +57,7 @@ def key(ingredient: Any) -> str:
 async def item_of(api: AsyncClient, user: Account, ingredient: Any) -> Any:
     """The user's recurring item of the ingredient, as `GET /api/recurring-items` shows it."""
     body = await recurring(api, user)
-    return next(item for item in body["items"] if item["ingredient"]["id"] == ingredient["id"])
+    return next(item for item in body["items"] if item["item"]["id"] == ingredient["id"])
 
 
 async def shopping_with(api: AsyncClient, user: Account, *extras: dict[str, Any]) -> Any:
@@ -79,7 +79,7 @@ async def test_a_checked_line_on_a_finished_list_is_a_purchase(
         api, anna, toilet_paper["id"], weeks=4, last_purchased_on=date(2026, 8, 23)
     )
     shopping_list = await shopping_with(
-        api, anna, {"ingredient_id": toilet_paper["id"], "amount": 12, "unit": "piece"}
+        api, anna, {"item_id": toilet_paper["id"], "amount": 12, "unit": "piece"}
     )
     await applied(
         api,
@@ -103,7 +103,7 @@ async def test_a_finish_sent_days_later_keeps_the_day_of_the_check_off(
     await make_recurring(
         api, anna, toilet_paper["id"], weeks=4, last_purchased_on=date(2026, 8, 23)
     )
-    shopping_list = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
+    shopping_list = await shopping_with(api, anna, {"item_id": toilet_paper["id"]})
     tap = START + timedelta(hours=10, minutes=30)  # 00:30 in Berlin on 09-28, 22:30Z on 09-27
     clock.advance(days=3)
     await login(api, anna)
@@ -130,7 +130,7 @@ async def test_a_line_without_one_amount_keeps_the_previous_amount(
 ) -> None:
     item = await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 23))
     await store_purchases(app, item["id"], last_amount=8, last_unit="piece")
-    shopping_list = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
+    shopping_list = await shopping_with(api, anna, {"item_id": toilet_paper["id"]})
     await finished(api, anna, shopping_list["id"], toilet_paper, at=START)
 
     item = await item_of(api, anna, toilet_paper)
@@ -148,14 +148,14 @@ async def test_a_partners_finish_counts_for_the_couples_set(
     await make_couple(api, anna, ben)
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 23))
     await make_recurring(api, ben, soap["id"], last_purchased_on=date(2026, 8, 23))
-    shared = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
+    shared = await shopping_with(api, anna, {"item_id": toilet_paper["id"]})
     await finished(api, ben, shared["id"], toilet_paper, at=START)
-    own = await shopping_with(api, ben, {"ingredient_id": soap["id"], "amount": 3})
+    own = await shopping_with(api, ben, {"item_id": soap["id"], "amount": 3})
     await finished(api, ben, own["id"], soap, at=START)
 
     for user in (anna, ben):
         assert [
-            (item["ingredient"]["name"], item["last_purchased_on"])
+            (item["item"]["name"], item["last_purchased_on"])
             for item in (await recurring(api, user))["items"]
         ] == [("Klopapier", "2026-09-27"), ("Seife", "2026-09-27")]
     assert (await item_of(api, anna, soap))["last_amount"] == {"value": 3, "unit": "piece"}
@@ -170,7 +170,7 @@ async def test_unchecked_and_free_text_lines_and_unfinished_lists_count_nothing(
         await make_recurring(api, anna, ingredient["id"], last_purchased_on=date(2026, 8, 23))
     before = await recurring(api, anna)
     shopping_list = await shopping_with(
-        api, anna, {"ingredient_id": toilet_paper["id"]}, {"ingredient_id": soap["id"]},
+        api, anna, {"item_id": toilet_paper["id"]}, {"item_id": soap["id"]},
         {"text": "Klopapier"},
     )  # fmt: skip
     text_key = next(line["key"] for line in shopping_list["lines"] if line["kind"] == "text")
@@ -189,12 +189,10 @@ async def test_a_line_that_needs_more_was_not_bought(
     """A checked line whose amount grew since shows unchecked on the done list (LIST-12), so
     it is no purchase."""
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 23))
-    shopping_list = await shopping_with(
-        api, anna, {"ingredient_id": toilet_paper["id"], "amount": 8}
-    )
+    shopping_list = await shopping_with(api, anna, {"item_id": toilet_paper["id"], "amount": 8})
     list_id = shopping_list["id"]
     await applied(api, anna, list_id, check(key(toilet_paper), at=START))
-    await extra_added(api, anna, list_id, ingredient_id=toilet_paper["id"], amount=4)
+    await extra_added(api, anna, list_id, item_id=toilet_paper["id"], amount=4)
     body = await applied(api, anna, list_id, op("list.finish", at=START + MINUTE))
     assert by_key(body, key(toilet_paper))["needs_more"] is not None
 
@@ -213,7 +211,7 @@ async def test_a_late_check_off_on_a_done_list_is_a_purchase_too(
     for ingredient in (toilet_paper, soap):
         await make_recurring(api, anna, ingredient["id"], last_purchased_on=date(2026, 8, 23))
     shopping_list = await shopping_with(
-        api, anna, {"ingredient_id": toilet_paper["id"]}, {"ingredient_id": soap["id"]}
+        api, anna, {"item_id": toilet_paper["id"]}, {"item_id": soap["id"]}
     )
     clock.advance(minutes=20)
     for user in (anna, ben):
@@ -232,7 +230,7 @@ async def test_a_list_counts_once(
     """Finishing again after "Reopen", with the line checked off anew three days later, and
     sending the same batch twice, count nothing twice."""
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 28))
-    shopping_list = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
+    shopping_list = await shopping_with(api, anna, {"item_id": toilet_paper["id"]})
     list_id = shopping_list["id"]
     batch = [check(key(toilet_paper), at=START), op("list.finish", at=START + MINUTE)]
     await applied(api, anna, list_id, *batch)
@@ -262,10 +260,10 @@ async def test_a_purchase_before_the_last_one_changes_nothing(
     """List A was finished offline on day 0 and is sent after list B was finished on day 2:
     the last purchase stays on day 2, with B's amount."""
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 23))
-    offline = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"], "amount": 4})
+    offline = await shopping_with(api, anna, {"item_id": toilet_paper["id"], "amount": 4})
     clock.advance(days=2)
     await login(api, anna)
-    online = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"], "amount": 8})
+    online = await shopping_with(api, anna, {"item_id": toilet_paper["id"], "amount": 8})
     await finished(api, anna, online["id"], toilet_paper, at=clock.now)
     bought = await item_of(api, anna, toilet_paper)
     assert bought["last_purchased_on"] == "2026-09-29"
@@ -282,7 +280,7 @@ async def test_a_second_purchase_on_the_same_day_adds_no_interval(
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 28))
     for amount in (4, 8):
         shopping_list = await shopping_with(
-            api, anna, {"ingredient_id": toilet_paper["id"], "amount": amount}
+            api, anna, {"item_id": toilet_paper["id"], "amount": amount}
         )
         await finished(api, anna, shopping_list["id"], toilet_paper, at=START)
 
@@ -297,7 +295,7 @@ async def test_a_late_uncheck_undoes_no_purchase(
     """An uncheck tapped before the finish but sent after it is applied (SYNC-06); the
     purchase stays."""
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 23))
-    shopping_list = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
+    shopping_list = await shopping_with(api, anna, {"item_id": toilet_paper["id"]})
     clock.advance(minutes=10)
     await login(api, anna)
     await finished(api, anna, shopping_list["id"], toilet_paper, at=START)
@@ -323,9 +321,7 @@ async def test_after_the_second_purchase_the_interval_is_the_average(
         await make_recurring(api, anna, ingredient["id"], last_purchased_on=date(2026, 8, 28))
     manual = await item_of(api, anna, soap)
     await updated(api, anna, manual["id"], interval_weeks=4)
-    first = await shopping_with(
-        api, anna, {"ingredient_id": toilet_paper["id"]}, {"ingredient_id": soap["id"]}
-    )
+    first = await shopping_with(api, anna, {"item_id": toilet_paper["id"]}, {"item_id": soap["id"]})
     await finished(api, anna, first["id"], toilet_paper, soap, at=START)
     once = await item_of(api, anna, toilet_paper)
     assert (once["due_on"], once["interval"]) == (
@@ -336,7 +332,7 @@ async def test_after_the_second_purchase_the_interval_is_the_average(
     clock.advance(days=20)
     await login(api, anna)
     second = await shopping_with(
-        api, anna, {"ingredient_id": toilet_paper["id"]}, {"ingredient_id": soap["id"]}
+        api, anna, {"item_id": toilet_paper["id"]}, {"item_id": soap["id"]}
     )
     await finished(api, anna, second["id"], toilet_paper, soap, at=clock.now)
     automatic = await item_of(api, anna, toilet_paper)
@@ -353,7 +349,7 @@ async def test_deleting_a_done_list_changes_no_recurring_item(
     api: AsyncClient, anna: Account, toilet_paper: Any
 ) -> None:
     await make_recurring(api, anna, toilet_paper["id"], last_purchased_on=date(2026, 8, 23))
-    shopping_list = await shopping_with(api, anna, {"ingredient_id": toilet_paper["id"]})
+    shopping_list = await shopping_with(api, anna, {"item_id": toilet_paper["id"]})
     await finished(api, anna, shopping_list["id"], toilet_paper, at=START)
     bought = await item_of(api, anna, toilet_paper)
 

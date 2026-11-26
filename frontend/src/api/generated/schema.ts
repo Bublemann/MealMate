@@ -80,7 +80,7 @@ export interface paths {
         post?: never;
         /**
          * Admin Delete Category
-         * @description Delete a category: its ingredients move to *Uncategorized* and its free-text items on
+         * @description Delete a category: its items move to *Uncategorized* and its free-text items on
          *     drafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and
          *     *Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not
          *     found.
@@ -106,7 +106,7 @@ export interface paths {
         };
         /**
          * Admin Category Usage
-         * @description How many ingredients and free-text items on drafts deleting the category would move, for
+         * @description How many items and free-text items on drafts deleting the category would move, for
          *     the confirmation. A deleted category is not found.
          */
         get: operations["admin_category_usage"];
@@ -132,49 +132,6 @@ export interface paths {
         get: operations["admin_list_events"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/ingredients/{ingredient_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Admin Delete Ingredient
-         * @description Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise).
-         */
-        delete: operations["admin_delete_ingredient"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/ingredients/{ingredient_id}/merge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Admin Merge Ingredient
-         * @description Merge a duplicate into `into_id`: its references move there and it is deleted
-         *     (ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the
-         *     number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
-         *     is true (D-33).
-         */
-        post: operations["admin_merge_ingredient"];
         delete?: never;
         options?: never;
         head?: never;
@@ -220,6 +177,49 @@ export interface paths {
          * @description Revoke an invite so it can no longer be used.
          */
         delete: operations["admin_revoke_invite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin Delete Item
+         * @description Delete an item that nothing refers to (409 `item.in_use` otherwise).
+         */
+        delete: operations["admin_delete_item"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/items/{item_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Merge Item
+         * @description Merge a duplicate into `into_id`: its references move there and it is deleted
+         *     (ING-05). Returns the item merged into. 409 `item.unit_mismatch` with the
+         *     number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
+         *     is true (D-33).
+         */
+        post: operations["admin_merge_item"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -689,7 +689,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients": {
+    "/api/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -697,28 +697,28 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Ingredients
+         * List Items
          * @description Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
          *     then names starting with `q`, then the rest, each in dictionary order by name and brand
          *     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
-         *     ingredients in that order (at most 1000). `category_id`
-         *     is repeatable: an ingredient matches if it is in any of the given categories.
+         *     items in that order (at most 1000). `category_id`
+         *     is repeatable: an item matches if it is in any of the given categories.
          */
-        get: operations["list_ingredients"];
+        get: operations["list_items"];
         put?: never;
         /**
-         * Create Ingredient
-         * @description Add an ingredient, by hand or from an Open Food Facts proposal (`off`) in one request;
-         *     409 `ingredient.barcode_taken` if another ingredient has the barcode.
+         * Create Item
+         * @description Add an item, by hand or from an Open Food Facts proposal (`off`) in one request;
+         *     409 `item.barcode_taken` if another item has the barcode.
          */
-        post: operations["create_ingredient"];
+        post: operations["create_item"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients/lookup": {
+    "/api/items/lookup": {
         parameters: {
             query?: never;
             header?: never;
@@ -727,11 +727,11 @@ export interface paths {
         };
         /**
          * Lookup Barcode
-         * @description Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a
-         *     proposal, not saved). With `own_only`, only our own ingredients: `none` then means that
-         *     no ingredient has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
+         * @description Look a scanned or typed barcode up: our own items first, then Open Food Facts (a
+         *     proposal, not saved). With `own_only`, only our own items: `none` then means that
+         *     no item has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a
          *     barcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open
-         *     Food Facts. A stale ingredient from Open Food Facts is refreshed after the response.
+         *     Food Facts. A stale item from Open Food Facts is refreshed after the response.
          */
         get: operations["lookup_barcode"];
         put?: never;
@@ -742,7 +742,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients/off-search": {
+    "/api/items/off-search": {
         parameters: {
             query?: never;
             header?: never;
@@ -766,7 +766,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients/similar": {
+    "/api/items/similar": {
         parameters: {
             query?: never;
             header?: never;
@@ -774,11 +774,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Similar Ingredients
-         * @description Up to five ingredients with a similar name, for the "similar ingredient exists" hint
+         * List Similar Items
+         * @description Up to five items with a similar name, for the "similar item exists" hint
          *     (only a hint: names need not be unique); those with the same name and `brand` first.
          */
-        get: operations["list_similar_ingredients"];
+        get: operations["list_similar_items"];
         put?: never;
         post?: never;
         delete?: never;
@@ -787,7 +787,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients/{ingredient_id}": {
+    "/api/items/{item_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -795,27 +795,27 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Ingredient
-         * @description An ingredient with its values, barcode, Open Food Facts data and usage; a stale one from
+         * Get Item
+         * @description An item with its values, barcode, Open Food Facts data and usage; a stale one from
          *     Open Food Facts is refreshed after the response.
          */
-        get: operations["get_ingredient"];
+        get: operations["get_item"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /**
-         * Update Ingredient
-         * @description Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.
+         * Update Item
+         * @description Change an item (anyone may); Open Food Facts fields sent become user-edited.
          *     Clearing or changing the barcode of one from Open Food Facts makes it manual. 409
-         *     `ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit
+         *     `item.unit_mismatch` with the number of meals and drafts affected when a base-unit
          *     change would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33).
          */
-        patch: operations["update_ingredient"];
+        patch: operations["update_item"];
         trace?: never;
     };
-    "/api/ingredients/{ingredient_id}/barcode": {
+    "/api/items/{item_id}/barcode": {
         parameters: {
             query?: never;
             header?: never;
@@ -826,9 +826,9 @@ export interface paths {
         put?: never;
         /**
          * Link Barcode
-         * @description Give an ingredient without a barcode a scanned one (the scanner's "already in
-         *     MealMate"); it never replaces one: 409 `ingredient.has_barcode` if it has a barcode, 409
-         *     `ingredient.barcode_taken` if another ingredient has this one. The edit form changes a
+         * @description Give an item without a barcode a scanned one (the scanner's "already in
+         *     MealMate"); it never replaces one: 409 `item.has_barcode` if it has a barcode, 409
+         *     `item.barcode_taken` if another item has this one. The edit form changes a
          *     barcode with PATCH instead.
          */
         post: operations["link_barcode"];
@@ -838,7 +838,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients/{ingredient_id}/pending-update/apply": {
+    "/api/items/{item_id}/pending-update/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -850,7 +850,7 @@ export interface paths {
         /**
          * Apply Pending Update
          * @description Take the newer Open Food Facts values (BAR-06); those fields are no longer
-         *     user-edited. 409 `ingredient.no_pending_update` if there are none.
+         *     user-edited. 409 `item.no_pending_update` if there are none.
          */
         post: operations["apply_pending_update"];
         delete?: never;
@@ -859,7 +859,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ingredients/{ingredient_id}/pending-update/ignore": {
+    "/api/items/{item_id}/pending-update/ignore": {
         parameters: {
             query?: never;
             header?: never;
@@ -871,7 +871,7 @@ export interface paths {
         /**
          * Ignore Pending Update
          * @description Keep the user's values (BAR-06); the same Open Food Facts version is not proposed
-         *     again. 409 `ingredient.no_pending_update` if there is nothing to ignore.
+         *     again. 409 `item.no_pending_update` if there is nothing to ignore.
          */
         post: operations["ignore_pending_update"];
         delete?: never;
@@ -984,7 +984,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/lists/{list_id}/due-items/{ingredient_id}/hide": {
+    "/api/lists/{list_id}/due-items/{item_id}/hide": {
         parameters: {
             query?: never;
             header?: never;
@@ -996,7 +996,7 @@ export interface paths {
         /**
          * Hide Due Item
          * @description Hide a due recurring item ("Fällig" box) on this list for everyone who sees it (drafts;
-         *     409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an
+         *     409 `list.not_draft` otherwise). There is no undo; the item can still be added as an
          *     extra item.
          */
         post: operations["hide_due_item"];
@@ -1017,7 +1017,7 @@ export interface paths {
         put?: never;
         /**
          * Add Extra Item
-         * @description Add an extra item: linked to an ingredient or free text. With an `id` already on this
+         * @description Add an extra item: linked to an item or free text. With an `id` already on this
          *     list nothing changes and the answer is 200 (safe to retry). While shopping, the item is
          *     `new` on the list.
          */
@@ -1219,7 +1219,7 @@ export interface paths {
         /**
          * Start Shopping
          * @description Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'
-         *     ingredients are frozen, so later changes of meals and ingredients no longer affect it
+         *     ingredients are frozen, so later changes of meals and items no longer affect it
          *     (LIST-11), and lines can be checked off.
          */
         post: operations["start_shopping"];
@@ -1262,7 +1262,7 @@ export interface paths {
         };
         /**
          * List Notices
-         * @description The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a
+         * @description The own unread notices, newest first, e.g. that an admin deleted an item kept as a
          *     recurring item.
          */
         get: operations["list_notices"];
@@ -1556,7 +1556,7 @@ export interface paths {
         put?: never;
         /**
          * Create Recurring Item
-         * @description Make an ingredient recurring in the caller's set.
+         * @description Make an item recurring in the caller's set.
          */
         post: operations["create_recurring_item"];
         delete?: never;
@@ -1814,15 +1814,15 @@ export interface components {
         };
         /**
          * BarcodeLookup
-         * @description The result of a barcode lookup (BAR-02, BAR-03), our own ingredients first:
+         * @description The result of a barcode lookup (BAR-02, BAR-03), our own items first:
          *
-         *     - `found_in` db: the `ingredient` with this barcode (go straight to it, or pick it);
+         *     - `found_in` db: the `item` with this barcode (go straight to it, or pick it);
          *     - `found_in` off: Open Food Facts' `proposal`; nothing is saved until the user saves the
-         *       prefilled ingredient form (`POST /api/ingredients` with `off`);
+         *       prefilled item form (`POST /api/items` with `off`);
          *     - `found_in` none: unknown to Open Food Facts, or `off_unavailable` when it could not be
          *       asked (slow or unreachable); the user enters the values.
          *
-         *     `barcode` is the canonical form (EAN-13, or EAN-8) to save the ingredient with.
+         *     `barcode` is the canonical form (EAN-13, or EAN-8) to save the item with.
          */
         BarcodeLookup: {
             /** Barcode */
@@ -1832,7 +1832,7 @@ export interface components {
              * @enum {string}
              */
             found_in: "db" | "off" | "none";
-            ingredient: components["schemas"]["Ingredient"] | null;
+            item: components["schemas"]["Item"] | null;
             /** Off Unavailable */
             off_unavailable: boolean;
             proposal: components["schemas"]["ProductProposal"] | null;
@@ -1855,7 +1855,7 @@ export interface components {
          *     done lists still show it. It keeps its last `sort_order`, which the next category in the
          *     walking order took over: its lines come right after that one's.
          *
-         *     `ingredient_count`: how many ingredients it holds, so that the Ingredients tab offers
+         *     `item_count`: how many items it holds, so that the Ingredients tab offers
          *     *Uncategorized* in its filter only while it holds some (ING-03).
          */
         Category: {
@@ -1863,8 +1863,8 @@ export interface components {
             deleted: boolean;
             /** Id */
             id: string;
-            /** Ingredient Count */
-            ingredient_count: number;
+            /** Item Count */
+            item_count: number;
             /** Key */
             key: string | null;
             names: components["schemas"]["CategoryNames"];
@@ -1908,14 +1908,14 @@ export interface components {
         };
         /**
          * CategoryUsage
-         * @description What deleting a category would move (ADM-01): its `ingredients` to *Uncategorized*, and
+         * @description What deleting a category would move (ADM-01): its `items` to *Uncategorized*, and
          *     the free-text extra items on drafts (`extra_items`) to *Other*.
          */
         CategoryUsage: {
             /** Extra Items */
             extra_items: number;
-            /** Ingredients */
-            ingredients: number;
+            /** Items */
+            items: number;
         };
         /** CodeCheckRequest */
         CodeCheckRequest: {
@@ -2038,7 +2038,7 @@ export interface components {
          * @description A due recurring item of the viewer's set, offered in a draft's "Fällig" box (LIST-16):
          *     due since `due_on`, `days_until_due` from today (0 "fällig heute", -3 "fällig seit 3
          *     Tagen"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,
-         *     only while its unit fits the ingredient's base unit (REF-02), for the amount pop-up.
+         *     only while its unit fits the item's base unit (REF-02), for the amount pop-up.
          */
         DueItem: {
             /** Days Until Due */
@@ -2048,7 +2048,7 @@ export interface components {
              * Format: date
              */
             due_on: string;
-            ingredient: components["schemas"]["IngredientSummary"];
+            item: components["schemas"]["ItemSummary"];
             last_amount: components["schemas"]["DisplayAmountOut"] | null;
             /**
              * Last Purchased On
@@ -2061,7 +2061,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "ingredient.in_use" | "ingredient.barcode_taken" | "ingredient.has_barcode" | "ingredient.no_pending_update" | "ingredient.unit_mismatch" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "item.in_use" | "item.barcode_taken" | "item.has_barcode" | "item.no_pending_update" | "item.unit_mismatch" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -2140,10 +2140,10 @@ export interface components {
         };
         /**
          * ExtraItem
-         * @description An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`
+         * @description An extra item (LIST-06): linked to an item (`item_id`, optional `amount`
          *     and `unit`) or free text (`text`, optional `amount_text`, `category_id`).
          *
-         *     A linked item's `base_unit` is the one its line is calculated with: its ingredient's, or
+         *     A linked item's `base_unit` is the one its line is calculated with: its item's, or
          *     the one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false
          *     for an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,
          *     or left by a base-unit change or a merge, and is kept as it is (D-33). Free text always
@@ -2166,8 +2166,8 @@ export interface components {
             created_at: string;
             /** Id */
             id: string;
-            /** Ingredient Id */
-            ingredient_id: string | null;
+            /** Item Id */
+            item_id: string | null;
             /** Text */
             text: string | null;
             unit: components["schemas"]["Unit"] | null;
@@ -2176,11 +2176,11 @@ export interface components {
         };
         /**
          * ExtraItemCreate
-         * @description Exactly one of `ingredient_id` and `text` (LIST-06).
+         * @description Exactly one of `item_id` and `text` (LIST-06).
          *
-         *     - linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
+         *     - linked (`item_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
          *       without a unit counts as pieces, a unit without an amount is refused, and the unit must
-         *       fit the ingredient's base unit (REF-02; `unit` `unit_mismatch` otherwise); no
+         *       fit the item's base unit (REF-02; `unit` `unit_mismatch` otherwise); no
          *       `amount_text` or `category_id`;
          *     - free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)
          *       and `category_id` (default: *Other*); no `amount` or `unit`.
@@ -2196,8 +2196,8 @@ export interface components {
             category_id?: string | null;
             /** Id */
             id?: string | null;
-            /** Ingredient Id */
-            ingredient_id?: string | null;
+            /** Item Id */
+            item_id?: string | null;
             /** Text */
             text?: string | null;
             unit?: components["schemas"]["Unit"] | null;
@@ -2206,8 +2206,8 @@ export interface components {
          * ExtraItemUpdate
          * @description Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of
          *     item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
-         *     unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`. A linked
-         *     item whose amount doesn't fit stays as it is while its ingredient, amount and unit stay the
+         *     unit or amount text, and is refused for `item_id`, `text` and `category_id`. A linked
+         *     item whose amount doesn't fit stays as it is while its item, amount and unit stay the
          *     same; changing any of them needs a unit that fits (D-33).
          */
         ExtraItemUpdate: {
@@ -2217,8 +2217,8 @@ export interface components {
             amount_text?: string | null;
             /** Category Id */
             category_id?: string | null;
-            /** Ingredient Id */
-            ingredient_id?: string | null;
+            /** Item Id */
+            item_id?: string | null;
             /** Text */
             text?: string | null;
             unit?: components["schemas"]["Unit"] | null;
@@ -2293,10 +2293,51 @@ export interface components {
              */
             status: "ok";
         };
+        /** Invite */
+        Invite: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["UserRef"] | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "used" | "expired" | "revoked";
+            /** Tailscale Share Url */
+            tailscale_share_url: string | null;
+            used_by: components["schemas"]["UserRef"] | null;
+        };
         /**
-         * Ingredient
-         * @description An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
-         *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count
+         * InviteCreate
+         * @description `tailscale_share_url`: the optional share link for step 1 of the invite message.
+         */
+        InviteCreate: {
+            /** Tailscale Share Url */
+            tailscale_share_url?: string | null;
+        };
+        /**
+         * InviteCreated
+         * @description The new invite and its link (`/join#<code>`); the code is shown only this once.
+         */
+        InviteCreated: {
+            invite: components["schemas"]["Invite"];
+            /** Url */
+            url: string;
+        };
+        /**
+         * Item
+         * @description An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
+         *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count
          *     with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
          *
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
@@ -2308,7 +2349,7 @@ export interface components {
          *     before D-47 keeps Open Food Facts' amount until its text changes.
          *     `created_by` / `updated_by` are null for a deleted user (ING-06).
          */
-        Ingredient: {
+        Item: {
             /** Barcode */
             barcode: string | null;
             /**
@@ -2354,38 +2395,38 @@ export interface components {
              */
             updated_at: string;
             updated_by: components["schemas"]["UserRef"] | null;
-            usage: components["schemas"]["IngredientUsage"];
+            usage: components["schemas"]["ItemUsage"];
             /** User Edited Fields */
             user_edited_fields: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
         };
         /**
-         * IngredientBarcodeLink
-         * @description Give an ingredient without a barcode the scanned one (the scanner's "already in
-         *     MealMate"). Unlike an update, this never replaces a barcode: 409 `ingredient.has_barcode`
-         *     if the ingredient has one, 409 `ingredient.barcode_taken` if another ingredient has it.
+         * ItemBarcodeLink
+         * @description Give an item without a barcode the scanned one (the scanner's "already in
+         *     MealMate"). Unlike an update, this never replaces a barcode: 409 `item.has_barcode`
+         *     if the item has one, 409 `item.barcode_taken` if another item has it.
          */
-        IngredientBarcodeLink: {
+        ItemBarcodeLink: {
             /** Barcode */
             barcode: string;
         };
         /**
-         * IngredientCreate
-         * @description A new ingredient (ING-02), in one request also when it was scanned.
+         * ItemCreate
+         * @description A new item (ING-02), in one request also when it was scanned.
          *
          *     `category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:
          *     0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per
          *     100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
          *     valid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13
          *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
-         *     ingredient has is 409 `ingredient.barcode_taken`.
+         *     item has is 409 `item.barcode_taken`.
          *
          *     `quantity_text` is the pack size ("500 g", "6 x 1,5 l"), at most 40 characters, for any
-         *     ingredient; its amount is taken from it (D-47). With `off`, the ingredient is from Open Food
+         *     item; its amount is taken from it (D-47). With `off`, the item is from Open Food
          *     Facts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).
-         *     Names need not be unique: the "similar ingredient exists" hint
-         *     (`GET /api/ingredients/similar`) is only a hint.
+         *     Names need not be unique: the "similar item exists" hint
+         *     (`GET /api/items/similar`) is only a hint.
          */
-        IngredientCreate: {
+        ItemCreate: {
             /** Barcode */
             barcode?: string | null;
             /**
@@ -2401,45 +2442,45 @@ export interface components {
             /** Name */
             name: string;
             nutrients?: components["schemas"]["NutrientValues"] | null;
-            off?: components["schemas"]["IngredientOffOrigin"] | null;
+            off?: components["schemas"]["ItemOffOrigin"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
             /** Quantity Text */
             quantity_text?: string | null;
         };
         /**
-         * IngredientMerge
-         * @description Merge the ingredient into `into_id` (ING-05). A merge across base units that would leave
-         *     amounts of the ingredient not fitting the base unit of `into_id` is refused (409
-         *     `ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
+         * ItemMerge
+         * @description Merge the item into `into_id` (ING-05). A merge across base units that would leave
+         *     amounts of the item not fitting the base unit of `into_id` is refused (409
+         *     `item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
          *     isn't).
          */
-        IngredientMerge: {
+        ItemMerge: {
             /** Accept Unit Mismatch */
             accept_unit_mismatch?: boolean | null;
             /** Into Id */
             into_id: string;
         };
         /**
-         * IngredientOffOrigin
-         * @description The ingredient's values come from an Open Food Facts proposal (a barcode lookup or the
+         * ItemOffOrigin
+         * @description The item's values come from an Open Food Facts proposal (a barcode lookup or the
          *     name search), possibly corrected: `off_last_modified_at` is the proposal's, and
          *     `edited_fields` the fields the user changed compared with it. Only those are marked
          *     user-edited; the others are refreshed from Open Food Facts (BAR-04, BAR-05).
          */
-        IngredientOffOrigin: {
+        ItemOffOrigin: {
             /** Edited Fields */
             edited_fields?: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
             /** Off Last Modified At */
             off_last_modified_at?: string | null;
         };
         /**
-         * IngredientSearchResult
-         * @description A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut
+         * ItemSearchResult
+         * @description A result of the item search. `exact`: its name is the query, ignoring case, umlaut
          *     spelling and accents (ING-03), whatever its brand; these come first. The list's item field
          *     takes such a result for "+" when it is the only one (D-41). False without a query.
          */
-        IngredientSearchResult: {
+        ItemSearchResult: {
             /** Barcode */
             barcode: string | null;
             /**
@@ -2464,12 +2505,12 @@ export interface components {
             source: "manual" | "off";
         };
         /**
-         * IngredientSummary
-         * @description A search result, list entry or meal row's ingredient. It is shown as `name` with the
+         * ItemSummary
+         * @description A search result, list entry or meal row's item. It is shown as `name` with the
          *     `brand` in brackets when there is one ("Milch (Weihenstephan)"); `barcode` is set for
-         *     scanned ingredients.
+         *     scanned items.
          */
-        IngredientSummary: {
+        ItemSummary: {
             /** Barcode */
             barcode: string | null;
             /**
@@ -2492,25 +2533,25 @@ export interface components {
             source: "manual" | "off";
         };
         /**
-         * IngredientUpdate
+         * ItemUpdate
          * @description Only the fields that are sent change (ING-01); an explicit null clears an optional one
          *     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
          *     only the nutrients it contains (null clears one).
          *
-         *     On an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the
+         *     On an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the
          *     pack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack
          *     size's amount follows its text. A new barcode must be free (409
-         *     `ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open
+         *     `item.barcode_taken`); clearing or changing the barcode of an item from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
          *     Changing it to or from `piece` clears the piece weight, unless the change to `piece` sends
-         *     one. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces
+         *     one. A piece weight is only taken for an item that is (or becomes) counted in pieces
          *     (422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on
-         *     drafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless
+         *     drafts not fitting is refused (409 `item.unit_mismatch`, D-33) unless
          *     `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
          *     they are and flagged.
          */
-        IngredientUpdate: {
+        ItemUpdate: {
             /** Accept Unit Mismatch */
             accept_unit_mismatch?: boolean | null;
             /** Barcode */
@@ -2530,56 +2571,15 @@ export interface components {
             quantity_text?: string | null;
         };
         /**
-         * IngredientUsage
-         * @description How many meals use the ingredient, and how many lists keep it in frozen rows or extra
+         * ItemUsage
+         * @description How many meals use the item, and how many lists keep it in frozen rows or extra
          *     items (the references that block deleting it, ING-05).
          */
-        IngredientUsage: {
+        ItemUsage: {
             /** Lists */
             lists: number;
             /** Meals */
             meals: number;
-        };
-        /** Invite */
-        Invite: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            created_by: components["schemas"]["UserRef"] | null;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /** Id */
-            id: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "open" | "used" | "expired" | "revoked";
-            /** Tailscale Share Url */
-            tailscale_share_url: string | null;
-            used_by: components["schemas"]["UserRef"] | null;
-        };
-        /**
-         * InviteCreate
-         * @description `tailscale_share_url`: the optional share link for step 1 of the invite message.
-         */
-        InviteCreate: {
-            /** Tailscale Share Url */
-            tailscale_share_url?: string | null;
-        };
-        /**
-         * InviteCreated
-         * @description The new invite and its link (`/join#<code>`); the code is shown only this once.
-         */
-        InviteCreated: {
-            invite: components["schemas"]["Invite"];
-            /** Url */
-            url: string;
         };
         /**
          * JoinRequest
@@ -2719,7 +2719,7 @@ export interface components {
          *     and `finished_at` are set once shopping started and while the list is done (LIST-10).
          *
          *     `due_items` fill the "Fällig" box (LIST-16), only on a draft the viewer can edit, else
-         *     empty: the due recurring items of the viewer's set whose ingredient has no line on the list
+         *     empty: the due recurring items of the viewer's set whose item has no line on the list
          *     (a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.
          */
         ListDetail: {
@@ -2803,7 +2803,7 @@ export interface components {
         ListFinishPayload: Record<string, never>;
         /**
          * ListLine
-         * @description An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,
+         * @description An aggregated line (AGG), identified by `key`: `i:<item_id>` for an item,
          *     `x:<extra_id>` for a free-text item.
          *
          *     `amounts` are the display amounts, shown joined ("500 g + 2 Stk."); `has_unspecified` means
@@ -2835,15 +2835,15 @@ export interface components {
             has_unspecified: boolean;
             /** Hidden */
             hidden: boolean;
-            /** Ingredient Id */
-            ingredient_id: string | null;
+            /** Item Id */
+            item_id: string | null;
             /** Key */
             key: string;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "ingredient" | "text";
+            kind: "item" | "text";
             /** Name */
             name: string;
             needs_more: components["schemas"]["LineNeedsMore"] | null;
@@ -3112,16 +3112,16 @@ export interface components {
         /**
          * MealIngredientInput
          * @description `amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an
-         *     amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's
+         *     amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the item's
          *     base unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already
-         *     has the very same row (ingredient, amount and unit), which is kept as it is (MEAL-02). An
+         *     has the very same row (item, amount and unit), which is kept as it is (MEAL-02). An
          *     empty note is stored as null.
          */
         MealIngredientInput: {
             /** Amount */
             amount?: number | null;
-            /** Ingredient Id */
-            ingredient_id: string;
+            /** Item Id */
+            item_id: string;
             /** Note */
             note?: string | null;
             unit?: components["schemas"]["Unit"] | null;
@@ -3129,7 +3129,7 @@ export interface components {
         /**
          * MealIngredientRow
          * @description An ingredient row; `amount` and `unit` are both null for e.g. "salt, to taste".
-         *     `unit_fits` is false for an amount whose unit doesn't fit the ingredient's base unit
+         *     `unit_fits` is false for an amount whose unit doesn't fit the item's base unit
          *     (REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is
          *     kept as it is (MEAL-02, D-33).
          */
@@ -3138,7 +3138,7 @@ export interface components {
             amount: number | null;
             /** Id */
             id: string;
-            ingredient: components["schemas"]["IngredientSummary"];
+            item: components["schemas"]["ItemSummary"];
             /** Note */
             note: string | null;
             /** Position */
@@ -3151,7 +3151,7 @@ export interface components {
          * MealNutrition
          * @description Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing
          *     contributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of
-         *     a g ingredient were counted as 1 g/ml (NUT-05). The totals are not
+         *     a g item were counted as 1 g/ml (NUT-05). The totals are not
          *     bounded by the per-100 maximums of `NutrientValues`.
          */
         MealNutrition: {
@@ -3167,16 +3167,16 @@ export interface components {
         /**
          * MealNutritionMissing
          * @description Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the
-         *     ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown
+         *     item's base unit, pieces of a `piece` item without a piece weight, or an unknown
          *     value for `nutrient` (NUT-04).
          */
         MealNutritionMissing: {
-            /** Ingredient Brand */
-            ingredient_brand: string | null;
-            /** Ingredient Id */
-            ingredient_id: string;
-            /** Ingredient Name */
-            ingredient_name: string;
+            /** Item Brand */
+            item_brand: string | null;
+            /** Item Id */
+            item_id: string;
+            /** Item Name */
+            item_name: string;
             /** Nutrient */
             nutrient: string | null;
             /**
@@ -3335,13 +3335,13 @@ export interface components {
         /**
          * OffSearchResult
          * @description A product found by the Open Food Facts name search, as a `proposal` like the barcode
-         *     lookup's. `in_mealmate`: an ingredient already has its barcode (`ingredient`), which can
+         *     lookup's. `in_mealmate`: an item already has its barcode (`item`), which can
          *     be picked instead of creating another one.
          */
         OffSearchResult: {
             /** In Mealmate */
             in_mealmate: boolean;
-            ingredient: components["schemas"]["IngredientSummary"] | null;
+            item: components["schemas"]["ItemSummary"] | null;
             proposal: components["schemas"]["ProductProposal"];
         };
         /**
@@ -3404,7 +3404,7 @@ export interface components {
         /**
          * PendingUpdateField
          * @description A user-edited field for which Open Food Facts now has another value: `current` is the
-         *     ingredient's value, `proposed` the new one (a text, a number or null).
+         *     item's value, `proposed` the new one (a text, a number or null).
          */
         PendingUpdateField: {
             /** Current */
@@ -3420,13 +3420,13 @@ export interface components {
         /**
          * ProductProposal
          * @description A product from Open Food Facts, validated and cleaned (BAR-10) but not saved: the values
-         *     to prefill the ingredient form with.
+         *     to prefill the item form with.
          *
          *     `name` is in the user's language if Open Food Facts has it, cut at a word boundary to the
-         *     60 characters of an ingredient name. `nutrition_basis` is null when Open Food Facts gives no
+         *     60 characters of an item name. `nutrition_basis` is null when Open Food Facts gives no
          *     values per 100 g or 100 ml; the nutrients are then all unknown. `category_key` is a guessed
          *     category (`/api/categories` key), or null. Values that are not plausible are dropped
-         *     (null). `barcode` is the canonical form to save the ingredient with.
+         *     (null). `barcode` is the canonical form to save the item with.
          */
         ProductProposal: {
             /** Barcode */
@@ -3468,7 +3468,7 @@ export interface components {
          *     interval, in calendar days of the instance's time zone. `days_until_due` counts from today
          *     (0 "fällig heute", 1 "fällig morgen", -3 "fällig seit 3 Tagen"). `interval_weeks` is the
          *     set interval for the edit pop-up. `last_amount` is the last purchase's amount, only while
-         *     its unit fits the ingredient's base unit (REF-02).
+         *     its unit fits the item's base unit (REF-02).
          */
         RecurringItem: {
             /** Days Until Due */
@@ -3482,10 +3482,10 @@ export interface components {
             due_on: string;
             /** Id */
             id: string;
-            ingredient: components["schemas"]["IngredientSummary"];
             interval: components["schemas"]["RecurringInterval"];
             /** Interval Weeks */
             interval_weeks: number;
+            item: components["schemas"]["ItemSummary"];
             last_amount: components["schemas"]["DisplayAmountOut"] | null;
             /**
              * Last Purchased On
@@ -3495,23 +3495,23 @@ export interface components {
         };
         /**
          * RecurringItemCreate
-         * @description Make an ingredient recurring: every `interval_weeks` (1 to 52), last bought on
+         * @description Make an item recurring: every `interval_weeks` (1 to 52), last bought on
          *     `last_purchased_on` (today if left out; not in the future, at most 730 days back:
-         *     422 `out_of_range`). An ingredient already in the set is 422 `taken`, an unknown one
+         *     422 `out_of_range`). An item already in the set is 422 `taken`, an unknown one
          *     `invalid`. The interval adapts automatically from the second purchase on.
          */
         RecurringItemCreate: {
-            /** Ingredient Id */
-            ingredient_id: string;
             /** Interval Weeks */
             interval_weeks: number;
+            /** Item Id */
+            item_id: string;
             /** Last Purchased On */
             last_purchased_on?: string | null;
         };
         /**
          * RecurringItemList
          * @description The caller's set (their couple's while in one, else their own), sorted by due date and
-         *     then by the ingredient's name, and how many items are due.
+         *     then by the item's name, and how many items are due.
          */
         RecurringItemList: {
             /** Due Count */
@@ -3620,9 +3620,9 @@ export interface components {
         Unit: "g" | "kg" | "ml" | "l" | "piece" | "tbsp" | "tsp";
         /**
          * UnitInfo
-         * @description A unit (translation `unit.<unit>`), its kind, and the base units of the ingredients it
-         *     fits (REF-02): an amount of an ingredient takes only the units whose `base_units` hold the
-         *     ingredient's base unit. An amount without a unit counts as pieces.
+         * @description A unit (translation `unit.<unit>`), its kind, and the base units of the items it
+         *     fits (REF-02): an amount of an item takes only the units whose `base_units` hold the
+         *     item's base unit. An amount without a unit counts as pieces.
          */
         UnitInfo: {
             /** Base Units */
@@ -3925,70 +3925,6 @@ export interface operations {
             };
         };
     };
-    admin_delete_ingredient: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ingredient_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error envelope; `code` names the error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    admin_merge_ingredient: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ingredient_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IngredientMerge"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Ingredient"];
-                };
-            };
-            /** @description Error envelope; `code` names the error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     admin_list_invites: {
         parameters: {
             query?: never;
@@ -4068,6 +4004,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_delete_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_merge_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemMerge"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
             };
             /** @description Error envelope; `code` names the error */
             default: {
@@ -4865,7 +4865,7 @@ export interface operations {
             };
         };
     };
-    list_ingredients: {
+    list_items: {
         parameters: {
             query?: {
                 q?: string | null;
@@ -4883,7 +4883,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngredientSearchResult"][];
+                    "application/json": components["schemas"]["ItemSearchResult"][];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -4897,7 +4897,7 @@ export interface operations {
             };
         };
     };
-    create_ingredient: {
+    create_item: {
         parameters: {
             query?: never;
             header?: never;
@@ -4906,7 +4906,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IngredientCreate"];
+                "application/json": components["schemas"]["ItemCreate"];
             };
         };
         responses: {
@@ -4916,7 +4916,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ingredient"];
+                    "application/json": components["schemas"]["Item"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -4994,7 +4994,7 @@ export interface operations {
             };
         };
     };
-    list_similar_ingredients: {
+    list_similar_items: {
         parameters: {
             query: {
                 name: string;
@@ -5012,7 +5012,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngredientSummary"][];
+                    "application/json": components["schemas"]["ItemSummary"][];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5026,12 +5026,12 @@ export interface operations {
             };
         };
     };
-    get_ingredient: {
+    get_item: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                ingredient_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
@@ -5043,7 +5043,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ingredient"];
+                    "application/json": components["schemas"]["Item"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5057,18 +5057,18 @@ export interface operations {
             };
         };
     };
-    update_ingredient: {
+    update_item: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                ingredient_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IngredientUpdate"];
+                "application/json": components["schemas"]["ItemUpdate"];
             };
         };
         responses: {
@@ -5078,7 +5078,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ingredient"];
+                    "application/json": components["schemas"]["Item"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5097,13 +5097,13 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ingredient_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IngredientBarcodeLink"];
+                "application/json": components["schemas"]["ItemBarcodeLink"];
             };
         };
         responses: {
@@ -5113,7 +5113,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ingredient"];
+                    "application/json": components["schemas"]["Item"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5132,7 +5132,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ingredient_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
@@ -5144,7 +5144,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ingredient"];
+                    "application/json": components["schemas"]["Item"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5163,7 +5163,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ingredient_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
@@ -5175,7 +5175,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Ingredient"];
+                    "application/json": components["schemas"]["Item"];
                 };
             };
             /** @description Error envelope; `code` names the error */
@@ -5432,7 +5432,7 @@ export interface operations {
             header?: never;
             path: {
                 list_id: string;
-                ingredient_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
@@ -5576,7 +5576,7 @@ export interface operations {
             header?: never;
             path: {
                 list_id: string;
-                /** @description `i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`. */
+                /** @description `i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`. */
                 line_key: string;
             };
             cookie?: never;
@@ -5609,7 +5609,7 @@ export interface operations {
             header?: never;
             path: {
                 list_id: string;
-                /** @description `i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`. */
+                /** @description `i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`. */
                 line_key: string;
             };
             cookie?: never;

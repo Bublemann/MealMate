@@ -16,7 +16,7 @@ import {
   scanInForm,
   summary,
   UNCATEGORIZED,
-} from '@/test/ingredients';
+} from '@/test/items';
 import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
 import { chooseFromMenu } from '@/test/menu';
@@ -40,7 +40,7 @@ vi.mock('@/features/scanner/decoder', () => ({
 }));
 
 /** The server's answer: any of the categories asked for (ING-03), then the search. */
-function listIngredients(request: Request) {
+function listItems(request: Request) {
   const params = new URL(request.url).searchParams;
   const categories = params.getAll('category_id');
   const inCategories = categories.length
@@ -51,60 +51,60 @@ function listIngredients(request: Request) {
   return q === 'aepfel' ? inCategories.filter((ingredient) => ingredient === ALL[1]) : [];
 }
 
-function renderIngredients(routes: Record<string, unknown> = {}) {
+function renderItems(routes: Record<string, unknown> = {}) {
   const fetchMock = mockApi({
     ...REFERENCE_ROUTES,
-    'GET /api/ingredients': listIngredients,
-    'GET /api/ingredients/similar': [],
+    'GET /api/items': listItems,
+    'GET /api/items/similar': [],
     ...routes,
   });
   return { fetchMock, ...renderApp('/ingredients') };
 }
 
 function categoriesAskedFor(fetchMock: ReturnType<typeof mockApi>) {
-  return requestsTo(fetchMock, 'GET /api/ingredients').map((request) =>
+  return requestsTo(fetchMock, 'GET /api/items').map((request) =>
     new URL(request.url).searchParams.getAll('category_id'),
   );
 }
 
 /** The rows, also while the filter panel hides the list from screen readers. */
 function rowTexts() {
-  return within(screen.getByTestId(testIds.ingredientList))
-    .getAllByTestId(testIds.ingredientRow)
+  return within(screen.getByTestId(testIds.itemList))
+    .getAllByTestId(testIds.itemRow)
     .map((row) => row.textContent);
 }
 
 function searchTerms(fetchMock: ReturnType<typeof mockApi>) {
-  return requestsTo(fetchMock, 'GET /api/ingredients').map((request) =>
+  return requestsTo(fetchMock, 'GET /api/items').map((request) =>
     new URL(request.url).searchParams.get('q'),
   );
 }
 
-describe('IngredientsScreen', () => {
+describe('ItemsScreen', () => {
   it('shows the pinned block at once and the placeholder only below it (UI-01, UI-03)', async () => {
     const ingredients = heldRoute();
-    renderIngredients({ 'GET /api/ingredients': ingredients.route });
+    renderItems({ 'GET /api/items': ingredients.route });
 
     expect(await screen.findByText('Loading…')).toBeVisible();
     const headline = expectPinnedHeadline('Ingredients');
     expect(screen.getByLabelText('Search ingredients')).toBeVisible();
-    expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('New ingredient');
+    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('New ingredient');
 
     await ingredients.answer([]);
     expect(await screen.findByText('No ingredients yet')).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
     expect(expectPinnedHeadline('Ingredients')).toBe(headline);
     expect(screen.getByLabelText('Search ingredients')).toBeVisible();
-    expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('New ingredient');
+    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('New ingredient');
   });
 
   it('shows one A–Z list with category and base unit in the grey line, brand and barcode (ING-03)', async () => {
-    renderIngredients();
+    renderItems();
 
-    const list = await screen.findByTestId(testIds.ingredientList);
+    const list = await screen.findByTestId(testIds.itemList);
     expect(list).toHaveAccessibleName('Ingredients');
     expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
-    const rows = within(list).getAllByTestId(testIds.ingredientRow);
+    const rows = within(list).getAllByTestId(testIds.itemRow);
     expect(rows.map((row) => row.textContent)).toEqual([
       'AlufolieOther · g',
       'ÄpfelFruit & vegetables · g',
@@ -123,35 +123,35 @@ describe('IngredientsScreen', () => {
 
   it('shows “Stk.” in the grey line of an ingredient counted in pieces (ING-03)', async () => {
     await i18n.changeLanguage('de');
-    renderIngredients({
-      'GET /api/ingredients': [summary('Eier', 'dairy_eggs', { base_unit: 'piece' })],
+    renderItems({
+      'GET /api/items': [summary('Eier', 'dairy_eggs', { base_unit: 'piece' })],
     });
 
-    const list = await screen.findByTestId(testIds.ingredientList);
-    expect(within(list).getByTestId(testIds.ingredientRow)).toHaveTextContent(
+    const list = await screen.findByTestId(testIds.itemList);
+    expect(within(list).getByTestId(testIds.itemRow)).toHaveTextContent(
       'EierMilchprodukte & Eier · Stk.',
     );
   });
 
   it('searches on the server once typing pauses', async () => {
-    const { fetchMock, user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { fetchMock, user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
 
     await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
 
     await waitFor(() => expect(searchTerms(fetchMock)).toEqual([null, 'aepfel']));
-    const list = screen.getByTestId(testIds.ingredientList);
-    await waitFor(() => expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(1));
-    expect(within(list).getByTestId(testIds.ingredientRow)).toHaveTextContent(
+    const list = screen.getByTestId(testIds.itemList);
+    await waitFor(() => expect(within(list).getAllByTestId(testIds.itemRow)).toHaveLength(1));
+    expect(within(list).getByTestId(testIds.itemRow)).toHaveTextContent(
       'ÄpfelFruit & vegetables · g',
     );
   });
 
   it('turns the tile into “Create …” while searching, filled in as the new name (ING-03)', async () => {
-    const { user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
     const search = screen.getByLabelText('Search ingredients');
-    const tile = screen.getByTestId(testIds.newIngredient);
+    const tile = screen.getByTestId(testIds.newItem);
 
     await user.type(search, ' Quitten ');
     expect(tile).toHaveAccessibleName('Create “Quitten”');
@@ -166,26 +166,25 @@ describe('IngredientsScreen', () => {
   });
 
   it('keeps the search and the categories until the app closes, but not in the address or browser storage (UI-01)', async () => {
-    const { router, unmount, user } = renderIngredients({
-      'GET /api/ingredients/ing-%C3%A4pfel': ingredient({ id: 'ing-äpfel', name: 'Äpfel' }),
+    const { router, unmount, user } = renderItems({
+      'GET /api/items/ing-%C3%A4pfel': ingredient({ id: 'ing-äpfel', name: 'Äpfel' }),
     });
-    await screen.findByTestId(testIds.ingredientList);
+    await screen.findByTestId(testIds.itemList);
     await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
     await user.click(screen.getByTestId(testIds.filterButton));
     const panel = await screen.findByTestId(testIds.filterPanel);
     await user.click(within(panel).getByRole('checkbox', { name: 'Fruit & vegetables' }));
     await user.click(within(panel).getByRole('button', { name: 'Done' }));
-    const rows = () =>
-      within(screen.getByTestId(testIds.ingredientList)).getAllByTestId(testIds.ingredientRow);
+    const rows = () => within(screen.getByTestId(testIds.itemList)).getAllByTestId(testIds.itemRow);
     await waitFor(() => expect(rows()).toHaveLength(1));
 
     // Open the ingredient and come back through the tab bar.
     await user.click(rows()[0]!);
     expect(await screen.findByRole('heading', { level: 1, name: 'Äpfel' })).toBeVisible();
-    await user.click(screen.getByTestId(testIds.tabIngredients));
+    await user.click(screen.getByTestId(testIds.tabItems));
 
     expect(await screen.findByLabelText('Search ingredients')).toHaveValue('aepfel');
-    expect(screen.getByTestId(testIds.newIngredient)).toHaveAccessibleName('Create “aepfel”');
+    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('Create “aepfel”');
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
     await waitFor(() => expect(rows()).toHaveLength(1));
     await user.click(screen.getByTestId(testIds.filterButton));
@@ -203,14 +202,14 @@ describe('IngredientsScreen', () => {
 
     // Started again, the app has forgotten them.
     unmount();
-    renderIngredients();
+    renderItems();
     expect(await screen.findByLabelText('Search ingredients')).toHaveValue('');
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
   });
 
   it('opens the filter panel from next to the search, with every category (UI-01)', async () => {
-    const { user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
     const button = screen.getByTestId(testIds.filterButton);
     expect(button).toHaveAccessibleName('Filters');
 
@@ -230,7 +229,7 @@ describe('IngredientsScreen', () => {
   });
 
   it('names the categories in the rows and the filter panel as the server does (I18N-04)', async () => {
-    const { authSession, user } = renderIngredients({
+    const { authSession, user } = renderItems({
       'GET /api/categories': CATEGORIES.map((category) =>
         category.key === 'dairy_eggs'
           ? { ...category, names: { de: 'Kühlregal', en: 'Chilled goods' } }
@@ -255,7 +254,7 @@ describe('IngredientsScreen', () => {
 
   it('shows the placeholder in the panel until the categories have loaded (UI-03)', async () => {
     const categories = heldRoute();
-    const { user } = renderIngredients({ 'GET /api/categories': categories.route });
+    const { user } = renderItems({ 'GET /api/categories': categories.route });
 
     await user.click(await screen.findByTestId(testIds.filterButton));
 
@@ -270,8 +269,8 @@ describe('IngredientsScreen', () => {
   });
 
   it('applies each ticked category at once and counts the group on the button (UI-01, ING-03)', async () => {
-    const { fetchMock, user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { fetchMock, user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
     const button = screen.getByTestId(testIds.filterButton);
     await user.click(button);
     const group = within(await screen.findByTestId(testIds.filterPanel)).getByRole('group', {
@@ -310,8 +309,8 @@ describe('IngredientsScreen', () => {
   });
 
   it('resets every group but keeps the search, and closes with “Done” (UI-01)', async () => {
-    const { user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
     const search = screen.getByLabelText('Search ingredients');
     await user.type(search, 'aepfel');
     await waitFor(() => expect(rowTexts()).toEqual(['ÄpfelFruit & vegetables · g']));
@@ -320,7 +319,7 @@ describe('IngredientsScreen', () => {
     const panel = await screen.findByRole('dialog', { name: 'Filters' });
     await user.click(within(panel).getByRole('checkbox', { name: 'Dairy & eggs' }));
     await user.click(within(panel).getByRole('checkbox', { name: 'Cheese' }));
-    await waitFor(() => expect(screen.queryByTestId(testIds.ingredientList)).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId(testIds.itemList)).toBeNull());
     expect(button).toHaveAccessibleName('Filters, 1 active');
 
     await user.click(within(panel).getByRole('button', { name: 'Reset' }));
@@ -331,7 +330,7 @@ describe('IngredientsScreen', () => {
     expect(button).toHaveAccessibleName('Filters');
     expect(button).not.toHaveTextContent('1');
     expect(search).toHaveValue('aepfel');
-    await screen.findByTestId(testIds.ingredientList);
+    await screen.findByTestId(testIds.itemList);
     expect(rowTexts()).toEqual(['ÄpfelFruit & vegetables · g']);
     // The panel stays open until "Done", which gives the focus back to the button.
     expect(panel).toBeVisible();
@@ -343,8 +342,8 @@ describe('IngredientsScreen', () => {
   });
 
   it('says “No matches” when the categories hide everything; “Reset filters” clears search and categories (UI-03)', async () => {
-    const { user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
     const search = screen.getByLabelText('Search ingredients');
     const button = screen.getByTestId(testIds.filterButton);
     await user.click(button);
@@ -360,8 +359,8 @@ describe('IngredientsScreen', () => {
 
     expect(search).toHaveValue('');
     expect(button).toHaveAccessibleName('Filters');
-    const list = await screen.findByTestId(testIds.ingredientList);
-    expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
+    const list = await screen.findByTestId(testIds.itemList);
+    expect(within(list).getAllByTestId(testIds.itemRow)).toHaveLength(ALL.length);
     await user.click(button);
     within(await screen.findByRole('dialog', { name: 'Filters' }))
       .getAllByRole('checkbox')
@@ -369,65 +368,65 @@ describe('IngredientsScreen', () => {
   });
 
   it('shows “No matches” with “Reset filters”, which clears the search (UI-03)', async () => {
-    const { user } = renderIngredients();
-    await screen.findByTestId(testIds.ingredientList);
+    const { user } = renderItems();
+    await screen.findByTestId(testIds.itemList);
     const search = screen.getByLabelText('Search ingredients');
 
     await user.type(search, 'Quitten');
     expect(await screen.findByText('No matches')).toBeVisible();
     expectPinnedHeadline('Ingredients');
-    expect(screen.queryByTestId(testIds.ingredientList)).toBeNull();
+    expect(screen.queryByTestId(testIds.itemList)).toBeNull();
     // The tile offers to create it; there is no other "Create" button any more.
     expect(screen.getAllByRole('button', { name: 'Create “Quitten”' })).toEqual([
-      screen.getByTestId(testIds.newIngredient),
+      screen.getByTestId(testIds.newItem),
     ]);
     await user.click(screen.getByRole('button', { name: 'Reset filters' }));
 
     expect(search).toHaveValue('');
-    const list = await screen.findByTestId(testIds.ingredientList);
-    expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
+    const list = await screen.findByTestId(testIds.itemList);
+    expect(within(list).getAllByTestId(testIds.itemRow)).toHaveLength(ALL.length);
     expect(screen.queryByText('No matches')).toBeNull();
   });
 
   it('does not call a filled tab empty while the full list loads again (UI-03)', async () => {
     const again = heldRoute();
     let fullLoads = 0;
-    const { queryClient, user } = renderIngredients({
-      'GET /api/ingredients': (request: Request) => {
+    const { queryClient, user } = renderItems({
+      'GET /api/items': (request: Request) => {
         if (new URL(request.url).searchParams.get('q')) return [];
         fullLoads += 1;
         return fullLoads === 1 ? ALL : again.route();
       },
     });
-    await screen.findByTestId(testIds.ingredientList);
+    await screen.findByTestId(testIds.itemList);
     await user.type(screen.getByLabelText('Search ingredients'), 'Quitten');
     expect(await screen.findByText('No matches')).toBeVisible();
 
     // The cache has dropped the unused full list (after its gcTime), so it is loaded again.
-    queryClient.removeQueries({ queryKey: ['ingredients', 'list', '', []], exact: true });
+    queryClient.removeQueries({ queryKey: ['items', 'list', '', []], exact: true });
     await user.click(screen.getByRole('button', { name: 'Reset filters' }));
     await waitFor(() => expect(fullLoads).toBe(2));
 
     expect(screen.queryByText('No ingredients yet')).toBeNull();
     expect(screen.queryByText('No matches')).toBeNull();
     await again.answer(ALL);
-    const list = await screen.findByTestId(testIds.ingredientList);
-    expect(within(list).getAllByTestId(testIds.ingredientRow)).toHaveLength(ALL.length);
+    const list = await screen.findByTestId(testIds.itemList);
+    expect(within(list).getAllByTestId(testIds.itemRow)).toHaveLength(ALL.length);
   });
 
   it('offers Uncategorized at its place in the order while it holds ingredients, never a deleted category (ING-03, REF-01)', async () => {
     // Cheese was deleted and its ingredient moved to Uncategorized, which an admin then moved
     // before Other.
     const [fruit, dairy, other, cheese, uncategorized] = CATEGORIES_AFTER_DELETE;
-    const { fetchMock, user } = renderIngredients({
+    const { fetchMock, user } = renderItems({
       'GET /api/categories': [
         fruit,
         dairy,
-        { ...uncategorized, sort_order: 2, ingredient_count: 1 },
+        { ...uncategorized, sort_order: 2, item_count: 1 },
         cheese,
         { ...other, sort_order: 3 },
       ],
-      'GET /api/ingredients': [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })],
+      'GET /api/items': [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })],
     });
 
     await waitFor(() => expect(rowTexts()).toEqual(['GoudaUncategorized · g']));
@@ -448,8 +447,8 @@ describe('IngredientsScreen', () => {
   });
 
   it('leaves Uncategorized out of the filter panel while it is empty (ING-03)', async () => {
-    const { user } = renderIngredients({ 'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED });
-    await screen.findByTestId(testIds.ingredientList);
+    const { user } = renderItems({ 'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED });
+    await screen.findByTestId(testIds.itemList);
 
     const panel = await openPanel(user);
 
@@ -458,27 +457,27 @@ describe('IngredientsScreen', () => {
 
   it('keeps Uncategorized ticked after its last ingredient got a new category, until it is unticked (ING-03)', async () => {
     let gouda = ingredient({ id: 'ing-gouda', name: 'Gouda', category_id: 'cat-uncategorized' });
-    const { fetchMock, user } = renderIngredients({
+    const { fetchMock, user } = renderItems({
       'GET /api/categories': () => [
         ...CATEGORIES,
         {
           ...UNCATEGORIZED,
-          ingredient_count: gouda.category_id === 'cat-uncategorized' ? 1 : 0,
+          item_count: gouda.category_id === 'cat-uncategorized' ? 1 : 0,
         },
       ],
-      'GET /api/ingredients': (request: Request) => {
+      'GET /api/items': (request: Request) => {
         const categories = new URL(request.url).searchParams.getAll('category_id');
         return categories.length === 0 || categories.includes(gouda.category_id)
           ? [toSummary(gouda)]
           : [];
       },
-      'GET /api/ingredients/ing-gouda': () => gouda,
-      'PATCH /api/ingredients/ing-gouda': async (request: Request) => {
+      'GET /api/items/ing-gouda': () => gouda,
+      'PATCH /api/items/ing-gouda': async (request: Request) => {
         gouda = { ...gouda, ...((await request.json()) as Partial<typeof gouda>) };
         return gouda;
       },
     });
-    await screen.findByTestId(testIds.ingredientList);
+    await screen.findByTestId(testIds.itemList);
     let panel = await openPanel(user);
     await user.click(within(panel).getByRole('checkbox', { name: 'Uncategorized' }));
     await user.click(within(panel).getByRole('button', { name: 'Done' }));
@@ -488,7 +487,7 @@ describe('IngredientsScreen', () => {
 
     // Give Gouda a new category.
     await user.click(await screen.findByRole('link', { name: /^Gouda/ }));
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Gouda' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Uncategorized'));
@@ -501,7 +500,7 @@ describe('IngredientsScreen', () => {
       expect(requestsTo(fetchMock, 'GET /api/categories').length).toBeGreaterThan(loaded),
     );
 
-    await user.click(screen.getByTestId(testIds.tabIngredients));
+    await user.click(screen.getByTestId(testIds.tabItems));
 
     // Still ticked, so still offered, although it is empty now.
     expect(await screen.findByText('No matches')).toBeVisible();
@@ -516,42 +515,42 @@ describe('IngredientsScreen', () => {
   });
 
   it('shows one line under the pinned block when there are no ingredients yet (UI-03)', async () => {
-    const { user } = renderIngredients({ 'GET /api/ingredients': [] });
+    const { user } = renderItems({ 'GET /api/items': [] });
 
     expect(await screen.findByText('No ingredients yet')).toBeVisible();
-    const tab = screen.getByTestId(testIds.screenIngredients);
+    const tab = screen.getByTestId(testIds.screenItems);
     expect(within(tab).queryAllByRole('heading', { level: 2 })).toEqual([]);
     // Only the pinned block's filter button and tile; the scanner is no longer linked from the
     // tab (BAR-01).
     expect(within(tab).getAllByRole('button')).toEqual([
       screen.getByTestId(testIds.filterButton),
-      screen.getByTestId(testIds.newIngredient),
+      screen.getByTestId(testIds.newItem),
     ]);
     expect(within(tab).queryByRole('link')).toBeNull();
-    await user.click(screen.getByTestId(testIds.newIngredient));
+    await user.click(screen.getByTestId(testIds.newItem));
 
     expect(await screen.findByRole('dialog', { name: 'New ingredient' })).toBeVisible();
   });
 
   it('no longer links the barcode scanner from the tab (BAR-01)', async () => {
-    renderIngredients();
+    renderItems();
 
-    await screen.findByTestId(testIds.ingredientList);
+    await screen.findByTestId(testIds.itemList);
     expect(screen.queryByRole('link', { name: 'Scan barcode' })).toBeNull();
     expect(screen.queryByTestId(testIds.scanBarcode)).toBeNull();
   });
 
   it('is where an old link to the scan page leads (BAR-01, D-37)', async () => {
-    mockApi({ ...REFERENCE_ROUTES, 'GET /api/ingredients': listIngredients });
+    mockApi({ ...REFERENCE_ROUTES, 'GET /api/items': listItems });
     const { router } = renderApp('/scan');
 
-    expect(await screen.findByTestId(testIds.screenIngredients)).toBeVisible();
+    expect(await screen.findByTestId(testIds.screenItems)).toBeVisible();
     expect(router.state.location.pathname).toBe('/ingredients');
     expect(screen.queryByTestId(testIds.barcodeScanDialog)).not.toBeInTheDocument();
   });
 
   it('shows a translated error when the list cannot be loaded', async () => {
-    renderIngredients({ 'GET /api/ingredients': errorResponse(503, 'common.service_unavailable') });
+    renderItems({ 'GET /api/items': errorResponse(503, 'common.service_unavailable') });
 
     expect(
       await screen.findByText('MealMate is unavailable right now. Please try again later.'),
@@ -559,22 +558,22 @@ describe('IngredientsScreen', () => {
   });
 });
 
-describe('IngredientFormDialog (create)', () => {
+describe('ItemFormDialog (create)', () => {
   it('is compact: name with magnifier and scan icon, barcode, similar hint, brand, category, base unit, piece weight, nutrition, footer (ING-04, D-35)', async () => {
     await i18n.changeLanguage('de');
-    const { fetchMock, user } = renderIngredients({
-      'GET /api/ingredients/similar': (request: Request) =>
+    const { fetchMock, user } = renderItems({
+      'GET /api/items/similar': (request: Request) =>
         new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[1]] : [],
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'Neue Zutat' });
     // No text below the headline.
     expect(dialog).not.toHaveAccessibleDescription();
-    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const form = within(dialog).getByTestId(testIds.itemForm);
     const name = within(form).getByLabelText('Name');
     await user.type(name, 'Apfel');
-    const similar = await within(form).findByTestId(testIds.ingredientSimilar);
+    const similar = await within(form).findByTestId(testIds.itemSimilar);
     const baseUnit = within(form).getByRole('group', { name: 'Basiseinheit' });
     await user.click(within(baseUnit).getByLabelText('Stück (Stk.)'));
 
@@ -582,7 +581,7 @@ describe('IngredientFormDialog (create)', () => {
     const brand = within(form).getByLabelText('Marke');
     const pack = within(form).getByLabelText('Packung');
     const nutrition = within(form).getByRole('group', { name: 'Nährwerte pro 100 g (optional)' });
-    const footer = within(dialog).getByTestId(testIds.ingredientFormFooter);
+    const footer = within(dialog).getByTestId(testIds.itemFormFooter);
     expectInPageOrder([
       name,
       within(form).getByRole('button', { name: 'In Open Food Facts suchen' }),
@@ -617,13 +616,13 @@ describe('IngredientFormDialog (create)', () => {
     // The ✕ cancels.
     await user.click(within(dialog).getByRole('button', { name: 'Schließen' }));
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
   });
 
   it('puts the cursor in the name only while it is empty (D-35)', async () => {
-    const { user } = renderIngredients();
+    const { user } = renderItems();
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const empty = await screen.findByRole('dialog', { name: 'New ingredient' });
     await waitFor(() => expect(within(empty).getByLabelText('Name')).toHaveFocus());
     await user.keyboard('{Escape}');
@@ -631,7 +630,7 @@ describe('IngredientFormDialog (create)', () => {
 
     // With “Quitten” filled in, the keyboard would cover the icons and the category.
     await user.type(screen.getByLabelText('Search ingredients'), 'Quitten');
-    await user.click(screen.getByTestId(testIds.newIngredient));
+    await user.click(screen.getByTestId(testIds.newItem));
     const named = await screen.findByRole('dialog', { name: 'New ingredient' });
     expect(within(named).getByLabelText('Name')).toHaveValue('Quitten');
     await waitFor(() => expect(named).toHaveFocus());
@@ -639,13 +638,13 @@ describe('IngredientFormDialog (create)', () => {
 
   it('creates an ingredient with brand, barcode and decimal commas, and opens it', async () => {
     const created = ingredient({ id: 'ing-birnen', name: 'Birnen', brand: 'Hofgut' });
-    const { fetchMock, user, router } = renderIngredients({
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    const { fetchMock, user, router } = renderItems({
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
-    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), '  Birnen ');
     await user.type(within(form).getByLabelText('Brand'), 'Hofgut ');
     // The category defaults to Other.
@@ -660,7 +659,7 @@ describe('IngredientFormDialog (create)', () => {
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-birnen'));
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Birnen',
       base_unit: 'g',
       category_id: 'cat-fruit_vegetables',
@@ -672,19 +671,19 @@ describe('IngredientFormDialog (create)', () => {
   });
 
   it('takes a pack size typed in (ING-02, D-47)', async () => {
-    const { fetchMock, user } = renderIngredients({
-      'POST /api/ingredients': Response.json(ingredient({ id: 'ing-wasser' }), { status: 201 }),
-      'GET /api/ingredients/ing-wasser': ingredient({ id: 'ing-wasser' }),
+    const { fetchMock, user } = renderItems({
+      'POST /api/items': Response.json(ingredient({ id: 'ing-wasser' }), { status: 201 }),
+      'GET /api/items/ing-wasser': ingredient({ id: 'ing-wasser' }),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
-    const form = within(await screen.findByRole('dialog')).getByTestId(testIds.ingredientForm);
+    await user.click(await screen.findByTestId(testIds.newItem));
+    const form = within(await screen.findByRole('dialog')).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), 'Wasser');
     await user.type(within(form).getByLabelText('Package'), ' 6 × 1,5 l ');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1));
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1));
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Wasser',
       base_unit: 'g',
       category_id: 'cat-other',
@@ -694,13 +693,13 @@ describe('IngredientFormDialog (create)', () => {
 
   it('counts an ingredient in pieces: “Pieces” shows the weight per piece, nutrition per 100 g (ING-02)', async () => {
     const created = ingredient({ id: 'ing-eier', name: 'Eier', base_unit: 'piece' });
-    const { fetchMock, user } = renderIngredients({
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    const { fetchMock, user } = renderItems({
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
-    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), 'Eier');
     const baseUnit = within(form).getByRole('group', { name: 'Base unit' });
     expect(
@@ -726,7 +725,7 @@ describe('IngredientFormDialog (create)', () => {
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Eier',
       base_unit: 'piece',
       category_id: 'cat-other',
@@ -737,13 +736,13 @@ describe('IngredientFormDialog (create)', () => {
 
   it('sends the weight per piece only for “Pieces” (ING-02)', async () => {
     const created = ingredient({ id: 'ing-mehl', name: 'Mehl' });
-    const { fetchMock, user } = renderIngredients({
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+    const { fetchMock, user } = renderItems({
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
-    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), 'Mehl');
     await user.click(within(form).getByLabelText('Pieces (pcs)'));
     await user.type(within(form).getByLabelText('Weight per piece (g)'), '60');
@@ -759,7 +758,7 @@ describe('IngredientFormDialog (create)', () => {
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Mehl',
       base_unit: 'g',
       category_id: 'cat-other',
@@ -768,12 +767,12 @@ describe('IngredientFormDialog (create)', () => {
 
   it('offers a category an admin added in walking order, and still starts with Other (REF-01)', async () => {
     const created = ingredient({ id: 'ing-feta', name: 'Feta' });
-    const { fetchMock, user } = renderIngredients({
+    const { fetchMock, user } = renderItems({
       'GET /api/categories': CATEGORIES_WITH_ADDED,
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Other'));
@@ -786,17 +785,17 @@ describe('IngredientFormDialog (create)', () => {
     await user.selectOptions(category, 'Cheese counter');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1));
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toMatchObject({
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1));
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toMatchObject({
       name: 'Feta',
       category_id: 'cat-cheese-counter',
     });
   });
 
   it('never offers Uncategorized or a deleted category (ING-02, D-30)', async () => {
-    const { user } = renderIngredients({ 'GET /api/categories': CATEGORIES_AFTER_DELETE });
+    const { user } = renderItems({ 'GET /api/categories': CATEGORIES_AFTER_DELETE });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Other'));
@@ -809,10 +808,10 @@ describe('IngredientFormDialog (create)', () => {
 
   it('loads the categories again when the one chosen was just deleted (REF-01)', async () => {
     let deleted = false;
-    const { fetchMock, user } = renderIngredients({
+    const { fetchMock, user } = renderItems({
       'GET /api/categories': () =>
         deleted ? CATEGORIES_AFTER_DELETE : CATEGORIES_WITH_UNCATEGORIZED,
-      'POST /api/ingredients': () => {
+      'POST /api/items': () => {
         deleted = true;
         return errorResponse(422, 'common.validation', [
           { loc: ['body', 'category_id'], code: 'invalid' },
@@ -820,7 +819,7 @@ describe('IngredientFormDialog (create)', () => {
       },
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Other'));
@@ -847,11 +846,11 @@ describe('IngredientFormDialog (create)', () => {
   });
 
   it('shows a barcode another ingredient has next to the field', async () => {
-    const { user } = renderIngredients({
-      'POST /api/ingredients': errorResponse(409, 'ingredient.barcode_taken'),
+    const { user } = renderItems({
+      'POST /api/items': errorResponse(409, 'item.barcode_taken'),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
     await user.type(within(dialog).getByLabelText('Barcode'), '4006381333931');
@@ -866,14 +865,14 @@ describe('IngredientFormDialog (create)', () => {
   });
 
   it('shows the server field errors next to their fields', async () => {
-    const { user } = renderIngredients({
-      'POST /api/ingredients': errorResponse(422, 'common.validation', [
+    const { user } = renderItems({
+      'POST /api/items': errorResponse(422, 'common.validation', [
         { loc: ['body', 'name'], code: 'taken' },
         { loc: ['body', 'nutrients', 'kcal'], code: 'out_of_range' },
       ]),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Äpfel');
     await user.type(within(dialog).getByLabelText('Calories'), '1000');
@@ -888,14 +887,14 @@ describe('IngredientFormDialog (create)', () => {
   });
 
   it('shows a server error for a field the form has no input for', async () => {
-    const { user } = renderIngredients({
-      'POST /api/ingredients': errorResponse(422, 'common.validation', [
+    const { user } = renderItems({
+      'POST /api/items': errorResponse(422, 'common.validation', [
         { loc: ['body', 'name'], code: 'taken' },
         { loc: ['body', 'off'], code: 'invalid' },
       ]),
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Äpfel');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -905,9 +904,9 @@ describe('IngredientFormDialog (create)', () => {
   });
 
   it('refuses numbers it cannot read without asking the server', async () => {
-    const { fetchMock, user } = renderIngredients();
+    const { fetchMock, user } = renderItems();
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Birnen');
     await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
@@ -917,50 +916,50 @@ describe('IngredientFormDialog (create)', () => {
     expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveAccessibleDescription(
       /^Invalid format/,
     );
-    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
   });
 
   it('points to similar ingredients while typing the name (ING-03)', async () => {
-    const { fetchMock, user } = renderIngredients({
-      'GET /api/ingredients/similar': (request: Request) =>
+    const { fetchMock, user } = renderItems({
+      'GET /api/items/similar': (request: Request) =>
         new URL(request.url).searchParams.get('name') === 'Apfel' ? [ALL[1]] : [],
     });
 
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
     await user.type(within(dialog).getByLabelText('Name'), 'Apfel');
 
-    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    const hint = await within(dialog).findByTestId(testIds.itemSimilar);
     expect(hint).toHaveTextContent('Similar ingredients already exist:');
     expect(within(hint).getByRole('link', { name: 'Äpfel' })).toHaveAttribute(
       'href',
       '/ingredients/ing-äpfel',
     );
     // Debounced: one request for the whole name.
-    const names = requestsTo(fetchMock, 'GET /api/ingredients/similar').map((request) =>
+    const names = requestsTo(fetchMock, 'GET /api/items/similar').map((request) =>
       new URL(request.url).searchParams.get('name'),
     );
     expect(names).toEqual(['Apfel']);
   });
 });
 
-describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
+describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
   const BARCODE = '4006381333931';
-  const LOOKUP = 'GET /api/ingredients/lookup';
+  const LOOKUP = 'GET /api/items/lookup';
 
   /** Opens "New ingredient" from the tile. */
   async function openNew(user: ReturnType<typeof renderApp>['user'], title = 'New ingredient') {
-    await user.click(await screen.findByTestId(testIds.newIngredient));
+    await user.click(await screen.findByTestId(testIds.newItem));
     return screen.findByRole('dialog', { name: title });
   }
 
   it('starts the scanner only on a tap on the scan icon (BAR-01)', async () => {
-    const { fetchMock, user } = renderIngredients({ [LOOKUP]: lookupResult() });
+    const { fetchMock, user } = renderItems({ [LOOKUP]: lookupResult() });
 
     const dialog = await openNew(user);
     // The barcode field has no scan button of its own.
     expect(within(dialog).getAllByRole('button', { name: 'Scan barcode' })).toEqual([
-      within(dialog).getByTestId(testIds.ingredientFormScan),
+      within(dialog).getByTestId(testIds.itemFormScan),
     ]);
     expect(screen.queryByTestId(testIds.barcodeScanDialog)).not.toBeInTheDocument();
     await scanInForm(user, dialog, BARCODE);
@@ -978,30 +977,30 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
       brand: 'Weihenstephan',
       barcode: BARCODE,
     });
-    const { fetchMock, user, router } = renderIngredients({
-      [LOOKUP]: lookupResult({ found_in: 'db', ingredient: milk }),
-      'GET /api/ingredients/ing-milch': milk,
+    const { fetchMock, user, router } = renderItems({
+      [LOOKUP]: lookupResult({ found_in: 'db', item: milk }),
+      'GET /api/items/ing-milch': milk,
     });
 
     const dialog = await openNew(user, 'Neue Zutat');
     await user.type(within(dialog).getByLabelText('Name'), 'Milchig');
     await scanInForm(user, dialog, BARCODE);
 
-    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    const notice = await within(dialog).findByTestId(testIds.itemScanNotice);
     expect(notice).toHaveTextContent(/^Gehört schon zu Milch \(Weihenstephan\)öffnen$/);
     // The pop-up stays open and nothing is filled in.
     expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Milchig');
     expect(within(dialog).queryByTestId(testIds.offAttribution)).not.toBeInTheDocument();
-    expect(within(notice).queryByTestId(testIds.ingredientScanTake)).not.toBeInTheDocument();
+    expect(within(notice).queryByTestId(testIds.itemScanTake)).not.toBeInTheDocument();
     const open = within(notice).getByRole('link', { name: 'öffnen' });
     expect(open).toHaveAccessibleDescription('Gehört schon zu Milch (Weihenstephan)');
-    expect(open).toHaveAttribute('data-testid', testIds.ingredientScanOpen);
+    expect(open).toHaveAttribute('data-testid', testIds.itemScanOpen);
     await user.click(open);
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-milch'));
     expect(dialog).not.toBeInTheDocument();
-    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
   });
 
   it('fills the form like a chosen search result, keeping what was typed where Open Food Facts has no value (BAR-03, BAR-04)', async () => {
@@ -1009,16 +1008,16 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
       brand: null,
       nutrients: { kcal: 64, protein: null, carbs: 4.8, sugar: 4.8, fat: 3.5 },
     });
-    const { fetchMock, user } = renderIngredients({
+    const { fetchMock, user } = renderItems({
       [LOOKUP]: lookupResult({ found_in: 'off', proposal: hit }),
-      'POST /api/ingredients': Response.json(ingredient({ id: 'ing-vollmilch' }), {
+      'POST /api/items': Response.json(ingredient({ id: 'ing-vollmilch' }), {
         status: 201,
       }),
-      'GET /api/ingredients/ing-vollmilch': ingredient({ id: 'ing-vollmilch' }),
+      'GET /api/items/ing-vollmilch': ingredient({ id: 'ing-vollmilch' }),
     });
 
     const dialog = await openNew(user);
-    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), 'Milch');
     await user.type(within(form).getByLabelText('Brand'), 'Hofgut');
     await user.type(within(form).getByLabelText('Calories'), '50');
@@ -1040,14 +1039,14 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     // The barcode belongs to the values: read-only, and the scan icon can't replace it.
     expect(within(form).getByLabelText('Barcode')).toHaveValue(BARCODE);
     expect(within(form).getByLabelText('Barcode')).toHaveAttribute('readonly');
-    expect(within(form).getByTestId(testIds.ingredientFormScan)).toBeDisabled();
+    expect(within(form).getByTestId(testIds.itemFormScan)).toBeDisabled();
     expect(within(form).getByTestId(testIds.offAttribution)).toBeVisible();
-    expect(within(form).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(form).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
 
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Frische Vollmilch 3,5 %',
       base_unit: 'ml',
       category_id: 'cat-dairy_eggs',
@@ -1066,10 +1065,10 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
   it('takes a corrected pack size as the user’s, so a refresh keeps it (BAR-04, D-47)', async () => {
     await i18n.changeLanguage('de');
     const hit = proposal({ name: 'Kartoffel-Gnocchi', brand: 'Henglein', quantity_text: '250 g' });
-    const { fetchMock, user } = renderIngredients({
+    const { fetchMock, user } = renderItems({
       [LOOKUP]: lookupResult({ found_in: 'off', proposal: hit }),
-      'POST /api/ingredients': Response.json(ingredient({ id: 'ing-gnocchi' }), { status: 201 }),
-      'GET /api/ingredients/ing-gnocchi': ingredient({ id: 'ing-gnocchi' }),
+      'POST /api/items': Response.json(ingredient({ id: 'ing-gnocchi' }), { status: 201 }),
+      'GET /api/items/ing-gnocchi': ingredient({ id: 'ing-gnocchi' }),
     });
 
     const dialog = await openNew(user, 'Neue Zutat');
@@ -1080,8 +1079,8 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     await user.type(pack, '500 g');
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
 
-    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(1));
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toMatchObject({
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1));
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toMatchObject({
       name: 'Kartoffel-Gnocchi',
       quantity_text: '500 g',
       off: { edited_fields: ['quantity_text'] },
@@ -1090,13 +1089,13 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
 
   it('fills in only a barcode Open Food Facts does not know, with a notice (BAR-03)', async () => {
     await i18n.changeLanguage('de');
-    const { user } = renderIngredients({ [LOOKUP]: lookupResult() });
+    const { user } = renderItems({ [LOOKUP]: lookupResult() });
 
     const dialog = await openNew(user, 'Neue Zutat');
     await user.type(within(dialog).getByLabelText('Name'), 'Quitten');
     await scanInForm(user, dialog, BARCODE);
 
-    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    const notice = await within(dialog).findByTestId(testIds.itemScanNotice);
     expect(notice).toHaveTextContent(/^Nicht bei Open Food Facts – trag die Werte selbst ein$/);
     const barcode = within(dialog).getByLabelText('Barcode');
     expect(barcode).toHaveValue(BARCODE);
@@ -1106,7 +1105,7 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
 
     // A barcode typed over the scanned one has nothing to do with the notice.
     await user.type(barcode, '{Backspace}');
-    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -1116,24 +1115,24 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     'fills in the barcode when Open Food Facts %s, and looks it up again on request (BAR-03)',
     async (_, slow) => {
       const answers: unknown[] = [slow, lookupResult({ found_in: 'off', proposal: proposal() })];
-      const { fetchMock, user } = renderIngredients({ [LOOKUP]: () => answers.shift() });
+      const { fetchMock, user } = renderItems({ [LOOKUP]: () => answers.shift() });
 
       const dialog = await openNew(user);
       await scanInForm(user, dialog, BARCODE);
 
-      const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+      const notice = await within(dialog).findByTestId(testIds.itemScanNotice);
       expect(notice).toHaveTextContent(
         /^Open Food Facts is slow right now – try again or enter the values yourselfTry again$/,
       );
       expect(within(dialog).getByLabelText('Barcode')).toHaveValue(BARCODE);
       const retry = within(notice).getByRole('button', { name: 'Try again' });
-      expect(retry).toHaveAttribute('data-testid', testIds.ingredientScanRetry);
+      expect(retry).toHaveAttribute('data-testid', testIds.itemScanRetry);
       await user.click(retry);
 
       await waitFor(() =>
         expect(within(dialog).getByLabelText('Name')).toHaveValue('Frische Vollmilch 3,5 %'),
       );
-      expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+      expect(within(dialog).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
       expect(within(dialog).getByLabelText('Barcode')).toHaveAttribute('readonly');
       expect(requestsTo(fetchMock, LOOKUP)).toHaveLength(2);
     },
@@ -1142,10 +1141,10 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
   it('gives a lookup 25 s before it counts as slow (plan § 8)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      const fetchMock = mockApi({ ...REFERENCE_ROUTES, 'GET /api/ingredients': listIngredients });
+      const fetchMock = mockApi({ ...REFERENCE_ROUTES, 'GET /api/items': listItems });
       // A lookup that never answers, until the client gives up.
       vi.stubGlobal('fetch', (request: Request, init?: RequestInit) => {
-        if (new URL(request.url).pathname !== '/api/ingredients/lookup') return fetchMock(request);
+        if (new URL(request.url).pathname !== '/api/items/lookup') return fetchMock(request);
         return new Promise((_, reject) => {
           init?.signal?.addEventListener('abort', () => reject(new DOMException('', 'AbortError')));
         });
@@ -1154,7 +1153,7 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
 
       const dialog = await openNew(user);
       await scanInForm(user, dialog, BARCODE);
-      const notice = () => within(dialog).getByTestId(testIds.ingredientScanNotice);
+      const notice = () => within(dialog).getByTestId(testIds.itemScanNotice);
       expect(notice()).toHaveTextContent(`Looking up ${BARCODE}…`);
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
@@ -1168,7 +1167,7 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
 
   it('cuts a long Open Food Facts name at a word to fit the name field', async () => {
     const long = 'Frische fettarme Milch aus der Region, länger haltbar, homogenisiert, 1,5 % Fett';
-    const { user } = renderIngredients({
+    const { user } = renderItems({
       [LOOKUP]: lookupResult({ found_in: 'off', proposal: proposal({ name: long }) }),
     });
 
@@ -1191,7 +1190,7 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     });
     const text = JSON.stringify(zeros).replace('"fat":0', '"fat":-0');
     expect(text).toContain('"fat":-0');
-    const { user } = renderIngredients({
+    const { user } = renderItems({
       [LOOKUP]: new Response(text, { headers: { 'Content-Type': 'application/json' } }),
     });
 
@@ -1202,7 +1201,7 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
   });
 
   it('says when the scanned digits are not a valid barcode, filling in nothing', async () => {
-    const { user } = renderIngredients({
+    const { user } = renderItems({
       [LOOKUP]: errorResponse(422, 'common.validation', [
         { loc: ['query', 'barcode'], code: 'invalid_format' },
       ]),
@@ -1211,7 +1210,7 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     const dialog = await openNew(user);
     await scanInForm(user, dialog, '4006381333932');
 
-    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    const notice = await within(dialog).findByTestId(testIds.itemScanNotice);
     expect(notice).toHaveTextContent(
       "4006381333932 isn't a valid barcode. Please check the digits.",
     );
@@ -1222,16 +1221,16 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     await i18n.changeLanguage('de');
     const milk = ALL[3]!;
     const linked = ingredient({ ...milk, barcode: BARCODE });
-    const { fetchMock, user, router } = renderIngredients({
+    const { fetchMock, user, router } = renderItems({
       [LOOKUP]: lookupResult(),
-      'GET /api/ingredients/similar': [milk, ALL[2]],
-      'POST /api/ingredients/ing-milch/barcode': linked,
-      'GET /api/ingredients/ing-milch': linked,
+      'GET /api/items/similar': [milk, ALL[2]],
+      'POST /api/items/ing-milch/barcode': linked,
+      'GET /api/items/ing-milch': linked,
     });
 
     const dialog = await openNew(user, 'Neue Zutat');
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
-    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    const hint = await within(dialog).findByTestId(testIds.itemSimilar);
     // Before a scan, the matches are only links.
     expect(within(hint).getByRole('link', { name: 'Milch' })).toBeVisible();
     await scanInForm(user, dialog, BARCODE);
@@ -1247,29 +1246,29 @@ describe('IngredientFormDialog, scanning (BAR-02, BAR-03)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-milch'));
     expect(dialog).not.toBeInTheDocument();
     await expect(
-      requestsTo(fetchMock, 'POST /api/ingredients/ing-milch/barcode')[0]?.json(),
+      requestsTo(fetchMock, 'POST /api/items/ing-milch/barcode')[0]?.json(),
     ).resolves.toEqual({ barcode: BARCODE });
-    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
   });
 
   it('shows a failed attaching in the pop-up, and attaches only the scanned barcode', async () => {
-    const { fetchMock, user, router } = renderIngredients({
+    const { fetchMock, user, router } = renderItems({
       [LOOKUP]: lookupResult(),
-      'GET /api/ingredients/similar': [ALL[3]],
-      'POST /api/ingredients/ing-milch/barcode': errorResponse(409, 'ingredient.has_barcode'),
+      'GET /api/items/similar': [ALL[3]],
+      'POST /api/items/ing-milch/barcode': errorResponse(409, 'item.has_barcode'),
     });
 
     const dialog = await openNew(user);
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
     await scanInForm(user, dialog, BARCODE);
-    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    const hint = await within(dialog).findByTestId(testIds.itemSimilar);
     await user.click(await within(hint).findByRole('button', { name: 'Add the barcode to Milch' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       /^This ingredient already has a barcode/,
     );
     expect(router.state.location.pathname).toBe('/ingredients');
-    expect(requestsTo(fetchMock, 'POST /api/ingredients/ing-milch/barcode')).toHaveLength(1);
+    expect(requestsTo(fetchMock, 'POST /api/items/ing-milch/barcode')).toHaveLength(1);
 
     // A barcode typed in by hand is no scan: the match is only a link again.
     const barcode = within(dialog).getByLabelText('Barcode');

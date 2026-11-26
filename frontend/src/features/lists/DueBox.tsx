@@ -2,8 +2,8 @@ import { Plus, X } from 'lucide-react';
 import { useId, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { ingredientLabel } from '@/features/ingredients/label';
-import { IngredientName } from '@/features/ingredients/IngredientName';
+import { itemLabel } from '@/features/items/label';
+import { ItemName } from '@/features/items/ItemName';
 import type { DueItem } from '@/features/recurring/api';
 import { dueLine } from '@/features/recurring/format';
 import { useLanguage } from '@/i18n';
@@ -58,15 +58,15 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
   function focusActed(): boolean {
     const last = acted.current;
     if (!last) return false;
-    const index = rows.findIndex((row) => row.ingredient.id === last.id);
+    const index = rows.findIndex((row) => row.item.id === last.id);
     const at = index >= 0 ? index : Math.min(last.index, rows.length - 1);
     const row = rows[at];
     if (!row) {
       acted.current = null;
       return false;
     }
-    acted.current = { id: row.ingredient.id, index: at, action: last.action };
-    buttons.current.get(`${last.action}:${row.ingredient.id}`)?.focus();
+    acted.current = { id: row.item.id, index: at, action: last.action };
+    buttons.current.get(`${last.action}:${row.item.id}`)?.focus();
     return true;
   }
 
@@ -75,7 +75,7 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
   // The row that had the focus left: its button went, and the focus with it (to the page).
   useLayoutEffect(() => {
     const last = acted.current;
-    if (!last || rows.some((row) => row.ingredient.id === last.id)) return;
+    if (!last || rows.some((row) => row.item.id === last.id)) return;
     const active = document.activeElement;
     if (active !== null && active !== document.body) {
       acted.current = null;
@@ -85,7 +85,7 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
   });
 
   function act(item: DueItem, index: number, action: DueAction) {
-    acted.current = { id: item.ingredient.id, index, action };
+    acted.current = { id: item.item.id, index, action };
     if (action === 'add') onAdd(item);
     else onHide(item);
   }
@@ -112,15 +112,15 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
       </h3>
       <ul aria-labelledby={headingId} className="flex flex-col divide-y">
         {rows.map((item, index) => {
-          const name = ingredientLabel(item.ingredient.name, item.ingredient.brand);
+          const name = itemLabel(item.item.name, item.item.brand);
           return (
             <li
-              key={item.ingredient.id}
+              key={item.item.id}
               data-testid={testIds.dueItem}
               className="flex min-h-(--tap-target) items-center gap-2 py-2 pr-2 pl-4"
             >
               <div className="flex min-w-0 flex-1 flex-col">
-                <IngredientName ingredient={item.ingredient} />
+                <ItemName item={item.item} />
                 <span className="text-sm text-muted-foreground">{dueLine(t, language, item)}</span>
               </div>
               <Button
@@ -130,7 +130,7 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
                 className="text-primary"
                 disabled={disabled}
                 aria-label={t('lists.due.add', { name })}
-                ref={buttonRef('add', item.ingredient.id)}
+                ref={buttonRef('add', item.item.id)}
                 onClick={() => act(item, index, 'add')}
               >
                 <Plus aria-hidden="true" />
@@ -142,7 +142,7 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
                 className="text-muted-foreground"
                 disabled={disabled}
                 aria-label={t('lists.due.hide', { name })}
-                ref={buttonRef('hide', item.ingredient.id)}
+                ref={buttonRef('hide', item.item.id)}
                 onClick={() => act(item, index, 'hide')}
               >
                 <X aria-hidden="true" />

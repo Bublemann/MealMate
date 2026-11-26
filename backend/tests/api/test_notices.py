@@ -40,8 +40,8 @@ async def toilet_paper(api: AsyncClient, anna: Account) -> Any:
     return await create_ingredient(api, anna, "Klopapier", base_unit="piece")
 
 
-async def delete_ingredient(api: AsyncClient, admin: Account, ingredient_id: str) -> None:
-    response = await api.delete(f"/api/admin/ingredients/{ingredient_id}", headers=admin.headers)
+async def delete_ingredient(api: AsyncClient, admin: Account, item_id: str) -> None:
+    response = await api.delete(f"/api/admin/items/{item_id}", headers=admin.headers)
     assert response.status_code == 204, response.text
 
 
@@ -66,7 +66,7 @@ async def test_deleting_a_recurring_ingredient_leaves_a_notice(
     """A recurring item is no reference: the ingredient's usage stays at none, and the admin
     deletes it. The item goes, and anna learns of it with the name and brand it had."""
     await make_recurring(api, anna, toilet_paper["id"])
-    url = f"/api/ingredients/{toilet_paper['id']}"
+    url = f"/api/items/{toilet_paper['id']}"
     usage = (await api.get(url, headers=anna.headers)).json()["usage"]
     assert usage == {"meals": 0, "lists": 0}
     clock.advance(minutes=5)

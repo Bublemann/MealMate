@@ -271,7 +271,7 @@ async def test_share_switch(api: AsyncClient, anna: Account, ben: Account) -> No
 
 
 async def test_delete(app: FastAPI, api: AsyncClient, anna: Account, flour: Any) -> None:
-    meal = await create_meal(api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"]}])
+    meal = await create_meal(api, anna, "Brot", ingredients=[{"item_id": flour["id"]}])
     shopping_list = await create_list(api, anna)
     await added(api, anna, shopping_list["id"], meal["id"])
     await extra_added(api, anna, shopping_list["id"], text="Kerzen")
@@ -411,7 +411,7 @@ async def test_the_feed_shows_every_list_one_can_see_in_every_state(
     await applied(api, carl, carls["id"], op("list.finish", at=clock.now))
     clock.advance(minutes=1)
     await create_list(api, dora, "Dora")
-    meal = await create_meal(api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"]}])
+    meal = await create_meal(api, anna, "Brot", ingredients=[{"item_id": flour["id"]}])
     await added(api, anna, own["id"], meal["id"])
     await extra_added(api, anna, own["id"], text="Kerzen")
     await extra_added(api, anna, own["id"], text="Servietten")
@@ -609,7 +609,7 @@ async def test_add_meals(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock, flour: Any
 ) -> None:
     pancakes = await create_meal(
-        api, anna, "Pfannkuchen", servings=2, ingredients=[{"ingredient_id": flour["id"]}]
+        api, anna, "Pfannkuchen", servings=2, ingredients=[{"item_id": flour["id"]}]
     )
     photo = await upload(api, anna, pancakes["id"], jpeg())
     assert photo.status_code == 200
@@ -736,11 +736,11 @@ async def test_private_meals_on_a_visible_list(
         carl,
         "Geheimrezept",
         servings=2,
-        ingredients=[{"ingredient_id": flour["id"], "amount": 100, "unit": "g"}],
+        ingredients=[{"item_id": flour["id"], "amount": 100, "unit": "g"}],
     )
     await upload(api, carl, secret["id"], jpeg())
     public = await create_meal(
-        api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"], "amount": 50, "unit": "g"}]
+        api, anna, "Brot", ingredients=[{"item_id": flour["id"], "amount": 50, "unit": "g"}]
     )
     shopping_list = await create_list(api, carl, "Grillabend")
     await added(api, carl, shopping_list["id"], secret["id"], servings=4)
@@ -785,12 +785,12 @@ async def test_linked_and_free_text_items(
     clock.advance(minutes=1)
 
     body = await extra_added(
-        api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=500, unit="g"
+        api, anna, shopping_list["id"], item_id=flour["id"], amount=500, unit="g"
     )
     [item] = body["extra_items"]
     assert item == {
         "id": item["id"],
-        "ingredient_id": flour["id"],
+        "item_id": flour["id"],
         "text": None,
         "amount": 500,
         "unit": "g",
@@ -805,7 +805,7 @@ async def test_linked_and_free_text_items(
     assert body["version"] == 1
 
     eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=2)
+    body = await extra_added(api, anna, shopping_list["id"], item_id=eggs["id"], amount=2)
     eggs_item = body["extra_items"][1]
     # An amount without a unit counts as pieces.
     assert (eggs_item["unit"], eggs_item["base_unit"], eggs_item["unit_fits"]) == (
@@ -813,7 +813,7 @@ async def test_linked_and_free_text_items(
         "piece",
         True,
     )
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"])
+    body = await extra_added(api, anna, shopping_list["id"], item_id=flour["id"])
     assert body["extra_items"][2]["amount"] is None
 
     body = await extra_added(
@@ -840,20 +840,20 @@ async def test_linked_and_free_text_items(
     ("body", "problems"),
     [
         ({}, {("body", "text"): "required"}),
-        ({"ingredient_id": "{flour}", "text": "x"}, {("body", "text"): "invalid"}),
-        ({"ingredient_id": "{flour}", "unit": "g"}, {("body", "amount"): "required"}),
-        ({"ingredient_id": "{flour}", "amount_text": "1"}, {("body", "amount_text"): "invalid"}),
-        ({"ingredient_id": "{flour}", "category_id": "{other}"},
+        ({"item_id": "{flour}", "text": "x"}, {("body", "text"): "invalid"}),
+        ({"item_id": "{flour}", "unit": "g"}, {("body", "amount"): "required"}),
+        ({"item_id": "{flour}", "amount_text": "1"}, {("body", "amount_text"): "invalid"}),
+        ({"item_id": "{flour}", "category_id": "{other}"},
          {("body", "category_id"): "invalid"}),
-        ({"ingredient_id": "unknown"}, {("body", "ingredient_id"): "invalid"}),
-        ({"ingredient_id": "{flour}", "amount": 0}, {("body", "amount"): "out_of_range"}),
-        ({"ingredient_id": "{flour}", "amount": 100_001}, {("body", "amount"): "out_of_range"}),
-        ({"ingredient_id": "{flour}", "unit": "cup", "amount": 1}, {("body", "unit"): "invalid"}),
+        ({"item_id": "unknown"}, {("body", "item_id"): "invalid"}),
+        ({"item_id": "{flour}", "amount": 0}, {("body", "amount"): "out_of_range"}),
+        ({"item_id": "{flour}", "amount": 100_001}, {("body", "amount"): "out_of_range"}),
+        ({"item_id": "{flour}", "unit": "cup", "amount": 1}, {("body", "unit"): "invalid"}),
         # Units that don't fit the ingredient's base unit (REF-02, LIST-06).
-        ({"ingredient_id": "{flour}", "amount": 2}, {("body", "unit"): "unit_mismatch"}),
-        ({"ingredient_id": "{flour}", "amount": 2, "unit": "piece"},
+        ({"item_id": "{flour}", "amount": 2}, {("body", "unit"): "unit_mismatch"}),
+        ({"item_id": "{flour}", "amount": 2, "unit": "piece"},
          {("body", "unit"): "unit_mismatch"}),
-        ({"ingredient_id": "{flour}", "amount": 1, "unit": "l"},
+        ({"item_id": "{flour}", "amount": 1, "unit": "l"},
          {("body", "unit"): "unit_mismatch"}),
         ({"text": "x", "amount": 1, "unit": "g"},
          {("body", "amount"): "invalid", ("body", "unit"): "invalid"}),
@@ -915,7 +915,7 @@ async def test_client_ids_make_adding_idempotent(
 async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, salt: Any) -> None:
     shopping_list = await create_list(api, anna)
     body = await extra_added(
-        api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=500, unit="g"
+        api, anna, shopping_list["id"], item_id=flour["id"], amount=500, unit="g"
     )
     item_id = body["extra_items"][0]["id"]
 
@@ -923,14 +923,14 @@ async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, 
         response = await patch_extra(api, anna, shopping_list["id"], item_id, **changes)
         assert response.status_code == 200, response.text
         [item] = response.json()["extra_items"]
-        return item["ingredient_id"], item["amount"], item["unit"], response.json()["version"]
+        return item["item_id"], item["amount"], item["unit"], response.json()["version"]
 
     assert await update(amount=750) == (flour["id"], 750, "g", 2)
     assert await update(unit="kg") == (flour["id"], 750, "kg", 3)
     assert await update(amount=750) == (flour["id"], 750, "kg", 3)  # unchanged
     assert await update(amount=None) == (flour["id"], None, None, 4)  # the unit goes too
     assert await update(amount=3, unit="tbsp") == (flour["id"], 3, "tbsp", 5)
-    assert await update(amount=None, unit=None, ingredient_id=salt["id"]) == (
+    assert await update(amount=None, unit=None, item_id=salt["id"]) == (
         salt["id"],
         None,
         None,
@@ -942,8 +942,8 @@ async def test_update_linked_items(api: AsyncClient, anna: Account, flour: Any, 
         ({"text": "x", "amount_text": "1", "category_id": "c"},
          {("body", "text"): "invalid", ("body", "amount_text"): "invalid",
           ("body", "category_id"): "invalid"}),
-        ({"ingredient_id": None}, {("body", "ingredient_id"): "invalid"}),
-        ({"ingredient_id": "unknown"}, {("body", "ingredient_id"): "invalid"}),
+        ({"item_id": None}, {("body", "item_id"): "invalid"}),
+        ({"item_id": "unknown"}, {("body", "item_id"): "invalid"}),
         ({"amount": -1}, {("body", "amount"): "out_of_range"}),
         ({"amount": 2}, {("body", "unit"): "unit_mismatch"}),
         ({"amount": 2, "unit": "ml"}, {("body", "unit"): "unit_mismatch"}),
@@ -962,7 +962,7 @@ async def test_linked_items_that_do_not_fit_are_kept(
     eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
-    body = await extra_added(api, anna, list_id, ingredient_id=eggs["id"], amount=2)
+    body = await extra_added(api, anna, list_id, item_id=eggs["id"], amount=2)
     item_id = body["extra_items"][0]["id"]
     await set_stored(app, eggs["id"], base_unit="g")
 
@@ -979,7 +979,7 @@ async def test_linked_items_that_do_not_fit_are_kept(
     assert unchanged.json()["version"] == body["version"]
     response = await patch_extra(api, anna, list_id, item_id, amount=3)
     assert fields(response) == {("body", "unit"): "unit_mismatch"}
-    response = await patch_extra(api, anna, list_id, item_id, ingredient_id=flour["id"])
+    response = await patch_extra(api, anna, list_id, item_id, item_id=flour["id"])
     assert fields(response) == {("body", "unit"): "unit_mismatch"}
     response = await patch_extra(api, anna, list_id, item_id, amount=120, unit="g")
     [item] = response.json()["extra_items"]
@@ -1016,8 +1016,8 @@ async def test_update_free_text_items(api: AsyncClient, anna: Account, flour: An
     assert await update() == ("Wunderkerzen", "2", drinks, 4)
 
     for changes, problems in (
-        ({"ingredient_id": flour["id"], "amount": 1, "unit": "g"},
-         {("body", "ingredient_id"): "invalid", ("body", "amount"): "invalid",
+        ({"item_id": flour["id"], "amount": 1, "unit": "g"},
+         {("body", "item_id"): "invalid", ("body", "amount"): "invalid",
           ("body", "unit"): "invalid"}),
         ({"text": None}, {("body", "text"): "invalid"}),
         ({"category_id": None}, {("body", "category_id"): "invalid"}),
@@ -1054,9 +1054,7 @@ async def test_delete_extra_items(api: AsyncClient, anna: Account, carl: Account
 
 async def test_hide_and_restore_lines(api: AsyncClient, anna: Account, flour: Any) -> None:
     shopping_list = await create_list(api, anna)
-    await extra_added(
-        api, anna, shopping_list["id"], ingredient_id=flour["id"], amount=1, unit="kg"
-    )
+    await extra_added(api, anna, shopping_list["id"], item_id=flour["id"], amount=1, unit="kg")
     key = f"i:{flour['id']}"
 
     hidden = await hide(api, anna, shopping_list["id"], key)
@@ -1083,7 +1081,7 @@ async def test_a_hidden_key_stays_hidden_when_its_line_appears(
 ) -> None:
     shopping_list = await create_list(api, anna)
     await hide(api, anna, shopping_list["id"], f"i:{flour['id']}")
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=flour["id"])
+    body = await extra_added(api, anna, shopping_list["id"], item_id=flour["id"])
     assert line(body, "Mehl")["hidden"] is True
 
 
@@ -1155,7 +1153,7 @@ async def test_copy(
 ) -> None:
     await set_privacy(api, ben, meals_public=False)
     await make_couple(api, anna, ben)
-    own = await create_meal(api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"]}])
+    own = await create_meal(api, anna, "Brot", ingredients=[{"item_id": flour["id"]}])
     partners = await create_meal(api, ben, "Bens Salat")
     gone = await create_meal(api, anna, "Weg")
     shopping_list = await create_list(api, anna, "Wochenende")
@@ -1164,7 +1162,7 @@ async def test_copy(
     await added(api, anna, list_id, own["id"], servings=5)
     await added(api, anna, list_id, gone["id"])
     await api.delete(f"/api/meals/{gone['id']}", headers=anna.headers)
-    await extra_added(api, anna, list_id, ingredient_id=flour["id"], amount=2, unit="kg")
+    await extra_added(api, anna, list_id, item_id=flour["id"], amount=2, unit="kg")
     [_, deleted] = (await extra_added(api, anna, list_id, text="Weg"))["extra_items"]
     await api.delete(f"/api/lists/{list_id}/extra-items/{deleted['id']}", headers=anna.headers)
     await extra_added(api, anna, list_id, text="Kerzen", amount_text="10")
@@ -1183,7 +1181,7 @@ async def test_copy(
     assert [(m["name"], m["servings"], m["meal_id"]) for m in copy["meals"]] == [
         ("Brot", 5, own["id"])
     ]
-    items = [(i["ingredient_id"], i["text"], i["amount"], i["unit"], i["amount_text"])
+    items = [(i["item_id"], i["text"], i["amount"], i["unit"], i["amount_text"])
              for i in copy["extra_items"]]  # fmt: skip
     assert items == [(flour["id"], None, 2, "kg", None), (None, "Kerzen", None, None, "10")]
     assert all(item["added_by"] == ref(carl) for item in copy["extra_items"])
@@ -1341,12 +1339,12 @@ def counted_queries(app: FastAPI) -> Iterator[list[str]]:
 async def fill(
     api: AsyncClient, user: Account, list_id: str, ingredients: list[Any], meals: int
 ) -> None:
-    rows = [{"ingredient_id": item["id"], "amount": 10, "unit": "g"} for item in ingredients]
+    rows = [{"item_id": item["id"], "amount": 10, "unit": "g"} for item in ingredients]
     for index in range(meals):
         meal = await create_meal(api, user, f"Meal {index}", ingredients=rows)
         await added(api, user, list_id, meal["id"])
     for item in ingredients:
-        await extra_added(api, user, list_id, ingredient_id=item["id"], amount=1, unit="kg")
+        await extra_added(api, user, list_id, item_id=item["id"], amount=1, unit="kg")
         await extra_added(api, user, list_id, text=f"Extra {item['name']}")
         await hide(api, user, list_id, f"i:{item['id']}")
     gone = await create_meal(api, user, "Weg", ingredients=rows)
@@ -1404,7 +1402,7 @@ async def test_polls_are_answered_from_the_cache(
 ) -> None:
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
-    await extra_added(api, anna, list_id, ingredient_id=flour["id"], amount=500, unit="g")
+    await extra_added(api, anna, list_id, item_id=flour["id"], amount=500, unit="g")
     database: Database = app.state.database
     generation = database.write_generation
 

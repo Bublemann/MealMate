@@ -8,7 +8,7 @@ type ScreenProps = {
   testId: TestId;
   /**
    * Where the headline sits. `scrolling` (the default): above the content, scrolling with it, as
-   * on the Settings tab and the detail screens. `pinned` for Lists, Meals and Ingredients: their
+   * on the Settings tab and the detail screens. `pinned` for Lists, Meals and Items: their
    * pinned block shows it as its first element, so it stays put with the block (D-44).
    */
   variant?: 'scrolling' | 'pinned';

@@ -487,8 +487,8 @@ def lines(
         result.append(
             ListLine(
                 key=line.line_key,
-                kind="ingredient" if is_item else "text",
-                ingredient_id=(line.line_key.removeprefix(ITEM_KEY_PREFIX) if is_item else None),
+                kind="item" if is_item else "text",
+                item_id=(line.line_key.removeprefix(ITEM_KEY_PREFIX) if is_item else None),
                 name=label.name,
                 brand=label.brand,
                 category_id=label.category_id,

@@ -36,7 +36,7 @@ import {
   summary,
   unitOptions,
   UNITS,
-} from '@/test/ingredients';
+} from '@/test/items';
 import { EGGS, FLOUR, foundMeal, MILK, mealSummary } from '@/test/meals';
 import { dueItem } from '@/test/recurring';
 import { renderApp } from '@/test/render';
@@ -690,7 +690,7 @@ describe('ListScreen', () => {
     });
 
     it('keeps the options of typed text after Escape or a tap elsewhere, in both fields', async () => {
-      const { user } = renderList(mealRoutes({ 'GET /api/ingredients': [] }));
+      const { user } = renderList(mealRoutes({ 'GET /api/items': [] }));
       const mealField = await screen.findByTestId(testIds.mealField);
       const itemField = screen.getByTestId(testIds.extraItemInput);
 
@@ -703,7 +703,7 @@ describe('ListScreen', () => {
       await user.keyboard('{Escape}');
       await user.click(mealField);
       expect(screen.getByTestId(testIds.itemFreeText)).toBeVisible();
-      expect(screen.getByTestId(testIds.itemNewIngredient)).toBeVisible();
+      expect(screen.getByTestId(testIds.itemNewItem)).toBeVisible();
       expect(screen.getByTestId(testIds.mealFieldCreate)).toBeVisible();
     });
 
@@ -828,7 +828,7 @@ describe('ListScreen', () => {
     });
 
     /** Like the server: names starting with `q`, an equal name exact whatever its brand. */
-    function search(ingredients: Schemas['IngredientSummary'][]) {
+    function search(ingredients: Schemas['ItemSummary'][]) {
       return (request: Request) => {
         const q = new URL(request.url).searchParams.get('q')?.toLowerCase() ?? '';
         return ingredients
@@ -838,7 +838,7 @@ describe('ListScreen', () => {
     }
 
     const routes = {
-      'GET /api/ingredients': search([FLOUR, MILK, EGGS]),
+      'GET /api/items': search([FLOUR, MILK, EGGS]),
       'GET /api/units': UNITS,
       [`POST ${BASE}/extra-items`]: Response.json(listDetail(), { status: 201 }),
     };
@@ -862,11 +862,11 @@ describe('ListScreen', () => {
       await user.type(field, 'Me');
 
       const freeText = screen.getByTestId(testIds.itemFreeText);
-      const newIngredient = screen.getByTestId(testIds.itemNewIngredient);
+      const newItem = screen.getByTestId(testIds.itemNewItem);
       expect(freeText).toHaveTextContent('“Me” as an item');
-      expect(newIngredient).toHaveTextContent('“Me” as a new ingredient');
+      expect(newItem).toHaveTextContent('“Me” as a new ingredient');
       const results = await screen.findByRole('list', { name: 'Matching ingredients' });
-      expectInPageOrder([field, freeText, newIngredient, results]);
+      expectInPageOrder([field, freeText, newItem, results]);
       expect(screen.getByRole('button', { name: 'Add “Me”' })).toBeEnabled();
     });
 
@@ -891,7 +891,7 @@ describe('ListScreen', () => {
       );
       await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
-        ingredient_id: FLOUR.id,
+        item_id: FLOUR.id,
         amount: 450,
         unit: 'g',
       });
@@ -914,7 +914,7 @@ describe('ListScreen', () => {
       );
       await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
-        ingredient_id: FLOUR.id,
+        item_id: FLOUR.id,
       });
     });
 
@@ -947,7 +947,7 @@ describe('ListScreen', () => {
     });
 
     it('opens the amount pop-up with ＋ for the only ingredient of that name, whatever its brand', async () => {
-      const { user } = renderList({ ...routes, 'GET /api/ingredients': search([MILK_REWE]) });
+      const { user } = renderList({ ...routes, 'GET /api/items': search([MILK_REWE]) });
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'milch');
       await user.click(screen.getByRole('button', { name: 'Add “milch”' }));
@@ -960,7 +960,7 @@ describe('ListScreen', () => {
     it('does nothing with ＋ when several brands have that name: the results stay', async () => {
       const { user } = renderList({
         ...routes,
-        'GET /api/ingredients': search([MILK_REWE, MILK_WEIDE]),
+        'GET /api/items': search([MILK_REWE, MILK_WEIDE]),
       });
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'Milch');
@@ -1021,11 +1021,11 @@ describe('ListScreen', () => {
       const created = ingredient({ id: 'ing-quitten', name: 'Quitten', category_id: 'cat-other' });
       const { fetchMock, user } = renderList({
         ...routes,
-        'POST /api/ingredients': Response.json(created, { status: 201 }),
+        'POST /api/items': Response.json(created, { status: 201 }),
       });
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'Quitten');
-      await user.click(screen.getByTestId(testIds.itemNewIngredient));
+      await user.click(screen.getByTestId(testIds.itemNewItem));
       const form = await screen.findByRole('dialog', { name: 'New ingredient' });
       expect(within(form).getByLabelText('Name')).toHaveValue('Quitten');
       await user.click(within(form).getByRole('button', { name: 'Save' }));
@@ -1038,7 +1038,7 @@ describe('ListScreen', () => {
 
       await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
-        ingredient_id: 'ing-quitten',
+        item_id: 'ing-quitten',
         amount: 3,
         unit: 'g',
       });
@@ -1049,7 +1049,7 @@ describe('ListScreen', () => {
       const mi = heldRoute();
       const { fetchMock, user } = renderList({
         ...routes,
-        'GET /api/ingredients': (request: Request) =>
+        'GET /api/items': (request: Request) =>
           new URL(request.url).searchParams.get('q') === 'Mi'
             ? mi.route()
             : search([FLOUR, MILK, EGGS])(request),
@@ -1058,19 +1058,19 @@ describe('ListScreen', () => {
 
       await user.type(field, 'Mi');
       await waitFor(() =>
-        expect(requestsTo(fetchMock, 'GET /api/ingredients').length).toBeGreaterThan(0),
+        expect(requestsTo(fetchMock, 'GET /api/items').length).toBeGreaterThan(0),
       );
       await user.type(field, 'x');
       const options = [
         screen.getByTestId(testIds.itemFreeText),
-        screen.getByTestId(testIds.itemNewIngredient),
+        screen.getByTestId(testIds.itemNewItem),
       ];
 
       await mi.answer([found(MILK)]);
       expect(await screen.findByText('“Mix” as an item')).toBe(options[0]?.lastChild);
       expect(screen.queryByRole('list', { name: 'Matching ingredients' })).not.toBeInTheDocument();
       expect(screen.getByTestId(testIds.itemFreeText)).toBe(options[0]);
-      expect(screen.getByTestId(testIds.itemNewIngredient)).toBe(options[1]);
+      expect(screen.getByTestId(testIds.itemNewItem)).toBe(options[1]);
     });
 
     it('sends an item again with the same id after an error, and the next one with a new id', async () => {
@@ -1141,7 +1141,7 @@ describe('ListScreen', () => {
 
   describe('"Fällig" box (LIST-16, D-42)', () => {
     const TOOTHPASTE = dueItem({
-      ingredient: summary('Zahnpasta', 'other', {
+      item: summary('Zahnpasta', 'other', {
         id: 'ing-zahnpasta',
         brand: 'Elmex',
         base_unit: 'g',
@@ -1236,7 +1236,7 @@ describe('ListScreen', () => {
       );
       await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
-        ingredient_id: 'ing-klopapier',
+        item_id: 'ing-klopapier',
         amount: 12,
         unit: 'piece',
       });
@@ -1276,7 +1276,7 @@ describe('ListScreen', () => {
           [`GET ${BASE}`]: () => withDue({ due_items: left }),
           ...Object.fromEntries(
             due.map((item) => [
-              `POST ${BASE}/due-items/${item.ingredient.id}/hide`,
+              `POST ${BASE}/due-items/${item.item.id}/hide`,
               () => {
                 left = left.filter((other) => other !== item);
                 return withDue({ due_items: left, version: 4 });
@@ -1418,7 +1418,7 @@ describe('ListScreen', () => {
       );
       await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
         id: A_UUID_V7,
-        ingredient_id: 'ing-zahnpasta',
+        item_id: 'ing-zahnpasta',
       });
     });
 

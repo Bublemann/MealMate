@@ -97,6 +97,41 @@ function hasNames(stored: StoredCategories): boolean {
   return stored.categories.every((category) => typeof category.names === 'object');
 }
 
+/**
+ * App versions before #171 stored the lists with "ingredient" where the API now says "item": a
+ * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
+ * `ingredient`. Read that way, they show as before until the next sync replaces them.
+ */
+type Stored = Record<string, unknown>;
+
+/** `ingredient_id` as `item_id`, and a line's `kind` "ingredient" as "item"; else unchanged. */
+function renamed({ ingredient_id, ...rest }: Stored): Stored {
+  if (ingredient_id === undefined) return rest;
+  return {
+    ...rest,
+    item_id: ingredient_id,
+    ...(rest.kind === 'ingredient' ? { kind: 'item' } : {}),
+  };
+}
+
+function fromOlderApp(entry: StoredList): StoredList {
+  const detail = entry.detail as unknown as {
+    lines: Stored[];
+    extra_items: Stored[];
+    due_items: Stored[];
+  };
+  const due = detail.due_items.map(({ ingredient, ...rest }) =>
+    ingredient === undefined ? rest : { ...rest, item: ingredient },
+  );
+  const upgraded = {
+    ...detail,
+    lines: detail.lines.map(renamed),
+    extra_items: detail.extra_items.map(renamed),
+    due_items: due,
+  };
+  return { ...entry, detail: upgraded as unknown as ListDetail };
+}
+
 /** The request would go out with a session that isn't the ops' user's any more (SYNC-10). */
 class UserChangedError extends Error {
   constructor() {
@@ -338,13 +373,14 @@ export class SyncEngine {
       // waiting ops stay, tagged with them, and are never sent with this session.
       await storage.deleteListsExcept(id);
       if (this.userId !== id) return;
-      const [lists, ops, categories, lastSync] = await Promise.all([
+      const [stored, ops, categories, lastSync] = await Promise.all([
         storage.readLists(id),
         storage.readOps(id),
         storage.getMeta(userMetaKey('categories', id)),
         storage.getMeta(userMetaKey('lastSync', id)),
       ]);
       if (this.userId !== id) return;
+      const lists = stored.map(fromOlderApp);
       for (const entry of lists) this.copy.set(entry.id, entry);
       this.syncedAt = typeof lastSync === 'number' ? lastSync : null;
       this.mergeOutbox(ops);

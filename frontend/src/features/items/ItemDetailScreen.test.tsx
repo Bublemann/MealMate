@@ -11,7 +11,7 @@ import {
   scanInForm,
   summary,
   WEIDEHOF_MILK,
-} from '@/test/ingredients';
+} from '@/test/items';
 import {
   deletedNotice,
   noticeList,
@@ -23,7 +23,7 @@ import { renderApp } from '@/test/render';
 import { chooseFromMenu, menuItemNames, openMoreMenu } from '@/test/menu';
 import { testIds } from '@/testIds';
 
-const MILK_PATH = `/api/ingredients/${WEIDEHOF_MILK.id}`;
+const MILK_PATH = `/api/items/${WEIDEHOF_MILK.id}`;
 
 // jsdom has no camera: the scanner of the form's scan icon shows its manual input.
 vi.mock('@/features/scanner/decoder', () => ({
@@ -35,9 +35,9 @@ function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 
   const fetchMock = mockApi({
     ...REFERENCE_ROUTES,
     ...(admin ? { 'GET /api/me': TEST_ADMIN } : {}),
-    'GET /api/ingredients/ing-aepfel': APPLES,
+    'GET /api/items/ing-aepfel': APPLES,
     [`GET ${MILK_PATH}`]: WEIDEHOF_MILK,
-    'GET /api/ingredients/similar': [],
+    'GET /api/items/similar': [],
     ...routes,
   });
   return {
@@ -46,26 +46,26 @@ function renderDetail(routes: Record<string, unknown> = {}, admin = false, id = 
   };
 }
 
-/** 409 `ingredient.unit_mismatch` (D-33) unless the request accepts it, then `accepted`. */
+/** 409 `item.unit_mismatch` (D-33) unless the request accepts it, then `accepted`. */
 function unlessAccepted(accepted: unknown, params: Record<string, number>) {
   return async (request: Request) => {
     const body = (await request.json()) as { accept_unit_mismatch?: boolean };
     if (body.accept_unit_mismatch) return accepted;
-    return Response.json({ code: 'ingredient.unit_mismatch', params, fields: [] }, { status: 409 });
+    return Response.json({ code: 'item.unit_mismatch', params, fields: [] }, { status: 409 });
   };
 }
 
 function nutrientRow(name: RegExp | string): HTMLElement {
-  const table = screen.getByTestId(testIds.ingredientNutrition);
+  const table = screen.getByTestId(testIds.itemNutrition);
   return within(table).getByRole('rowheader', { name }).closest('tr') as HTMLElement;
 }
 
-describe('IngredientDetailScreen', () => {
+describe('ItemDetailScreen', () => {
   it('shows the details, who created and changed it, and a deleted creator (ING-06)', async () => {
     renderDetail();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Äpfel' })).toBeVisible();
-    const screenEl = screen.getByTestId(testIds.screenIngredient);
+    const screenEl = screen.getByTestId(testIds.screenItem);
     expect(await within(screenEl).findByText('Fruit & vegetables')).toBeVisible();
     expect(screenEl).toHaveTextContent('Brandnot set');
     expect(screenEl).toHaveTextContent('Base unitGrams (g)');
@@ -91,7 +91,7 @@ describe('IngredientDetailScreen', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Vollmilch (Weidehof)' }),
     ).toBeVisible();
-    const screenEl = screen.getByTestId(testIds.screenIngredient);
+    const screenEl = screen.getByTestId(testIds.screenItem);
     expect(screenEl).toHaveTextContent('BrandWeidehof');
     expect(screenEl).toHaveTextContent('Barcode4006381333931');
     expect(screenEl).toHaveTextContent('Package1 l');
@@ -109,7 +109,7 @@ describe('IngredientDetailScreen', () => {
       WEIDEHOF_MILK.id,
     );
 
-    const screenEl = await screen.findByTestId(testIds.screenIngredient);
+    const screenEl = await screen.findByTestId(testIds.screenItem);
     await waitFor(() => expect(screenEl).toHaveTextContent('BrandWeidehof'));
     expect(screenEl).toHaveTextContent('Packagenot set');
   });
@@ -117,7 +117,7 @@ describe('IngredientDetailScreen', () => {
   it('shows its own value per nutrient, unknown ones as "–" (NUT-02)', async () => {
     renderDetail();
 
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
     expect(screen.getByRole('heading', { name: 'Nutrition per 100 g' })).toBeVisible();
     expect(nutrientRow('Calories')).toHaveTextContent('52 kcal');
     expect(nutrientRow('Protein')).toHaveTextContent('0.3 g');
@@ -127,7 +127,7 @@ describe('IngredientDetailScreen', () => {
   it('marks the values a user changed on an Open Food Facts ingredient (BAR-04)', async () => {
     renderDetail({}, false, WEIDEHOF_MILK.id);
 
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
     expect(nutrientRow(/^Fat/)).toHaveTextContent('FatChanged in MealMate3.6 g');
     expect(nutrientRow('Calories')).toHaveTextContent('64 kcal');
   });
@@ -140,10 +140,10 @@ describe('IngredientDetailScreen', () => {
       base_unit: 'piece' as const,
       piece_weight_g: 60,
     };
-    renderDetail({ 'GET /api/ingredients/ing-eier': eggs }, false, 'ing-eier');
+    renderDetail({ 'GET /api/items/ing-eier': eggs }, false, 'ing-eier');
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Eier' })).toBeVisible();
-    const screenEl = screen.getByTestId(testIds.screenIngredient);
+    const screenEl = screen.getByTestId(testIds.screenItem);
     expect(screenEl).toHaveTextContent('Base unitPieces (pcs)');
     expect(screenEl).toHaveTextContent('Weight of one piece60 g');
     expect(screen.getByRole('heading', { name: 'Nutrition per 100 g' })).toBeVisible();
@@ -154,9 +154,7 @@ describe('IngredientDetailScreen', () => {
     renderDetail();
 
     await waitFor(() => expect(nutrientRow('Eiweiß')).toHaveTextContent('0,3 g'));
-    expect(screen.getByTestId(testIds.screenIngredient)).toHaveTextContent(
-      'Verwendet in3 Gerichten',
-    );
+    expect(screen.getByTestId(testIds.screenItem)).toHaveTextContent('Verwendet in3 Gerichten');
   });
 
   describe('newer values from Open Food Facts (BAR-06)', () => {
@@ -215,10 +213,7 @@ describe('IngredientDetailScreen', () => {
       const { fetchMock, user } = renderDetail(
         {
           [`GET ${MILK_PATH}`]: PENDING,
-          [`POST ${MILK_PATH}/pending-update/ignore`]: errorResponse(
-            409,
-            'ingredient.no_pending_update',
-          ),
+          [`POST ${MILK_PATH}/pending-update/ignore`]: errorResponse(409, 'item.no_pending_update'),
         },
         false,
         WEIDEHOF_MILK.id,
@@ -269,7 +264,7 @@ describe('IngredientDetailScreen', () => {
 
   it('edits only what changed, including the base unit (ING-02)', async () => {
     const { fetchMock, user } = renderDetail({
-      'PATCH /api/ingredients/ing-aepfel': {
+      'PATCH /api/items/ing-aepfel': {
         ...APPLES,
         brand: 'Hofgut',
         base_unit: 'ml',
@@ -277,9 +272,9 @@ describe('IngredientDetailScreen', () => {
       },
     });
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
-    expect(within(dialog).queryByTestId(testIds.ingredientSimilar)).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId(testIds.itemSimilar)).not.toBeInTheDocument();
     await user.click(within(dialog).getByLabelText('Millilitres (ml)'));
     await user.type(within(dialog).getByLabelText('Brand'), 'Hofgut');
     const kcal = within(dialog).getByLabelText('Calories');
@@ -289,9 +284,11 @@ describe('IngredientDetailScreen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(
-      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
-    ).resolves.toEqual({ brand: 'Hofgut', base_unit: 'ml', nutrients: { kcal: 55 } });
+    await expect(requestsTo(fetchMock, 'PATCH /api/items/ing-aepfel')[0]?.json()).resolves.toEqual({
+      brand: 'Hofgut',
+      base_unit: 'ml',
+      nutrients: { kcal: 55 },
+    });
     expect(nutrientRow('Calories')).toHaveTextContent('55 kcal');
     expect(screen.getByRole('heading', { level: 1, name: 'Äpfel (Hofgut)' })).toBeVisible();
   });
@@ -300,12 +297,12 @@ describe('IngredientDetailScreen', () => {
     const uncategorized = { ...APPLES, category_id: 'cat-uncategorized' };
     const { fetchMock, user } = renderDetail({
       'GET /api/categories': CATEGORIES_WITH_UNCATEGORIZED,
-      'GET /api/ingredients/ing-aepfel': uncategorized,
-      'PATCH /api/ingredients/ing-aepfel': { ...uncategorized, brand: 'Hofgut' },
+      'GET /api/items/ing-aepfel': uncategorized,
+      'PATCH /api/items/ing-aepfel': { ...uncategorized, brand: 'Hofgut' },
     });
 
     expect(await screen.findByText('Uncategorized')).toBeVisible();
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     const category = within(dialog).getByLabelText('Category');
     // The current value, which can't be picked again.
@@ -321,23 +318,23 @@ describe('IngredientDetailScreen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(
-      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
-    ).resolves.toEqual({ brand: 'Hofgut' });
+    await expect(requestsTo(fetchMock, 'PATCH /api/items/ing-aepfel')[0]?.json()).resolves.toEqual({
+      brand: 'Hofgut',
+    });
   });
 
   it('edits an ingredient counted in pieces; leaving “Pieces” clears its piece weight (ING-02)', async () => {
     const eggs = { ...APPLES, id: 'ing-eier', name: 'Eier', base_unit: 'piece' as const };
     const { fetchMock, user } = renderDetail(
       {
-        'GET /api/ingredients/ing-eier': { ...eggs, piece_weight_g: 60 },
-        'PATCH /api/ingredients/ing-eier': { ...eggs, base_unit: 'g', piece_weight_g: null },
+        'GET /api/items/ing-eier': { ...eggs, piece_weight_g: 60 },
+        'PATCH /api/items/ing-eier': { ...eggs, base_unit: 'g', piece_weight_g: null },
       },
       false,
       'ing-eier',
     );
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Eier' });
     expect(within(dialog).getByLabelText('Pieces (pcs)')).toBeChecked();
     expect(within(dialog).getByLabelText('Weight per piece (g)')).toHaveValue('60');
@@ -351,18 +348,18 @@ describe('IngredientDetailScreen', () => {
 
     // The server clears the piece weight (ING-02).
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(
-      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-eier')[0]?.json(),
-    ).resolves.toEqual({ base_unit: 'g' });
+    await expect(requestsTo(fetchMock, 'PATCH /api/items/ing-eier')[0]?.json()).resolves.toEqual({
+      base_unit: 'g',
+    });
   });
 
   it('asks before a base-unit change leaves amounts not fitting, and saves only when told to (ING-02)', async () => {
-    const path = 'PATCH /api/ingredients/ing-aepfel';
+    const path = 'PATCH /api/items/ing-aepfel';
     const { fetchMock, user } = renderDetail({
       [path]: unlessAccepted({ ...APPLES, base_unit: 'piece' }, { meals: 3, lists: 1, amounts: 5 }),
     });
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -392,7 +389,7 @@ describe('IngredientDetailScreen', () => {
       { base_unit: 'piece' },
       { base_unit: 'piece', accept_unit_mismatch: true },
     ]);
-    expect(screen.getByTestId(testIds.screenIngredient)).toHaveTextContent('Base unitPieces (pcs)');
+    expect(screen.getByTestId(testIds.screenItem)).toHaveTextContent('Base unitPieces (pcs)');
   });
 
   it('names a single draft in German when a base-unit change asks', async () => {
@@ -400,14 +397,14 @@ describe('IngredientDetailScreen', () => {
     const eggs = { ...APPLES, id: 'ing-eier', name: 'Eier', base_unit: 'piece' as const };
     const { user } = renderDetail(
       {
-        'GET /api/ingredients/ing-eier': eggs,
-        'PATCH /api/ingredients/ing-eier': unlessAccepted(eggs, { meals: 0, lists: 1, amounts: 1 }),
+        'GET /api/items/ing-eier': eggs,
+        'PATCH /api/items/ing-eier': unlessAccepted(eggs, { meals: 0, lists: 1, amounts: 1 }),
       },
       false,
       'ing-eier',
     );
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Eier bearbeiten' });
     await user.click(within(dialog).getByLabelText('Gramm (g)'));
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
@@ -428,12 +425,12 @@ describe('IngredientDetailScreen', () => {
     };
     const { user } = renderDetail({ [`GET ${MILK_PATH}`]: edited }, false, WEIDEHOF_MILK.id);
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Vollmilch (Weidehof) bearbeiten' });
     // A name is filled in, so the keyboard stays down.
     await waitFor(() => expect(dialog).toHaveFocus());
     expect(dialog).not.toHaveAccessibleDescription();
-    const form = within(dialog).getByTestId(testIds.ingredientForm);
+    const form = within(dialog).getByTestId(testIds.itemForm);
     const name = within(form).getByLabelText('Name');
     const pack = within(form).getByLabelText('Packung');
     const baseUnit = within(form).getByRole('group', { name: 'Basiseinheit' });
@@ -447,7 +444,7 @@ describe('IngredientDetailScreen', () => {
       within(form).getByLabelText('Kategorie'),
       baseUnit,
       within(form).getByRole('group', { name: 'Nährwerte pro 100 ml (optional)' }),
-      within(dialog).getByTestId(testIds.ingredientFormFooter),
+      within(dialog).getByTestId(testIds.itemFormFooter),
     ]);
     // Editing is not creating: no search at Open Food Facts here (BAR-11).
     expect(
@@ -473,7 +470,7 @@ describe('IngredientDetailScreen', () => {
       WEIDEHOF_MILK.id,
     );
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
     const pack = within(dialog).getByLabelText('Package');
     expect(pack).toHaveAttribute('placeholder', 'optional, e.g. 500 g');
@@ -494,7 +491,7 @@ describe('IngredientDetailScreen', () => {
       WEIDEHOF_MILK.id,
     );
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
     const barcode = within(dialog).getByLabelText('Barcode');
     expect(barcode).not.toHaveAttribute('readonly');
@@ -517,11 +514,11 @@ describe('IngredientDetailScreen', () => {
 
   it('gives an ingredient typed by hand its package’s barcode with the scan icon, without asking Open Food Facts (ING-04, BAR-03)', async () => {
     const { fetchMock, user } = renderDetail({
-      'GET /api/ingredients/lookup': lookupResult(),
-      'PATCH /api/ingredients/ing-aepfel': { ...APPLES, barcode: '4006381333931' },
+      'GET /api/items/lookup': lookupResult(),
+      'PATCH /api/items/ing-aepfel': { ...APPLES, barcode: '4006381333931' },
     });
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await scanInForm(user, dialog, '4006381333931');
 
@@ -529,32 +526,32 @@ describe('IngredientDetailScreen', () => {
       expect(within(dialog).getByLabelText('Barcode')).toHaveValue('4006381333931'),
     );
     // Only whether another ingredient has it is asked; nothing else changes.
-    const [lookup] = requestsTo(fetchMock, 'GET /api/ingredients/lookup');
+    const [lookup] = requestsTo(fetchMock, 'GET /api/items/lookup');
     expect(new URL(lookup!.url).search).toBe('?barcode=4006381333931&own_only=true');
-    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Äpfel');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(
-      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
-    ).resolves.toEqual({ barcode: '4006381333931' });
+    await expect(requestsTo(fetchMock, 'PATCH /api/items/ing-aepfel')[0]?.json()).resolves.toEqual({
+      barcode: '4006381333931',
+    });
   });
 
   it('names the ingredient a scanned barcode belongs to instead of filling it in (BAR-02)', async () => {
     const { fetchMock, user, router } = renderDetail({
-      'GET /api/ingredients/lookup': lookupResult({
+      'GET /api/items/lookup': lookupResult({
         barcode: WEIDEHOF_MILK.barcode!,
         found_in: 'db',
-        ingredient: WEIDEHOF_MILK,
+        item: WEIDEHOF_MILK,
       }),
     });
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
 
-    const notice = await within(dialog).findByTestId(testIds.ingredientScanNotice);
+    const notice = await within(dialog).findByTestId(testIds.itemScanNotice);
     expect(notice).toHaveTextContent(/^Already belongs to Vollmilch \(Weidehof\)open$/);
     expect(within(dialog).getByLabelText('Barcode')).toHaveValue('');
     await user.click(within(notice).getByRole('link', { name: 'open' }));
@@ -563,30 +560,30 @@ describe('IngredientDetailScreen', () => {
       expect(router.state.location.pathname).toBe(`/ingredients/${WEIDEHOF_MILK.id}`),
     );
     expect(dialog).not.toBeInTheDocument();
-    expect(requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'PATCH /api/items/ing-aepfel')).toHaveLength(0);
   });
 
   it('fills in an ingredient’s own barcode scanned again, without a notice', async () => {
     const { user } = renderDetail(
       {
-        'GET /api/ingredients/lookup': lookupResult({
+        'GET /api/items/lookup': lookupResult({
           barcode: WEIDEHOF_MILK.barcode!,
           found_in: 'db',
-          ingredient: WEIDEHOF_MILK,
+          item: WEIDEHOF_MILK,
         }),
       },
       false,
       WEIDEHOF_MILK.id,
     );
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Vollmilch (Weidehof)' });
     const barcode = within(dialog).getByLabelText('Barcode');
     await user.clear(barcode);
     await scanInForm(user, dialog, WEIDEHOF_MILK.barcode!);
 
     await waitFor(() => expect(barcode).toHaveValue(WEIDEHOF_MILK.barcode));
-    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
   });
 
   it('does not send stored numbers with more decimals than shown unless they were edited', async () => {
@@ -597,11 +594,11 @@ describe('IngredientDetailScreen', () => {
       nutrients: { ...APPLES.nutrients, kcal: 52.66666667, protein: 0.33333333 },
     };
     const { fetchMock, user } = renderDetail({
-      'GET /api/ingredients/ing-aepfel': precise,
-      'PATCH /api/ingredients/ing-aepfel': { ...precise, name: 'Äpfel rot' },
+      'GET /api/items/ing-aepfel': precise,
+      'PATCH /api/items/ing-aepfel': { ...precise, name: 'Äpfel rot' },
     });
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     expect(within(dialog).getByLabelText('Protein')).toHaveValue('0.333333');
     await user.type(within(dialog).getByLabelText('Name'), ' rot');
@@ -610,17 +607,18 @@ describe('IngredientDetailScreen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
-    await expect(
-      requestsTo(fetchMock, 'PATCH /api/ingredients/ing-aepfel')[0]?.json(),
-    ).resolves.toEqual({ name: 'Äpfel rot', nutrients: { fat: 0.2 } });
+    await expect(requestsTo(fetchMock, 'PATCH /api/items/ing-aepfel')[0]?.json()).resolves.toEqual({
+      name: 'Äpfel rot',
+      nutrients: { fat: 0.2 },
+    });
   });
 
   it('shows a barcode another ingredient has next to the field', async () => {
     const { user } = renderDetail({
-      'PATCH /api/ingredients/ing-aepfel': errorResponse(409, 'ingredient.barcode_taken'),
+      'PATCH /api/items/ing-aepfel': errorResponse(409, 'item.barcode_taken'),
     });
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     await user.type(within(dialog).getByLabelText('Barcode'), '4006381333931');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -635,7 +633,7 @@ describe('IngredientDetailScreen', () => {
   it('shows the barcode’s digit counts as a placeholder, not as a hint', async () => {
     const { user } = renderDetail();
 
-    await chooseFromMenu(user, testIds.editIngredient);
+    await chooseFromMenu(user, testIds.editItem);
     const dialog = await screen.findByRole('dialog', { name: 'Edit Äpfel' });
     const barcode = within(dialog).getByLabelText('Barcode');
     expect(barcode).toHaveAttribute('placeholder', '8, 12 or 13 digits');
@@ -643,16 +641,16 @@ describe('IngredientDetailScreen', () => {
   });
 
   it('shows "not found" for an ingredient that is gone', async () => {
-    renderDetail({ 'GET /api/ingredients/ing-aepfel': errorResponse(404, 'common.not_found') });
+    renderDetail({ 'GET /api/items/ing-aepfel': errorResponse(404, 'common.not_found') });
 
     expect(await screen.findByText("This doesn't exist (any more).")).toBeVisible();
   });
 });
 
-describe('IngredientMenu (D-39)', () => {
+describe('ItemMenu (D-39)', () => {
   it('offers "Edit" to everyone', async () => {
     const { user } = renderDetail();
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
 
     const menu = await openMoreMenu(user);
 
@@ -660,44 +658,44 @@ describe('IngredientMenu (D-39)', () => {
     // The properties card has no button of its own any more.
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
-    expect(screen.queryByTestId(testIds.editIngredient)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.editItem)).not.toBeInTheDocument();
   });
 
   it('offers admins "Merge…" and, red and last, "Delete" instead of an admin card (ING-05)', async () => {
     const { user } = renderDetail({}, true);
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
     expect(screen.queryByText('Administration')).not.toBeInTheDocument();
 
     const menu = await openMoreMenu(user);
 
     expect(menuItemNames(menu)).toEqual(['Edit', 'Buy regularly…', 'Merge…', 'Delete']);
-    const remove = within(menu).getByTestId(testIds.deleteIngredient);
+    const remove = within(menu).getByTestId(testIds.deleteItem);
     expect(menu.lastElementChild).toBe(remove);
     expect(remove.previousElementSibling).toHaveAttribute('role', 'separator');
-    expect(within(menu).getByTestId(testIds.mergeIngredient)).toHaveTextContent('Merge…');
+    expect(within(menu).getByTestId(testIds.mergeItem)).toHaveTextContent('Merge…');
   });
 
   it('merge into an ingredient picked from the others, after confirming both names', async () => {
     const apfel = summary('Apfel', 'fruit_vegetables');
     const { fetchMock, user, router } = renderDetail(
       {
-        'GET /api/ingredients': (request: Request) =>
+        'GET /api/items': (request: Request) =>
           new URL(request.url).searchParams.get('q') === 'Apf'
             ? [summary('Äpfel', 'fruit_vegetables', { id: 'ing-aepfel' }), apfel]
             : [],
-        'POST /api/admin/ingredients/ing-aepfel/merge': { ...APPLES, id: apfel.id, name: 'Apfel' },
+        'POST /api/admin/items/ing-aepfel/merge': { ...APPLES, id: apfel.id, name: 'Apfel' },
       },
       true,
     );
 
-    await chooseFromMenu(user, testIds.mergeIngredient);
+    await chooseFromMenu(user, testIds.mergeItem);
     const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
-    const picker = within(dialog).getByTestId(testIds.ingredientPicker);
+    const picker = within(dialog).getByTestId(testIds.itemPicker);
     await user.type(within(picker).getByLabelText('Ingredient that stays'), 'Apf');
     const option = await within(picker).findByRole('button', { name: /^Apfel/ });
     // The ingredient itself can't be picked, and nothing is created here.
     expect(within(picker).queryByRole('button', { name: /^Äpfel/ })).not.toBeInTheDocument();
-    expect(within(picker).queryByTestId(testIds.ingredientPickerCreate)).not.toBeInTheDocument();
+    expect(within(picker).queryByTestId(testIds.itemPickerCreate)).not.toBeInTheDocument();
     await user.click(option);
 
     const confirm = await screen.findByRole('alertdialog', { name: 'Merge Äpfel into Apfel?' });
@@ -706,18 +704,18 @@ describe('IngredientMenu (D-39)', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/ingredients/${apfel.id}`));
     await expect(
-      requestsTo(fetchMock, 'POST /api/admin/ingredients/ing-aepfel/merge')[0]?.json(),
+      requestsTo(fetchMock, 'POST /api/admin/items/ing-aepfel/merge')[0]?.json(),
     ).resolves.toEqual({ into_id: apfel.id });
     expect(await screen.findByRole('heading', { level: 1, name: 'Apfel' })).toBeVisible();
   });
 
   it('names the amounts that won’t fit the ingredient that stays, and merges when told to (ING-05)', async () => {
     const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
-    const path = 'POST /api/admin/ingredients/ing-aepfel/merge';
+    const path = 'POST /api/admin/items/ing-aepfel/merge';
     const accepted = heldRoute();
     const { fetchMock, user, router } = renderDetail(
       {
-        'GET /api/ingredients': (request: Request) =>
+        'GET /api/items': (request: Request) =>
           new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
         [path]: async (request: Request) =>
           (await unlessAccepted(null, { meals: 2, lists: 1, amounts: 4 })(request)) ??
@@ -726,7 +724,7 @@ describe('IngredientMenu (D-39)', () => {
       true,
     );
 
-    await chooseFromMenu(user, testIds.mergeIngredient);
+    await chooseFromMenu(user, testIds.mergeItem);
     const dialog = await screen.findByRole('dialog', { name: 'Merge Äpfel into…' });
     await user.type(within(dialog).getByLabelText('Ingredient that stays'), 'Eie');
     await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
@@ -760,9 +758,9 @@ describe('IngredientMenu (D-39)', () => {
     const eggs = summary('Eier', 'dairy_eggs', { base_unit: 'piece' });
     const { user } = renderDetail(
       {
-        'GET /api/ingredients': (request: Request) =>
+        'GET /api/items': (request: Request) =>
           new URL(request.url).searchParams.get('q') === 'Eie' ? [eggs] : [],
-        'POST /api/admin/ingredients/ing-aepfel/merge': unlessAccepted(APPLES, {
+        'POST /api/admin/items/ing-aepfel/merge': unlessAccepted(APPLES, {
           meals: 1,
           lists: 0,
           amounts: 1,
@@ -771,7 +769,7 @@ describe('IngredientMenu (D-39)', () => {
       true,
     );
 
-    await chooseFromMenu(user, testIds.mergeIngredient);
+    await chooseFromMenu(user, testIds.mergeItem);
     const dialog = await screen.findByRole('dialog', { name: 'Äpfel zusammenführen mit …' });
     await user.type(within(dialog).getByLabelText('Zutat, die bleibt'), 'Eie');
     await user.click(await within(dialog).findByRole('button', { name: /^Eier/ }));
@@ -789,15 +787,15 @@ describe('IngredientMenu (D-39)', () => {
   it('explains why an ingredient in use cannot be deleted', async () => {
     const { user } = renderDetail(
       {
-        'DELETE /api/admin/ingredients/ing-aepfel': Response.json(
-          { code: 'ingredient.in_use', params: { meals: 1, lists: 3 }, fields: [] },
+        'DELETE /api/admin/items/ing-aepfel': Response.json(
+          { code: 'item.in_use', params: { meals: 1, lists: 3 }, fields: [] },
           { status: 409 },
         ),
       },
       true,
     );
 
-    await chooseFromMenu(user, testIds.deleteIngredient);
+    await chooseFromMenu(user, testIds.deleteItem);
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete Äpfel?' });
     await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
 
@@ -812,11 +810,11 @@ describe('IngredientMenu (D-39)', () => {
 
   it('deletes an unused ingredient and returns to the list', async () => {
     const { user, router } = renderDetail(
-      { 'DELETE /api/admin/ingredients/ing-aepfel': null, 'GET /api/ingredients': [] },
+      { 'DELETE /api/admin/items/ing-aepfel': null, 'GET /api/items': [] },
       true,
     );
 
-    await chooseFromMenu(user, testIds.deleteIngredient);
+    await chooseFromMenu(user, testIds.deleteItem);
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
     );
@@ -828,7 +826,7 @@ describe('IngredientMenu (D-39)', () => {
 describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
   const APPLES_ITEM = recurringItem({
     id: 'rec-aepfel',
-    ingredient: summary('Äpfel', 'fruit_vegetables', { id: 'ing-aepfel' }),
+    item: summary('Äpfel', 'fruit_vegetables', { id: 'ing-aepfel' }),
     interval_weeks: 2,
     interval: { value: 2, unit: 'week', automatic: false },
   });
@@ -843,7 +841,7 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
         return Response.json(APPLES_ITEM, { status: 201 });
       },
     });
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
 
     await chooseFromMenu(user, testIds.buyRegularly);
     const dialog = await screen.findByRole('dialog', { name: 'Äpfel' });
@@ -852,7 +850,7 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await expect(requestsTo(fetchMock, 'POST /api/recurring-items')[0]?.json()).resolves.toEqual({
-      ingredient_id: 'ing-aepfel',
+      item_id: 'ing-aepfel',
       interval_weeks: 4,
     });
     // The focus goes back to ⋯, and the set is loaded again: next time it opens for editing.
@@ -866,7 +864,7 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
   it('opens it for editing when the ingredient is recurring already', async () => {
     stubResizeObserver();
     const { user } = renderDetail({ 'GET /api/recurring-items': recurringList([APPLES_ITEM]) });
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
 
     await chooseFromMenu(user, testIds.buyRegularly);
 
@@ -881,7 +879,7 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
     const { fetchMock, user } = renderDetail({
       'GET /api/recurring-items': errorResponse(500, 'common.internal'),
     });
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
     await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/recurring-items')).toHaveLength(1));
 
     const menu = await openMoreMenu(user);
@@ -891,7 +889,7 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
 
   it('is disabled offline, not hidden (SYNC-03)', async () => {
     const { fetchMock, user } = renderDetail();
-    await screen.findByTestId(testIds.ingredientNutrition);
+    await screen.findByTestId(testIds.itemNutrition);
 
     goOffline(fetchMock);
     const menu = await openMoreMenu(user);
@@ -904,17 +902,17 @@ describe('"Regelmäßig kaufen…" in the ⋯ menu (LIST-16, D-39)', () => {
     const { fetchMock, user, router } = renderDetail(
       {
         'GET /api/me/notices': () => noticeList(notices),
-        'DELETE /api/admin/ingredients/ing-aepfel': () => {
+        'DELETE /api/admin/items/ing-aepfel': () => {
           notices = [deletedNotice('Äpfel')];
           return null;
         },
-        'GET /api/ingredients': [],
+        'GET /api/items': [],
       },
       true,
     );
     await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/me/notices')).toHaveLength(1));
 
-    await chooseFromMenu(user, testIds.deleteIngredient);
+    await chooseFromMenu(user, testIds.deleteItem);
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
     );

@@ -30,51 +30,51 @@ import { useConnected } from '@/features/sync/context';
 import { testIds } from '@/testIds';
 import {
   unitMismatch,
-  useDeleteIngredient,
-  useMergeIngredient,
-  type Ingredient,
-  type IngredientMerge,
-  type IngredientSummary,
+  useDeleteItem,
+  useMergeItem,
+  type Item,
+  type ItemMerge,
+  type ItemSummary,
   type UnitMismatch,
 } from './api';
-import { IngredientFormDialog } from './IngredientFormDialog';
-import { IngredientPicker } from './IngredientPicker';
-import { ingredientLabel } from './label';
+import { ItemFormDialog } from './ItemFormDialog';
+import { ItemPicker } from './ItemPicker';
+import { itemLabel } from './label';
 
-interface IngredientMenuProps {
-  ingredient: Ingredient;
+interface ItemMenuProps {
+  item: Item;
   /** Shows an error of an action below the title; `null` clears it when the next one starts. */
   onError: (error: unknown) => void;
 }
 
 /**
- * The ingredient's ⋯ menu (D-39): "Edit" (ING-04), "Regelmäßig kaufen…" (LIST-16: the recurring
- * pop-up, for editing when the ingredient is recurring already), and for admins "Merge…" and, red and last,
+ * The item's ⋯ menu (D-39): "Edit" (ING-04), "Regelmäßig kaufen…" (LIST-16: the recurring
+ * pop-up, for editing when the item is recurring already), and for admins "Merge…" and, red and last,
  * "Delete" (ING-05). Each needs a connection (SYNC-03). A merge that would leave amounts not
- * fitting the ingredient that stays asks once more, naming how many (D-33).
+ * fitting the item that stays asks once more, naming how many (D-33).
  */
-export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
+export function ItemMenu({ item, onError }: ItemMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const admin = useCurrentUser().role === 'admin';
   const offline = !useConnected();
-  const merge = useMergeIngredient(ingredient.id);
-  const remove = useDeleteIngredient(ingredient.id);
+  const merge = useMergeItem(item.id);
+  const remove = useDeleteItem(item.id);
   const [editing, setEditing] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
   const recurringItems = useRecurringItems();
   const [picking, setPicking] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [target, setTarget] = useState<IngredientSummary | null>(null);
+  const [target, setTarget] = useState<ItemSummary | null>(null);
   const { trigger, focusMenu } = useMoreMenuFocus();
   // What the merge into `target` would leave not fitting, once the server said so; kept while
   // the accepting request runs.
   const [mismatch, setMismatch] = useState<UnitMismatch | null>(null);
-  const name = ingredientLabel(ingredient.name, ingredient.brand);
-  const into = target ? ingredientLabel(target.name, target.brand) : '';
+  const name = itemLabel(item.name, item.brand);
+  const into = target ? itemLabel(target.name, target.brand) : '';
   const busy = merge.isPending || remove.isPending || offline;
 
-  function onPick(picked: IngredientSummary) {
+  function onPick(picked: ItemSummary) {
     setPicking(false);
     setMismatch(null);
     setTarget(picked);
@@ -82,7 +82,7 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
 
   function onMerge() {
     if (!target) return;
-    const body: IngredientMerge = { into_id: target.id };
+    const body: ItemMerge = { into_id: target.id };
     if (mismatch) body.accept_unit_mismatch = true;
     merge.mutate(body, {
       onSuccess: (kept) => {
@@ -109,25 +109,25 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
         danger={
           admin && (
             <MoreMenuItem
-              testId={testIds.deleteIngredient}
+              testId={testIds.deleteItem}
               icon={<Trash2 aria-hidden="true" />}
               dialog
               disabled={busy}
               onSelect={() => setDeleting(true)}
             >
-              {t('ingredients.admin.delete')}
+              {t('items.admin.delete')}
             </MoreMenuItem>
           )
         }
       >
         <MoreMenuItem
-          testId={testIds.editIngredient}
+          testId={testIds.editItem}
           icon={<Pencil aria-hidden="true" />}
           dialog
           disabled={offline}
           onSelect={() => setEditing(true)}
         >
-          {t('ingredients.detail.edit')}
+          {t('items.detail.edit')}
         </MoreMenuItem>
         <MoreMenuItem
           testId={testIds.buyRegularly}
@@ -145,7 +145,7 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
         </MoreMenuItem>
         {admin && (
           <MoreMenuItem
-            testId={testIds.mergeIngredient}
+            testId={testIds.mergeItem}
             icon={<Merge aria-hidden="true" />}
             dialog
             disabled={busy}
@@ -154,22 +154,20 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
               setPicking(true);
             }}
           >
-            {t('ingredients.admin.merge')}
+            {t('items.admin.merge')}
           </MoreMenuItem>
         )}
       </MoreMenu>
 
-      <IngredientFormDialog
+      <ItemFormDialog
         open={editing}
         onOpenChange={setEditing}
         onCloseAutoFocus={focusMenu}
-        ingredient={ingredient}
+        item={item}
       />
 
       <RecurringDialog
-        target={
-          recurringOpen ? { ingredient, item: itemOf(recurringItems.data, ingredient.id) } : null
-        }
+        target={recurringOpen ? { item, recurring: itemOf(recurringItems.data, item.id) } : null}
         onClose={() => setRecurringOpen(false)}
         onCloseAutoFocus={focusMenu}
       />
@@ -179,12 +177,12 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
           <Dialog open={picking} onOpenChange={setPicking}>
             <DialogContent onCloseAutoFocus={focusMenu}>
               <DialogHeader>
-                <DialogTitle>{t('ingredients.admin.mergeTitle', { name })}</DialogTitle>
-                <DialogDescription>{t('ingredients.admin.mergeText', { name })}</DialogDescription>
+                <DialogTitle>{t('items.admin.mergeTitle', { name })}</DialogTitle>
+                <DialogDescription>{t('items.admin.mergeText', { name })}</DialogDescription>
               </DialogHeader>
-              <IngredientPicker
-                label={t('ingredients.admin.mergePicker')}
-                excludeIds={[ingredient.id]}
+              <ItemPicker
+                label={t('items.admin.mergePicker')}
+                excludeIds={[item.id]}
                 allowCreate={false}
                 onSelect={onPick}
               />
@@ -195,26 +193,24 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
             <AlertDialogContent onCloseAutoFocus={focusMenu}>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  {t('ingredients.admin.mergeConfirmTitle', { from: name, into })}
+                  {t('items.admin.mergeConfirmTitle', { from: name, into })}
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  {t('ingredients.admin.mergeConfirmText', { from: name, into })}
+                  {t('items.admin.mergeConfirmText', { from: name, into })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               {mismatch && (
                 <Alert variant="destructive" data-testid={testIds.mergeUnitMismatch}>
                   <CircleAlert aria-hidden="true" />
                   <AlertDescription>
-                    {t('ingredients.admin.mergeUnitMismatch', { count: mismatch.amounts, into })}
+                    {t('items.admin.mergeUnitMismatch', { count: mismatch.amounts, into })}
                   </AlertDescription>
                 </Alert>
               )}
               <AlertDialogFooter>
                 <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
                 <Button variant="destructive" disabled={merge.isPending} onClick={onMerge}>
-                  {mismatch
-                    ? t('ingredients.admin.mergeAnyway')
-                    : t('ingredients.admin.mergeConfirm')}
+                  {mismatch ? t('items.admin.mergeAnyway') : t('items.admin.mergeConfirm')}
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -224,9 +220,9 @@ export function IngredientMenu({ ingredient, onError }: IngredientMenuProps) {
             open={deleting}
             onOpenChange={setDeleting}
             onCloseAutoFocus={focusMenu}
-            title={t('ingredients.admin.deleteTitle', { name })}
-            description={t('ingredients.admin.deleteText')}
-            confirmLabel={t('ingredients.admin.deleteConfirm')}
+            title={t('items.admin.deleteTitle', { name })}
+            description={t('items.admin.deleteText')}
+            confirmLabel={t('items.admin.deleteConfirm')}
             destructive
             onConfirm={() => {
               onError(null);

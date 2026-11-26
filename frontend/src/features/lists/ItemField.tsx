@@ -2,15 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
-import {
-  toSummary,
-  useIngredients,
-  type IngredientSearchResult,
-  type IngredientSummary,
-} from '@/features/ingredients/api';
-import { IngredientCategoryUnit } from '@/features/ingredients/IngredientCategoryUnit';
-import { IngredientFormDialog } from '@/features/ingredients/IngredientFormDialog';
-import { IngredientName } from '@/features/ingredients/IngredientName';
+import { toSummary, useItems, type ItemSearchResult, type ItemSummary } from '@/features/items/api';
+import { ItemCategoryUnit } from '@/features/items/ItemCategoryUnit';
+import { ItemFormDialog } from '@/features/items/ItemFormDialog';
+import { ItemName } from '@/features/items/ItemName';
 import type { DueItem } from '@/features/recurring/api';
 import { useCategories, useUnits, type Unit } from '@/features/reference/api';
 import { keptUnit } from '@/features/reference/units';
@@ -40,10 +35,10 @@ interface Retry {
   error: Error;
 }
 
-/** The amount pop-up of an ingredient. */
+/** The amount pop-up of an item. */
 interface AmountRequest {
   kind: 'amount';
-  ingredient: IngredientSummary;
+  item: ItemSummary;
   value: AmountValue;
   retry: Retry | null;
   /** Opened from the "Fällig" box: the focus goes back there, not into the field. */
@@ -54,7 +49,7 @@ interface AmountRequest {
 type ItemRequest =
   | AmountRequest
   | { kind: 'freeText'; text: string; value: FreeTextValue | null; retry: Retry | null }
-  | { kind: 'newIngredient'; name: string };
+  | { kind: 'newItem'; name: string };
 
 interface ItemFieldProps {
   listId: string;
@@ -65,8 +60,8 @@ interface ItemFieldProps {
 }
 
 /**
- * The item field at the top of Artikel (LIST-06, D-41). It searches ingredients, under
- * "„X“ als Artikel" and "„X“ als neue Zutat". An ingredient, or ＋ with the only ingredient of
+ * The item field at the top of Artikel (LIST-06, D-41). It searches items, under
+ * "„X“ als Artikel" and "„X“ als neue Zutat". An item, or ＋ with the only item of
  * that name (whatever its brand), opens the amount pop-up with the units that fit it (REF-02);
  * "„X“ als Artikel", or ＋ without an exact match, the free-text pop-up; with several brands of
  * that name ＋ does nothing and the results stay for a tap. "„X“ als neue Zutat" opens "Neue
@@ -97,7 +92,7 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
   const [request, setRequest] = useState<ItemRequest | null>(null);
   const requestRef = useRef(request);
   const [addError, setAddError] = useState<Error | null>(null);
-  /** The unit last chosen here: the next ingredient starts with it while it fits (MEAL-02). */
+  /** The unit last chosen here: the next item starts with it while it fits (MEAL-02). */
   const [lastUnit, setLastUnit] = useState<Unit | ''>('');
   const add = useAddExtraItem(listId);
   const hideDue = useHideDueItem(listId);
@@ -107,11 +102,11 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
   const typed = text.trim();
   const debounced = useDebouncedValue(typed);
   const searching = connected && typed !== '';
-  const results = useIngredients(debounced, { enabled: connected && debounced !== '' });
+  const results = useItems(debounced, { enabled: connected && debounced !== '' });
   // Only the answer for the text in the field (D-41). Offline, or when the search failed, there
   // is nothing to wait for: ＋ takes the text as free text.
   const current = searching && debounced === typed && !results.isPlaceholderData;
-  const answer: IngredientSearchResult[] | undefined = !connected
+  const answer: ItemSearchResult[] | undefined = !connected
     ? []
     : current
       ? (results.data ?? (results.isError ? [] : undefined))
@@ -122,11 +117,11 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
   });
 
   // A failed ✕ says why until the due items change after the reload that brought its row back,
-  // or until the next action (`show`, another ✕). Compared by their ingredients: a reload with
+  // or until the next action (`show`, another ✕). Compared by their items: a reload with
   // the same items is no change.
   const hideFailed = hideDue.isError;
-  const dueIds = due.map((item) => item.ingredient.id).join(' ');
-  const rowBack = hideFailed && due.some((item) => item.ingredient.id === hideDue.variables);
+  const dueIds = due.map((item) => item.item.id).join(' ');
+  const rowBack = hideFailed && due.some((item) => item.item.id === hideDue.variables);
   const resetHide = hideDue.reset;
   const failedWith = useRef<string | null>(null);
   useEffect(() => {
@@ -139,9 +134,9 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
     }
   }, [hideFailed, rowBack, dueIds, resetHide]);
 
-  function startUnit(ingredient: IngredientSummary): Unit {
-    const kept = units.data ? keptUnit(units.data, ingredient.base_unit, lastUnit) : '';
-    return kept || ingredient.base_unit;
+  function startUnit(item: ItemSummary): Unit {
+    const kept = units.data ? keptUnit(units.data, item.base_unit, lastUnit) : '';
+    return kept || item.base_unit;
   }
 
   /** Opens a pop-up; a new action also clears the error of a failed ✕. */
@@ -162,26 +157,26 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
     focusBackThere();
   };
 
-  function chooseIngredient(ingredient: IngredientSummary) {
+  function chooseItem(item: ItemSummary) {
     setAddError(null);
     show({
       kind: 'amount',
-      ingredient,
-      value: { amount: null, unit: startUnit(ingredient) },
+      item,
+      value: { amount: null, unit: startUnit(item) },
       retry: null,
       fromDue: false,
     });
   }
 
   /** ＋ of a due item: its last amount filled in, when the server gives one that fits (D-42). */
-  function chooseDue({ ingredient, last_amount }: DueItem) {
+  function chooseDue({ item, last_amount }: DueItem) {
     setAddError(null);
     show({
       kind: 'amount',
-      ingredient,
+      item,
       value: last_amount
         ? { amount: last_amount.value, unit: last_amount.unit }
-        : { amount: null, unit: startUnit(ingredient) },
+        : { amount: null, unit: startUnit(item) },
       retry: null,
       fromDue: true,
     });
@@ -193,8 +188,8 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
   }
 
   const plus = usePlus(typed, answer, (found) => {
-    const exact = found.filter((ingredient) => ingredient.exact);
-    if (exact.length === 1 && exact[0]) chooseIngredient(exact[0]);
+    const exact = found.filter((item) => item.exact);
+    if (exact.length === 1 && exact[0]) chooseItem(exact[0]);
     else if (exact.length === 0) chooseFreeText();
     // Several brands of that name: the results stay for a tap.
   });
@@ -217,8 +212,8 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
     else if (error) setAddError(error);
   }
 
-  /** The id to send: the same as last time for the very same item after an error. */
-  function itemId(body: Omit<ExtraItemCreate, 'id'>, retry: Retry | null): string {
+  /** The id to send: the same as last time for the very same extra item after an error. */
+  function extraId(body: Omit<ExtraItemCreate, 'id'>, retry: Retry | null): string {
     if (retry) {
       const { id, ...sent } = retry.sent;
       if (id && JSON.stringify(sent) === JSON.stringify(body)) return id;
@@ -226,17 +221,17 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
     return uuidv7();
   }
 
-  function addLinked({ ingredient, retry, fromDue }: AmountRequest, value: AmountValue) {
+  function addLinked({ item, retry, fromDue }: AmountRequest, value: AmountValue) {
     const body =
       value.amount === null
-        ? { ingredient_id: ingredient.id }
-        : { ingredient_id: ingredient.id, amount: value.amount, unit: value.unit };
-    const item = { id: itemId(body, retry), ...body };
+        ? { item_id: item.id }
+        : { item_id: item.id, amount: value.amount, unit: value.unit };
+    const extra = { id: extraId(body, retry), ...body };
     closeAndFocus();
     setLastUnit(value.unit);
-    add.mutate(item, {
+    add.mutate(extra, {
       onError: (error) =>
-        reopen({ kind: 'amount', ingredient, value, retry: { sent: item, error }, fromDue }, error),
+        reopen({ kind: 'amount', item, value, retry: { sent: extra, error }, fromDue }, error),
     });
   }
 
@@ -255,10 +250,10 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
       });
       return;
     }
-    const item = { id: itemId(body, retry), ...body };
-    add.mutate(item, {
+    const extra = { id: extraId(body, retry), ...body };
+    add.mutate(extra, {
       onError: (error) =>
-        reopen({ kind: 'freeText', text: name, value, retry: { sent: item, error } }, error),
+        reopen({ kind: 'freeText', text: name, value, retry: { sent: extra, error } }, error),
     });
   }
 
@@ -270,13 +265,13 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
       </FieldOption>
       {connected && (
         <FieldOption
-          testId={testIds.itemNewIngredient}
+          testId={testIds.itemNewItem}
           onSelect={() => {
             setAddError(null);
-            show({ kind: 'newIngredient', name: typed });
+            show({ kind: 'newItem', name: typed });
           }}
         >
-          {t('lists.itemField.newIngredient', { name: typed })}
+          {t('lists.itemField.newItem', { name: typed })}
         </FieldOption>
       )}
     </FieldOptions>
@@ -286,18 +281,15 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
       <ErrorAlert error={searching ? results.error : null} />
       {matches.length > 0 && (
         <ul aria-label={t('lists.itemField.results')} className={RESULT_LIST_CLASS}>
-          {matches.map((ingredient) => (
-            <li key={ingredient.id}>
+          {matches.map((item) => (
+            <li key={item.id}>
               <button
                 type="button"
-                onClick={() => chooseIngredient(ingredient)}
+                onClick={() => chooseItem(item)}
                 className={cn(RESULT_BUTTON_CLASS, 'flex-col items-start gap-0')}
               >
-                <IngredientName ingredient={ingredient} />
-                <IngredientCategoryUnit
-                  ingredient={ingredient}
-                  categories={categories.data ?? []}
-                />
+                <ItemName item={item} />
+                <ItemCategoryUnit item={item} categories={categories.data ?? []} />
               </button>
             </li>
           ))}
@@ -336,12 +328,12 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
         disabled={!connected}
         frozen={request !== null}
         onAdd={chooseDue}
-        onHide={(item) => hideDue.mutate(item.ingredient.id)}
+        onHide={(item) => hideDue.mutate(item.item.id)}
         onEmpty={() => inputRef.current?.focus()}
       />
       <ErrorAlert error={hideDue.error} />
       <AmountDialog
-        ingredient={amountRequest?.ingredient ?? null}
+        item={amountRequest?.item ?? null}
         initial={amountRequest?.value}
         error={amountRequest?.retry?.error}
         disabled={!connected}
@@ -363,15 +355,14 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
         onCloseAutoFocus={restoreFocus}
       />
       {connected && (
-        <IngredientFormDialog
-          open={request?.kind === 'newIngredient'}
+        <ItemFormDialog
+          open={request?.kind === 'newItem'}
           onOpenChange={(isOpen) => {
-            if (!isOpen)
-              setRequest((current) => (current?.kind === 'newIngredient' ? null : current));
+            if (!isOpen) setRequest((current) => (current?.kind === 'newItem' ? null : current));
           }}
-          initialName={request?.kind === 'newIngredient' ? request.name : ''}
-          onSaved={(ingredient) => chooseIngredient(toSummary(ingredient))}
-          onPickExisting={chooseIngredient}
+          initialName={request?.kind === 'newItem' ? request.name : ''}
+          onSaved={(item) => chooseItem(toSummary(item))}
+          onPickExisting={chooseItem}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             // Saved: the amount pop-up has the focus; cancelled: back to the field.

@@ -21,7 +21,7 @@ from app.domain.meals import (
 )
 from app.domain.nutrition import MissingReason
 from app.domain.units import Unit
-from app.schemas.ingredients import IdInput, IngredientSummary, blank_to_none, not_null
+from app.schemas.items import IdInput, ItemSummary, blank_to_none, not_null
 from app.schemas.nutrition import NutrientValues
 from app.schemas.reference import Cuisine, Tag
 from app.schemas.users import UserRef
@@ -74,13 +74,13 @@ class MealPhoto(BaseModel):
 
 class MealIngredientRow(BaseModel):
     """An ingredient row; `amount` and `unit` are both null for e.g. "salt, to taste".
-    `unit_fits` is false for an amount whose unit doesn't fit the ingredient's base unit
+    `unit_fits` is false for an amount whose unit doesn't fit the item's base unit
     (REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is
     kept as it is (MEAL-02, D-33)."""
 
     id: str
     position: int
-    ingredient: IngredientSummary
+    item: ItemSummary
     amount: float | None
     unit: Unit | None
     unit_fits: bool
@@ -89,12 +89,12 @@ class MealIngredientRow(BaseModel):
 
 class MealNutritionMissing(BaseModel):
     """Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the
-    ingredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown
+    item's base unit, pieces of a `piece` item without a piece weight, or an unknown
     value for `nutrient` (NUT-04)."""
 
-    ingredient_id: str
-    ingredient_name: str
-    ingredient_brand: str | None
+    item_id: str
+    item_name: str
+    item_brand: str | None
     reason: MissingReason
     nutrient: str | None
 
@@ -102,7 +102,7 @@ class MealNutritionMissing(BaseModel):
 class MealNutrition(BaseModel):
     """Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing
     contributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of
-    a g ingredient were counted as 1 g/ml (NUT-05). The totals are not
+    a g item were counted as 1 g/ml (NUT-05). The totals are not
     bounded by the per-100 maximums of `NutrientValues`."""
 
     per_meal: NutrientValues
@@ -164,12 +164,12 @@ class MealSearchResult(MealSummary):
 
 class MealIngredientInput(BaseModel):
     """`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an
-    amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's
+    amount is refused (`ingredients.<i>.amount` `required`). The unit must fit the item's
     base unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already
-    has the very same row (ingredient, amount and unit), which is kept as it is (MEAL-02). An
+    has the very same row (item, amount and unit), which is kept as it is (MEAL-02). An
     empty note is stored as null."""
 
-    ingredient_id: IdInput
+    item_id: IdInput
     amount: AmountInput | None = None
     unit: Unit | None = None
     note: NoteInput | None = None

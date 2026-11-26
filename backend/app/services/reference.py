@@ -23,7 +23,7 @@ from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction, AdminEventDetail
-from app.schemas.ingredients import base_unit_name
+from app.schemas.items import base_unit_name
 from app.schemas.reference import (
     Category,
     CategoryNames,
@@ -50,7 +50,7 @@ def category(row: CategoryRow, item_count: int) -> Category:
         names=_names(row),
         sort_order=row.sort_order,
         deleted=row.deleted_at is not None,
-        ingredient_count=item_count,
+        item_count=item_count,
     )
 
 
@@ -283,7 +283,7 @@ async def category_usage(session: AsyncSession, category_id: str) -> CategoryUsa
     async with session.begin():
         row = _get_not_deleted(await reference_repo.categories_in_order(session), category_id)
         return CategoryUsage(
-            ingredients=await items_repo.count_in_category(session, row.id),
+            items=await items_repo.count_in_category(session, row.id),
             extra_items=len(await lists_repo.draft_extras_in_category(session, row.id)),
         )
 

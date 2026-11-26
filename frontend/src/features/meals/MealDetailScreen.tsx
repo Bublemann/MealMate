@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ingredientLabel } from '@/features/ingredients/label';
+import { itemLabel } from '@/features/items/label';
 import { cuisineName, unitLabel } from '@/features/reference/labels';
 import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
@@ -299,10 +299,10 @@ function IngredientsCard({ meal }: { meal: Meal }) {
                 </span>
                 <span className="min-w-0 flex-1 break-words">
                   <Link
-                    to={`/ingredients/${row.ingredient.id}`}
+                    to={`/ingredients/${row.item.id}`}
                     className="inline-flex min-h-(--tap-target) items-center font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    {ingredientLabel(row.ingredient.name, row.ingredient.brand)}
+                    {itemLabel(row.item.name, row.item.brand)}
                   </Link>
                   {row.note && <span className="text-muted-foreground"> · {row.note}</span>}
                 </span>

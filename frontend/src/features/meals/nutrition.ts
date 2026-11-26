@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
-import { ingredientLabel } from '@/features/ingredients/label';
-import { NUTRIENT_KEYS, nutrientLabel, type NutrientKey } from '@/features/ingredients/nutrients';
+import { itemLabel } from '@/features/items/label';
+import { NUTRIENT_KEYS, nutrientLabel, type NutrientKey } from '@/features/items/nutrients';
 import type { Language } from '@/i18n';
 import { formatList } from '@/i18n/format';
 import type { MealNutritionMissing } from './api';
@@ -21,9 +21,9 @@ export function missingLines(
 ): string[] {
   const groups = new Map<string, { name: string; reason: string; nutrients: string[] }>();
   for (const entry of missing) {
-    const key = `${entry.ingredient_id}:${entry.reason}`;
+    const key = `${entry.item_id}:${entry.reason}`;
     const group = groups.get(key) ?? {
-      name: ingredientLabel(entry.ingredient_name, entry.ingredient_brand),
+      name: itemLabel(entry.item_name, entry.item_brand),
       reason: entry.reason,
       nutrients: [],
     };

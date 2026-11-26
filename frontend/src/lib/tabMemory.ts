@@ -8,14 +8,14 @@ export interface TabMemories {
   /** The cuisines and tags ticked in the filter panel; none shows every cuisine, or every tag. */
   meals: { search: string; cuisineIds: string[]; tagIds: string[] };
   /** `categoryIds`: the categories ticked in the filter panel; none shows every category. */
-  ingredients: { search: string; categoryIds: string[] };
+  items: { search: string; categoryIds: string[] };
 }
 
 export type TabWithMemory = keyof TabMemories;
 
 export const INITIAL_TAB_MEMORIES: TabMemories = {
   meals: { search: '', cuisineIds: [], tagIds: [] },
-  ingredients: { search: '', categoryIds: [] },
+  items: { search: '', categoryIds: [] },
 };
 
 export const TabMemoryContext = createContext<{

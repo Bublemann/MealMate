@@ -28,7 +28,7 @@ describe('rowsOf', () => {
   it('treats a loaded "to taste" row like a new one, and a loaded unit as chosen', () => {
     const rows = rowsOf(meal(), 'en');
 
-    expect(rows.map((row) => [row.ingredient.name, row.unit, row.unitChosen])).toEqual([
+    expect(rows.map((row) => [row.item.name, row.unit, row.unitChosen])).toEqual([
       ['Mehl', 'g', true],
       ['Milch', 'ml', true],
       ['Eier', 'piece', true],
@@ -36,7 +36,7 @@ describe('rowsOf', () => {
     ]);
     const salt = rows[3];
     if (!salt) throw new Error('no salt row');
-    expect(salt.ingredient).toEqual(SALT);
+    expect(salt.item).toEqual(SALT);
     expect(withAmountText(salt, '5').unit).toBe('g');
     expect(withAmountText(rows[2] ?? salt, '').unit).toBe('piece');
   });

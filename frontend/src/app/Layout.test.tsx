@@ -21,8 +21,8 @@ const TABS = [
     de: 'Gerichte',
   },
   {
-    tab: testIds.tabIngredients,
-    screen: testIds.screenIngredients,
+    tab: testIds.tabItems,
+    screen: testIds.screenItems,
     path: '/ingredients',
     title: 'Ingredients',
     de: 'Zutaten',

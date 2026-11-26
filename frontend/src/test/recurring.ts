@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { summary } from './ingredients';
+import { summary } from './items';
 
 type Schemas = components['schemas'];
 
@@ -10,7 +10,7 @@ export function recurringItem(
 ): Schemas['RecurringItem'] {
   return {
     id: 'rec-klopapier',
-    ingredient: summary('Klopapier', 'other', { base_unit: 'piece' }),
+    item: summary('Klopapier', 'other', { base_unit: 'piece' }),
     interval: { value: 4, unit: 'week', automatic: true },
     interval_weeks: 4,
     last_purchased_on: '2026-10-02',
@@ -28,7 +28,7 @@ export function recurringItem(
  */
 export function dueItem(overrides: Partial<Schemas['DueItem']> = {}): Schemas['DueItem'] {
   return {
-    ingredient: summary('Klopapier', 'other', { base_unit: 'piece' }),
+    item: summary('Klopapier', 'other', { base_unit: 'piece' }),
     due_on: '2026-10-22',
     days_until_due: -3,
     last_purchased_on: '2026-09-24',

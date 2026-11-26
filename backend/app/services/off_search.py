@@ -29,7 +29,7 @@ from app.core.ratelimit import Clock
 from app.domain.text import normalize
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, SEARCH_PAGE_SIZE, OffClient, OffProduct
 from app.repositories import items as items_repo
-from app.schemas.ingredients import OffSearchPage, OffSearchResult
+from app.schemas.items import OffSearchPage, OffSearchResult
 from app.services import barcodes, items
 from app.services.principal import Principal
 
@@ -127,7 +127,7 @@ async def search(
         OffSearchResult(
             proposal=barcodes.proposal(product, barcode, language),
             in_mealmate=barcode in known,
-            ingredient=items.summary(known[barcode]) if barcode in known else None,
+            item=items.summary(known[barcode]) if barcode in known else None,
         )
         for barcode, product in by_barcode.items()
     ]

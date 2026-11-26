@@ -26,7 +26,7 @@ export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   names: NAMES[key],
   sort_order: index,
   deleted: false,
-  ingredient_count: 0,
+  item_count: 0,
 }));
 
 /** A category an admin added (REF-01): it has no key, and goes last until it is moved. */
@@ -36,7 +36,7 @@ export const CHEESE_COUNTER: Schemas['Category'] = {
   names: { de: 'Käsetheke', en: 'Cheese counter' },
   sort_order: CATEGORIES.length,
   deleted: false,
-  ingredient_count: 0,
+  item_count: 0,
 };
 
 /**
@@ -49,7 +49,7 @@ export const UNCATEGORIZED: Schemas['Category'] = {
   names: { de: 'Ohne Kategorie', en: 'Uncategorized' },
   sort_order: CATEGORIES.length,
   deleted: false,
-  ingredient_count: 0,
+  item_count: 0,
 };
 
 /** The categories with *Uncategorized*, as the seed has them. */
@@ -67,7 +67,7 @@ export const CATEGORIES_AFTER_DELETE: Schemas['Category'][] = (() => {
     dairy,
     { ...other, sort_order: 2 },
     { ...cheese, sort_order: 2, deleted: true },
-    { ...UNCATEGORIZED, sort_order: 3, ingredient_count: 1 },
+    { ...UNCATEGORIZED, sort_order: 3, item_count: 1 },
   ];
 })();
 
@@ -110,8 +110,8 @@ export function expectInPageOrder(elements: HTMLElement[]) {
 export function summary(
   name: string,
   category: (typeof KEYS)[number],
-  overrides: Partial<Schemas['IngredientSummary']> = {},
-): Schemas['IngredientSummary'] {
+  overrides: Partial<Schemas['ItemSummary']> = {},
+): Schemas['ItemSummary'] {
   return {
     id: `ing-${name.toLowerCase()}`,
     name,
@@ -133,7 +133,7 @@ const NO_VALUES: Schemas['NutrientValues'] = {
 };
 
 /** Äpfel, typed by hand: kcal and protein known, the rest unknown; used in 3 meals. */
-export const APPLES: Schemas['Ingredient'] = {
+export const APPLES: Schemas['Item'] = {
   id: 'ing-aepfel',
   name: 'Äpfel',
   brand: null,
@@ -157,7 +157,7 @@ export const APPLES: Schemas['Ingredient'] = {
   updated_at: '2026-09-26T10:00:00Z',
 };
 
-export function ingredient(overrides: Partial<Schemas['Ingredient']> = {}): Schemas['Ingredient'] {
+export function ingredient(overrides: Partial<Schemas['Item']> = {}): Schemas['Item'] {
   return {
     id: 'ing-new',
     name: 'New',
@@ -185,7 +185,7 @@ export function ingredient(overrides: Partial<Schemas['Ingredient']> = {}): Sche
 }
 
 /** Weidehof's whole milk from Open Food Facts, with its barcode; the fat was corrected by hand. */
-export const WEIDEHOF_MILK: Schemas['Ingredient'] = ingredient({
+export const WEIDEHOF_MILK: Schemas['Item'] = ingredient({
   id: 'ing-milch-weidehof',
   name: 'Vollmilch',
   brand: 'Weidehof',
@@ -227,7 +227,7 @@ export function lookupResult(
   return {
     barcode: '4006381333931',
     found_in: 'none',
-    ingredient: null,
+    item: null,
     proposal: null,
     off_unavailable: false,
     ...overrides,
@@ -239,7 +239,7 @@ export function lookupResult(
  * fallback without a camera (jsdom has none, BAR-01); returns once the scanner has closed.
  */
 export async function scanInForm(user: UserEvent, dialog: HTMLElement, digits: string) {
-  await user.click(within(dialog).getByTestId(testIds.ingredientFormScan));
+  await user.click(within(dialog).getByTestId(testIds.itemFormScan));
   await typeInScanner(user, digits);
 }
 
@@ -257,9 +257,6 @@ export const REFERENCE_ROUTES: Record<string, unknown> = {
 };
 
 /** An ingredient as the search answers it, marked when its name is exactly the query (D-41). */
-export function found(
-  ingredient: Schemas['IngredientSummary'],
-  exact = false,
-): Schemas['IngredientSearchResult'] {
-  return { ...ingredient, exact };
+export function found(item: Schemas['ItemSummary'], exact = false): Schemas['ItemSearchResult'] {
+  return { ...item, exact };
 }

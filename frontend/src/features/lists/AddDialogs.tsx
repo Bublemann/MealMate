@@ -9,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { IngredientSummary } from '@/features/ingredients/api';
-import { ingredientLabel } from '@/features/ingredients/label';
+import type { ItemSummary } from '@/features/items/api';
+import { itemLabel } from '@/features/items/label';
 import { useCategories, type Unit } from '@/features/reference/api';
 import { useLanguage } from '@/i18n';
 import { fieldErrorMessages } from '@/i18n/errors';
@@ -39,11 +39,11 @@ export interface AmountValue {
 }
 
 interface AmountDialogProps {
-  /** The ingredient to add; null closes the pop-up. */
-  ingredient: IngredientSummary | null;
+  /** The item to add; null closes the pop-up. */
+  item: ItemSummary | null;
   /**
    * The amount and unit it opens with, e.g. the last amount of a due item (D-42); without them,
-   * no amount in the ingredient's base unit (REF-02).
+   * no amount in the item's base unit (REF-02).
    */
   initial?: AmountValue | null;
   /** Why the server refused it the last time: field errors show next to their field. */
@@ -56,11 +56,11 @@ interface AmountDialogProps {
 }
 
 /**
- * The amount pop-up of a linked item (LIST-06, D-41): the ingredient's name, the optional amount
+ * The amount pop-up of a linked item (LIST-06, D-41): the item's name, the optional amount
  * and the units that fit it (D-32), "Hinzufügen". The cursor starts in the amount.
  */
 export function AmountDialog({
-  ingredient,
+  item,
   initial = null,
   error = null,
   disabled = false,
@@ -71,7 +71,7 @@ export function AmountDialog({
   const amountRef = useRef<HTMLInputElement>(null);
 
   return (
-    <Dialog open={ingredient !== null} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open={item !== null} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent
         data-testid={testIds.amountDialog}
         aria-describedby={undefined}
@@ -81,12 +81,12 @@ export function AmountDialog({
         }}
         onCloseAutoFocus={onCloseAutoFocus}
       >
-        {ingredient && (
+        {item && (
           <AmountForm
-            key={ingredient.id}
-            ingredient={ingredient}
+            key={item.id}
+            item={item}
             initialAmount={initial?.amount ?? null}
-            initialUnit={initial?.unit ?? ingredient.base_unit}
+            initialUnit={initial?.unit ?? item.base_unit}
             error={error}
             disabled={disabled}
             amountRef={amountRef}
@@ -99,7 +99,7 @@ export function AmountDialog({
 }
 
 interface AmountFormProps {
-  ingredient: IngredientSummary;
+  item: ItemSummary;
   initialAmount: number | null;
   initialUnit: Unit;
   error: Error | null;
@@ -109,7 +109,7 @@ interface AmountFormProps {
 }
 
 function AmountForm({
-  ingredient,
+  item,
   initialAmount,
   initialUnit,
   error,
@@ -119,7 +119,7 @@ function AmountForm({
 }: AmountFormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
-  const name = ingredientLabel(ingredient.name, ingredient.brand);
+  const name = itemLabel(item.name, item.brand);
   const [amount, setAmount] = useState(() =>
     initialAmount === null ? '' : formatNumber(initialAmount, language, { useGrouping: false }),
   );
@@ -150,7 +150,7 @@ function AmountForm({
         amountRef={amountRef}
         amount={amount}
         unit={unit}
-        baseUnit={ingredient.base_unit}
+        baseUnit={item.base_unit}
         name={name}
         onAmountChange={(value) => {
           setInvalid(false);

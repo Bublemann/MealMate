@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
-import { CATEGORIES } from '@/test/ingredients';
+import { CATEGORIES } from '@/test/items';
 import {
   DETACHED_MEAL,
   doneList,
@@ -71,8 +71,8 @@ describe('exportText', () => {
       lines: [
         {
           key: 'i:ing-zwiebeln',
-          kind: 'ingredient',
-          ingredient_id: 'ing-zwiebeln',
+          kind: 'item',
+          item_id: 'ing-zwiebeln',
           name: 'Zwiebeln',
           brand: null,
           category_id: 'cat-fruit_vegetables',
@@ -89,7 +89,7 @@ describe('exportText', () => {
         {
           key: 'x:0190c0de-0000-7000-8000-0000000000c2',
           kind: 'text',
-          ingredient_id: null,
+          item_id: null,
           name: 'Servietten',
           brand: null,
           category_id: 'cat-other',
@@ -126,7 +126,7 @@ describe('exportText', () => {
         key: `i:${id}`,
         name: 'Milch',
         brand,
-        ingredient_id: id,
+        item_id: id,
         category_id: 'cat-dairy_eggs',
         amounts: [{ value, unit: 'ml' }],
       });

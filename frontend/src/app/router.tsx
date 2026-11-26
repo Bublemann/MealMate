@@ -4,8 +4,8 @@ import { LoginScreen } from '@/features/auth/LoginScreen';
 import { RequireAdmin, RequireAuth } from '@/features/auth/RequireAuth';
 import { ResetScreen } from '@/features/auth/ResetScreen';
 import { CoupleScreen } from '@/features/couple/CoupleScreen';
-import { IngredientDetailScreen } from '@/features/ingredients/IngredientDetailScreen';
-import { IngredientsScreen } from '@/features/ingredients/IngredientsScreen';
+import { ItemDetailScreen } from '@/features/items/ItemDetailScreen';
+import { ItemsScreen } from '@/features/items/ItemsScreen';
 import { ListScreen } from '@/features/lists/ListScreen';
 import { ListsScreen } from '@/features/lists/ListsScreen';
 import { MealDetailScreen } from '@/features/meals/MealDetailScreen';
@@ -55,9 +55,9 @@ export const routes: RouteObject[] = [
           { path: 'meals/new', element: <MealFormScreen /> },
           { path: 'meals/:id', element: <MealDetailScreen /> },
           { path: 'meals/:id/edit', element: <MealFormScreen /> },
-          { path: 'ingredients', element: <IngredientsScreen /> },
-          { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
-          // The former scan page; scanning is inside "New ingredient" now (BAR-01, D-37).
+          { path: 'ingredients', element: <ItemsScreen /> },
+          { path: 'ingredients/:id', element: <ItemDetailScreen /> },
+          // The former scan page; scanning is inside "New item" now (BAR-01, D-37).
           { path: 'scan', element: <Navigate to="/ingredients" replace /> },
           // The Settings tab and the pages its rows open (D-45); see features/me/settingsRows.ts.
           { path: 'me', element: <SettingsScreen /> },

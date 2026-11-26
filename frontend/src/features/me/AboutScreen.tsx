@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useCurrentUser } from '@/features/auth/context';
-import { OffAttribution } from '@/features/ingredients/OffAttribution';
+import { OffAttribution } from '@/features/items/OffAttribution';
 import { errorMessage } from '@/i18n/errors';
 import { testIds } from '@/testIds';
 import { useVersionInfo } from './api';

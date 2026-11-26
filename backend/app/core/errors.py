@@ -60,21 +60,21 @@ class ErrorCode(StrEnum):
     # 409: *Uncategorized* can only be moved, not renamed (REF-01).
     CATEGORY_NOT_RENAMABLE = "category.not_renamable"
 
-    # 409: the ingredient is still referenced; `params` counts the references per kind
+    # 409: the item is still referenced; `params` counts the references per kind
     # (`meals`, `lists`).
-    INGREDIENT_IN_USE = "ingredient.in_use"
-    # 409: another ingredient has this barcode; `params.ingredient_id` is that one.
-    INGREDIENT_BARCODE_TAKEN = "ingredient.barcode_taken"
-    # 409: linking a barcode to an ingredient that already has one (the scanner's "already in
+    ITEM_IN_USE = "item.in_use"
+    # 409: another item has this barcode; `params.item_id` is that one.
+    ITEM_BARCODE_TAKEN = "item.barcode_taken"
+    # 409: linking a barcode to an item that already has one (the scanner's "already in
     # MealMate"); linking never replaces a barcode, the edit form changes it on purpose.
-    INGREDIENT_HAS_BARCODE = "ingredient.has_barcode"
-    # 409: apply or ignore, but the ingredient has no newer Open Food Facts values (BAR-06).
-    INGREDIENT_NO_PENDING_UPDATE = "ingredient.no_pending_update"
+    ITEM_HAS_BARCODE = "item.has_barcode"
+    # 409: apply or ignore, but the item has no newer Open Food Facts values (BAR-06).
+    ITEM_NO_PENDING_UPDATE = "item.no_pending_update"
     # 409: a base-unit change would leave amounts that fit now not fitting (ING-02), or a merge
-    # across base units would leave amounts not fitting the ingredient that stays (ING-05, D-33);
+    # across base units would leave amounts not fitting the item that stays (ING-05, D-33);
     # `params` counts them (`amounts`) and the meals and drafts they are on (`meals`, `lists`).
     # The request goes through when it accepts that.
-    INGREDIENT_UNIT_MISMATCH = "ingredient.unit_mismatch"
+    ITEM_UNIT_MISMATCH = "item.unit_mismatch"
     # 503: too many Open Food Facts lookups or searches right now (BAR-08); retry or enter the
     # values by hand.
     OFF_BUSY = "off.busy"
@@ -113,7 +113,7 @@ class FieldErrorCode(StrEnum):
     TAKEN = "taken"
     TOO_COMMON = "too_common"
     SAME_AS_USERNAME = "same_as_username"
-    # An amount whose unit doesn't fit its ingredient's base unit (REF-02).
+    # An amount whose unit doesn't fit its item's base unit (REF-02).
     UNIT_MISMATCH = "unit_mismatch"
 
 

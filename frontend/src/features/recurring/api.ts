@@ -23,7 +23,7 @@ export const NOTICES_KEY = ['me', 'notices'] as const;
 
 /**
  * The caller's set of recurring items (LIST-16), in the server's order (due first): one cache
- * entry for the page "Regelmäßige Artikel", its row on the Settings tab and the ingredient's ⋯
+ * entry for the page "Regelmäßige Artikel", its row on the Settings tab and the item's ⋯
  * menu, so they always agree.
  */
 export const recurringQuery = queryOptions({
@@ -48,12 +48,12 @@ export function useNotices() {
   return useQuery(noticesQuery);
 }
 
-/** The item of `ingredientId` in the set, if the ingredient is recurring already. */
+/** The item of `itemId` in the set, if the item is recurring already. */
 export function itemOf(
   list: RecurringItemList | undefined,
-  ingredientId: string,
+  itemId: string,
 ): RecurringItem | undefined {
-  return list?.items.find((item) => item.ingredient.id === ingredientId);
+  return list?.items.find((item) => item.item.id === itemId);
 }
 
 /**

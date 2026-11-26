@@ -13,12 +13,12 @@ import {
   SALT,
 } from '@/test/meals';
 import { LIST_ID, listDetail } from '@/test/lists';
-import { ingredient, lookupResult, proposal, typeInScanner, unitOptions } from '@/test/ingredients';
+import { ingredient, lookupResult, proposal, typeInScanner, unitOptions } from '@/test/items';
 import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
-const INGREDIENTS = [FLOUR, MILK, EGGS, SALT];
+const ITEMS = [FLOUR, MILK, EGGS, SALT];
 
 // The scanner's decoder needs a browser; jsdom has no camera anyway, so the scanner shows its
 // manual input (see features/scanner for its own tests).
@@ -27,15 +27,15 @@ vi.mock('@/features/scanner/decoder', () => ({
   decodeVideoFrame: () => Promise.resolve(null),
 }));
 
-function searchIngredients(request: Request) {
+function searchItems(request: Request) {
   const q = new URL(request.url).searchParams.get('q')?.toLowerCase() ?? '';
-  return INGREDIENTS.filter((ingredient) => ingredient.name.toLowerCase().startsWith(q));
+  return ITEMS.filter((ingredient) => ingredient.name.toLowerCase().startsWith(q));
 }
 
 function renderForm(path: string, routes: Record<string, unknown> = {}) {
   const fetchMock = mockApi({
     ...MEAL_ROUTES,
-    'GET /api/ingredients': searchIngredients,
+    'GET /api/items': searchItems,
     'GET /api/meals': [],
     ...routes,
   });
@@ -74,7 +74,7 @@ type User = ReturnType<typeof renderApp>['user'];
 
 async function addIngredient(user: User, name: string) {
   const form = screen.getByTestId(testIds.mealForm);
-  const picker = within(form).getByTestId(testIds.ingredientPicker);
+  const picker = within(form).getByTestId(testIds.itemPicker);
   await user.type(within(picker).getByLabelText('Add ingredient'), name);
   await user.click(await within(picker).findByRole('button', { name: new RegExp(`^${name}`) }));
 }
@@ -159,9 +159,9 @@ describe('MealFormScreen (create)', () => {
       cuisine_id: 'cui-german',
       tags: ['Frühstück', 'schnell'],
       ingredients: [
-        { ingredient_id: SALT.id, amount: null, unit: null, note: 'to taste' },
-        { ingredient_id: FLOUR.id, amount: 200, unit: 'g', note: null },
-        { ingredient_id: MILK.id, amount: 0.3, unit: 'l', note: null },
+        { item_id: SALT.id, amount: null, unit: null, note: 'to taste' },
+        { item_id: FLOUR.id, amount: 200, unit: 'g', note: null },
+        { item_id: MILK.id, amount: 0.3, unit: 'l', note: null },
       ],
     });
     // The photo goes up after the meal is saved, as multipart field `file`.
@@ -173,13 +173,13 @@ describe('MealFormScreen (create)', () => {
 
   it('searches Open Food Facts with Enter from the picker, without saving the meal', async () => {
     const { fetchMock, user } = renderForm('/meals/new', {
-      'GET /api/ingredients/similar': [],
-      'GET /api/ingredients/off-search': { q: 'Kakao', page: 1, results: [], has_more: false },
+      'GET /api/items/similar': [],
+      'GET /api/items/off-search': { q: 'Kakao', page: 1, results: [], has_more: false },
     });
     const form = await screen.findByTestId(testIds.mealForm);
     await user.type(within(form).getByLabelText('Name'), 'Kakao');
     await user.type(within(form).getByLabelText('Add ingredient'), 'Kakao');
-    await user.click(await within(form).findByTestId(testIds.ingredientPickerCreate));
+    await user.click(await within(form).findByTestId(testIds.itemPickerCreate));
     await user.click(await screen.findByTestId(testIds.offSearchButton));
     const search = await screen.findByTestId(testIds.offSearchDialog);
     // The magnifier searched for the name at once.
@@ -187,11 +187,9 @@ describe('MealFormScreen (create)', () => {
 
     await user.type(within(search).getByLabelText('Product name or brand'), '{Enter}');
 
-    await waitFor(() =>
-      expect(requestsTo(fetchMock, 'GET /api/ingredients/off-search')).toHaveLength(2),
-    );
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/items/off-search')).toHaveLength(2));
     expect(await within(search).findByTestId(testIds.offSearchEmpty)).toBeVisible();
-    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
     expect(requestsTo(fetchMock, 'POST /api/meals')).toHaveLength(0);
   });
 
@@ -304,7 +302,7 @@ describe('MealFormScreen (create)', () => {
     await user.click(screen.getByRole('button', { name: 'Create meal' }));
 
     await expect(bodyOf(fetchMock, 'POST /api/meals')).resolves.toMatchObject({
-      ingredients: [{ ingredient_id: MILK.id, amount: null, unit: null, note: null }],
+      ingredients: [{ item_id: MILK.id, amount: null, unit: null, note: null }],
     });
   });
 
@@ -362,7 +360,7 @@ describe('MealFormScreen (create)', () => {
     expect(screen.getByLabelText('Tags')).toHaveAccessibleDescription(/^Too long/);
     expect(screen.queryByText('Please check your input.')).not.toBeInTheDocument();
     await expect(bodyOf(fetchMock, 'POST /api/meals')).resolves.toMatchObject({
-      ingredients: [{ ingredient_id: SALT.id, amount: null, unit: 'tsp', note: null }],
+      ingredients: [{ item_id: SALT.id, amount: null, unit: 'tsp', note: null }],
     });
   });
 
@@ -444,7 +442,7 @@ describe('MealFormScreen (create)', () => {
 
 describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
   const BARCODE = '4006381333931';
-  const LOOKUP = 'GET /api/ingredients/lookup';
+  const LOOKUP = 'GET /api/items/lookup';
 
   /**
    * The lookup route as the server answers it: asked about our own ingredients alone, it knows
@@ -488,7 +486,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     await own.answer(
       lookupResult({
         found_in: 'db',
-        ingredient: ingredient({ ...MILK, brand: 'Weidehof', barcode: BARCODE }),
+        item: ingredient({ ...MILK, brand: 'Weidehof', barcode: BARCODE }),
       }),
     );
 
@@ -517,14 +515,14 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     });
     const { fetchMock, user } = renderForm('/meals/new', {
       [LOOKUP]: lookupRoute(off.route),
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
     await scanInMealForm(user, BARCODE);
 
     // It opens with the barcode being looked up, as after a scan inside it.
     const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
-    expect(within(dialog).getByTestId(testIds.ingredientScanNotice)).toHaveTextContent(
+    expect(within(dialog).getByTestId(testIds.itemScanNotice)).toHaveTextContent(
       `Looking up ${BARCODE}…`,
     );
     // No cursor in the name, as after a scan inside it: the lookup may still fill it in.
@@ -540,7 +538,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     expect(within(dialog).getByLabelText('Barcode')).toHaveValue(BARCODE);
     expect(within(dialog).getByLabelText('Barcode')).toHaveAttribute('readonly');
     expect(within(dialog).getByTestId(testIds.offAttribution)).toBeVisible();
-    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     const form = screen.getByTestId(testIds.mealForm);
@@ -548,7 +546,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
       await within(form).findByRole('listitem', { name: 'Ingredient Kakaopulver (Bio)' }),
     ).toBeVisible();
     expect(dialog).not.toBeInTheDocument();
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toMatchObject({
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toMatchObject({
       name: 'Kakaopulver',
       brand: 'Bio',
       barcode: BARCODE,
@@ -567,13 +565,13 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     const created = ingredient({ id: 'ing-quitten', name: 'Quitten', barcode: BARCODE });
     const { fetchMock, user } = renderForm('/meals/new', {
       [LOOKUP]: lookupRoute(() => lookupResult()),
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
     await scanInMealForm(user, BARCODE);
 
     const dialog = await scannedPopUp();
-    expect(within(dialog).getByTestId(testIds.ingredientScanNotice)).toHaveTextContent(
+    expect(within(dialog).getByTestId(testIds.itemScanNotice)).toHaveTextContent(
       /^Not at Open Food Facts – enter the values yourself$/,
     );
     expect(within(dialog).getByLabelText('Barcode')).toHaveValue(BARCODE);
@@ -585,7 +583,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     const form = screen.getByTestId(testIds.mealForm);
     expect(await within(form).findByRole('listitem', { name: 'Ingredient Quitten' })).toBeVisible();
     expect(dialog).not.toBeInTheDocument();
-    await expect(requestsTo(fetchMock, 'POST /api/ingredients')[0]?.json()).resolves.toEqual({
+    await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Quitten',
       base_unit: 'g',
       category_id: 'cat-other',
@@ -603,7 +601,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     await scanInMealForm(user, BARCODE);
 
     const dialog = await scannedPopUp();
-    const notice = within(dialog).getByTestId(testIds.ingredientScanNotice);
+    const notice = within(dialog).getByTestId(testIds.itemScanNotice);
     expect(notice).toHaveTextContent(
       /^Open Food Facts is slow right now – try again or enter the values yourselfTry again$/,
     );
@@ -613,31 +611,31 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     await waitFor(() =>
       expect(within(dialog).getByLabelText('Name')).toHaveValue('Frische Vollmilch 3,5 %'),
     );
-    expect(within(dialog).queryByTestId(testIds.ingredientScanNotice)).not.toBeInTheDocument();
+    expect(within(dialog).queryByTestId(testIds.itemScanNotice)).not.toBeInTheDocument();
   });
 
   it('“Use Milch” gives a similar ingredient without a barcode the scanned one and adds its row (BAR-03)', async () => {
     await i18n.changeLanguage('de');
     const { fetchMock, user } = renderForm('/meals/new', {
       [LOOKUP]: lookupRoute(() => lookupResult()),
-      'GET /api/ingredients/similar': [MILK],
-      'POST /api/ingredients/ing-milch/barcode': ingredient({ ...MILK, barcode: BARCODE }),
+      'GET /api/items/similar': [MILK],
+      'POST /api/items/ing-milch/barcode': ingredient({ ...MILK, barcode: BARCODE }),
     });
 
     await scanInMealForm(user, BARCODE);
     const dialog = await screen.findByRole('dialog', { name: 'Neue Zutat' });
     await waitFor(() => expect(within(dialog).getByLabelText('Barcode')).toHaveValue(BARCODE));
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
-    const hint = await within(dialog).findByTestId(testIds.ingredientSimilar);
+    const hint = await within(dialog).findByTestId(testIds.itemSimilar);
     await user.click(within(hint).getByRole('button', { name: 'Milch nehmen' }));
 
     const form = screen.getByTestId(testIds.mealForm);
     expect(await within(form).findByRole('listitem', { name: 'Zutat Milch' })).toBeVisible();
     expect(dialog).not.toBeInTheDocument();
     await expect(
-      requestsTo(fetchMock, 'POST /api/ingredients/ing-milch/barcode')[0]?.json(),
+      requestsTo(fetchMock, 'POST /api/items/ing-milch/barcode')[0]?.json(),
     ).resolves.toEqual({ barcode: BARCODE });
-    expect(requestsTo(fetchMock, 'POST /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
   });
 
   it('says when the scanned digits are not a valid barcode, adding nothing', async () => {
@@ -714,10 +712,10 @@ describe('MealFormScreen (edit)', () => {
       cuisine_id: null,
       tags: [],
       ingredients: [
-        { ingredient_id: FLOUR.id, amount: 250, unit: 'g', note: null },
-        { ingredient_id: MILK.id, amount: 300, unit: 'ml', note: null },
-        { ingredient_id: EGGS.id, amount: 2, unit: 'piece', note: 'Größe M' },
-        { ingredient_id: SALT.id, amount: null, unit: null, note: 'to taste' },
+        { item_id: FLOUR.id, amount: 250, unit: 'g', note: null },
+        { item_id: MILK.id, amount: 300, unit: 'ml', note: null },
+        { item_id: EGGS.id, amount: 2, unit: 'piece', note: 'Größe M' },
+        { item_id: SALT.id, amount: null, unit: null, note: 'to taste' },
       ],
     });
   });
@@ -739,10 +737,10 @@ describe('MealFormScreen (edit)', () => {
     );
     await expect(bodyOf(fetchMock, 'PATCH /api/meals/meal-pancakes')).resolves.toMatchObject({
       ingredients: [
-        { ingredient_id: FLOUR.id, amount: 200, unit: 'g' },
-        { ingredient_id: MILK.id, amount: 300, unit: 'ml' },
-        { ingredient_id: EGGS.id, amount: 2, unit: 'piece' },
-        { ingredient_id: SALT.id, amount: 5, unit: 'g', note: 'to taste' },
+        { item_id: FLOUR.id, amount: 200, unit: 'g' },
+        { item_id: MILK.id, amount: 300, unit: 'ml' },
+        { item_id: EGGS.id, amount: 2, unit: 'piece' },
+        { item_id: SALT.id, amount: 5, unit: 'g', note: 'to taste' },
       ],
     });
   });
@@ -805,7 +803,7 @@ describe('MealFormScreen (edit)', () => {
       expect(requestsTo(fetchMock, 'PATCH /api/meals/meal-pancakes')).toHaveLength(1),
     );
     await expect(bodyOf(fetchMock, 'PATCH /api/meals/meal-pancakes')).resolves.toMatchObject({
-      ingredients: [{ ingredient_id: FLOUR.id, amount: 200, unit: 'g', note: null }, {}, {}, {}],
+      ingredients: [{ item_id: FLOUR.id, amount: 200, unit: 'g', note: null }, {}, {}, {}],
     });
   });
 

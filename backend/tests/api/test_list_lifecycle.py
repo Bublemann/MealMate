@@ -50,7 +50,7 @@ async def flour(api: AsyncClient, anna: Account) -> Any:
 
 async def meal_with(api: AsyncClient, user: Account, name: str, ingredient: Any) -> Any:
     """A meal of one serving with 100 g of the ingredient."""
-    rows = [{"ingredient_id": ingredient["id"], "amount": 100, "unit": "g"}]
+    rows = [{"item_id": ingredient["id"], "amount": 100, "unit": "g"}]
     return await create_meal(api, user, name, ingredients=rows)
 
 
@@ -286,16 +286,12 @@ async def test_ingredients_on_lists_are_in_use(
     await added(api, anna, frozen_list["id"], meal["id"])
     await api.delete(f"/api/meals/{meal['id']}", headers=anna.headers)
     extra_list = await create_list(api, anna)
-    [item] = (await extra_added(api, anna, extra_list["id"], ingredient_id=flour["id"]))[
-        "extra_items"
-    ]
+    [item] = (await extra_added(api, anna, extra_list["id"], item_id=flour["id"]))["extra_items"]
     other_list = await create_list(api, anna)
-    await extra_added(api, anna, other_list["id"], ingredient_id=flour["id"])
+    await extra_added(api, anna, other_list["id"], item_id=flour["id"])
 
     for ingredient, lists_count in ((salt, 1), (flour, 2)):
-        response = await api.delete(
-            f"/api/admin/ingredients/{ingredient['id']}", headers=admin.headers
-        )
+        response = await api.delete(f"/api/admin/items/{ingredient['id']}", headers=admin.headers)
         assert response.status_code == 409
         assert response.json()["params"] == {"meals": 0, "lists": lists_count}
 
@@ -304,7 +300,7 @@ async def test_ingredients_on_lists_are_in_use(
     await api.delete(
         f"/api/lists/{extra_list['id']}/extra-items/{item['id']}", headers=anna.headers
     )
-    response = await api.delete(f"/api/admin/ingredients/{flour['id']}", headers=admin.headers)
+    response = await api.delete(f"/api/admin/items/{flour['id']}", headers=admin.headers)
     assert response.status_code == 204
     assert await scalars(app, select(ListExtraItem.id)) == []
 
@@ -325,11 +321,11 @@ async def test_merging_ingredients(
     await added(api, anna, frozen["id"], gone_meal["id"])
     await api.delete(f"/api/meals/{gone_meal['id']}", headers=anna.headers)
     extras = await create_list(api, anna, "Extras")
-    await extra_added(api, anna, extras["id"], ingredient_id=duplicate["id"], amount=1, unit="kg")
-    await extra_added(api, anna, extras["id"], ingredient_id=tomatoes["id"], amount=500, unit="g")
+    await extra_added(api, anna, extras["id"], item_id=duplicate["id"], amount=1, unit="kg")
+    await extra_added(api, anna, extras["id"], item_id=tomatoes["id"], amount=500, unit="g")
     await api.post(f"/api/lists/{extras['id']}/lines/{old_key}/hide", headers=anna.headers)
     shown = await create_list(api, anna, "Shown")
-    await extra_added(api, anna, shown["id"], ingredient_id=tomatoes["id"])
+    await extra_added(api, anna, shown["id"], item_id=tomatoes["id"])
     for key, action in ((old_key, "hide"), (new_key, "hide"), (new_key, "unhide")):
         await api.post(f"/api/lists/{shown['id']}/lines/{key}/{action}", headers=anna.headers)
     both_checked = await create_list(api, anna, "Both")
@@ -352,12 +348,12 @@ async def test_merging_ingredients(
         .values(checked=True),
     )
     unrelated = await create_list(api, anna, "Unrelated")
-    await extra_added(api, anna, unrelated["id"], ingredient_id=other["id"])
+    await extra_added(api, anna, unrelated["id"], item_id=other["id"])
     lists = (live, frozen, extras, shown, both_checked, one_checked, unrelated)
     versions = {item["id"]: (await detail(api, anna, item["id"]))["version"] for item in lists}
 
     response = await api.post(
-        f"/api/admin/ingredients/{duplicate['id']}/merge",
+        f"/api/admin/items/{duplicate['id']}/merge",
         json={"into_id": tomatoes["id"]},
         headers=admin.headers,
     )
@@ -410,7 +406,7 @@ async def test_merging_line_states_by_the_lines_the_lists_have(
         states (hidden or not)."""
         shopping_list = await create_list(api, anna, name)
         for ingredient in ingredients:
-            await extra_added(api, anna, shopping_list["id"], ingredient_id=ingredient["id"])
+            await extra_added(api, anna, shopping_list["id"], item_id=ingredient["id"])
         for which, hidden in states.items():
             key = old_key if which == "old" else new_key
             for action in ("hide",) if hidden else ("hide", "unhide"):
@@ -449,7 +445,7 @@ async def test_merging_line_states_by_the_lines_the_lists_have(
     )
 
     response = await api.post(
-        f"/api/admin/ingredients/{duplicate['id']}/merge",
+        f"/api/admin/items/{duplicate['id']}/merge",
         json={"into_id": tomatoes["id"]},
         headers=admin.headers,
     )

@@ -76,7 +76,7 @@ async def test_a_new_item_was_last_bought_today(
     item = await make_recurring(api, anna, toilet_paper["id"], weeks=4)
     assert item == {
         "id": item["id"],
-        "ingredient": summary(toilet_paper),
+        "item": summary(toilet_paper),
         "interval": {"value": 4, "unit": "week", "automatic": True},
         "interval_weeks": 4,
         "last_purchased_on": "2026-09-27",
@@ -105,7 +105,7 @@ async def test_the_set_is_sorted_by_due_date_then_by_name(api: AsyncClient, anna
 
     body = await recurring(api, anna)
     assert [
-        (item["ingredient"]["name"], item["due_on"], item["days_until_due"], item["due"])
+        (item["item"]["name"], item["due_on"], item["days_until_due"], item["due"])
         for item in body["items"]
     ] == [
         ("Klopapier", "2026-09-20", -7, True),
@@ -157,7 +157,7 @@ async def test_the_last_amount_follows_the_current_base_unit(
 
     async def last_amount_as(base_unit: str) -> Any:
         response = await api.patch(
-            f"/api/ingredients/{ingredient['id']}",
+            f"/api/items/{ingredient['id']}",
             json={"base_unit": base_unit},
             headers=anna.headers,
         )
@@ -177,7 +177,7 @@ async def test_an_ingredient_is_in_a_set_once(
     await make_recurring(api, anna, toilet_paper["id"])
     response = await create_recurring(api, anna, toilet_paper["id"], weeks=2)
     assert response.status_code == 422
-    assert fields(response) == {("body", "ingredient_id"): "taken"}
+    assert fields(response) == {("body", "item_id"): "taken"}
     assert len((await recurring(api, anna))["items"]) == 1
 
 
@@ -188,7 +188,7 @@ async def test_an_unknown_ingredient_is_invalid(api: AsyncClient, anna: Account)
     )
     assert response.status_code == 422
     assert fields(response) == {
-        ("body", "ingredient_id"): "invalid",
+        ("body", "item_id"): "invalid",
         ("body", "last_purchased_on"): "out_of_range",
     }
 
@@ -209,7 +209,7 @@ async def test_values_out_of_range_are_refused(
 ) -> None:
     response = await api.post(
         "/api/recurring-items",
-        json={"ingredient_id": toilet_paper["id"], "interval_weeks": 4} | body,
+        json={"item_id": toilet_paper["id"], "interval_weeks": 4} | body,
         headers=anna.headers,
     )
     assert response.status_code == 422
@@ -442,7 +442,7 @@ async def test_a_couple_shares_one_set(
     changed = await updated(api, ben, item["id"], interval_weeks=2)
     assert (await recurring(api, anna))["items"] == [changed]
     response = await create_recurring(api, ben, toilet_paper["id"])
-    assert fields(response) == {("body", "ingredient_id"): "taken"}
+    assert fields(response) == {("body", "item_id"): "taken"}
 
     url = f"/api/recurring-items/{item['id']}"
     assert (await recurring(api, carl))["items"] == []
@@ -569,9 +569,9 @@ async def test_a_deactivated_partner_changes_nothing(
 # --- ingredients merged (ING-05) -------------------------------------------------------------
 
 
-async def merge(api: AsyncClient, admin: Account, ingredient_id: str, into_id: str) -> None:
+async def merge(api: AsyncClient, admin: Account, item_id: str, into_id: str) -> None:
     response = await api.post(
-        f"/api/admin/ingredients/{ingredient_id}/merge",
+        f"/api/admin/items/{item_id}/merge",
         json={"into_id": into_id},
         headers=admin.headers,
     )
@@ -593,7 +593,7 @@ async def test_a_merge_moves_the_item_to_the_surviving_ingredient(
 
     await merge(api, admin, duplicate["id"], toilet_paper["id"])
 
-    assert (await recurring(api, anna))["items"] == [item | {"ingredient": summary(toilet_paper)}]
+    assert (await recurring(api, anna))["items"] == [item | {"item": summary(toilet_paper)}]
     assert (await notices(api, anna))["count"] == 0
 
 
@@ -633,7 +633,7 @@ async def test_when_a_set_has_both_the_later_purchase_stays(
 
     await merge(api, admin, duplicate["id"], toilet_paper["id"])
 
-    assert (await recurring(api, anna))["items"] == [later | {"ingredient": summary(toilet_paper)}]
+    assert (await recurring(api, anna))["items"] == [later | {"item": summary(toilet_paper)}]
     assert (await recurring(api, admin))["items"] == [kept]
     assert (await recurring(api, ben))["items"] == [tie]
     for user in (anna, admin, ben):
@@ -732,9 +732,9 @@ async def test_the_demo_couple_has_two_recurring_items_one_of_them_due(
     household = (await category_ids(api, anna))["household_hygiene"]
     assert [
         (
-            item["ingredient"]["name"],
-            item["ingredient"]["category_id"] == household,
-            item["ingredient"]["base_unit"],
+            item["item"]["name"],
+            item["item"]["category_id"] == household,
+            item["item"]["base_unit"],
             item["interval"],
             item["last_purchased_on"],
             item["due_on"],

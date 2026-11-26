@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '@/i18n';
 import { mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import { REFERENCE_ROUTES, summary } from '@/test/items';
 import { deletedNotice, noticeList, recurringItem, recurringList } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -44,7 +44,7 @@ describe('RecurringScreen: the set (LIST-16, MNT-02, I18N-05)', () => {
         'GET /api/recurring-items': recurringList([
           recurringItem({
             id: 'rec-duschgel',
-            ingredient: summary('Duschgel', 'other', { brand: 'Duschdas' }),
+            item: summary('Duschgel', 'other', { brand: 'Duschdas' }),
             interval: { value: 5, unit: 'day', automatic: true },
             last_purchased_on: '2026-10-17',
             days_until_due: -3,
@@ -52,7 +52,7 @@ describe('RecurringScreen: the set (LIST-16, MNT-02, I18N-05)', () => {
           }),
           recurringItem({
             id: 'rec-zahnpasta',
-            ingredient: summary('Zahnpasta', 'other'),
+            item: summary('Zahnpasta', 'other'),
             interval: { value: 2, unit: 'week', automatic: false },
             last_purchased_on: '2025-12-20',
             days_until_due: 0,
@@ -60,7 +60,7 @@ describe('RecurringScreen: the set (LIST-16, MNT-02, I18N-05)', () => {
           }),
           recurringItem({
             id: 'rec-spuelmittel',
-            ingredient: summary('Spülmittel', 'other'),
+            item: summary('Spülmittel', 'other'),
             interval: { value: 1, unit: 'week', automatic: false },
             last_purchased_on: '2026-10-19',
             days_until_due: 1,

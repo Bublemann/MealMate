@@ -6,7 +6,7 @@ import {
   NUTRIENT_KEYS,
   nutrientLabel,
   type NutrientKey,
-} from '@/features/ingredients/nutrients';
+} from '@/features/items/nutrients';
 import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
 import type { Meal } from './api';

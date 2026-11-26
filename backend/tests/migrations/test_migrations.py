@@ -1253,7 +1253,7 @@ def items_renamed_meanwhile(path: Path) -> Iterator[None]:
 
 def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
     return sorted(
-        (meal["name"], row["ingredient"]["name"], row["amount"], row["unit"])
+        (meal["name"], row["item"]["name"], row["amount"], row["unit"])
         for meal in seen.values()
         for row in meal.get("ingredients", [])
         if not row["unit_fits"]
@@ -1262,7 +1262,7 @@ def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
 
 def _nutrition_missing(seen: dict[str, dict[str, Any]], name: str) -> list[tuple[object, ...]]:
     [meal] = [meal for meal in seen.values() if meal.get("name") == name]
-    return [(item["ingredient_name"], item["reason"]) for item in meal["nutrition"]["missing"]]
+    return [(item["item_name"], item["reason"]) for item in meal["nutrition"]["missing"]]
 
 
 def test_0014_through_the_api(tmp_path: Path) -> None:
