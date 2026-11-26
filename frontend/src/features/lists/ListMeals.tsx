@@ -1,15 +1,18 @@
 import { CookingPot, Trash2 } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { SwipeRow } from '@/components/SwipeRow';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TapCheckbox } from '@/components/ui/tap-checkbox';
 import { useConnected } from '@/features/sync/context';
+import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import {
   useRemoveListMeal,
+  useSetListMealEaten,
   useSetListMealServings,
   type ListDetail,
   type ListMealEntry,
@@ -24,6 +27,11 @@ interface ListMealsProps {
   collapsible?: boolean;
   /** The meal field, at the top of the section (D-41). */
   field?: ReactNode;
+  /**
+   * Each meal has an eaten checkbox and the heading counts the eaten ones, as on a done list
+   * (SHOP-07). The boxes only show the state for those who may not edit the list, and offline.
+   */
+  eatenBoxes?: boolean;
 }
 
 /**
@@ -31,14 +39,24 @@ interface ListMealsProps {
  * (LIST-04/05); its heading shows even without meals. A meal the viewer can't
  * see is only "Private meal (N servings)" (VIS-06); a detached one is marked "no longer
  * available" and can be removed (LIST-15). Changing meals needs a connection: offline the controls
- * are disabled (SYNC-03).
+ * are disabled (SYNC-03). On a done list, a meal is ticked eaten and then struck through (SHOP-07).
  */
-export function ListMeals({ list, editable, collapsible = false, field }: ListMealsProps) {
+export function ListMeals({
+  list,
+  editable,
+  collapsible = false,
+  field,
+  eatenBoxes = false,
+}: ListMealsProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const setServings = useSetListMealServings(list.id);
   const remove = useRemoveListMeal(list.id);
+  const setEaten = useSetListMealEaten(list.id);
+  // Kept here: the mutation's own `error` follows only the latest tap.
+  const [eatenError, setEatenError] = useState<unknown>(null);
   const offline = !useConnected();
+  const eatenCount = list.meals.filter((meal) => meal.eaten).length;
 
   const content = (
     <>
@@ -59,11 +77,27 @@ export function ListMeals({ list, editable, collapsible = false, field }: ListMe
               offline={offline}
               onServings={(servings) => setServings.mutate({ listMealId: entry.id, servings })}
               onRemove={() => remove.mutate(entry.id)}
+              eatenBox={
+                eatenBoxes
+                  ? {
+                      disabled: !list.can_edit || offline,
+                      // The promise settles for every tap; `mutate`'s own callbacks only for
+                      // the latest, which would leave an earlier box as it was tapped.
+                      onChange: (eaten, settled) => {
+                        setEatenError(null);
+                        void setEaten
+                          .mutateAsync({ listMealId: entry.id, eaten })
+                          .catch(setEatenError)
+                          .finally(settled);
+                      },
+                    }
+                  : undefined
+              }
             />
           ))}
         </ul>
       )}
-      <ErrorAlert error={setServings.error ?? remove.error} />
+      <ErrorAlert error={setServings.error ?? remove.error ?? eatenError} />
     </>
   );
 
@@ -85,6 +119,14 @@ export function ListMeals({ list, editable, collapsible = false, field }: ListMe
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <h2 id={headingId} className="text-xl font-semibold">
         {t('lists.meals.title')}
+        {eatenBoxes && list.meals.length > 0 && (
+          <>
+            {/* The space keeps the words apart in the heading's accessible name. */}{' '}
+            <span className="ml-1 text-base font-normal text-muted-foreground">
+              {t('lists.meals.eatenCount', { eaten: eatenCount, count: list.meals.length })}
+            </span>
+          </>
+        )}
       </h2>
       {content}
     </section>
@@ -98,6 +140,8 @@ interface MealEntryProps {
   offline: boolean;
   onServings: (servings: number) => void;
   onRemove: () => void;
+  /** The eaten checkbox of a done list (SHOP-07). */
+  eatenBox?: { disabled: boolean; onChange: (eaten: boolean, settled: () => void) => void };
 }
 
 /**
@@ -105,11 +149,12 @@ interface MealEntryProps {
  * stepper, or the servings for those who can't change them. "Remove" shows on focus and hover and
  * is always there for screen readers.
  */
-function MealEntry({ entry, editable, offline, onServings, onRemove }: MealEntryProps) {
+function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }: MealEntryProps) {
   const { t } = useTranslation();
   const visible = !entry.private && entry.name !== null;
   const name = visible ? (entry.name ?? '') : t('lists.meals.private');
   const label = visible ? name : t('lists.meals.privateServings', { count: entry.servings });
+  const struck = eatenBox !== undefined && entry.eaten && 'text-muted-foreground line-through';
 
   return (
     <li data-testid={testIds.listMeal} aria-label={label}>
@@ -123,6 +168,14 @@ function MealEntry({ entry, editable, offline, onServings, onRemove }: MealEntry
         disabled={!editable || offline}
       >
         <div className="group flex items-center gap-3 px-3 py-2">
+          {eatenBox && (
+            <EatenBox
+              label={t('lists.meals.eaten', { name: label })}
+              eaten={entry.eaten}
+              disabled={eatenBox.disabled}
+              onChange={eatenBox.onChange}
+            />
+          )}
           {entry.thumb_url ? (
             // The name next to it says what it shows, so the thumbnail is decorative.
             <img
@@ -140,12 +193,15 @@ function MealEntry({ entry, editable, offline, onServings, onRemove }: MealEntry
             {visible && entry.meal_id ? (
               <Link
                 to={`/meals/${entry.meal_id}`}
-                className="inline-flex min-h-(--tap-target) min-w-0 items-center font-medium break-words text-primary underline-offset-4 hover:underline"
+                className={cn(
+                  'inline-flex min-h-(--tap-target) min-w-0 items-center font-medium break-words text-primary underline-offset-4 hover:underline',
+                  struck,
+                )}
               >
                 {name}
               </Link>
             ) : (
-              <span className="min-w-0 font-medium break-words">{label}</span>
+              <span className={cn('min-w-0 font-medium break-words', struck)}>{label}</span>
             )}
             {entry.detached && <Badge variant="secondary">{t('lists.meals.detached')}</Badge>}
           </span>
@@ -183,5 +239,37 @@ function MealEntry({ entry, editable, offline, onServings, onRemove }: MealEntry
         </div>
       </SwipeRow>
     </li>
+  );
+}
+
+interface EatenBoxProps {
+  label: string;
+  eaten: boolean;
+  disabled: boolean;
+  /** Sends the change; `settled` is called once it has its answer, or failed. */
+  onChange: (eaten: boolean, settled: () => void) => void;
+}
+
+/**
+ * The eaten checkbox of a meal on a done list (SHOP-07). A tap shows at once and stays until the
+ * change has its answer: the list's change reaches the cache only after a tick, and a box bound
+ * to the cache alone would jump back for a moment. Then the box shows the cached list again, which
+ * is the server's answer, or the list loaded again after a failure.
+ */
+function EatenBox({ label, eaten, disabled, onChange }: EatenBoxProps) {
+  const [tapped, setTapped] = useState<boolean | null>(null);
+  const checked = tapped ?? eaten;
+
+  return (
+    <TapCheckbox
+      aria-label={label}
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => {
+        const value = event.target.checked;
+        setTapped(value);
+        onChange(value, () => setTapped((current) => (current === value ? null : current)));
+      }}
+    />
   );
 }

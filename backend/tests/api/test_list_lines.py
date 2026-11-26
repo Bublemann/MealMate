@@ -353,6 +353,7 @@ async def test_detached_meals_keep_their_frozen_rows(
         "servings": 2,
         "meal_servings": 4,
         "detached": "deleted",
+        "eaten": False,
     }
     assert lines(after)["Brötchen"] == ([(2, "piece")], False)  # 3 * 2/4, rounded up
 
