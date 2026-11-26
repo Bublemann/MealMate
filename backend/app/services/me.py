@@ -1,5 +1,5 @@
-"""The own account: profile, language, privacy, saved filters, password, sessions (ACC-09,
-ACC-10, ACC-13, VIS-02, MEAL-10, UI-02, I18N-01)."""
+"""The own account: profile, language, privacy, saved filters, the carry-over setting,
+password, sessions (ACC-09, ACC-10, ACC-13, VIS-02, MEAL-10, UI-02, I18N-01, LIST-17)."""
 
 from datetime import datetime
 
@@ -71,6 +71,8 @@ async def update_me(
             user.lists_public = update.lists_public
         if update.filter_hidden is not None:
             user.filter_hidden = _filter_hidden(update.filter_hidden)
+        if update.carry_over_leftovers is not None:
+            user.carry_over_leftovers = update.carry_over_leftovers
         user.updated_at = now
         await session.flush()
         return Me.model_validate(user)

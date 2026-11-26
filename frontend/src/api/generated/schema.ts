@@ -3061,6 +3061,8 @@ export interface components {
         };
         /** Me */
         Me: {
+            /** Carry Over Leftovers */
+            carry_over_leftovers: boolean;
             /**
              * Created At
              * Format: date-time
@@ -3090,9 +3092,12 @@ export interface components {
         };
         /**
          * MeUpdate
-         * @description Only the fields that are sent change (ACC-13, VIS-02, I18N-01).
+         * @description Only the fields that are sent change (ACC-13, VIS-02, I18N-01, LIST-17). Left out or
+         *     null, a field stays as it is.
          */
         MeUpdate: {
+            /** Carry Over Leftovers */
+            carry_over_leftovers?: boolean | null;
             /** Display Name */
             display_name?: string | null;
             filter_hidden?: components["schemas"]["FilterHidden"] | null;

@@ -679,6 +679,7 @@ order.
 | `screenCouple`          | `screen-couple`           | Settings → Paar page                             |
 | `screenSecurity`        | `screen-security`         | Settings → Sicherheit page                       |
 | `screenRecurring`       | `screen-recurring`        | Settings → Regelmäßige Artikel page              |
+| `screenLeftovers`       | `screen-leftovers`        | Settings → Übrige Gerichte page                  |
 | `screenWalkingOrder`    | `screen-walking-order`    | Settings → Reihenfolge im Laden page             |
 | `screenAbout`           | `screen-about`            | Settings → Über MealMate page                    |
 | `languageSelect`        | `language-select`         | Language select on Profil                        |
@@ -697,6 +698,7 @@ order.
 | `displayNameInput`      | `display-name-input`      | Display name field on Profil                     |
 | `mealsPublicSwitch`     | `meals-public-switch`     | "Meals public" switch on Privatsphäre            |
 | `listsPublicSwitch`     | `lists-public-switch`     | "Lists public" switch on Privatsphäre            |
+| `carryOverSwitch`       | `carry-over-switch`       | "Übrige Gerichte übernehmen" switch              |
 | `coupleSection`         | `couple-section`          | Content of the Paar page                         |
 | `couplePartner`         | `couple-partner`          | Partner name (and since when) on Paar            |
 | `couplePicker`          | `couple-picker`           | User picker for a couple request                 |

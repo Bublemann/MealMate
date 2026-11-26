@@ -3262,6 +3262,10 @@
       },
       "Me": {
         "properties": {
+          "carry_over_leftovers": {
+            "title": "Carry Over Leftovers",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -3316,14 +3320,26 @@
           "meals_public",
           "lists_public",
           "filter_hidden",
+          "carry_over_leftovers",
           "created_at"
         ],
         "title": "Me",
         "type": "object"
       },
       "MeUpdate": {
-        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01).",
+        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01, LIST-17). Left out or\nnull, a field stays as it is.",
         "properties": {
+          "carry_over_leftovers": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carry Over Leftovers"
+          },
           "display_name": {
             "anyOf": [
               {

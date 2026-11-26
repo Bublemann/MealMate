@@ -65,6 +65,25 @@ async def test_update_me(app: FastAPI, api: AsyncClient) -> None:
     assert (await api.get("/api/me", headers=anna.headers)).json() == response.json()
 
 
+async def test_the_carry_over_setting_is_on_by_default_and_per_user(
+    app: FastAPI, api: AsyncClient
+) -> None:
+    anna = await make_user(app, api, "anna")
+    ben = await make_user(app, api, "ben")
+    assert (await api.get("/api/me", headers=anna.headers)).json()["carry_over_leftovers"] is True
+
+    response = await api.patch(
+        "/api/me", json={"carry_over_leftovers": False}, headers=anna.headers
+    )
+    assert response.json()["carry_over_leftovers"] is False
+    # Null or left out, it stays; it is anna's alone.
+    for body in ({"carry_over_leftovers": None}, {"language": "en"}):
+        response = await api.patch("/api/me", json=body, headers=anna.headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["carry_over_leftovers"] is False
+    assert (await api.get("/api/me", headers=ben.headers)).json()["carry_over_leftovers"] is True
+
+
 async def test_keeping_the_own_display_name_is_fine(app: FastAPI, api: AsyncClient) -> None:
     anna = await make_user(app, api, "anna", display_name="Anna")
     response = await api.patch("/api/me", json={"display_name": "ANNA"}, headers=anna.headers)

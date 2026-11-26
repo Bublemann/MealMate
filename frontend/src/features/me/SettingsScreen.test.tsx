@@ -43,6 +43,7 @@ describe('SettingsScreen', () => {
       '/me/couple',
       '/me/security',
       '/me/recurring',
+      '/me/leftovers',
       '/me/walking-order',
       '/me/about',
     ]);
@@ -54,6 +55,7 @@ describe('SettingsScreen', () => {
     expect(within(settings).getByRole('link', { name: /^Couple/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^Security/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^Recurring items/ })).toBeVisible();
+    expect(within(settings).getByRole('link', { name: /^Leftover meals/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^Order in the store/ })).toBeVisible();
     expect(within(settings).getByRole('link', { name: /^About MealMate/ })).toBeVisible();
     // Abmelden is a button, not a link, and comes last.
@@ -88,6 +90,7 @@ describe('SettingsScreen', () => {
       '/me/couple',
       '/me/security',
       '/me/recurring',
+      '/me/leftovers',
       '/me/walking-order',
       '/me/admin/users',
       '/me/admin/invites',
@@ -248,6 +251,14 @@ describe('SettingsScreen row values (D-45)', () => {
     expect(row('Couple')).toHaveAccessibleName('Couple');
     expect(row('Privacy')).toHaveAccessibleName('Privacy');
     expect(row('Security')).toHaveAccessibleName('Security');
+  });
+
+  it('shows whether leftover meals carry over (LIST-17)', async () => {
+    mockApi({ 'GET /api/me': { ...TEST_USER, carry_over_leftovers: false } });
+    renderApp('/me');
+
+    expect(row('Leftover meals')).toHaveAccessibleName('Leftover meals On');
+    await waitFor(() => expect(row('Leftover meals')).toHaveAccessibleName('Leftover meals Off'));
   });
 
   it('shows no value on the Verwaltung rows but System', async () => {
