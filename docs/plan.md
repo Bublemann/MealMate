@@ -525,7 +525,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - The server tells "session revoked / user deactivated" apart from "expired" with distinct error codes, which drive SYNC-10.
 - **Sync module** (`features/sync/`):
   - an IndexedDB store `lists` for the offline copy (SYNC-02), refreshed from `GET /lists/sync` on start, `visibilitychange`, `online` and after each mutation;
-  - the copy seeds the first page of the list feed: the Lists tab shows it, sorted like the feed, until that page arrives, and offline it shows only the copy, ignoring the saved filters (UI-02). A list finished on this phone whose finish wasn't sent yet is left out;
+  - the copy seeds the first page of the list feed: online, the Lists tab waits for that page with the spinner and shows the copy, sorted like the feed, only once about 3 seconds have passed or the page failed, until it arrives (D-56), and offline it shows only the copy, ignoring the saved filters (UI-02). A list finished on this phone whose finish wasn't sent yet is left out;
   - the category list, cached per user in the `meta` store with every category's names, deleted ones included (D-30), so stored lists show every heading offline (LIST-11). It is loaded again with the copy once it is stale, whichever screen is open; a cached list without names (stored by an app version before D-31) is not used;
   - an `outbox` store for ops (SYNC-03/04), tagged with the user id. Ops are only sent with a session of the same user id. A pending free-text item (`extra.add`) sends its category's id;
   - a flush loop that runs on start, `visibilitychange→visible` and `online`, in order, stopping at the first network error or timeout;

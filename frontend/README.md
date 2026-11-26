@@ -336,7 +336,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   page, `next_cursor`); the next page loads when the end of the feed comes near the screen
   (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
   filter. Until its first page arrives the feed is the local copy (`showsLocalCopy`), which they
-  don't narrow. Icons with an accessible name mark a shared list, a read-only one (lock), one being
+  don't narrow. Online, `ListFeed` shows the spinner instead of that copy for up to 3 s
+  (`COPY_STANDS_IN_AFTER_MS`, D-56); offline or once the page failed it shows the copy at once. Icons with an accessible name mark a shared list, a read-only one (lock), one being
   shopped and a done one.
 - **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in
   `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
