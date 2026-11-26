@@ -1150,10 +1150,33 @@ export interface paths {
         /**
          * Set List Meal Eaten
          * @description Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change
-         *     a done list takes. 409 `list.not_done` in a draft or while shopping.
+         *     a done list takes. 409 `list.not_done` in a draft or while shopping. A leftover is marked on
+         *     any list, and that marks the meal it comes from, on every list showing it (LIST-17).
          */
         put: operations["set_list_meal_eaten"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lists/{list_id}/meals/{list_meal_id}/shop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shop Leftover Meal
+         * @description "Doch einkaufen": a leftover becomes a normal meal of the list, whose ingredients go on
+         *     it (LIST-17); in a draft or while shopping. 409 `list_meal.not_leftover` for a normal meal,
+         *     `list_meal.unavailable` if its meal was deleted or can't be seen any more.
+         */
+        post: operations["shop_leftover_meal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2083,7 +2106,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "item.in_use" | "item.barcode_taken" | "item.has_barcode" | "item.no_pending_update" | "item.unit_mismatch" | "item.used_in_meals" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "item.in_use" | "item.barcode_taken" | "item.has_barcode" | "item.no_pending_update" | "item.unit_mismatch" | "item.used_in_meals" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "list_meal.leftover" | "list_meal.not_leftover" | "list_meal.unavailable" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -2901,7 +2924,8 @@ export interface components {
         };
         /**
          * ListMealEaten
-         * @description Mark a meal on a done list eaten, or clear that (SHOP-07).
+         * @description Mark a meal on a done list eaten, or clear that (SHOP-07); for a leftover, on any list,
+         *     its source meal (LIST-17).
          */
         ListMealEaten: {
             /** Eaten */
@@ -2917,6 +2941,9 @@ export interface components {
          *     the one it had). `meal_servings` is what the meal's rows are written for; the rows are
          *     scaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.
          *     `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
+         *     A `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,
+         *     its servings are what was bought and can't change, and `eaten` is its source meal's; on a
+         *     draft or while shopping it is shown only while that is not eaten.
          */
         ListMealEntry: {
             /** Detached */
@@ -2925,6 +2952,8 @@ export interface components {
             eaten: boolean;
             /** Id */
             id: string;
+            /** Leftover */
+            leftover: boolean;
             /** Meal Id */
             meal_id: string | null;
             /** Meal Servings */
@@ -5799,6 +5828,38 @@ export interface operations {
                 "application/json": components["schemas"]["ListMealEaten"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    shop_leftover_meal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                list_meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

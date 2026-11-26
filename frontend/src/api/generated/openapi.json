@@ -845,6 +845,9 @@
           "list.done",
           "list.not_done",
           "list.not_shopping",
+          "list_meal.leftover",
+          "list_meal.not_leftover",
+          "list_meal.unavailable",
           "extra.id_taken",
           "media.too_large",
           "media.unsupported_type",
@@ -2941,7 +2944,7 @@
         "type": "object"
       },
       "ListMealEaten": {
-        "description": "Mark a meal on a done list eaten, or clear that (SHOP-07).",
+        "description": "Mark a meal on a done list eaten, or clear that (SHOP-07); for a leftover, on any list,\nits source meal (LIST-17).",
         "properties": {
           "eaten": {
             "title": "Eaten",
@@ -2955,7 +2958,7 @@
         "type": "object"
       },
       "ListMealEntry": {
-        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.",
+        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.\nA `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,\nits servings are what was bought and can't change, and `eaten` is its source meal's; on a\ndraft or while shopping it is shown only while that is not eaten.",
         "properties": {
           "detached": {
             "anyOf": [
@@ -2979,6 +2982,10 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "leftover": {
+            "title": "Leftover",
+            "type": "boolean"
           },
           "meal_id": {
             "anyOf": [
@@ -3046,7 +3053,8 @@
           "servings",
           "meal_servings",
           "detached",
-          "eaten"
+          "eaten",
+          "leftover"
         ],
         "title": "ListMealEntry",
         "type": "object"
@@ -8293,7 +8301,7 @@
     },
     "/api/lists/{list_id}/meals/{list_meal_id}/eaten": {
       "put": {
-        "description": "Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change\na done list takes. 409 `list.not_done` in a draft or while shopping.",
+        "description": "Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change\na done list takes. 409 `list.not_done` in a draft or while shopping. A leftover is marked on\nany list, and that marks the meal it comes from, on every list showing it (LIST-17).",
         "operationId": "set_list_meal_eaten",
         "parameters": [
           {
@@ -8353,6 +8361,63 @@
           }
         ],
         "summary": "Set List Meal Eaten",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/meals/{list_meal_id}/shop": {
+      "post": {
+        "description": "\"Doch einkaufen\": a leftover becomes a normal meal of the list, whose ingredients go on\nit (LIST-17); in a draft or while shopping. 409 `list_meal.not_leftover` for a normal meal,\n`list_meal.unavailable` if its meal was deleted or can't be seen any more.",
+        "operationId": "shop_leftover_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Shop Leftover Meal",
         "tags": [
           "lists"
         ]

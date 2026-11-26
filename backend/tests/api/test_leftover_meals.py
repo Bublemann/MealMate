@@ -383,3 +383,20 @@ async def test_removing_a_leftover_takes_it_off_this_draft_only(
     assert meal_rows(response.json()) == []
     assert meal_rows(await detail(api, anna, two["id"])) == [("Brot", True, False)]
     assert meal_rows(await detail(api, anna, done["id"])) == [("Brot", False, False)]
+
+
+async def test_a_copy_has_a_meal_on_the_list_twice_once(
+    api: AsyncClient, anna: Account, meals: dict[str, Any]
+) -> None:
+    await done_list(api, anna, [meals["Brot"]])
+    draft = await create_list(api, anna)
+    await added(api, anna, draft["id"], meals["Brot"]["id"], servings=2)
+
+    response = await api.post(f"/api/lists/{draft['id']}/copy", headers=anna.headers)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert [(row["name"], row["leftover"], row["servings"]) for row in body["list"]["meals"]] == [
+        ("Brot", False, 3)
+    ]
+    assert body["left_out"] == 0

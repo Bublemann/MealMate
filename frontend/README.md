@@ -800,6 +800,10 @@ order.
 | `listMeals`             | `list-meals`              | Meals of the list with their servings            |
 | `listMeal`              | `list-meal`               | One meal on the list                             |
 | `removeListMeal`        | `remove-list-meal`        | "Remove" button of a meal on the list            |
+| `leftoverMenu`          | `leftover-menu`           | ⋮ button of a leftover meal (LIST-17)            |
+| `shopLeftover`          | `shop-leftover`           | "Doch einkaufen" in a leftover's ⋮ menu          |
+| `removeLeftover`        | `remove-leftover`         | "Entfernen" in a leftover's ⋮ menu               |
+| `leftoverToast`         | `leftover-toast`          | "Chili gegessen · Rückgängig" toast              |
 | `mealField`             | `meal-field`              | Meal field's input, top of "Meals"               |
 | `mealFieldPanel`        | `meal-field-panel`        | Meal field's panel: create option, meals         |
 | `mealFieldCreate`       | `meal-field-create`       | "“X” as a new meal" under the meal field         |
