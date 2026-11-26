@@ -120,8 +120,8 @@ function renamedDue(entry: Stored): Stored {
  * App versions before #171 stored the lists with "ingredient" where the API now says "item": a
  * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
  * `ingredient`. Read that way, they show as before until the next sync replaces them. A field an
- * even older version didn't store (`due_items`) stays missing, as it was. This can go once no
- * device keeps a copy from before #171.
+ * even older version didn't store (`due_items`) stays missing, as it was. Meals stored before
+ * #177 count as not eaten. This can go once no device keeps a copy from before #177.
  */
 function fromOlderApp(entry: StoredList): StoredList {
   const detail = entry.detail as unknown as Record<string, Stored[] | undefined>;
@@ -134,6 +134,8 @@ function fromOlderApp(entry: StoredList): StoredList {
     const entries = detail[field];
     if (entries) upgraded[field] = entries.map(rename);
   }
+  // Meals stored before SHOP-07 weren't eaten.
+  if (detail.meals) upgraded.meals = detail.meals.map((meal) => ({ eaten: false, ...meal }));
   return { ...entry, detail: upgraded as unknown as ListDetail };
 }
 

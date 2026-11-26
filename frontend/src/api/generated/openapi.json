@@ -2875,8 +2875,22 @@
         "title": "ListMealAdd",
         "type": "object"
       },
+      "ListMealEaten": {
+        "description": "Mark a meal on a done list eaten, or clear that (SHOP-07).",
+        "properties": {
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eaten"
+        ],
+        "title": "ListMealEaten",
+        "type": "object"
+      },
       "ListMealEntry": {
-        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.",
+        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.",
         "properties": {
           "detached": {
             "anyOf": [
@@ -2892,6 +2906,10 @@
               }
             ],
             "title": "Detached"
+          },
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -2962,7 +2980,8 @@
           "thumb_url",
           "servings",
           "meal_servings",
-          "detached"
+          "detached",
+          "eaten"
         ],
         "title": "ListMealEntry",
         "type": "object"
@@ -8182,6 +8201,73 @@
           }
         ],
         "summary": "Update List Meal",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/meals/{list_meal_id}/eaten": {
+      "put": {
+        "description": "Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change\na done list takes. 409 `list.not_done` in a draft or while shopping.",
+        "operationId": "set_list_meal_eaten",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListMealEaten"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set List Meal Eaten",
         "tags": [
           "lists"
         ]

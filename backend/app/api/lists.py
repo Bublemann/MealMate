@@ -21,6 +21,7 @@ from app.schemas.lists import (
     ListDetail,
     ListFeedPage,
     ListMealAdd,
+    ListMealEaten,
     ListMealUpdate,
     ListsSync,
     ListUpdate,
@@ -274,6 +275,24 @@ async def update_list_meal(
 ) -> ListDetail:
     """Set the servings of a meal on the list."""
     return await lists.update_meal(
+        session, media, principal, list_id, list_meal_id, body, now=now, zone=zone
+    )
+
+
+@router.put("/{list_id}/meals/{list_meal_id}/eaten")
+async def set_list_meal_eaten(
+    list_id: str,
+    list_meal_id: str,
+    body: ListMealEaten,
+    principal: CurrentUser,
+    session: WriteSession,
+    media: Media,
+    now: Now,
+    zone: TimeZone,
+) -> ListDetail:
+    """Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change
+    a done list takes. 409 `list.not_done` in a draft or while shopping."""
+    return await lists.set_meal_eaten(
         session, media, principal, list_id, list_meal_id, body, now=now, zone=zone
     )
 

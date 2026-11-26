@@ -458,6 +458,25 @@ describe('local copy (SYNC-02, SYNC-10)', () => {
     expect(engine.copied(LIST_ID)).toEqual(list);
   });
 
+  it('reads a list stored before meals could be eaten as not eaten (SHOP-07)', async () => {
+    const list = shoppingList();
+    const stored = {
+      ...list,
+      meals: list.meals.map((meal) => {
+        const before: Partial<typeof meal> = { ...meal };
+        delete before.eaten;
+        return before;
+      }),
+    } as unknown as Schemas['ListDetail'];
+    const storage = await openSyncStorage();
+    await storage.putList({ id: LIST_ID, userId: TEST_USER.id, detail: stored, storedAt: 5 });
+    mockApi({ 'GET /api/lists/sync': () => new Promise(() => {}) });
+
+    const { engine } = await startEngine();
+
+    await vi.waitFor(() => expect(engine.copied(LIST_ID)).toEqual(list));
+  });
+
   it("reads a list stored before due items existed, and today's lists as they are", async () => {
     const today = listDetail({ due_items: [dueItem()] });
     const beforeDue: Partial<Schemas['ListDetail']> = { ...shoppingList(), id: OTHER_LIST };
