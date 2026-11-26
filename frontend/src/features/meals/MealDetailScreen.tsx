@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { MoreMenu, MoreMenuItem } from '@/components/MoreMenu';
 import { useMoreMenuFocus } from '@/components/useMoreMenuFocus';
 import { Screen } from '@/components/Screen';
@@ -66,7 +67,7 @@ function MealDetail({ id }: { id: string }) {
           </AlertDescription>
         </Alert>
       )}
-      {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {meal.isPending && <LoadingState />}
       <LoadError error={meal.error} />
       {meal.data && <MealContent key={meal.data.id} meal={meal.data} />}
     </Screen>

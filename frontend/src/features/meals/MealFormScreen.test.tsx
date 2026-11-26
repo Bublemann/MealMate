@@ -522,8 +522,10 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
 
     // It opens with the barcode being looked up, as after a scan inside it.
     const dialog = await screen.findByRole('dialog', { name: 'New item' });
-    expect(within(dialog).getByTestId(testIds.itemScanNotice)).toHaveTextContent(
-      `Looking up ${BARCODE}…`,
+    await waitFor(() =>
+      expect(within(dialog).getByTestId(testIds.itemScanNotice)).toHaveTextContent(
+        `Looking up ${BARCODE}…`,
+      ),
     );
     // No cursor in the name, as after a scan inside it: the lookup may still fill it in.
     await waitFor(() => expect(dialog).toHaveFocus());

@@ -108,7 +108,7 @@ export function PasswordDialog({ onChanged }: { onChanged: () => void }) {
           </FormField>
           {showAlert && <ErrorAlert error={change.error} />}
           <DialogFooter>
-            <Button type="submit" disabled={change.isPending}>
+            <Button type="submit" pending={change.isPending}>
               {t('me.password.submit')}
             </Button>
           </DialogFooter>

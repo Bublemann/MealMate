@@ -299,7 +299,7 @@ function RenameDialog({ list, onClose, onCloseAutoFocus }: RenameDialogProps) {
           </FormField>
           <ErrorAlert error={nameError ? null : update.error} />
           <DialogFooter>
-            <Button type="submit" disabled={update.isPending}>
+            <Button type="submit" pending={update.isPending}>
               {t('common.save')}
             </Button>
           </DialogFooter>

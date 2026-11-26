@@ -162,6 +162,7 @@ export const testIds = {
   offlineBanner: 'offline-banner',
   offlineNotice: 'offline-notice',
   loadingState: 'loading-state',
+  spinner: 'spinner',
   waitingBanner: 'waiting-banner',
   noStorageBanner: 'no-storage-banner',
   syncToast: 'sync-toast',

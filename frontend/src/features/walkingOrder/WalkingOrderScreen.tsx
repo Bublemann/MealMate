@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -61,7 +62,7 @@ export function WalkingOrderScreen() {
   return (
     <SettingsPage title={t('walkingOrder.title')} testId={testIds.screenWalkingOrder}>
       <p className="text-muted-foreground">{t('walkingOrder.text')}</p>
-      {order.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {order.isPending && <LoadingState />}
       <LoadError error={order.error} />
       {order.data && <OrderEditor order={order.data} />}
     </SettingsPage>

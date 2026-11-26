@@ -172,7 +172,8 @@ function EditForm({
         }}
         followsInterval
         submitLabel={t('common.save')}
-        pending={update.isPending || remove.isPending}
+        pending={update.isPending}
+        busy={remove.isPending}
         error={update.error ?? remove.error}
         onSubmit={onSubmit}
         extra={
@@ -181,7 +182,8 @@ function EditForm({
             variant="ghost"
             data-testid={testIds.recurringRemove}
             className="text-destructive hover:text-destructive"
-            disabled={!connected || update.isPending || remove.isPending}
+            pending={remove.isPending}
+            disabled={!connected || update.isPending}
             onClick={() => setConfirming(true)}
           >
             {t('recurring.dialog.remove')}
@@ -209,7 +211,10 @@ interface RecurringFormProps {
    */
   followsInterval: boolean;
   submitLabel: string;
+  /** Its own save runs: the button shows the spinner (UI-08). */
   pending: boolean;
+  /** Another change runs (the removal): the button only takes no press. */
+  busy?: boolean;
   error: unknown;
   onSubmit: (values: { weeks: number } & Omit<Values, 'weeks'>) => void;
   /** Below the main button: "Nicht mehr regelmäßig" when editing. */
@@ -221,6 +226,7 @@ function RecurringForm({
   followsInterval,
   submitLabel,
   pending,
+  busy = false,
   error,
   onSubmit,
   extra,
@@ -314,7 +320,7 @@ function RecurringForm({
       </FormField>
       {error !== null && needsErrorAlert(fields, SHOWN_FIELDS) && <ErrorAlert error={error} />}
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pending || !connected}>
+        <Button type="submit" pending={pending} disabled={!connected || busy}>
           {submitLabel}
         </Button>
         {extra}

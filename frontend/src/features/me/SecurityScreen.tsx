@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -54,7 +55,7 @@ export function SecurityScreen() {
       <Button
         variant="outline"
         data-testid={testIds.logoutAllButton}
-        disabled={logoutAll.isPending}
+        pending={logoutAll.isPending}
         onClick={() => void onLogoutAll()}
       >
         {t('me.sessions.logoutAll')}
@@ -88,6 +89,7 @@ function SecurityNotice() {
   const language = useLanguage();
   const security = useSecurityInfo();
 
+  if (security.isPending) return <LoadingState />;
   if (!security.data) return <LoadError error={security.error} />;
   const { password_reset_at: resetAt, password_reset_by: resetBy } = security.data;
   const changedAt = security.data.password_changed_at;
@@ -127,7 +129,7 @@ function SessionList() {
       <h2 id={headingId} className="text-lg font-semibold">
         {t('me.sessions.title')}
       </h2>
-      {sessions.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {sessions.isPending && <LoadingState />}
       <LoadError error={sessions.error} />
       {sessions.data && (
         <ul data-testid={testIds.sessionList} className="flex flex-col divide-y">
@@ -173,7 +175,7 @@ function SessionRow({ session, onRevoke, revoking }: SessionRowProps) {
           variant="outline"
           size="compact"
           onClick={onRevoke}
-          disabled={revoking}
+          pending={revoking}
           aria-label={t('me.sessions.revokeLabel', { device })}
         >
           {t('me.sessions.revoke')}
