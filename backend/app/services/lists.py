@@ -46,7 +46,7 @@ from app.domain.units import BaseUnit, Unit, counted_unit, fits
 from app.media import urls as media_urls
 from app.media.store import MediaStore
 from app.models import (
-    Ingredient,
+    Item,
     ListExtraItem,
     ListHiddenDueItem,
     ListLineState,
@@ -54,7 +54,7 @@ from app.models import (
     ShoppingList,
 )
 from app.models import Meal as MealRow
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
@@ -169,12 +169,10 @@ def _meal_entry(
 def _extra_item(
     content: aggregation.ListContent, row: ListExtraItem, refs: Mapping[str, UserRef]
 ) -> ExtraItem:
-    base_unit = (
-        None if row.ingredient_id is None else aggregation.extra_attrs(content, row).base_unit
-    )
+    base_unit = None if row.item_id is None else aggregation.extra_attrs(content, row).base_unit
     return ExtraItem(
         id=row.id,
-        ingredient_id=row.ingredient_id,
+        ingredient_id=row.item_id,
         text=row.text,
         amount=row.amount,
         unit=None if row.unit is None else Unit(row.unit),
@@ -509,7 +507,7 @@ async def _copy(
             ListExtraItem(
                 id=new_id(),
                 list_id=copy.id,
-                ingredient_id=extra.ingredient_id,
+                item_id=extra.item_id,
                 text=extra.text,
                 amount=extra.amount,
                 unit=extra.unit,
@@ -741,7 +739,7 @@ async def remove_meal(
 
 
 def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
-    """Exactly one of ingredient and text, and only the fields of that kind (LIST-06)."""
+    """Exactly one of item and text, and only the fields of that kind (LIST-06)."""
     if body.ingredient_id is None and body.text is None:
         return [_field("text", FieldErrorCode.REQUIRED)]
     if body.ingredient_id is not None and body.text is not None:
@@ -765,31 +763,31 @@ def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
 async def _find_references(
     session: AsyncSession,
     *,
-    ingredient_id: str | None,
+    item_id: str | None,
     category_id: str | None,
     current_category_id: str | None = None,
-) -> tuple[list[FieldProblem], Ingredient | None]:
-    """Look up the referenced ingredient and category: the problems with an unknown ingredient
+) -> tuple[list[FieldProblem], Item | None]:
+    """Look up the referenced item and category: the problems with an unknown item
     or a category a free-text item can't be put into (a deleted one or *Uncategorized*, LIST-06;
-    an item keeps the category it has, even a deleted one), and the ingredient if one was given
+    an item keeps the category it has, even a deleted one), and the item if one was given
     and found."""
     problems = []
-    ingredient = None
-    if ingredient_id is not None:
-        ingredient = await ingredients_repo.get(session, ingredient_id)
-        if ingredient is None:
+    item = None
+    if item_id is not None:
+        item = await items_repo.get(session, item_id)
+        if item is None:
             problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
     if category_id is not None and not await reference.can_pick(
         session, category_id, keeping=current_category_id
     ):
         problems.append(_field("category_id", FieldErrorCode.INVALID))
-    return problems, ingredient
+    return problems, item
 
 
 def _unit_problems(
     amount: float | None, unit: Unit | str | None, base_unit: BaseUnit | str
 ) -> list[FieldProblem]:
-    """A linked item's unit must fit its ingredient's base unit (REF-02, LIST-06)."""
+    """A linked extra item's unit must fit its item's base unit (REF-02, LIST-06)."""
     return [] if fits(amount, unit, base_unit) else [_field("unit", FieldErrorCode.UNIT_MISMATCH)]
 
 
@@ -838,19 +836,19 @@ async def add_extra(
             )
             return detail, False
         problems = _create_problems(body)
-        found, ingredient = await _find_references(
-            session, ingredient_id=body.ingredient_id, category_id=body.category_id
+        found, item = await _find_references(
+            session, item_id=body.ingredient_id, category_id=body.category_id
         )
         problems += found
-        if ingredient is not None:
-            problems += _unit_problems(body.amount, body.unit, ingredient.base_unit)
+        if item is not None:
+            problems += _unit_problems(body.amount, body.unit, item.base_unit)
         if problems:
             raise validation_error(problems)
         linked = body.ingredient_id is not None
         extra = ListExtraItem(
             id=body.id or new_id(),
             list_id=shopping_list.id,
-            ingredient_id=body.ingredient_id,
+            item_id=body.ingredient_id,
             text=body.text,
             amount=body.amount,
             unit=_stored_unit(body.amount, body.unit),
@@ -891,14 +889,14 @@ async def update_extra(
 ) -> ListDetail:
     """Change the fields that were sent; a linked item stays linked and a free-text item
     stays free text (the other kind's fields are refused). While shopping, a linked item
-    moved to another ingredient takes that one's snapshot. A linked item whose ingredient,
+    moved to another item takes that one's snapshot. A linked extra item whose item,
     amount or unit changes needs a unit that fits the base unit it is calculated with: the new
-    ingredient's, else its snapshot's or its ingredient's (D-33)."""
+    item's, else its snapshot's or its item's (D-33)."""
     sent = body.model_fields_set
     async with session.begin():
         shopping_list, rights = await _editable(session, principal, list_id)
         extra = await _extra_of(session, shopping_list.id, extra_id)
-        linked = extra.ingredient_id is not None
+        linked = extra.item_id is not None
         other_kind = (
             ("text", "amount_text", "category_id")
             if linked
@@ -914,7 +912,7 @@ async def update_extra(
             if unit is not None and amount is None:
                 problems.append(_field("amount", FieldErrorCode.REQUIRED))
             values = {
-                "ingredient_id": body.ingredient_id or extra.ingredient_id,
+                "item_id": body.ingredient_id or extra.item_id,
                 "amount": amount,
                 "unit": _stored_unit(amount, unit),
             }
@@ -924,21 +922,21 @@ async def update_extra(
                 "amount_text": body.amount_text if "amount_text" in sent else extra.amount_text,
                 "category_id": body.category_id or extra.category_id,
             }
-        found, ingredient = await _find_references(
+        found, item = await _find_references(
             session,
-            ingredient_id=body.ingredient_id if linked else None,
+            item_id=body.ingredient_id if linked else None,
             category_id=None if linked else body.category_id,
             current_category_id=extra.category_id,
         )
         problems += found
         if linked and not problems and _changed(extra, values):
-            moved = values["ingredient_id"] != extra.ingredient_id
-            base_unit = await _extra_base_unit(session, extra, ingredient if moved else None)
+            moved = values["item_id"] != extra.item_id
+            base_unit = await _extra_base_unit(session, extra, item if moved else None)
             problems += _unit_problems(amount, unit, base_unit)
         if problems:
             raise validation_error(problems)
         if _changed(extra, values):
-            if linked and values["ingredient_id"] != extra.ingredient_id:
+            if linked and values["item_id"] != extra.item_id:
                 extra.attrs_snapshot = None
             for name, value in values.items():
                 setattr(extra, name, value)
@@ -956,18 +954,18 @@ def _changed(extra: ListExtraItem, values: Mapping[str, object]) -> bool:
 
 
 async def _extra_base_unit(
-    session: AsyncSession, extra: ListExtraItem, moved_to: Ingredient | None
+    session: AsyncSession, extra: ListExtraItem, moved_to: Item | None
 ) -> str:
-    """The base unit a linked item is calculated with: the ingredient it moves to, else its
-    snapshot's, else its ingredient's (LIST-11)."""
+    """The base unit a linked item is calculated with: the item it moves to, else its
+    snapshot's, else its item's (LIST-11)."""
     if moved_to is not None:
         return moved_to.base_unit
     if extra.attrs_snapshot is not None:
         return str(extra.attrs_snapshot["base_unit"])
-    ingredient = await ingredients_repo.get(session, str(extra.ingredient_id))
-    if ingredient is None:  # pragma: no cover -- the foreign key restricts deleting it
-        raise RuntimeError("a linked extra item's ingredient is missing")
-    return ingredient.base_unit
+    item = await items_repo.get(session, str(extra.item_id))
+    if item is None:  # pragma: no cover -- the foreign key restricts deleting it
+        raise RuntimeError("a linked extra item's item is missing")
+    return item.base_unit
 
 
 async def delete_extra(
@@ -1036,24 +1034,24 @@ async def hide_due_item(
     media: MediaStore,
     principal: Principal,
     list_id: str,
-    ingredient_id: str,
+    item_id: str,
     *,
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
     """Hide a due recurring item on this draft for everyone who sees it (LIST-16; 409
-    `list.not_draft` otherwise), by its ingredient (404 for an unknown one). It need not be
+    `list.not_draft` otherwise), by its item (404 for an unknown one). It need not be
     due or recurring now; hiding it again changes nothing. There is no undo."""
     async with session.begin():
         shopping_list, rights = await access.require_list_edit(session, principal, list_id)
         _require_draft(shopping_list)
-        if await ingredients_repo.get(session, ingredient_id) is None:
+        if await items_repo.get(session, item_id) is None:
             raise not_found()
-        if await lists_repo.get_hidden_due_item(session, shopping_list.id, ingredient_id) is None:
+        if await lists_repo.get_hidden_due_item(session, shopping_list.id, item_id) is None:
             session.add(
                 ListHiddenDueItem(
                     list_id=shopping_list.id,
-                    ingredient_id=ingredient_id,
+                    item_id=item_id,
                     hidden_at=now,
                     hidden_by=principal.user_id,
                 )

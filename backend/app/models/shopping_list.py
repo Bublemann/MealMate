@@ -16,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
-from app.domain.catalog import BRAND_MAX_LENGTH, INGREDIENT_NAME_MAX_LENGTH
+from app.domain.catalog import BRAND_MAX_LENGTH, ITEM_NAME_MAX_LENGTH
 from app.domain.lists import (
     AMOUNT_TEXT_MAX_LENGTH,
     EXTRA_TEXT_MAX_LENGTH,
@@ -106,8 +106,8 @@ class ListMeal(IdMixin, TimestampMixin, Base):
 
 
 class ListMealIngredient(IdMixin, TimestampMixin, Base):
-    """The frozen copy of a meal's row (LIST-11, LIST-15), with the ingredient's name, brand,
-    attributes and category it was calculated with. Ingredients referenced here cannot be
+    """The frozen copy of a meal's row (LIST-11, LIST-15), with the item's name, brand,
+    attributes and category it was calculated with. Items referenced here cannot be
     deleted (ING-05)."""
 
     __tablename__ = "list_meal_ingredients"
@@ -123,11 +123,11 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
         String(36), ForeignKey("list_meals.id", ondelete="CASCADE"), index=True
     )
     position: Mapped[int] = mapped_column(Integer)
-    ingredient_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("ingredients.id", ondelete="RESTRICT"), index=True
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("items.id", ondelete="RESTRICT"), index=True
     )
-    ingredient_name_snapshot: Mapped[str] = mapped_column(String(INGREDIENT_NAME_MAX_LENGTH))
-    ingredient_brand_snapshot: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
+    item_name_snapshot: Mapped[str] = mapped_column(String(ITEM_NAME_MAX_LENGTH))
+    item_brand_snapshot: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
     base_unit_snapshot: Mapped[str] = mapped_column(String(5))
     piece_weight_g_snapshot: Mapped[float | None] = mapped_column(Float)
     density_snapshot: Mapped[float | None] = mapped_column(Float)
@@ -140,18 +140,18 @@ class ListMealIngredient(IdMixin, TimestampMixin, Base):
 
 
 class ListExtraItem(IdMixin, TimestampMixin, Base):
-    """An extra item on a list (LIST-06): linked to an ingredient (merges with its line, with
+    """An extra item on a list (LIST-06): linked to an item (merges with its line, with
     an optional amount and unit) or free text (its own line, with an optional free-text amount
     and a category, *Other* by default).
 
     The id may come from the client (any UUID), so adding is idempotent. Deleting sets
     `deleted_at` (a tombstone for offline clients, SYNC). `attrs_snapshot` holds the
-    ingredient attributes once the list has left `draft` (M5b).
+    item attributes once the list has left `draft` (M5b).
     """
 
     __tablename__ = "list_extra_items"
     __table_args__ = (
-        CheckConstraint("(ingredient_id IS NULL) <> (text IS NULL)", name="ingredient_or_text"),
+        CheckConstraint("(item_id IS NULL) <> (text IS NULL)", name="item_or_text"),
         CheckConstraint("amount IS NULL OR amount > 0", name="amount"),
         CheckConstraint("unit IS NULL OR amount IS NOT NULL", name="unit_needs_amount"),
         CheckConstraint("amount IS NULL OR amount_text IS NULL", name="amount_or_amount_text"),
@@ -160,8 +160,8 @@ class ListExtraItem(IdMixin, TimestampMixin, Base):
     list_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("shopping_lists.id", ondelete="CASCADE"), index=True
     )
-    ingredient_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("ingredients.id", ondelete="RESTRICT"), index=True
+    item_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("items.id", ondelete="RESTRICT"), index=True
     )
     attrs_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     text: Mapped[str | None] = mapped_column(String(EXTRA_TEXT_MAX_LENGTH))
@@ -200,16 +200,16 @@ class ListLineState(Base):
 
 class ListHiddenDueItem(Base):
     """A due recurring item hidden on one list, for everyone who sees it (✕ in the "Fällig"
-    box, LIST-16, D-42). Keyed by ingredient rather than by recurring item, so it survives a
-    couple forming or ending; there is no undo. It goes with its list or ingredient."""
+    box, LIST-16, D-42). Keyed by item rather than by recurring item, so it survives a
+    couple forming or ending; there is no undo. It goes with its list or item."""
 
     __tablename__ = "list_hidden_due_items"
 
     list_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("shopping_lists.id", ondelete="CASCADE"), primary_key=True
     )
-    ingredient_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True, index=True
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("items.id", ondelete="CASCADE"), primary_key=True, index=True
     )
     hidden_at: Mapped[datetime] = mapped_column(UTCDateTime())
     hidden_by: Mapped[str | None] = mapped_column(

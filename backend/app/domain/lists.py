@@ -1,7 +1,7 @@
 """Input rules and line keys of shopping lists (LIST-01..08, plan §§ 5.6 and 5.7), and the
 pages of the list feed (UI-02).
 
-A line is identified by its key: `i:<ingredient_id>` for an ingredient (all its parts from
+A line is identified by its key: `i:<item_id>` for an item (all its parts from
 meals and linked extra items merge into it, AGG-02), `x:<extra_item_id>` for a free-text extra
 item (never merged). Check and hide states (`list_line_states`) are stored per key, so keys
 must stay stable (AGG-05).
@@ -32,14 +32,14 @@ ListStatus = Literal["draft", "shopping", "done"]
 DetachedReason = Literal["deleted", "unavailable"]
 LIST_STATUSES: tuple[ListStatus, ...] = get_args(ListStatus)
 
-INGREDIENT_KEY_PREFIX = "i:"
+ITEM_KEY_PREFIX = "i:"
 TEXT_KEY_PREFIX = "x:"
 # What a client may send as a line key: a prefix and a UUID as the server writes it.
 LINE_KEY_PATTERN = r"^(i|x):[0-9a-f-]{36}$"
 
 
-def ingredient_key(ingredient_id: str) -> str:
-    return INGREDIENT_KEY_PREFIX + ingredient_id
+def item_key(item_id: str) -> str:
+    return ITEM_KEY_PREFIX + item_id
 
 
 def text_key(extra_item_id: str) -> str:

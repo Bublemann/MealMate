@@ -8,12 +8,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
 from app.domain.catalog import (
     BRAND_MAX_LENGTH,
-    INGREDIENT_NAME_MAX_LENGTH,
+    ITEM_NAME_MAX_LENGTH,
     NAME_NORM_FACTOR,
     QUANTITY_TEXT_MAX_LENGTH,
 )
 from app.domain.nutrients import NUTRIENT_KEYS
-from app.domain.units import IngredientAttrs
+from app.domain.units import ItemAttrs
 
 
 class NutrientColumns:
@@ -40,15 +40,15 @@ for _key in NUTRIENT_KEYS:
     setattr(NutrientColumns, _key, mapped_column(Float, nullable=True))
 
 
-class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
-    """A shared ingredient, editable by everyone like a wiki (ING-01, ING-02). There is one kind
-    of ingredient: typed by hand ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and
+class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
+    """A shared item, editable by everyone like a wiki (ING-01, ING-02). There is one kind
+    of item: typed by hand ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and
     taken from Open Food Facts with its barcode.
 
-    The nutrient columns are the ingredient's own values per 100 g, or per 100 ml for base unit
-    `ml` (NUT-02); null is unknown. A `piece` ingredient's pieces count through its piece weight
+    The nutrient columns are the item's own values per 100 g, or per 100 ml for base unit
+    `ml` (NUT-02); null is unknown. A `piece` item's pieces count through its piece weight
     (NUT-05). Names are not unique: two brands of the same thing are two
-    ingredients with the same name. A barcode belongs to at most one ingredient.
+    items with the same name. A barcode belongs to at most one item.
 
     The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
     fields a user changed (`name`, `nutrients.kcal`, ...), which a refresh never overwrites
@@ -58,19 +58,19 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
     rounding.
     """
 
-    __tablename__ = "ingredients"
+    __tablename__ = "items"
     __table_args__ = (
         CheckConstraint("base_unit IN ('g', 'ml', 'piece')", name="base_unit"),
         CheckConstraint("source IN ('off', 'manual')", name="source"),
     )
 
-    name: Mapped[str] = mapped_column(String(INGREDIENT_NAME_MAX_LENGTH))
+    name: Mapped[str] = mapped_column(String(ITEM_NAME_MAX_LENGTH))
     name_norm: Mapped[str] = mapped_column(
-        String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
+        String(ITEM_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
     )
     # Dictionary order by name, then brand (ING-03, `domain.text.sort_key`).
     name_sort: Mapped[str] = mapped_column(
-        String(INGREDIENT_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
+        String(ITEM_NAME_MAX_LENGTH * NAME_NORM_FACTOR), index=True
     )
     brand: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH))
     brand_norm: Mapped[str | None] = mapped_column(String(BRAND_MAX_LENGTH * NAME_NORM_FACTOR))
@@ -80,7 +80,7 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
     base_unit: Mapped[str] = mapped_column(String(5), default="g")
-    # Only for `piece` (D-32); migration 0014 cleared it on g and ml ingredients and dropped
+    # Only for `piece` (D-32); migration 0014 cleared it on g and ml items and dropped
     # the density (D-34). See `attrs()`.
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
     quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))
@@ -99,7 +99,7 @@ class Ingredient(IdMixin, TimestampMixin, NutrientColumns, Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
 
-    def attrs(self) -> IngredientAttrs:
-        """What calculations know about the ingredient as it is now (D-32): its base unit, and
+    def attrs(self) -> ItemAttrs:
+        """What calculations know about the item as it is now (D-32): its base unit, and
         its piece weight when it is counted in pieces; never a density."""
-        return IngredientAttrs.live(self.base_unit, self.piece_weight_g)
+        return ItemAttrs.live(self.base_unit, self.piece_weight_g)

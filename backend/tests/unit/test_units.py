@@ -11,7 +11,7 @@ from app.domain.units import (
     UNIT_KIND,
     BaseUnit,
     Converted,
-    IngredientAttrs,
+    ItemAttrs,
     Unit,
     UnitKind,
     convert,
@@ -21,16 +21,16 @@ from app.domain.units import (
     stops_fitting,
 )
 
-G = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
-G_PIECE = IngredientAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
-G_DENSE = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=0.92)
-ML = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=None)
-ML_PIECE = IngredientAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=None)
-ML_FULL = IngredientAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=1.03)
-G_ZERO = IngredientAttrs(BaseUnit.G, piece_weight_g=0, density_g_per_ml=0)
-EGGS = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
-EGGS_BARE = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=None, density_g_per_ml=None)
-EGGS_DENSE = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=1.03)
+G = ItemAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
+G_PIECE = ItemAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
+G_DENSE = ItemAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=0.92)
+ML = ItemAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=None)
+ML_PIECE = ItemAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=None)
+ML_FULL = ItemAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=1.03)
+G_ZERO = ItemAttrs(BaseUnit.G, piece_weight_g=0, density_g_per_ml=0)
+EGGS = ItemAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
+EGGS_BARE = ItemAttrs(BaseUnit.PIECE, piece_weight_g=None, density_g_per_ml=None)
+EGGS_DENSE = ItemAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=1.03)
 
 
 def test_units_in_display_order() -> None:
@@ -156,19 +156,19 @@ def test_fitting_units_in_display_order() -> None:
 @pytest.mark.parametrize(
     ("base_unit", "piece_weight_g", "expected"),
     [
-        (BaseUnit.G, 60, IngredientAttrs(BaseUnit.G, None, None)),
-        (BaseUnit.ML, 1030, IngredientAttrs(BaseUnit.ML, None, None)),
-        (BaseUnit.PIECE, 60, IngredientAttrs(BaseUnit.PIECE, 60, None)),
-        (BaseUnit.PIECE, None, IngredientAttrs(BaseUnit.PIECE, None, None)),
-        ("piece", 60, IngredientAttrs(BaseUnit.PIECE, 60, None)),
+        (BaseUnit.G, 60, ItemAttrs(BaseUnit.G, None, None)),
+        (BaseUnit.ML, 1030, ItemAttrs(BaseUnit.ML, None, None)),
+        (BaseUnit.PIECE, 60, ItemAttrs(BaseUnit.PIECE, 60, None)),
+        (BaseUnit.PIECE, None, ItemAttrs(BaseUnit.PIECE, None, None)),
+        ("piece", 60, ItemAttrs(BaseUnit.PIECE, 60, None)),
     ],
 )
 def test_live_attributes(
-    base_unit: BaseUnit | str, piece_weight_g: float | None, expected: IngredientAttrs
+    base_unit: BaseUnit | str, piece_weight_g: float | None, expected: ItemAttrs
 ) -> None:
     """A live ingredient has no density, and a piece weight only when counted in pieces
     (D-32): what a g or ml ingredient still has stored from before is left out."""
-    assert IngredientAttrs.live(base_unit, piece_weight_g) == expected
+    assert ItemAttrs.live(base_unit, piece_weight_g) == expected
 
 
 @pytest.mark.parametrize(
@@ -217,7 +217,7 @@ def test_live_attributes(
 def test_convert(
     amount: float,
     unit: Unit,
-    attrs: IngredientAttrs,
+    attrs: ItemAttrs,
     estimate_allowed: bool,
     expected: Converted | None,
 ) -> None:
@@ -245,9 +245,9 @@ def test_base_unit_as_a_plain_string(
     base_unit: str, amount: float, unit: Unit, expected: float
 ) -> None:
     """Rows and JSON snapshots hold the base unit as a plain string."""
-    attrs = IngredientAttrs(base_unit, piece_weight_g=60, density_g_per_ml=1.03)
+    attrs = ItemAttrs(base_unit, piece_weight_g=60, density_g_per_ml=1.03)
     assert attrs.base_unit is BaseUnit(base_unit)
-    assert attrs == IngredientAttrs(BaseUnit(base_unit), piece_weight_g=60, density_g_per_ml=1.03)
+    assert attrs == ItemAttrs(BaseUnit(base_unit), piece_weight_g=60, density_g_per_ml=1.03)
     result = convert(amount, unit, attrs, allow_estimate=False)
     assert result is not None
     assert result.value == pytest.approx(expected)
@@ -255,11 +255,11 @@ def test_base_unit_as_a_plain_string(
 
 def test_an_unknown_base_unit_is_refused() -> None:
     with pytest.raises(ValueError, match="'kg' is not a valid BaseUnit"):
-        IngredientAttrs("kg", piece_weight_g=None, density_g_per_ml=None)
+        ItemAttrs("kg", piece_weight_g=None, density_g_per_ml=None)
 
 
 attrs_strategy = st.builds(
-    IngredientAttrs,
+    ItemAttrs,
     base_unit=st.sampled_from(BaseUnit),
     piece_weight_g=st.none() | st.floats(0.1, 10_000),
     density_g_per_ml=st.none() | st.floats(0.1, 5),
@@ -274,7 +274,7 @@ attrs_strategy = st.builds(
     estimate_allowed=st.booleans(),
 )
 def test_conversion_is_linear(
-    amount: float, factor: float, unit: Unit, attrs: IngredientAttrs, estimate_allowed: bool
+    amount: float, factor: float, unit: Unit, attrs: ItemAttrs, estimate_allowed: bool
 ) -> None:
     once = convert(amount, unit, attrs, allow_estimate=estimate_allowed)
     scaled = convert(amount * factor, unit, attrs, allow_estimate=estimate_allowed)
@@ -288,7 +288,7 @@ def test_conversion_is_linear(
 
 @given(amount=st.floats(0.001, 100_000), unit=st.sampled_from(Unit), attrs=attrs_strategy)
 def test_the_base_kind_always_converts_without_estimate(
-    amount: float, unit: Unit, attrs: IngredientAttrs
+    amount: float, unit: Unit, attrs: ItemAttrs
 ) -> None:
     result = convert(amount, unit, attrs, allow_estimate=True)
     if UNIT_KIND[unit] is BASE_KIND[attrs.base_unit]:
@@ -300,10 +300,10 @@ def test_the_base_kind_always_converts_without_estimate(
 
 @given(amount=st.floats(0.001, 100_000), unit=st.sampled_from(Unit), attrs=attrs_strategy)
 def test_a_piece_ingredient_converts_only_pieces(
-    amount: float, unit: Unit, attrs: IngredientAttrs
+    amount: float, unit: Unit, attrs: ItemAttrs
 ) -> None:
     """Whatever piece weight and density it has (REF-02, D-32)."""
-    piece = IngredientAttrs(BaseUnit.PIECE, attrs.piece_weight_g, attrs.density_g_per_ml)
+    piece = ItemAttrs(BaseUnit.PIECE, attrs.piece_weight_g, attrs.density_g_per_ml)
     result = convert(amount, unit, piece, allow_estimate=True)
     if unit is Unit.PIECE:
         assert result == Converted(amount, estimate=False)
@@ -322,7 +322,7 @@ def test_live_ingredients_convert_only_within_their_kind(
 ) -> None:
     """Nothing converts between grams, millilitres and pieces for a live ingredient (D-32):
     strictly, only its own kind converts; with the estimate, also spoons of a g ingredient."""
-    attrs = IngredientAttrs.live(base_unit, piece_weight_g)
+    attrs = ItemAttrs.live(base_unit, piece_weight_g)
     strict = convert(amount, unit, attrs, allow_estimate=False)
     estimated = convert(amount, unit, attrs, allow_estimate=True)
     same_kind = UNIT_KIND[unit] is BASE_KIND[base_unit]
@@ -341,6 +341,6 @@ def test_every_fitting_amount_of_a_live_ingredient_converts_with_the_estimate(
     amount: float, unit: Unit, base_unit: BaseUnit, piece_weight_g: float | None
 ) -> None:
     """So the nutrition only ever misses an amount because it doesn't fit (NUT-05)."""
-    attrs = IngredientAttrs.live(base_unit, piece_weight_g)
+    attrs = ItemAttrs.live(base_unit, piece_weight_g)
     converted = convert(amount, unit, attrs, allow_estimate=True)
     assert (converted is not None) is fits(amount, unit, base_unit)

@@ -1,7 +1,7 @@
 """Notices (D-51): each is for one user and stays unread until that user dismisses it.
 
 The lifecycle hooks write them (`services.hooks`), so this module must not import
-`services.ingredients` or anything else that imports the hooks.
+`services.items` or anything else that imports the hooks.
 """
 
 from collections.abc import Iterable

@@ -18,10 +18,10 @@ from app.db.base import Base, IdMixin, TimestampMixin
 
 
 class RecurringItem(IdMixin, TimestampMixin, Base):
-    """An ingredient a user, or a couple together, buys again and again (LIST-16, D-42).
+    """An item a user, or a couple together, buys again and again (LIST-16, D-42).
 
     It belongs to one set: an accepted couple's (`couple_id`) or a user's without one
-    (`user_id`), and each set holds an ingredient once. `interval_days` is the interval the
+    (`user_id`), and each set holds an item once. `interval_days` is the interval the
     user set, in days, by hand while `interval_manual`; otherwise the average of
     `measured_intervals` serves from two on (`domain.recurring`). Only the last purchase is kept:
     its date in the instance's time zone, its amount and unit when it was one amount, the list
@@ -37,16 +37,16 @@ class RecurringItem(IdMixin, TimestampMixin, Base):
         CheckConstraint("last_unit IS NULL OR last_amount IS NOT NULL", name="unit_needs_amount"),
         CheckConstraint("json_type(measured_intervals) = 'array'", name="measured_intervals"),
         Index(
-            "uq_recurring_items_couple_id_ingredient_id",
+            "uq_recurring_items_couple_id_item_id",
             "couple_id",
-            "ingredient_id",
+            "item_id",
             unique=True,
             sqlite_where=text("couple_id IS NOT NULL"),
         ),
         Index(
-            "uq_recurring_items_user_id_ingredient_id",
+            "uq_recurring_items_user_id_item_id",
             "user_id",
-            "ingredient_id",
+            "item_id",
             unique=True,
             sqlite_where=text("user_id IS NOT NULL"),
         ),
@@ -58,8 +58,8 @@ class RecurringItem(IdMixin, TimestampMixin, Base):
     user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    ingredient_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("ingredients.id", ondelete="CASCADE"), index=True
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("items.id", ondelete="CASCADE"), index=True
     )
     interval_days: Mapped[int] = mapped_column(Integer)
     interval_manual: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -9,7 +9,7 @@ def base_unit(name: str, brand: str | None) -> str:
     several of the same name)."""
     [item] = [
         item
-        for item in demo.DEMO_INGREDIENTS
+        for item in demo.DEMO_ITEMS
         if item.name == name and (brand is None or item.brand == brand)
     ]
     return item.base_unit
@@ -25,18 +25,18 @@ def test_every_demo_amount_fits_its_ingredient() -> None:
             *demo_list.extras,
             *(demo_list.shopping.added if demo_list.shopping else ()),
         )
-        if extra.ingredient is not None
+        if extra.item is not None
     ]
     assert rows
     assert extras
     for row in rows:
-        assert fits(row.amount, row.unit, base_unit(row.ingredient, row.brand)), row
+        assert fits(row.amount, row.unit, base_unit(row.item, row.brand)), row
     for extra in extras:
-        assert extra.ingredient is not None
-        assert fits(extra.amount, extra.unit, base_unit(extra.ingredient, extra.brand)), extra
+        assert extra.item is not None
+        assert fits(extra.amount, extra.unit, base_unit(extra.item, extra.brand)), extra
 
 
 def test_only_demo_ingredients_counted_in_pieces_have_a_piece_weight() -> None:
     """ING-02, D-32."""
-    for item in demo.DEMO_INGREDIENTS:
+    for item in demo.DEMO_ITEMS:
         assert item.piece_weight_g is None or item.base_unit == "piece", item

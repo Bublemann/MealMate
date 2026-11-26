@@ -8,15 +8,15 @@ Merging rules (AGG-03), deliberately simple:
 1. parts without an amount only set `has_unspecified` ("+ some");
 2. if all parts with an amount are of one kind, they add up in that kind's segment: pieces stay
    pieces and spoons stay a volume, nothing is converted;
-3. otherwise every part is converted strictly (no 1 g/ml estimate) to the ingredient's base
+3. otherwise every part is converted strictly (no 1 g/ml estimate) to the item's base
    unit where its attributes allow it; the others stay in their own kind's segment. Only parts
-   frozen before D-32 cross kinds (a piece weight or density with g or ml); live ingredients
-   have neither (`IngredientAttrs.live`), so their spoons of a g ingredient and amounts that
+   frozen before D-32 cross kinds (a piece weight or density with g or ml); live items
+   have neither (`ItemAttrs.live`), so their spoons of a g item and amounts that
    don't fit sit beside the rest: "500 g + 2 Stk." (`units.convert`).
 
 Sums use `math.fsum`, so they do not depend on the order of the parts (AGG-05).
 
-"Needs more" (LIST-12) compares in the ingredient's base unit whenever every part with an
+"Needs more" (LIST-12) compares in the item's base unit whenever every part with an
 amount converts to it strictly, so rule 2 cannot make a line look different in kind: a checked
 "2 Stk. + 100 g" (460 g of apples frozen before D-32) stays checked when only "2 Stk." (360 g)
 remain. Otherwise it compares segment by segment.
@@ -33,7 +33,7 @@ from app.domain.units import (
     SPOONS,
     UNIT_KIND,
     BaseUnit,
-    IngredientAttrs,
+    ItemAttrs,
     Unit,
     UnitKind,
     convert,
@@ -73,7 +73,7 @@ class Part:
     line_key: str
     amount: float | None
     unit: Unit | None
-    attrs: IngredientAttrs | None
+    attrs: ItemAttrs | None
     source: SourceRef
 
 
@@ -83,7 +83,7 @@ class LineTotals:
     of tablespoons and teaspoons only, so it is shown in tbsp (AGG-04).
 
     `base_total` is the sum of all parts with an amount, each converted strictly into the
-    ingredient's `base_unit`; both are None unless there is such a part and every one converts
+    item's `base_unit`; both are None unless there is such a part and every one converts
     (not for free text, missing piece weights or densities, or differing base units). Only
     `needs_more` uses it.
     """

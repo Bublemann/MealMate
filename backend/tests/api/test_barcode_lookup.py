@@ -13,7 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.core.ratelimit import SlidingWindow
-from app.models import Ingredient as IngredientRow
+from app.models import Item as ItemRow
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
 from tests.catalog import NO_NUTRIENTS, UPC_A, create_from_off, create_ingredient, ref
 from tests.off import (
@@ -170,7 +170,7 @@ async def test_an_open_food_facts_proposal_is_not_saved(
         },
         "off_unavailable": False,
     }
-    assert len(await scalars(app, select(IngredientRow.id))) == 3
+    assert len(await scalars(app, select(ItemRow.id))) == 3
 
 
 async def test_the_proposal_name_follows_the_users_language(
@@ -426,7 +426,7 @@ async def test_save_a_proposal_in_one_request(
         "created_at": "2026-09-27T12:00:00Z",
         "updated_at": "2026-09-27T12:00:00Z",
     }
-    [modified_at] = await scalars(app, select(IngredientRow.off_last_modified_at))
+    [modified_at] = await scalars(app, select(ItemRow.off_last_modified_at))
     assert modified_at.isoformat() == "2026-01-01T00:00:00+00:00"
     # Found in our own database from now on (BAR-02); fresh, so not refreshed.
     off_api.reset()
@@ -439,7 +439,7 @@ async def test_save_a_proposal_without_edits(app: FastAPI, api: AsyncClient, ann
     body = await create_from_off(api, anna, "Haferflocken", OATS)
 
     assert (body["source"], body["user_edited_fields"]) == ("off", [])
-    assert await scalars(app, select(IngredientRow.off_last_modified_at)) == [None]
+    assert await scalars(app, select(ItemRow.off_last_modified_at)) == [None]
 
 
 @pytest.mark.parametrize(

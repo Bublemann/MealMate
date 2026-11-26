@@ -24,32 +24,36 @@ _Avoid_: spouse, co-owner
 
 ### Food
 
+**Item**:
+Something one buys, shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category and a base unit, and, unless it is a supply, its own nutrition values per 100 g/ml. Food and supplies are both items; two brands of the same thing are two items.
+_Avoid_: ingredient (for the item itself), product, article, food
+
+**Supply**:
+An item that isn't food (toilet paper, candles). It has no nutrition and can be on shopping lists but never in a meal.
+_Avoid_: non-food item, household item, item without nutrition
+
 **Ingredient**:
-A food or household item shared by all users: typed by hand, optionally with a brand ("Zwiebel", "Eier (REWE)"), or a specific product with a barcode, usually from OFF ("Milch (Weihenstephan)"). It has a category, a base unit and its own nutrition values per 100 g/ml. There is only this one kind; two brands of the same thing are two ingredients.
-_Avoid_: product, food, article
+An item as used in a meal, with its amount ("200 g Zwiebel"). A supply is never an ingredient.
+_Avoid_: meal row, component
 
 **Base unit**:
-What an ingredient is counted in, chosen once for it: grams, millilitres or pieces (Stück). Its amounts in meals and on shopping lists use units of that kind only; an ingredient counted in grams may also be measured in spoons. Nothing is converted between grams, millilitres and pieces.
+What an item is counted in, chosen once for it: grams, millilitres or pieces (Stück). Its amounts in meals and on shopping lists use units of that kind only; an item counted in grams may also be measured in spoons. Nothing is converted between grams, millilitres and pieces.
 _Avoid_: unit (on its own), format, measure
 
 **Piece weight**:
-What one piece of an ingredient counted in pieces weighs (e.g. one egg = 60 g). It only serves to work out that ingredient's nutrition, which is given per 100 g like any other.
+What one piece of an item counted in pieces weighs (e.g. one egg = 60 g). It only serves to work out that item's nutrition, which is given per 100 g like any other.
 _Avoid_: unit weight, piece size
 
-**Pack size**:
-The amount printed on a package ("500 g", "6 × 1,5 l"), as OFF reports it or as a user corrects or types it; it may be unknown. Information only, never used in a calculation; not the same as a piece weight.
-_Avoid_: package, quantity, content
-
 **Brand**:
-The brand name on an ingredient (e.g. "Weihenstephan", "REWE"). It is optional, with or without a barcode, and always shown after the ingredient's name.
+The brand name on an item (e.g. "Weihenstephan", "REWE"). It is optional, with or without a barcode, and always shown after the item's name.
 _Avoid_: manufacturer, label
 
 **Barcode**:
-The EAN or UPC number printed on a package. An ingredient has at most one, and no two ingredients share one.
+The EAN or UPC number printed on a package. An item has at most one, and no two items share one.
 _Avoid_: EAN, code, product
 
 **Category**:
-The supermarket section an ingredient belongs to (e.g. "Obst & Gemüse"), with a German and an English name. Admins add, rename and delete categories and put them in the store's walking order.
+The supermarket section an item belongs to (e.g. "Obst & Gemüse"), with a German and an English name. Admins add, rename and delete categories and put them in the store's walking order.
 _Avoid_: aisle, section, department
 
 **Walking order**:
@@ -57,11 +61,11 @@ The order in which categories come on a shopping list, following the way through
 _Avoid_: sort order
 
 **Other**:
-The category for things that belong in no other section ("Sonstiges"), and the default for new ingredients and free-text extra items.
+The category for things that belong in no other section ("Sonstiges"), and the default for new items and free-text extra items.
 _Avoid_: misc, uncategorized
 
 **Uncategorized**:
-The built-in category ("Ohne Kategorie") that holds ingredients whose category an admin deleted, until someone gives each one a new category. Nothing is put there on purpose.
+The built-in category ("Ohne Kategorie") that holds items whose category an admin deleted, until someone gives each one a new category. Nothing is put there on purpose.
 _Avoid_: Other, no category, unsorted
 
 **Deleted category**:
@@ -69,7 +73,7 @@ A category an admin deleted. It can no longer be picked or ordered, but shopping
 _Avoid_: retired category, archived category
 
 **Meal**:
-A recipe owned by one user: ingredients with amounts, instructions, photo, source link, and "makes N servings".
+A recipe owned by one user: ingredients, instructions, photo, source link, and "makes N servings".
 _Avoid_: recipe, dish
 
 **Serving**:
@@ -82,7 +86,7 @@ _Avoid_: kitchen, style
 
 **Tag**:
 A free-text label on a meal (e.g. "schnell"), from one pool shared by all users. A meal can have several.
-_Avoid_: label, keyword, category (categories belong to ingredients)
+_Avoid_: label, keyword, category (categories belong to items)
 
 **OFF**:
 Open Food Facts, the open database of packaged foods in which barcodes and names are looked up.
@@ -126,11 +130,11 @@ A shopping list whose shopping was finished. It is read-only and kept as the own
 _Avoid_: archived list, completed list, history entry
 
 **Line**:
-One row on a shopping list after aggregation (e.g. "Zwiebeln 500 g"), merging the same ingredient from all meals and extra items. Two brands of the same thing are two ingredients, so they make two lines.
+One row on a shopping list after aggregation (e.g. "Zwiebeln 500 g"), merging the same item from all meals and extra items. Two brands of the same thing are two items, so they make two lines.
 _Avoid_: entry, position, row
 
 **Extra item**:
-Something added to a shopping list by hand, either linked to an ingredient ("1 l Milch") or free text ("Geburtstagskerzen").
+Something added to a shopping list by hand, either linked to an item ("1 l Milch") or free text ("Geburtstagskerzen").
 _Avoid_: manual item, custom item
 
 **Frozen meal**:
@@ -141,8 +145,16 @@ _Avoid_: snapshot, locked meal
 A meal on a draft that was deleted or stopped being visible to the list's owner. Its ingredients were frozen into the list and it is marked "no longer available".
 _Avoid_: orphaned meal, removed meal
 
+**Eaten** (meal):
+The state of a meal on a done list that someone has marked as eaten. Until then the meal counts as still at home.
+_Avoid_: cooked, consumed, used up
+
+**Leftover meal**:
+A meal from the most recent done list, not yet eaten, that a new draft carries over without putting its ingredients on the list again. It leaves the draft once it is marked as eaten.
+_Avoid_: carried-over meal, remaining meal, old meal
+
 **Recurring item**:
-An ingredient that a user, or a couple together, buys again and again at a roughly steady interval (toilet paper, toothpaste).
+An item that a user, or a couple together, buys again and again at a roughly steady interval (toilet paper, toothpaste).
 _Avoid_: staple, pantry item, regular item
 
 **Due** (recurring item):

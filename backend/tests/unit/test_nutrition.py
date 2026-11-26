@@ -6,15 +6,15 @@ from hypothesis import strategies as st
 
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.nutrition import MealRow, Missing, meal_nutrition
-from app.domain.units import BaseUnit, IngredientAttrs, Unit
+from app.domain.units import BaseUnit, ItemAttrs, Unit
 
-G = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
+G = ItemAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
 # A g ingredient with a piece weight, and an ml one with a density, as only rows frozen before
 # D-32 have them: the nutrition counts by the fitting rule all the same.
-EGG = IngredientAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
-MILK = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=1.03)
-EGG_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
-BARE_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=None, density_g_per_ml=None)
+EGG = ItemAttrs(BaseUnit.G, piece_weight_g=60, density_g_per_ml=None)
+MILK = ItemAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=1.03)
+EGG_PIECES = ItemAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
+BARE_PIECES = ItemAttrs(BaseUnit.PIECE, piece_weight_g=None, density_g_per_ml=None)
 FULL = dict.fromkeys(NUTRIENT_KEYS, 10.0)
 
 
@@ -22,7 +22,7 @@ def row(
     name: str,
     amount: float | None,
     unit: Unit | None,
-    attrs: IngredientAttrs = G,
+    attrs: ItemAttrs = G,
     values: dict[str, float | None] | None = None,
 ) -> MealRow:
     return MealRow(name.lower(), name, amount, unit, attrs, FULL if values is None else values)
@@ -105,13 +105,13 @@ def test_pieces_of_a_piece_ingredient() -> None:
     [
         (2, Unit.PIECE, EGG),  # a piece weight on a g ingredient converts nothing (D-32)
         (2, None, EGG),
-        (0.5, Unit.L, IngredientAttrs(BaseUnit.G, None, density_g_per_ml=1.03)),
+        (0.5, Unit.L, ItemAttrs(BaseUnit.G, None, density_g_per_ml=1.03)),
         (103, Unit.G, MILK),
         (1, Unit.TBSP, EGG_PIECES),
     ],
 )
 def test_an_amount_that_does_not_fit_counts_as_unknown(
-    amount: float, unit: Unit | None, attrs: IngredientAttrs
+    amount: float, unit: Unit | None, attrs: ItemAttrs
 ) -> None:
     """NUT-05: named in the "incomplete" marker, never converted, whatever the attributes
     (REF-02, D-33)."""
@@ -123,7 +123,7 @@ def test_an_amount_that_does_not_fit_counts_as_unknown(
 def test_spoons_of_a_g_ingredient_are_an_estimate() -> None:
     """NUT-05: 2 tbsp of sugar count as 30 g; spoons of an ml ingredient are exact."""
     sugar = row("Zucker", 2, Unit.TBSP, values={"kcal": 400})
-    oil = row("Öl", 1, Unit.TBSP, IngredientAttrs(BaseUnit.ML, None, None), values=FULL)
+    oil = row("Öl", 1, Unit.TBSP, ItemAttrs(BaseUnit.ML, None, None), values=FULL)
 
     assert meal_nutrition([sugar], servings=1).totals["kcal"] == pytest.approx(120)
     assert meal_nutrition([sugar], servings=1).estimate

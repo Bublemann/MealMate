@@ -21,7 +21,7 @@ from app.schemas.ingredients import (
     IngredientUpdate,
     OffSearchPage,
 )
-from app.services import barcodes, ingredients, off_refresh, off_search
+from app.services import barcodes, items, off_refresh, off_search
 
 router = APIRouter(prefix="/api/ingredients", tags=["ingredients"], responses=ERROR_RESPONSES)
 
@@ -51,7 +51,7 @@ async def list_ingredients(
     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
     ingredients in that order (at most 1000). `category_id`
     is repeatable: an ingredient matches if it is in any of the given categories."""
-    return await ingredients.search(session, query=q, category_ids=category_id or [])
+    return await items.search(session, query=q, category_ids=category_id or [])
 
 
 @router.get("/similar")
@@ -63,7 +63,7 @@ async def list_similar_ingredients(
 ) -> list[IngredientSummary]:
     """Up to five ingredients with a similar name, for the "similar ingredient exists" hint
     (only a hint: names need not be unique); those with the same name and `brand` first."""
-    return await ingredients.similar(session, name, brand)
+    return await items.similar(session, name, brand)
 
 
 @router.get("/lookup")
@@ -111,7 +111,7 @@ async def create_ingredient(
 ) -> Ingredient:
     """Add an ingredient, by hand or from an Open Food Facts proposal (`off`) in one request;
     409 `ingredient.barcode_taken` if another ingredient has the barcode."""
-    return await ingredients.create_ingredient(session, principal, body, now=now)
+    return await items.create_item(session, principal, body, now=now)
 
 
 @router.get("/{ingredient_id}")
@@ -126,7 +126,7 @@ async def get_ingredient(
 ) -> Ingredient:
     """An ingredient with its values, barcode, Open Food Facts data and usage; a stale one from
     Open Food Facts is refreshed after the response."""
-    result = await ingredients.get_ingredient(session, ingredient_id)
+    result = await items.get_item(session, ingredient_id)
     off_refresh.schedule_if_stale(background, refresh, database, [result], now=now)
     return result
 
@@ -143,7 +143,7 @@ async def update_ingredient(
     Clearing or changing the barcode of one from Open Food Facts makes it manual. 409
     `ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit
     change would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33)."""
-    return await ingredients.update_ingredient(session, principal, ingredient_id, body, now=now)
+    return await items.update_item(session, principal, ingredient_id, body, now=now)
 
 
 @router.post("/{ingredient_id}/barcode")
@@ -158,7 +158,7 @@ async def link_barcode(
     MealMate"); it never replaces one: 409 `ingredient.has_barcode` if it has a barcode, 409
     `ingredient.barcode_taken` if another ingredient has this one. The edit form changes a
     barcode with PATCH instead."""
-    return await ingredients.link_barcode(session, principal, ingredient_id, body, now=now)
+    return await items.link_barcode(session, principal, ingredient_id, body, now=now)
 
 
 @router.post("/{ingredient_id}/pending-update/apply")
@@ -167,7 +167,7 @@ async def apply_pending_update(
 ) -> Ingredient:
     """Take the newer Open Food Facts values (BAR-06); those fields are no longer
     user-edited. 409 `ingredient.no_pending_update` if there are none."""
-    return await ingredients.apply_pending_update(session, principal, ingredient_id, now=now)
+    return await items.apply_pending_update(session, principal, ingredient_id, now=now)
 
 
 @router.post("/{ingredient_id}/pending-update/ignore")
@@ -176,4 +176,4 @@ async def ignore_pending_update(
 ) -> Ingredient:
     """Keep the user's values (BAR-06); the same Open Food Facts version is not proposed
     again. 409 `ingredient.no_pending_update` if there is nothing to ignore."""
-    return await ingredients.ignore_pending_update(session, principal, ingredient_id, now=now)
+    return await items.ignore_pending_update(session, principal, ingredient_id, now=now)

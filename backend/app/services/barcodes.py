@@ -1,9 +1,9 @@
-"""The barcode lookup (BAR-02, BAR-03, plan § 5.9): our own ingredients first, then Open Food
+"""The barcode lookup (BAR-02, BAR-03, plan § 5.9): our own items first, then Open Food
 Facts.
 
-A barcode we know goes straight to its ingredient. Otherwise Open Food Facts is asked, outside
+A barcode we know goes straight to its item. Otherwise Open Food Facts is asked, outside
 any transaction, and its product becomes a *proposal* that is not saved: the app opens the
-ingredient form prefilled with it, and the user may correct values before saving it with
+item form prefilled with it, and the user may correct values before saving it with
 `POST /api/ingredients` (with `off`), in one request.
 """
 
@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ApiError, ErrorCode
 from app.domain.units import BaseUnit
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, OffClient, OffProduct
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import users as users_repo
 from app.schemas.ingredients import BarcodeLookup, NutritionBasisName, ProductProposal
 from app.schemas.nutrition import NutrientValues
-from app.services import ingredients
+from app.services import items
 from app.services.off_refresh import DEFAULT_LANGUAGE
 from app.services.principal import Principal
 
@@ -69,19 +69,19 @@ async def lookup(
     own_only: bool = False,
 ) -> BarcodeLookup:
     """Look a barcode up (422 `invalid_format` if it is not a valid EAN/UPC code): an
-    ingredient of ours, else Open Food Facts' proposal, else nothing (after a transient
+    item of ours, else Open Food Facts' proposal, else nothing (after a transient
     failure, Open Food Facts gets a second try before that, see `OffClient.fetch`). While too
     many lookups wait for Open Food Facts: 503 `off.busy`. With `own_only`, Open Food Facts
     isn't asked: the edit pop-up's scan (BAR-03) and the meal form's (BAR-02) only need to
-    know whether an ingredient has the barcode."""
-    barcode = ingredients.canonical_barcode(text, ("query", "barcode"))
+    know whether an item has the barcode."""
+    barcode = items.canonical_barcode(text, ("query", "barcode"))
     async with session.begin():
-        row = await ingredients_repo.by_barcode(session, barcode)
+        row = await items_repo.by_barcode(session, barcode)
         if row is not None:
             return BarcodeLookup(
                 barcode=barcode,
                 found_in="db",
-                ingredient=await ingredients.detail(session, row),
+                ingredient=await items.detail(session, row),
                 proposal=None,
                 off_unavailable=False,
             )

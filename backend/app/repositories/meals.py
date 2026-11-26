@@ -118,34 +118,32 @@ async def set_tags(session: AsyncSession, meal_id: str, tag_ids: Iterable[str]) 
     session.add_all(MealTag(meal_id=meal_id, tag_id=tag_id) for tag_id in dict.fromkeys(tag_ids))
 
 
-async def count_with_ingredient(session: AsyncSession, ingredient_id: str) -> int:
-    """How many meals have at least one row of the ingredient."""
+async def count_with_item(session: AsyncSession, item_id: str) -> int:
+    """How many meals have at least one row of the item."""
     result = await session.execute(
         select(func.count(func.distinct(MealIngredient.meal_id))).where(
-            MealIngredient.ingredient_id == ingredient_id
+            MealIngredient.item_id == item_id
         )
     )
     return result.scalar_one()
 
 
 async def amounts_of(
-    session: AsyncSession, ingredient_id: str
+    session: AsyncSession, item_id: str
 ) -> list[tuple[str, float | None, str | None]]:
-    """The meal id, amount and unit of every row of the ingredient."""
+    """The meal id, amount and unit of every row of the item."""
     result = await session.execute(
         select(MealIngredient.meal_id, MealIngredient.amount, MealIngredient.unit).where(
-            MealIngredient.ingredient_id == ingredient_id
+            MealIngredient.item_id == item_id
         )
     )
     return [(meal_id, amount, unit) for meal_id, amount, unit in result]
 
 
-async def repoint_ingredient(session: AsyncSession, from_id: str, into_id: str) -> None:
-    """Rows of one ingredient now refer to another (merge, ING-05); positions stay."""
+async def repoint_item(session: AsyncSession, from_id: str, into_id: str) -> None:
+    """Rows of one item now refer to another (merge, ING-05); positions stay."""
     await session.execute(
-        update(MealIngredient)
-        .where(MealIngredient.ingredient_id == from_id)
-        .values(ingredient_id=into_id)
+        update(MealIngredient).where(MealIngredient.item_id == from_id).values(item_id=into_id)
     )
 
 

@@ -1,7 +1,7 @@
 """The nutrients registry (NUT-01, MNT-06).
 
-Everything nutrient-shaped is generated from `NUTRIENTS`: the nullable columns on `ingredients`
-(each ingredient's own values), the API schema `NutrientValues`, the calculations, and the Open
+Everything nutrient-shaped is generated from `NUTRIENTS`: the nullable columns on `items`
+(each item's own values), the API schema `NutrientValues`, the calculations, and the Open
 Food Facts mapping.
 
 Adding a nutrient:
