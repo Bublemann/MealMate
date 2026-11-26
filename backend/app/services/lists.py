@@ -14,8 +14,9 @@ eaten (SHOP-07). Lines are hidden and restored only in a draft (409 `list.not_dr
 
 Leftover meals (LIST-17, D-58): a new draft gets the uneaten meals of the last done list the
 principal can edit, if it was finished at most `LEFTOVER_DAYS` ago, as leftovers of the meal
-they come from (the source; a leftover of a leftover is one of its source). Marking a leftover
-eaten, on any list, marks its source, and bumps every list that shows it.
+they come from (the source; a leftover of a leftover is one of its source), unless the principal
+turned the carry-over off (D-59). Marking a leftover eaten, on any list, marks its source, and
+bumps every list that shows it.
 """
 
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
@@ -85,6 +86,7 @@ from app.services import (
     access,
     aggregation,
     detach,
+    me,
     recurring,
     reference,
     shopping,
@@ -467,10 +469,14 @@ async def create_list(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """A new draft (LIST-01), with the leftovers of the last done list (LIST-17)."""
+    """A new draft (LIST-01), with the leftovers of the last done list unless the principal
+    turned the carry-over off (LIST-17, D-59)."""
     async with session.begin():
         shopping_list, rights = await _new_list(session, principal, body.name, now=now)
-        await _add_leftovers(session, principal, shopping_list, rights.viewer_partner_id, now=now)
+        if (await me.current_user(session, principal)).carry_over_leftovers:
+            await _add_leftovers(
+                session, principal, shopping_list, rights.viewer_partner_id, now=now
+            )
         return await list_detail(
             session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )

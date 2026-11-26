@@ -184,32 +184,33 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   display name of the list a new meal goes onto (`useListOnce`, which doesn't poll; "Einkaufsliste"
   until it is known). On its right, `action` takes the screen's one button, its ⋯ menu (D-39);
   without one the slot is empty, with nothing to see or to focus. Tests: `DetailStrip.test.tsx`.
-- **Settings tab** (UI-07, D-45): `features/me/SettingsScreen.tsx` shows the headline, then rows
-  in grouped panels, and Abmelden last. The rows come from one ordered list, `SETTINGS_ROWS` in
+- **Settings tab** (UI-07, D-45): `features/me/SettingsScreen.tsx` shows the headline, then rows in
+  grouped panels, and Abmelden last. The rows come from one ordered list, `SETTINGS_ROWS` in
   `features/me/settingsRows.ts`: each entry has its group, its label key, its address and,
   optionally, a value component (`SettingsValues.tsx`). The groups (`SETTINGS_GROUPS`) are the
-  user's own rows, **Verwaltung** for admins only (its heading, `adminEntry`), and Über MealMate.
-  A later page adds its row as one entry in its group, plus its route in `app/router.tsx`. A row
-  is a link: the label first (its accessible name starts with it, so tests find "Paar" whatever
-  the value), the value in muted text, then a chevron; at large text sizes the value wraps below
-  the label. Values load on their own and never hold the rows back: while one loads, fails or
-  can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
-  name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
-  (`waitingRequests`) or else the partner (`userLabel`), Regelmäßige Artikel "1 Hinweis" and
-  "2 fällig" (`RecurringValue`), System (admins) when the last backup ran, or "Fehlgeschlagen" in
-  words after a failed run, followed by the day of the last successful backup when the host knows
-  it ("Fehlgeschlagen · zuletzt am 26.09.2026"), and Über MealMate the version. Only their
-  addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03); the System
-  value's query (`useSystemInfo`) sits in `features/me/api.ts` for that reason, shared with the
-  System page. Abmelden is a red, centred button: with changes still waiting it asks first with
-  their count (SYNC-05).
+  user's own rows, **Verwaltung** for admins only (its heading, `adminEntry`), and Über MealMate. A
+  later page adds its row as one entry in its group, plus its route in `app/router.tsx`. A row is a
+  link: the label first (its accessible name starts with it, so tests find "Paar" whatever the
+  value), the value in muted text, then a chevron; at large text sizes the value wraps below the
+  label. Values load on their own and never hold the rows back: while one loads, fails or can't be
+  fetched offline, its row shows no value and stays tappable. Profil shows the display name (the tab
+  loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
+  (`waitingRequests`) or else the partner (`userLabel`), Regelmäßige Artikel "1 Hinweis" and "2
+  fällig" (`RecurringValue`), Übrige Gerichte "An" or "Aus" (`LeftoversValue`), System (admins) when
+  the last backup ran, or "Fehlgeschlagen" in words after a failed run, followed by the day of the
+  last successful backup when the host knows it ("Fehlgeschlagen · zuletzt am 26.09.2026"), and Über
+  MealMate the version. Only their addresses name the admin pages, so the tab doesn't load the admin
+  chunk (PERF-03); the System value's query (`useSystemInfo`) sits in `features/me/api.ts` for that
+  reason, shared with the System page. Abmelden is a red, centred button: with changes still waiting
+  it asks first with their count (SYNC-05).
 - **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
-  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/walking-order`, `/me/about`), framed by `SettingsPage`: the strip
-  with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
-  held, without the card's heading. The admin pages share the frame and stay under
-  `/me/admin/…` (`/me/admin` opens Benutzer); they have no switcher of their own, admins go back
-  and tap the next Verwaltung row. When nobody else can be picked for a couple, the Paar page
-  shows admins the way to the invites and asks everyone else to turn to an admin (D-49).
+  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/leftovers`,
+  `/me/walking-order`, `/me/about`), framed by `SettingsPage`: the strip with "‹ Einstellungen" back
+  to `/me` and no ⋯ menu, then its title. A page holds what its card held, without the card's
+  heading. The admin pages share the frame and stay under `/me/admin/…` (`/me/admin` opens
+  Benutzer); they have no switcher of their own, admins go back and tap the next Verwaltung row.
+  When nobody else can be picked for a couple, the Paar page shows admins the way to the invites and
+  asks everyone else to turn to an admin (D-49).
 - **Count on the gear** (UI-07, D-51): while something waits for the user to act on, the Settings
   tab's gear carries a small red count ("9+" above nine), sized by the capped
   `--tab-bar-badge*` tokens so it doesn't grow beyond the bar. It is hidden from screen readers,
@@ -679,6 +680,7 @@ order.
 | `screenCouple`          | `screen-couple`           | Settings → Paar page                             |
 | `screenSecurity`        | `screen-security`         | Settings → Sicherheit page                       |
 | `screenRecurring`       | `screen-recurring`        | Settings → Regelmäßige Artikel page              |
+| `screenLeftovers`       | `screen-leftovers`        | Settings → Übrige Gerichte page                  |
 | `screenWalkingOrder`    | `screen-walking-order`    | Settings → Reihenfolge im Laden page             |
 | `screenAbout`           | `screen-about`            | Settings → Über MealMate page                    |
 | `languageSelect`        | `language-select`         | Language select on Profil                        |
@@ -697,6 +699,7 @@ order.
 | `displayNameInput`      | `display-name-input`      | Display name field on Profil                     |
 | `mealsPublicSwitch`     | `meals-public-switch`     | "Meals public" switch on Privatsphäre            |
 | `listsPublicSwitch`     | `lists-public-switch`     | "Lists public" switch on Privatsphäre            |
+| `carryOverSwitch`       | `carry-over-switch`       | "Übrige Gerichte übernehmen" switch              |
 | `coupleSection`         | `couple-section`          | Content of the Paar page                         |
 | `couplePartner`         | `couple-partner`          | Partner name (and since when) on Paar            |
 | `couplePicker`          | `couple-picker`           | User picker for a couple request                 |

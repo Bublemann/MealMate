@@ -41,15 +41,19 @@ export function clearUserStorage(): void {
   }
 }
 
-/** The profile of the last signed-in user, shown when the server can't be reached at start. */
+/**
+ * The profile of the last signed-in user, shown when the server can't be reached at start. A
+ * profile cached by an older app lacks the fields added since; they get the server's defaults.
+ */
 export function readCachedProfile(): Me | null {
   const raw = readStorage(PROFILE_STORAGE_KEY);
   if (!raw) return null;
   try {
     const value: unknown = JSON.parse(raw);
-    return typeof value === 'object' && value !== null && 'id' in value && 'username' in value
-      ? (value as Me)
-      : null;
+    if (typeof value !== 'object' || value === null || !('id' in value) || !('username' in value))
+      return null;
+    const profile = value as Partial<Me>;
+    return { ...(profile as Me), carry_over_leftovers: profile.carry_over_leftovers ?? true };
   } catch {
     return null;
   }
