@@ -44,6 +44,6 @@ e2e/playwright-report/
 .vscode/
 .DS_Store
 
-# Claude Code: .claude/skills/ is committed; local worktrees and settings are not
+# Claude Code: local worktrees and settings are not committed
 .claude/worktrees/
 .claude/settings.local.json
