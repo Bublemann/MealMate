@@ -273,8 +273,9 @@ def test_leftovers_come_along_into_a_new_draft(
     expect(page.get_by_text(beans["name"])).to_have_count(0)
 
     # Ticked, it leaves the draft, and the toast offers to undo it.
+    # Through the outbox, like a check-off (D-59).
     with page.expect_response(
-        lambda response: response.request.method == "PUT" and response.url.endswith("/eaten")
+        lambda response: response.request.method == "POST" and response.url.endswith("/ops")
     ) as saved:
         # A click, not check(): the box leaves with its row, so it can't be seen ticked.
         row.get_by_role("checkbox", name=text("lists.meals.eaten", name=chili["name"])).click()

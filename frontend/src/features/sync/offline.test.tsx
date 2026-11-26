@@ -11,10 +11,12 @@ import {
   FEED_LISTS,
   feedPage,
   FORMER_REMINDER,
+  leftoverChili,
   line,
   LIST_ID,
   LIST_ROUTES,
   listDetail,
+  listMeal,
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
@@ -514,6 +516,45 @@ describe('a draft offline (SYNC-03)', () => {
     // Restoring a hidden line needs the server too.
     fireEvent.click(screen.getByText('Hidden (1)'));
     expect(screen.getByRole('button', { name: 'Restore Eier' })).toBeDisabled();
+  });
+});
+
+describe('a leftover ticked offline (LIST-17, SYNC-03)', () => {
+  it('leaves every local draft at once and stays off them over a restart', async () => {
+    const other = listDetail({
+      id: '0190c0de-0000-7000-8000-0000000000b2',
+      name: 'Nächste Woche',
+      meals: [leftoverChili({ id: 'lm-chili-2' })],
+    });
+    await storeCopy(listDetail({ meals: [leftoverChili(), listMeal()] }));
+    await (
+      await openSyncStorage()
+    ).putList({
+      id: other.id,
+      userId: TEST_USER.id,
+      detail: other,
+      storedAt: 1_000,
+    });
+    serverGone(FAIL);
+    const first = renderApp(`/lists/${LIST_ID}`);
+    goOffline();
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent(
+        'Offline – 1 change waiting',
+      ),
+    );
+    first.unmount();
+
+    // The other draft, after the app was opened again, still without a connection.
+    renderApp(`/lists/${other.id}`);
+    expect(await screen.findByText(/^No meals yet\./)).toBeVisible();
+    expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument();
   });
 });
 

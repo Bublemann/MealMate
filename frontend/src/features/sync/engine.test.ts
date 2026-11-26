@@ -9,7 +9,15 @@ import { createAuthSession, type AuthSession } from '@/features/auth/session';
 import { detailKey, FEED_KEY } from '@/features/lists/keys';
 import i18n from '@/i18n';
 import { BEN, errorResponse, loginResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { doneList, LIST_ID, listDetail, shoppingList } from '@/test/lists';
+import {
+  CHILI_SOURCE_ID,
+  doneList,
+  leftoverChili,
+  LIST_ID,
+  listDetail,
+  listMeal,
+  shoppingList,
+} from '@/test/lists';
 import { dueItem } from '@/test/recurring';
 import { SyncEngine } from './engine';
 import {
@@ -251,6 +259,43 @@ describe('outbox (SYNC-03/04)', () => {
     },
   );
 
+  it('sends a leftover ticked offline, and keeps it off the other drafts until they load again (LIST-17)', async () => {
+    const pancakes = listMeal();
+    const one = listDetail({ meals: [leftoverChili(), pancakes] });
+    const two = listDetail({
+      id: OTHER_LIST,
+      meals: [leftoverChili({ id: 'lm-chili-2' }), pancakes],
+    });
+    const fetchMock = mockApi({
+      [`POST /api/lists/${LIST_ID}/ops`]: opsAnswer({ ...one, version: 4, meals: [pancakes] }),
+      // The copy as it was before: it doesn't replace the newer state in the cache.
+      'GET /api/lists/sync': syncAnswer(one, two),
+    });
+    goOffline();
+    const { engine, queryClient } = await startEngine();
+    await settle(engine);
+    queryClient.setQueryData(detailKey(LIST_ID), one);
+    queryClient.setQueryData(detailKey(OTHER_LIST), two);
+    seq += 1;
+    const tick: Op = {
+      type: 'leftover.eaten',
+      payload: { leftover_of: CHILI_SOURCE_ID, eaten: true },
+      op_id: `0190c0de-0000-7000-8000-${String(seq).padStart(12, '0')}`,
+      at: new Date().toISOString(),
+    };
+    await engine.enqueue(LIST_ID, tick);
+
+    goOnline();
+    await vi.waitFor(() => expect(engine.outbox.get()).toEqual([]));
+
+    expect((await sentBodies(fetchMock)).map((body) => body.ops)).toEqual([[tick]]);
+    const names = (id: string) =>
+      queryClient.getQueryData<Schemas['ListDetail']>(detailKey(id))?.meals.map((m) => m.name);
+    expect(names(LIST_ID)).toEqual(['Pfannkuchen']);
+    // Until the other draft is loaded again, it doesn't show Chili again either.
+    expect(names(OTHER_LIST)).toEqual(['Pfannkuchen']);
+  });
+
   it('keeps everything when the network is gone, and says the server can’t be reached', async () => {
     const fetchMock = mockApi();
     const { engine, storage } = await startEngine();
@@ -466,6 +511,7 @@ describe('local copy (SYNC-02, SYNC-10)', () => {
         const before: Partial<typeof meal> = { ...meal };
         delete before.eaten;
         delete before.leftover;
+        delete before.leftover_of;
         return before;
       }),
     } as unknown as Schemas['ListDetail'];

@@ -1,7 +1,7 @@
 import { itemLabel } from '@/features/items/label';
 import { otherCategoryId } from '@/features/lists/format';
 import { pickableCategories } from '@/features/reference/categories';
-import type { Category, ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
+import type { Category, ExtraItem, ListDetail, ListLine, Op, OutboxEntry, UserRef } from './types';
 
 /** What a free-text item's category is found by, and whether it can still take one. */
 type CategoryRef = Pick<Category, 'id' | 'key' | 'deleted'>;
@@ -58,6 +58,10 @@ function tapTime(at: string, now: number): { at: string; ms: number } {
  * the list was finished or well before shopping started, changes to a draft's check state) are
  * left out. What only the server knows (amounts, badges of other lines) stays as it was. Lines
  * and items touched by an op are marked `pending`.
+ *
+ * A ticked leftover (`leftover.eaten`, LIST-17) is applied by its source meal, so `ops` may hold
+ * those of other lists too (`opsForList`): it leaves every draft and list being shopped that has a
+ * leftover of that meal, and a done list shows the meal and its leftovers ticked.
  */
 export function applyPending(
   detail: ListDetail,
@@ -67,6 +71,8 @@ export function applyPending(
   const list: PendingList = { ...detail, pendingFinish: false };
   /** The op id of the waiting check-off each line shows, for the tie-break. */
   const shownOps = new Map<string, string>();
+  /** The eaten state each source meal will have, by the last waiting op (LIST-17). */
+  const eaten = new Map<string, boolean>();
   for (const op of ops) {
     switch (op.type) {
       case 'line.check':
@@ -88,9 +94,51 @@ export function applyPending(
           list.pendingFinish = true;
         }
         break;
+      case 'leftover.eaten':
+        eaten.set(op.payload.leftover_of, op.payload.eaten);
+        break;
     }
   }
+  if (eaten.size > 0) list.meals = markEaten(list, eaten);
   return list;
+}
+
+/** Which ops of the outbox the view of list `listId` applies: its own, and every ticked leftover. */
+export function opsForList(entries: readonly OutboxEntry[], listId: string): Op[] {
+  return entries
+    .filter((entry) => entry.listId === listId || entry.op.type === 'leftover.eaten')
+    .map((entry) => entry.op);
+}
+
+/**
+ * The list with the ticked leftovers of `ops` applied (LIST-17), as `applyPending` does; the same
+ * list when they change nothing on it.
+ */
+export function withLeftoversEaten(detail: ListDetail, ops: readonly Op[]): ListDetail {
+  const eaten = new Map<string, boolean>();
+  for (const op of ops) {
+    if (op.type === 'leftover.eaten') eaten.set(op.payload.leftover_of, op.payload.eaten);
+  }
+  const meals = markEaten(detail, eaten);
+  return meals === detail.meals ? detail : { ...detail, meals };
+}
+
+function markEaten(
+  list: Pick<ListDetail, 'meals' | 'status'>,
+  eaten: ReadonlyMap<string, boolean>,
+): ListDetail['meals'] {
+  const stateOf = (meal: ListDetail['meals'][number]) =>
+    eaten.get(meal.leftover_of ?? '') ?? (list.status === 'done' ? eaten.get(meal.id) : undefined);
+  if (!list.meals.some((meal) => stateOf(meal) !== undefined)) return list.meals;
+  return (
+    list.meals
+      // Ticked, a leftover leaves drafts and lists being shopped (LIST-17).
+      .filter((meal) => !(list.status !== 'done' && meal.leftover && stateOf(meal) === true))
+      .map((meal) => {
+        const state = stateOf(meal);
+        return state === undefined || state === meal.eaten ? meal : { ...meal, eaten: state };
+      })
+  );
 }
 
 type LineCheck = Extract<Op, { type: 'line.check' }>;

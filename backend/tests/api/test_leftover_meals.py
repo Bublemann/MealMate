@@ -19,7 +19,17 @@ from tests.accounts import (
     set_privacy,
 )
 from tests.catalog import category_ids, create_item
-from tests.lists import added, applied, create_list, detail, lines, op, start_shopping
+from tests.lists import (
+    added,
+    applied,
+    create_list,
+    detail,
+    lines,
+    op,
+    results,
+    send_ops,
+    start_shopping,
+)
 from tests.meals import create_meal
 
 
@@ -486,3 +496,128 @@ async def test_leftovers_go_with_their_source_and_their_lists_change(
     assert response.status_code == 204, response.text
     gone = await detail(api, anna, draft["id"])
     assert (meal_rows(gone), gone["version"]) == ([], after["version"] + 1)
+
+
+# --- the leftover.eaten op (offline, SYNC-03) ---------------------------------------------
+
+
+def eaten_op(source_id: str, eaten: bool = True, **options: Any) -> Any:
+    return op("leftover.eaten", leftover_of=source_id, eaten=eaten, **options)
+
+
+async def test_a_leftover_names_its_source_meal(
+    api: AsyncClient, anna: Account, meals: dict[str, Any]
+) -> None:
+    """Two drafts' leftovers of one meal have different ids but name the same source, so the
+    app can hide it on every local draft at once."""
+    done = await done_list(api, anna, [meals["Brot"]])
+    one = await create_list(api, anna)
+    two = await create_list(api, anna)
+
+    source = by_name(done, "Brot")
+    assert source["leftover_of"] is None
+    assert one["meals"][0]["id"] != two["meals"][0]["id"]
+    assert one["meals"][0]["leftover_of"] == two["meals"][0]["leftover_of"] == source["id"]
+
+
+async def test_the_op_marks_a_leftovers_source_eaten_everywhere(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock, meals: dict[str, Any]
+) -> None:
+    await make_couple(api, anna, ben)
+    done = await done_list(api, anna, [meals["Brot"], meals["Chili"]])
+    one = await create_list(api, anna, "Eins")
+    two = await create_list(api, ben, "Zwei")
+    clock.advance(minutes=1)
+    await login(api, anna)
+    await login(api, ben)
+    chili = by_name(done, "Chili")["id"]
+
+    body = await applied(api, ben, two["id"], eaten_op(chili))
+
+    assert meal_rows(body) == [("Brot", True, False)]
+    assert body["version"] == two["version"] + 1
+    after_one = await detail(api, anna, one["id"])
+    assert (meal_rows(after_one), after_one["version"]) == (
+        [("Brot", True, False)],
+        one["version"] + 1,
+    )
+    after_done = await detail(api, anna, done["id"])
+    assert meal_rows(after_done) == [("Brot", False, False), ("Chili", False, True)]
+    assert after_done["version"] == done["version"] + 1
+
+    # The undo, also queued: it comes back on every draft.
+    body = await applied(api, ben, two["id"], eaten_op(chili, eaten=False))
+    assert meal_rows(body) == [("Brot", True, False), ("Chili", True, False)]
+    assert meal_rows(await detail(api, anna, one["id"]))[1] == ("Chili", True, False)
+
+
+async def test_the_op_works_while_shopping_and_changes_nothing_twice(
+    api: AsyncClient, anna: Account, meals: dict[str, Any]
+) -> None:
+    done = await done_list(api, anna, [meals["Brot"]])
+    draft = await create_list(api, anna)
+    shopping = await start_shopping(api, anna, draft["id"])
+    tick = eaten_op(by_name(done, "Brot")["id"])
+
+    body = await applied(api, anna, draft["id"], tick)
+    again = await send_ops(api, anna, draft["id"], tick)
+    same = await send_ops(api, anna, draft["id"], eaten_op(by_name(done, "Brot")["id"]))
+
+    assert (meal_rows(body), body["version"]) == ([], shopping["version"] + 1)
+    assert results(again) == [("duplicate", None)]
+    # Already eaten: applied, but the list doesn't change.
+    assert results(same) == [("applied", None)]
+    assert same.json()["list"]["version"] == body["version"]
+    assert meal_rows(await detail(api, anna, done["id"])) == [("Brot", False, True)]
+
+
+async def test_the_last_change_to_arrive_wins(
+    api: AsyncClient, anna: Account, ben: Account, clock: FakeClock, meals: dict[str, Any]
+) -> None:
+    """The flag has no dates (D-55): anna's tick made offline before ben's untick still wins
+    when it arrives after it."""
+    await make_couple(api, anna, ben)
+    done = await done_list(api, anna, [meals["Brot"]])
+    draft = await create_list(api, anna)
+    tapped = clock.now
+    clock.advance(minutes=30)
+    await login(api, anna)
+    await login(api, ben)
+    brot = by_name(done, "Brot")
+    assert (await set_eaten(api, ben, done["id"], brot["id"], eaten=True)).status_code == 200
+    assert (await set_eaten(api, ben, done["id"], brot["id"], eaten=False)).status_code == 200
+
+    await applied(api, anna, draft["id"], eaten_op(brot["id"], at=tapped))
+
+    assert meal_rows(await detail(api, ben, done["id"])) == [("Brot", False, True)]
+
+
+async def test_the_op_is_rejected_without_the_leftover_or_the_rights_on_its_source(
+    api: AsyncClient, anna: Account, ben: Account, meals: dict[str, Any]
+) -> None:
+    await make_couple(api, anna, ben)
+    done = await done_list(api, anna, [meals["Brot"], meals["Chili"]])
+    draft = await create_list(api, ben)
+    other = await create_list(api, ben)
+    brot, chili = by_name(done, "Brot")["id"], by_name(done, "Chili")["id"]
+    # Removed from this draft (Entfernen): nothing on it to tick any more.
+    gone = by_name(other, "Chili")["id"]
+    response = await api.delete(f"/api/lists/{other['id']}/meals/{gone}", headers=ben.headers)
+    assert response.status_code == 200, response.text
+    assert results(await send_ops(api, ben, other["id"], eaten_op(chili))) == [
+        ("rejected", "common.not_found")
+    ]
+    # A leftover's own id names no source.
+    assert results(await send_ops(api, ben, draft["id"], eaten_op(draft["meals"][0]["id"]))) == [
+        ("rejected", "common.not_found")
+    ]
+
+    # Once the couple ended, ben may no longer mark anna's list (CPL-03, CPL-05).
+    assert (await api.delete("/api/couple", headers=anna.headers)).status_code == 204
+    response = await send_ops(api, ben, draft["id"], eaten_op(brot))
+
+    assert results(response) == [("rejected", "common.forbidden")]
+    assert meal_rows(await detail(api, anna, done["id"])) == [
+        ("Brot", False, False),
+        ("Chili", False, False),
+    ]

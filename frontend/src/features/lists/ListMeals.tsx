@@ -11,10 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { TapCheckbox } from '@/components/ui/tap-checkbox';
-import { useConnected } from '@/features/sync/context';
+import { useConnected, useQueueOp } from '@/features/sync/context';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import {
+  shoppingOps,
+  stampOp,
   useRemoveListMeal,
   useSetListMealEaten,
   useSetListMealServings,
@@ -52,7 +54,7 @@ interface ListMealsProps {
  * A leftover (LIST-17) shows "übrig", "Zutaten nicht auf der Liste" and an eaten box on every
  * list, its servings without a stepper, and for editors of a draft or a list being shopped a ⋮
  * menu with "Doch einkaufen" and "Entfernen". Ticked there, it leaves the list and a toast offers
- * to undo it.
+ * to undo it; that tick and its undo go through the outbox, so they work offline too (SYNC-03).
  */
 export function ListMeals({
   list,
@@ -66,11 +68,12 @@ export function ListMeals({
   const setServings = useSetListMealServings(list.id);
   const remove = useRemoveListMeal(list.id);
   const setEaten = useSetListMealEaten(list.id);
+  const queue = useQueueOp(list.id);
   const shopLeftover = useShopLeftover(list.id);
   // Kept here: the mutation's own `error` follows only the latest tap.
   const [eatenError, setEatenError] = useState<unknown>(null);
   // The leftover just ticked on a draft or a list being shopped, whose tick can be undone.
-  const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
+  const [undo, setUndo] = useState<{ id: string; sourceId: string; label: string } | null>(null);
   const offline = !useConnected();
   const eatenCount = list.meals.filter((meal) => meal.eaten).length;
   const leavesList = list.status !== 'done';
@@ -81,16 +84,36 @@ export function ListMeals({
     return () => clearTimeout(timer);
   }, [undo]);
 
-  function sendEaten(listMealId: string, eaten: boolean, settled?: () => void) {
+  /** A meal of a done list (SHOP-07), its leftovers too: sent at once, online only. */
+  function sendEaten(listMealId: string, eaten: boolean, settled: () => void) {
     setEatenError(null);
-    return setEaten
+    void setEaten
       .mutateAsync({ listMealId, eaten })
-      .then(() => true)
-      .catch((error: unknown) => {
-        setEatenError(error);
-        return false;
-      })
+      .catch((error: unknown) => setEatenError(error))
       .finally(settled);
+  }
+
+  /** A leftover of a draft or a list being shopped: queued, online or offline (D-59). */
+  function queueEaten(sourceId: string, eaten: boolean) {
+    setEatenError(null);
+    return queue(shoppingOps.eatLeftover(sourceId, eaten, stampOp()));
+  }
+
+  /** The box of a leftover that leaves the list when ticked; undefined for any other. */
+  function queuedEatenBox(entry: ListMealEntry): MealEntryProps['eatenBox'] {
+    const sourceId = entry.leftover_of;
+    if (!entry.leftover || sourceId === null || !leavesList) return undefined;
+    return {
+      disabled: !list.can_edit,
+      onChange: (eaten, settled) => {
+        if (eaten) setUndo({ id: entry.id, sourceId, label: mealLabel(t, entry) });
+        void queueEaten(sourceId, eaten)
+          .then((queued) => {
+            if (!queued) setUndo((current) => (current?.id === entry.id ? null : current));
+          })
+          .finally(settled);
+      },
+    };
   }
 
   const content = (
@@ -115,19 +138,12 @@ export function ListMeals({
               onShop={() => shopLeftover.mutate(entry.id)}
               eatenBox={
                 eatenBoxes || entry.leftover
-                  ? {
+                  ? (queuedEatenBox(entry) ?? {
                       disabled: !list.can_edit || offline,
                       // The promise settles for every tap; `mutate`'s own callbacks only for
                       // the latest, which would leave an earlier box as it was tapped.
-                      onChange: (eaten, settled) => {
-                        if (entry.leftover && leavesList && eaten)
-                          setUndo({ id: entry.id, label: mealLabel(t, entry) });
-                        void sendEaten(entry.id, eaten, settled).then((ok) => {
-                          if (!ok)
-                            setUndo((current) => (current?.id === entry.id ? null : current));
-                        });
-                      },
-                    }
+                      onChange: (eaten, settled) => sendEaten(entry.id, eaten, settled),
+                    })
                   : undefined
               }
             />
@@ -140,7 +156,7 @@ export function ListMeals({
           text={t('lists.meals.eaten', { name: undo.label })}
           onUndo={() => {
             setUndo(null);
-            void sendEaten(undo.id, false);
+            void queueEaten(undo.sourceId, false);
           }}
           onDismiss={() => setUndo(null)}
         />

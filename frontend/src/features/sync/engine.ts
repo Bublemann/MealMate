@@ -15,6 +15,7 @@ import { RECURRING_KEY } from '@/features/recurring/api';
 import { CATEGORIES_KEY, categoriesQuery } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import { errorMessage } from '@/i18n/errors';
+import { withLeftoversEaten } from './applyPending';
 import { flushEntries, type FlushResult, type SendOutcome } from './flush';
 import {
   applyPendingWipes,
@@ -121,8 +122,8 @@ function renamedDue(entry: Stored): Stored {
  * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
  * `ingredient`. Read that way, they show as before until the next sync replaces them. A field an
  * even older version didn't store (`due_items`) stays missing, as it was. Meals stored before
- * #177 count as not eaten, and before #178 as no leftovers. This can go once no device keeps a
- * copy from before #178.
+ * #177 count as not eaten, and before #178 as no leftovers (nor before #179 as leftovers of
+ * nothing known). This can go once no device keeps a copy from before #179.
  */
 function fromOlderApp(entry: StoredList): StoredList {
   const detail = entry.detail as unknown as Record<string, Stored[] | undefined>;
@@ -135,9 +136,15 @@ function fromOlderApp(entry: StoredList): StoredList {
     const entries = detail[field];
     if (entries) upgraded[field] = entries.map(rename);
   }
-  // Meals stored before SHOP-07 weren't eaten, those stored before LIST-17 no leftovers.
+  // Meals stored before SHOP-07 weren't eaten, those stored before LIST-17 no leftovers. A
+  // leftover stored before its source was sent can't be ticked until the next sync.
   if (detail.meals)
-    upgraded.meals = detail.meals.map((meal) => ({ eaten: false, leftover: false, ...meal }));
+    upgraded.meals = detail.meals.map((meal) => ({
+      eaten: false,
+      leftover: false,
+      leftover_of: null,
+      ...meal,
+    }));
   return { ...entry, detail: upgraded as unknown as ListDetail };
 }
 
@@ -728,6 +735,7 @@ export class SyncEngine {
       notifyManager.schedule(() => this.removeFromOutbox(seqs));
     });
     this.keepInCopy(userId, list);
+    this.leftoversEatenElsewhere(list.id, batch);
     void this.queryClient.invalidateQueries({ queryKey: FEED_KEY });
     // A done list's checked lines are purchases of recurring items (LIST-16): the server has
     // recorded them with this batch, so the set's dates and due items change.
@@ -748,6 +756,25 @@ export class SyncEngine {
           reason: errorMessage(t, reason),
         }),
       );
+    }
+  }
+
+  /**
+   * Leftovers ticked in the batch leave the other lists too (LIST-17): their cached lists show
+   * that until they are loaded again, which they are at once, so none shows a ticked leftover
+   * again once its op left the outbox.
+   */
+  private leftoversEatenElsewhere(listId: string, batch: readonly OutboxEntry[]): void {
+    const ops = batch.map((entry) => entry.op).filter((op) => op.type === 'leftover.eaten');
+    if (ops.length === 0) return;
+    for (const [key, detail] of this.queryClient.getQueriesData<ListDetail>({
+      queryKey: ['lists', 'detail'],
+    })) {
+      if (!detail || detail.id === listId) continue;
+      const shown = withLeftoversEaten(detail, ops);
+      if (shown === detail) continue;
+      this.queryClient.setQueryData(key, shown);
+      void this.queryClient.invalidateQueries({ queryKey: key, exact: true });
     }
   }
 

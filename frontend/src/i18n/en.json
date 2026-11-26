@@ -395,6 +395,8 @@
   "sync.waitingTooLong": "Some changes have been waiting for more than an hour. Open MealMate with a connection to send them.",
   "sync.offline.shopping": "You're offline. Checking off, extra items and finishing still work; everything else needs a connection.",
   "sync.offline.list": "You're offline. Changes to this list need a connection.",
+  "sync.offline.shoppingLeftovers": "You're offline. Checking off (leftovers too), extra items and finishing still work; everything else needs a connection.",
+  "sync.offline.listLeftovers": "You're offline. Ticking leftovers still works; everything else on this list needs a connection.",
   "sync.offline.page": "You're offline. This page needs a connection.",
   "sync.noStorage": "MealMate can't store anything on this device right now: changes made without a connection are lost when the app is closed.",
   "sync.rejected_one": "A change to “{{name}}” could not be saved: {{reason}}",

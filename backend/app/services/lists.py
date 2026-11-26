@@ -156,6 +156,7 @@ def _meal_entry(
             detached=detached,
             eaten=content.eaten(list_meal),
             leftover=list_meal.leftover_of_id is not None,
+            leftover_of=list_meal.leftover_of_id,
         )
     owner_id = list_meal.meal_owner_id_snapshot
     return ListMealEntry(
@@ -174,6 +175,7 @@ def _meal_entry(
         detached=detached,
         eaten=content.eaten(list_meal),
         leftover=list_meal.leftover_of_id is not None,
+        leftover_of=list_meal.leftover_of_id,
     )
 
 
@@ -837,25 +839,49 @@ async def set_meal_eaten(
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
         if list_meal.leftover_of_id is None:
             _require_done(shopping_list)
-            target = list_meal
+            changed = await _mark_eaten(session, list_meal, body.eaten, shopping_list.id, now)
         else:
-            target = await _source_of(session, list_meal)
-            try:
-                await access.require_list_edit(session, principal, target.list_id)
-            except ApiError as refused:
-                raise ApiError(ErrorCode.FORBIDDEN, status_code=403) from refused
-        if target.eaten != body.eaten:
-            target.eaten = body.eaten
-            target.updated_at = now
-            showing = {
-                target.list_id,
-                *await lists_repo.lists_with_leftovers_of(session, [target.id]),
-            }
-            await lists_repo.bump(session, showing - {shopping_list.id}, now)
+            changed = await mark_leftover_eaten(
+                session, principal, list_meal, body.eaten, shopping_list.id, now
+            )
+        if changed:
             await touch(session, shopping_list, now)
         return await list_detail(
             session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )
+
+
+async def mark_leftover_eaten(
+    session: AsyncSession,
+    principal: Principal,
+    leftover: ListMeal,
+    eaten: bool,
+    list_id: str,
+    now: datetime,
+) -> bool:
+    """Marks a leftover's source meal eaten or clears that (LIST-17), with edit rights on the
+    source's list (403 otherwise); whether it changed. The lists showing the source are bumped,
+    except `list_id`, which the caller touches."""
+    source = await _source_of(session, leftover)
+    try:
+        await access.require_list_edit(session, principal, source.list_id)
+    except ApiError as refused:
+        raise ApiError(ErrorCode.FORBIDDEN, status_code=403) from refused
+    return await _mark_eaten(session, source, eaten, list_id, now)
+
+
+async def _mark_eaten(
+    session: AsyncSession, target: ListMeal, eaten: bool, list_id: str, now: datetime
+) -> bool:
+    """Sets the flag; a change bumps every list that shows the meal (its own and those with a
+    leftover of it) except `list_id`."""
+    if target.eaten == eaten:
+        return False
+    target.eaten = eaten
+    target.updated_at = now
+    showing = {target.list_id, *await lists_repo.lists_with_leftovers_of(session, [target.id])}
+    await lists_repo.bump(session, showing - {list_id}, now)
+    return True
 
 
 async def _source_of(session: AsyncSession, leftover: ListMeal) -> ListMeal:

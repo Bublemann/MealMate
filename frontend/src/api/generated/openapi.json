@@ -2332,6 +2332,58 @@
         "title": "JoinRequest",
         "type": "object"
       },
+      "LeftoverEatenOp": {
+        "description": "Ticking a leftover, which also works offline in a draft (SYNC-03, D-59): sets `eaten`\non its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The\nflag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't\ncount. Rejected with `common.not_found` when the list has no leftover of that meal (any\nmore), and `common.forbidden` without edit rights on the source's list.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LeftoverEatenPayload"
+          },
+          "type": {
+            "const": "leftover.eaten",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "LeftoverEatenOp",
+        "type": "object"
+      },
+      "LeftoverEatenPayload": {
+        "description": "Mark the source meal of a leftover on this list eaten, or clear that (LIST-17):\n`leftover_of` as in `ListMealEntry.leftover_of`.",
+        "properties": {
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
+          },
+          "leftover_of": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Leftover Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "leftover_of",
+          "eaten"
+        ],
+        "title": "LeftoverEatenPayload",
+        "type": "object"
+      },
       "LineCheckOp": {
         "description": "Last write wins by `at` (clamped to at most 5 minutes after the server's time), ties by\nthe higher `op_id`; a losing op is `applied` without effect. While shopping; on a done list\nonly if `at` is not after `finished_at` (else `list.done`); not in a draft, nor with an `at`\nmore than 5 minutes before `shopping_started_at` (`list.not_shopping`). An `at` that is out\nof range in UTC is rejected (`common.validation`).",
         "properties": {
@@ -2958,7 +3010,7 @@
         "type": "object"
       },
       "ListMealEntry": {
-        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.\nA `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,\nits servings are what was bought and can't change, and `eaten` is its source meal's; on a\ndraft or while shopping it is shown only while that is not eaten.",
+        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.\nA `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,\nits servings are what was bought and can't change, and `eaten` is its source meal's; on a\ndraft or while shopping it is shown only while that is not eaten. `leftover_of` is the id of\nthat source meal (on the done list it came from), the same for every leftover of it; null\nfor a meal that is not a leftover.",
         "properties": {
           "detached": {
             "anyOf": [
@@ -2986,6 +3038,17 @@
           "leftover": {
             "title": "Leftover",
             "type": "boolean"
+          },
+          "leftover_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftover Of"
           },
           "meal_id": {
             "anyOf": [
@@ -3054,7 +3117,8 @@
           "meal_servings",
           "detached",
           "eaten",
-          "leftover"
+          "leftover",
+          "leftover_of"
         ],
         "title": "ListMealEntry",
         "type": "object"
@@ -4273,6 +4337,7 @@
             "extra.add": "#/components/schemas/ExtraAddOp",
             "extra.delete": "#/components/schemas/ExtraDeleteOp",
             "extra.update": "#/components/schemas/ExtraUpdateOp",
+            "leftover.eaten": "#/components/schemas/LeftoverEatenOp",
             "line.check": "#/components/schemas/LineCheckOp",
             "list.finish": "#/components/schemas/ListFinishOp"
           },
@@ -4293,6 +4358,9 @@
           },
           {
             "$ref": "#/components/schemas/ListFinishOp"
+          },
+          {
+            "$ref": "#/components/schemas/LeftoverEatenOp"
           }
         ],
         "title": "Op"
