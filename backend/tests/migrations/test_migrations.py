@@ -1236,7 +1236,7 @@ def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
 
 @contextmanager
 def no_eaten_meals_yet(path: Path) -> Iterator[None]:
-    """The app of today reads whether each meal on a list is eaten (SHOP-07), a column 0020
+    """The app of today reads whether each meal on a list is eaten (SHOP-07), a column 0021
     adds. No meal was eaten before, so the column stands in, false, while the app reads, and
     goes again before the upgrade adds it."""
     execute(path, "ALTER TABLE list_meals ADD COLUMN eaten BOOLEAN NOT NULL DEFAULT 0")
