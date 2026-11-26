@@ -9,7 +9,8 @@ the frontend (AGG-01).
    item attributes (`Item.attrs()`: no density, a piece weight only for pieces,
    D-32); a frozen or detached one its `list_meal_ingredients` with the attributes captured
    then, which before D-32 included a density and a g or ml item's piece weight (LIST-11).
-   Each row is scaled by `servings ÷ meal servings` (LIST-04).
+   Each row is scaled by `servings ÷ meal servings` (LIST-04). A leftover meal (LIST-17) is
+   frozen without rows, so it contributes nothing.
 2. A linked extra item contributes to its item's line with its `attrs_snapshot` once it
    has one (taken when shopping starts or when it is added while shopping), else with the live
    attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
