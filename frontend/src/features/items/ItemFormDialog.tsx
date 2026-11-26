@@ -58,7 +58,6 @@ import {
   editedFields,
   emptyValues,
   NAME_MAX_LENGTH,
-  PACK_SIZE_MAX_LENGTH,
   proposalValues,
   typedValues,
   valuesFromItem,
@@ -94,7 +93,6 @@ const INLINE_LINK =
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   'name',
   'brand',
-  'quantity_text',
   'category_id',
   'base_unit',
   'barcode',
@@ -125,7 +123,7 @@ interface ItemFormDialogProps {
   onCloseAutoFocus?: (event: Event) => void;
   /**
    * For a meal's ingredients (MEAL-02): no choice of kind, a new item is food, and no supply is
-   * offered to use instead (D-54).
+   * offered to use instead (D-55).
    */
   foodOnly?: boolean;
 }
@@ -191,7 +189,7 @@ interface ItemFormProps {
   onClose: () => void;
   /** The name field, e.g. for the dialog to put the cursor there. */
   nameRef?: Ref<HTMLInputElement>;
-  /** Only food, for a meal's ingredients (D-54). */
+  /** Only food, for a meal's ingredients (D-55). */
   foodOnly?: boolean;
 }
 
@@ -219,14 +217,14 @@ interface Proposed {
 
 /**
  * One form for every item, new or existing, typed by hand, searched or scanned (ING-04,
- * D-35, D-36). Top to bottom: "Lebensmittel" or "Gebrauchsartikel" (D-54; not for a meal's
+ * D-35, D-36). Top to bottom: "Lebensmittel" or "Gebrauchsartikel" (D-55; not for a meal's
  * ingredients, which are food); the Open Food Facts attribution while its values are shown; the
  * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
- * the barcode with the scan's notice; the similar-items hint; brand; pack size (D-47);
- * category; base unit (g, ml or pieces) with the piece weight for pieces only; the nutrition per
- * 100 g/ml, both of which a supply has none of. "Save" sits in a footer below the fields, which scroll on their own. A product chosen
- * in the search or scanned is saved in one request, with the fields the user changed named as
- * edited (BAR-04).
+ * the barcode with the scan's notice; the similar-items hint; brand; category; base unit (g, ml
+ * or pieces) with the piece weight for pieces only; the nutrition per 100 g/ml. A supply has
+ * neither the piece weight nor the nutrition. "Save" sits in a footer below the fields, which
+ * scroll on their own. A product chosen in the search or scanned is saved in one request, with
+ * the fields the user changed named as edited (BAR-04).
  *
  * The scan looks the barcode up (BAR-02/03): a barcode another item has fills in nothing
  * and offers that one instead; one Open Food Facts knows fills the form like a chosen product;
@@ -276,7 +274,7 @@ function ItemForm({
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken = isApiError(mutation.error) && mutation.error.code === 'item.barcode_taken';
-  // A refused switch to supply names the meals in its own alert (D-54).
+  // A refused switch to supply names the meals in its own alert (D-55).
   const inMeals = usedInMeals(mutation.error);
   // A refused base-unit change asks in its own dialog instead.
   const showAlert =
@@ -285,7 +283,7 @@ function ItemForm({
     unitMismatch(mutation.error) === null &&
     needsErrorAlert(serverFields, SHOWN_FIELDS);
   const supply = values.kind === 'supply';
-  // A meal's ingredient is never a supply (D-54).
+  // A meal's ingredient is never a supply (D-55).
   const takes = (match: ItemSummary) => !foodOnly || match.kind === 'food';
   const pick =
     onPickExisting &&
@@ -395,7 +393,7 @@ function ItemForm({
     // input) bubble up through the React tree; only this form's own submit saves.
     if (event.target !== event.currentTarget) return;
     const problems = new Set<string>();
-    // Only pieces of food have a weight (ING-02, D-54): its field shows, and is sent, only for
+    // Only pieces of food have a weight (ING-02, D-55): its field shows, and is sent, only for
     // Stück. Leaving Stück, or switching to supply, clears it on the server.
     const inPieces = values.baseUnit === 'piece' && !supply;
     let pieceWeight: number | null = null;
@@ -404,7 +402,7 @@ function ItemForm({
       if (parsed.ok) pieceWeight = parsed.value;
       else problems.add('piece_weight_g');
     }
-    // A supply has no nutrition (D-54): its hidden fields are neither checked nor sent.
+    // A supply has no nutrition (D-55): its hidden fields are neither checked nor sent.
     const nutrients = {} as Record<NutrientKey, number | null>;
     for (const key of supply ? [] : NUTRIENT_KEYS) {
       const parsed = parseOptionalAmount(values.nutrients[key]);
@@ -417,7 +415,6 @@ function ItemForm({
     const texts = {
       name: values.name.trim(),
       brand: values.brand.trim() || null,
-      quantity_text: values.quantity_text.trim() || null,
       barcode: barcode || null,
     };
 
@@ -426,7 +423,6 @@ function ItemForm({
       if (supply) body.kind = 'supply';
       if (selectedCategory) body.category_id = selectedCategory;
       if (texts.brand !== null) body.brand = texts.brand;
-      if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
       if (texts.barcode !== null) body.barcode = texts.barcode;
       if (pieceWeight !== null) body.piece_weight_g = pieceWeight;
       const given: Partial<NutrientValues> = {};
@@ -455,7 +451,6 @@ function ItemForm({
     if (values.kind !== item.kind) body.kind = values.kind;
     if (texts.name !== item.name) body.name = texts.name;
     if (texts.brand !== item.brand) body.brand = texts.brand;
-    if (texts.quantity_text !== item.quantity_text) body.quantity_text = texts.quantity_text;
     if (selectedCategory !== item.category_id) body.category_id = selectedCategory;
     if (values.baseUnit !== item.base_unit) body.base_unit = values.baseUnit;
     if (texts.barcode !== item.barcode) body.barcode = texts.barcode;
@@ -612,23 +607,6 @@ function ItemForm({
           )}
         </FormField>
         <FormField
-          label={t('items.field.packSize')}
-          hint={editedHint('quantity_text')}
-          error={fieldError('quantity_text')}
-        >
-          {(control) => (
-            <Input
-              {...control}
-              name="quantity_text"
-              autoComplete="off"
-              maxLength={PACK_SIZE_MAX_LENGTH}
-              placeholder={t('items.field.packSizePlaceholder')}
-              value={values.quantity_text}
-              onChange={(event) => set('quantity_text', event.target.value)}
-            />
-          )}
-        </FormField>
-        <FormField
           label={t('items.field.category')}
           error={fieldError('category_id') && t('items.field.categoryGone')}
         >
@@ -768,7 +746,7 @@ interface KindChoiceProps {
 }
 
 /**
- * "Lebensmittel" or "Gebrauchsartikel" at the top of the form (D-54): two segments, food chosen
+ * "Lebensmittel" or "Gebrauchsartikel" at the top of the form (D-55): two segments, food chosen
  * for a new item. A supply's form has no nutrition and no piece weight.
  */
 function KindChoice({ kind, onChange }: KindChoiceProps) {
@@ -800,7 +778,7 @@ function KindChoice({ kind, onChange }: KindChoiceProps) {
 }
 
 /**
- * Why an item can't become a supply (D-54): "Äpfel wird in 3 Gerichten verwendet (Apfelkuchen,
+ * Why an item can't become a supply (D-55): "Äpfel wird in 3 Gerichten verwendet (Apfelkuchen,
  * Müsli und 1 weiteres) …". Meals the user may not see are only counted.
  */
 function UsedInMealsAlert({ name, refused }: { name: string; refused: UsedInMeals }) {
@@ -857,7 +835,7 @@ interface ScanNoticeProps {
   onRetry: (barcode: string) => void;
   /** Given in the picker: "use" takes the item the barcode belongs to. */
   onPickExisting?: (item: ItemSummary) => void;
-  /** Whether the picker may take an item: not a supply for a meal (D-54). */
+  /** Whether the picker may take an item: not a supply for a meal (D-55). */
   takes: (item: ItemSummary) => boolean;
   /** Called before "open" leaves to the item the barcode belongs to. */
   onNavigate: () => void;
@@ -905,7 +883,7 @@ function ScanNotice({ state, onRetry, onPickExisting, takes, onNavigate }: ScanN
       const owner = state.item;
       const label = itemLabel(owner.name, owner.brand);
       if (!takes(toSummary(owner))) {
-        // A meal's ingredient can't be a supply (D-54): nothing to use or open here.
+        // A meal's ingredient can't be a supply (D-55): nothing to use or open here.
         text = t('items.kind.notForMeals', { name: label });
         break;
       }
@@ -964,7 +942,7 @@ interface SimilarHintProps {
   /** A scanned barcode no item has, while it is in the field (BAR-03). */
   attachBarcode: string | null;
   onPickExisting?: (item: ItemSummary) => void;
-  /** Whether the picker may take an item: not a supply for a meal (D-54). */
+  /** Whether the picker may take an item: not a supply for a meal (D-55). */
   takes: (item: ItemSummary) => boolean;
   onNavigate: () => void;
 }
@@ -991,7 +969,7 @@ function SimilarHint({
   // Editing without renaming needs no hint.
   const query = item && debounced === item.name ? '' : debounced;
   const similar = useSimilarItems(query);
-  // A supply is no hint for a meal's ingredient, which can't be one (D-54).
+  // A supply is no hint for a meal's ingredient, which can't be one (D-55).
   const matches = query
     ? (similar.data ?? []).filter((match) => match.id !== item?.id && takes(match))
     : [];

@@ -53,7 +53,7 @@ async function openNewItem(user: ReturnType<typeof userEvent.setup>) {
   return within(dialog).getByTestId(testIds.itemForm);
 }
 
-describe('Food or supplies (D-54)', () => {
+describe('Food or supplies (D-55)', () => {
   it('starts “New item” with “Food” chosen, at the very top', async () => {
     const { user } = renderItems();
 
@@ -207,7 +207,7 @@ describe('Food or supplies (D-54)', () => {
   });
 });
 
-describe('The meal form’s item search (MEAL-02, D-54)', () => {
+describe('The meal form’s item search (MEAL-02, D-55)', () => {
   function renderPicker(routes: Record<string, unknown> = {}) {
     const fetchMock = mockApi({
       ...REFERENCE_ROUTES,

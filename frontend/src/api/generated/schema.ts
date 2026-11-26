@@ -703,7 +703,7 @@ export interface paths {
          *     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
          *     items in that order (at most 1000). `category_id`
          *     is repeatable: an item matches if it is in any of the given categories. With `kind`, only
-         *     food or only supplies (the meal form's search asks for food, D-54).
+         *     food or only supplies (the meal form's search asks for food, D-55).
          */
         get: operations["list_items"];
         put?: never;
@@ -2340,16 +2340,13 @@ export interface components {
          * @description An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
          *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count
          *     with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
-         *     `kind` food or supply (D-54): a supply's nutrients and piece weight are always null, and it
+         *     `kind` food or supply (D-55): a supply's nutrients and piece weight are always null, and it
          *     is never an ingredient in a meal.
          *
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
          *     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-         *     Facts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food
-         *     Facts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from
-         *     the text when it is a plain amount and unit ("500 g", "1,5 l"), else null (D-47); one saved
-         *     before D-47 keeps Open Food Facts' amount until its text changes.
+         *     Facts values for them (BAR-06).
          *     `created_by` / `updated_by` are null for a deleted user (ING-06).
          */
         Item: {
@@ -2384,14 +2381,9 @@ export interface components {
             nutrients: components["schemas"]["NutrientValues"];
             /** Off Last Modified At */
             off_last_modified_at: string | null;
-            /** Pack Quantity */
-            pack_quantity: number | null;
-            pack_unit: components["schemas"]["Unit"] | null;
             pending_update: components["schemas"]["PendingUpdate"] | null;
             /** Piece Weight G */
             piece_weight_g: number | null;
-            /** Quantity Text */
-            quantity_text: string | null;
             /**
              * Source
              * @enum {string}
@@ -2405,7 +2397,7 @@ export interface components {
             updated_by: components["schemas"]["UserRef"] | null;
             usage: components["schemas"]["ItemUsage"];
             /** User Edited Fields */
-            user_edited_fields: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            user_edited_fields: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
         };
         /**
          * ItemBarcodeLink
@@ -2422,7 +2414,7 @@ export interface components {
          * @description A new item (ING-02), in one request also when it was scanned.
          *
          *     `category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out
-         *     or null; D-54). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
+         *     or null; D-55). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
          *     otherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes
          *     neither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).
          *     Open Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
@@ -2430,11 +2422,9 @@ export interface components {
          *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
          *     item has is 409 `item.barcode_taken`.
          *
-         *     `quantity_text` is the pack size ("500 g", "6 x 1,5 l"), at most 40 characters, for any
-         *     item; its amount is taken from it (D-47). With `off`, the item is from Open Food
-         *     Facts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).
-         *     Names need not be unique: the "similar item exists" hint
-         *     (`GET /api/items/similar`) is only a hint.
+         *     With `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its
+         *     `barcode` (422 `required` without). Names need not be unique: the "similar item exists"
+         *     hint (`GET /api/items/similar`) is only a hint.
          */
         ItemCreate: {
             /** Barcode */
@@ -2457,8 +2447,6 @@ export interface components {
             off?: components["schemas"]["ItemOffOrigin"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
-            /** Quantity Text */
-            quantity_text?: string | null;
         };
         /**
          * ItemMerge
@@ -2466,7 +2454,7 @@ export interface components {
          *     amounts of the item not fitting the base unit of `into_id` is refused (409
          *     `item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
          *     isn't). A merge into a supply is refused while meals use the item (409
-         *     `item.used_in_meals`, D-54).
+         *     `item.used_in_meals`, D-55).
          */
         ItemMerge: {
             /** Accept Unit Mismatch */
@@ -2483,7 +2471,7 @@ export interface components {
          */
         ItemOffOrigin: {
             /** Edited Fields */
-            edited_fields?: ("name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
+            edited_fields?: ("name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat")[];
             /** Off Last Modified At */
             off_last_modified_at?: string | null;
         };
@@ -2526,7 +2514,7 @@ export interface components {
          * ItemSummary
          * @description A search result, list entry or meal row's item. It is shown as `name` with the
          *     `brand` in brackets when there is one ("Milch (Weihenstephan)"); `barcode` is set for
-         *     scanned items. A `kind` supply is never an ingredient in a meal (D-54).
+         *     scanned items. A `kind` supply is never an ingredient in a meal (D-55).
          */
         ItemSummary: {
             /** Barcode */
@@ -2561,9 +2549,8 @@ export interface components {
          *     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
          *     only the nutrients it contains (null clears one).
          *
-         *     On an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the
-         *     pack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack
-         *     size's amount follows its text. A new barcode must be free (409
+         *     On an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and the
+         *     nutrients) becomes user-edited (BAR-04). A new barcode must be free (409
          *     `item.barcode_taken`); clearing or changing the barcode of an item from Open
          *     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
          *     another product's. The base unit may change freely; the values are not converted.
@@ -2574,7 +2561,7 @@ export interface components {
          *     `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
          *     they are and flagged.
          *
-         *     `kind` (D-54): an item that is (or becomes) a supply takes neither a piece weight nor a
+         *     `kind` (D-55): an item that is (or becomes) a supply takes neither a piece weight nor a
          *     nutrient value (422 `invalid`). Switching to supply clears both, and is refused while any
          *     meal uses the item (409 `item.used_in_meals`).
          */
@@ -2596,8 +2583,6 @@ export interface components {
             nutrients?: components["schemas"]["NutrientValues"] | null;
             /** Piece Weight G */
             piece_weight_g?: number | null;
-            /** Quantity Text */
-            quantity_text?: string | null;
         };
         /**
          * ItemUsage
@@ -3442,7 +3427,7 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "name" | "brand" | "quantity_text" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
+            field: "name" | "brand" | "nutrients.kcal" | "nutrients.protein" | "nutrients.carbs" | "nutrients.sugar" | "nutrients.fat";
             /** Proposed */
             proposed: string | number | null;
         };
@@ -3471,8 +3456,6 @@ export interface components {
             nutrition_basis: ("g" | "ml") | null;
             /** Off Last Modified At */
             off_last_modified_at: string | null;
-            /** Quantity Text */
-            quantity_text: string | null;
         };
         /**
          * RecurringInterval

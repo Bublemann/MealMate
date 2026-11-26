@@ -20,7 +20,7 @@ import { PendingUpdateHint } from './PendingUpdateHint';
 
 /**
  * One item: its details (kind, brand, barcode, package, source, use), nutrition (none for a
- * supply, D-54), newer values
+ * supply, D-55), newer values
  * from Open Food Facts (BAR-06), and who created and changed it; editing and the admin actions
  * are in the ⋯ menu (`ItemMenu`), their errors below the title.
  */
@@ -76,7 +76,7 @@ function PropertiesCard({ item }: { item: Item }) {
       label: t('items.detail.baseUnit'),
       value: t(`items.baseUnit.${item.base_unit}`),
     },
-    // Only pieces of food have a weight (ING-02, D-54): they count towards the nutrition
+    // Only pieces of food have a weight (ING-02, D-55): they count towards the nutrition
     // through it.
     ...(item.base_unit === 'piece' && item.kind === 'food'
       ? [
@@ -95,8 +95,6 @@ function PropertiesCard({ item }: { item: Item }) {
         ]
       : []),
     { label: t('items.detail.barcode'), value: item.barcode ?? notSet },
-    // The pack size is its text alone, as in the edit pop-up (D-47).
-    { label: t('items.detail.pack'), value: item.quantity_text ?? notSet },
     {
       label: t('items.detail.source'),
       value: t(`items.detail.source.${item.source}`),

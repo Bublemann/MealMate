@@ -25,7 +25,7 @@ interface ItemPickerProps {
   /** Offers "Create “…”" for the typed name (default true). */
   allowCreate?: boolean;
   /**
-   * Only items of this kind: a meal's ingredients are food (D-54), so supplies are neither found
+   * Only items of this kind: a meal's ingredients are food (D-55), so supplies are neither found
    * nor offered, and an item created here is food.
    */
   kind?: ItemKind;

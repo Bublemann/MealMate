@@ -10,7 +10,6 @@ from app.domain.catalog import (
     BRAND_MAX_LENGTH,
     ITEM_NAME_MAX_LENGTH,
     NAME_NORM_FACTOR,
-    QUANTITY_TEXT_MAX_LENGTH,
 )
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.units import ItemAttrs
@@ -43,7 +42,7 @@ for _key in NUTRIENT_KEYS:
 class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     """A shared item, editable by everyone like a wiki (ING-01, ING-02): typed by hand
     ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and taken from Open Food Facts with
-    its barcode. Its `kind` is food or a supply (D-54), which has no nutrients and no piece
+    its barcode. Its `kind` is food or a supply (D-55), which has no nutrients and no piece
     weight and is never an ingredient in a meal.
 
     The nutrient columns are the item's own values per 100 g, or per 100 ml for base unit
@@ -54,9 +53,7 @@ class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     The Open Food Facts columns only matter for `source` off: `user_edited_fields` lists the
     fields a user changed (`name`, `nutrients.kcal`, ...), which a refresh never overwrites
     (BAR-04); `pending_update` holds newer Open Food Facts values for those (BAR-06), see
-    `services.off_fields`. The pack size `quantity_text` is information only; `pack_quantity` and
-    `pack_unit` are its amount in g or ml, taken from the text (D-47), for the postponed pack
-    rounding.
+    `services.off_fields`.
     """
 
     __tablename__ = "items"
@@ -81,15 +78,12 @@ class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
-    # Food, or a supply: no nutrients, no piece weight and never in a meal (D-54).
+    # Food, or a supply: no nutrients, no piece weight and never in a meal (D-55).
     kind: Mapped[str] = mapped_column(String(10), default="food")
     base_unit: Mapped[str] = mapped_column(String(5), default="g")
     # Only for `piece` (D-32); migration 0014 cleared it on g and ml items and dropped
     # the density (D-34). See `attrs()`.
     piece_weight_g: Mapped[float | None] = mapped_column(Float)
-    quantity_text: Mapped[str | None] = mapped_column(String(QUANTITY_TEXT_MAX_LENGTH))
-    pack_quantity: Mapped[float | None] = mapped_column(Float)
-    pack_unit: Mapped[str | None] = mapped_column(String(10))
     source: Mapped[str] = mapped_column(String(10), default="manual")
     off_last_modified_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     fetched_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

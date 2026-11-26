@@ -53,7 +53,7 @@ async def list_items(
     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
     items in that order (at most 1000). `category_id`
     is repeatable: an item matches if it is in any of the given categories. With `kind`, only
-    food or only supplies (the meal form's search asks for food, D-54)."""
+    food or only supplies (the meal form's search asks for food, D-55)."""
     return await items.search(session, query=q, category_ids=category_id or [], kind=kind)
 
 

@@ -1,7 +1,7 @@
 """Items (ING-01..06, NUT-02), their barcode and Open Food Facts data (BAR-02..10).
 
 An item is typed by hand, with a brand, or taken from Open Food Facts with its barcode. It is
-food or a supply (D-54) and counted in its base unit: g, ml or pieces (D-32). Nutrients are a
+food or a supply (D-55) and counted in its base unit: g, ml or pieces (D-32). Nutrients are a
 food's own values per 100 g, or per 100 ml for an ml item; a supply has none.
 """
 
@@ -24,11 +24,9 @@ from app.domain.catalog import (
     ITEM_NAME_MAX_LENGTH,
     OFF_FIELDS,
     PIECE_WEIGHT_MAX_G,
-    QUANTITY_TEXT_MAX_LENGTH,
     check_name,
     check_text,
 )
-from app.domain.units import Unit
 from app.schemas.nutrition import NutrientValues
 from app.schemas.users import UserRef
 
@@ -93,18 +91,12 @@ BrandInput = Annotated[
     AfterValidator(check_text),
     AfterValidator(blank_to_none),
 ]
-QuantityTextInput = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, max_length=QUANTITY_TEXT_MAX_LENGTH),
-    AfterValidator(check_text),
-    AfterValidator(blank_to_none),
-]
 
 
 class ItemSummary(BaseModel):
     """A search result, list entry or meal row's item. It is shown as `name` with the
     `brand` in brackets when there is one ("Milch (Weihenstephan)"); `barcode` is set for
-    scanned items. A `kind` supply is never an ingredient in a meal (D-54)."""
+    scanned items. A `kind` supply is never an ingredient in a meal (D-55)."""
 
     id: str
     name: str
@@ -154,16 +146,13 @@ class Item(BaseModel):
     """An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count
     with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
-    `kind` food or supply (D-54): a supply's nutrients and piece weight are always null, and it
+    `kind` food or supply (D-55): a supply's nutrients and piece weight are always null, and it
     is never an ingredient in a meal.
 
     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
     ...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food
-    Facts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food
-    Facts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from
-    the text when it is a plain amount and unit ("500 g", "1,5 l"), else null (D-47); one saved
-    before D-47 keeps Open Food Facts' amount until its text changes.
+    Facts values for them (BAR-06).
     `created_by` / `updated_by` are null for a deleted user (ING-06).
     """
 
@@ -176,9 +165,6 @@ class Item(BaseModel):
     base_unit: BaseUnitName
     piece_weight_g: float | None
     nutrients: NutrientValues
-    quantity_text: str | None
-    pack_quantity: float | None
-    pack_unit: Unit | None
     source: ItemSource
     user_edited_fields: list[ItemField]
     off_last_modified_at: datetime | None
@@ -205,7 +191,7 @@ class ItemCreate(BaseModel):
     """A new item (ING-02), in one request also when it was scanned.
 
     `category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out
-    or null; D-54). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
+    or null; D-55). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
     otherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes
     neither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).
     Open Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
@@ -213,11 +199,9 @@ class ItemCreate(BaseModel):
     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
     item has is 409 `item.barcode_taken`.
 
-    `quantity_text` is the pack size ("500 g", "6 x 1,5 l"), at most 40 characters, for any
-    item; its amount is taken from it (D-47). With `off`, the item is from Open Food
-    Facts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).
-    Names need not be unique: the "similar item exists" hint
-    (`GET /api/items/similar`) is only a hint.
+    With `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its
+    `barcode` (422 `required` without). Names need not be unique: the "similar item exists"
+    hint (`GET /api/items/similar`) is only a hint.
     """
 
     name: ItemNameInput
@@ -228,7 +212,6 @@ class ItemCreate(BaseModel):
     base_unit: BaseUnitName = "g"
     piece_weight_g: PieceWeightInput | None = None
     nutrients: NutrientValues | None = None
-    quantity_text: QuantityTextInput | None = None
     off: ItemOffOrigin | None = None
 
 
@@ -237,9 +220,8 @@ class ItemUpdate(BaseModel):
     and is refused for the name, category and base unit (422 `invalid`). `nutrients` changes
     only the nutrients it contains (null clears one).
 
-    On an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the
-    pack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack
-    size's amount follows its text. A new barcode must be free (409
+    On an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and the
+    nutrients) becomes user-edited (BAR-04). A new barcode must be free (409
     `item.barcode_taken`); clearing or changing the barcode of an item from Open
     Food Facts makes it manual: a refresh by the new barcode would overwrite its values with
     another product's. The base unit may change freely; the values are not converted.
@@ -250,7 +232,7 @@ class ItemUpdate(BaseModel):
     `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
     they are and flagged.
 
-    `kind` (D-54): an item that is (or becomes) a supply takes neither a piece weight nor a
+    `kind` (D-55): an item that is (or becomes) a supply takes neither a piece weight nor a
     nutrient value (422 `invalid`). Switching to supply clears both, and is refused while any
     meal uses the item (409 `item.used_in_meals`).
     """
@@ -262,7 +244,6 @@ class ItemUpdate(BaseModel):
     kind: ItemKind | None = None
     base_unit: BaseUnitName | None = None
     piece_weight_g: PieceWeightInput | None = None
-    quantity_text: QuantityTextInput | None = None
     nutrients: NutrientValues | None = None
     accept_unit_mismatch: bool | None = None
 
@@ -282,7 +263,7 @@ class ItemMerge(BaseModel):
     amounts of the item not fitting the base unit of `into_id` is refused (409
     `item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
     isn't). A merge into a supply is refused while meals use the item (409
-    `item.used_in_meals`, D-54)."""
+    `item.used_in_meals`, D-55)."""
 
     into_id: IdInput
     accept_unit_mismatch: bool | None = None
@@ -301,7 +282,6 @@ class ProductProposal(BaseModel):
     barcode: str
     name: str | None
     brand: str | None
-    quantity_text: str | None
     nutrition_basis: NutritionBasisName | None
     nutrients: NutrientValues
     category_key: str | None

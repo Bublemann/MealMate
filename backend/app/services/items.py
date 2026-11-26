@@ -2,7 +2,7 @@
 Food Facts data (BAR-03..06), and the admin actions merge and delete (ING-05).
 
 An item is typed by hand, with a brand, or created from an Open Food Facts proposal (a scan or
-the name search) in one request. It is food or a supply (D-54): a supply holds no nutrients and
+the name search) in one request. It is food or a supply (D-55): a supply holds no nutrients and
 no piece weight (`_nutrient_problems`, `_piece_weight_problem`, `_make_supply`), and no meal
 uses it as an ingredient (`_check_not_in_meals`, `services.meals`); Open Food Facts never sets
 the kind, and a refresh leaves a supply's nutrients alone (`services.off_refresh`). Names need
@@ -14,10 +14,8 @@ an admin, which the API checks. Barcode uniqueness is checked inside the write t
 which holds the write lock (`BEGIN IMMEDIATE`).
 
 On an item from Open Food Facts (`source` off), every Open Food Facts field a user sets
-(`OFF_FIELDS`: name, brand, pack size, nutrients) is marked user-edited, so that a refresh
+(`OFF_FIELDS`: name, brand, nutrients) is marked user-edited, so that a refresh
 (`services.off_refresh`) never overwrites it; see `services.off_fields` for the pending update.
-Any item may have a pack size, typed in or from Open Food Facts; its amount is taken from
-its text (D-47).
 
 References from meals and lists go through `services.hooks`: `item_references` blocks
 deletion (and is shown as the usage), and `on_items_merged` repoints them when merging.
@@ -52,7 +50,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
 from app.domain.text import normalize, same_name
-from app.domain.units import NUTRITION_BASIS, BaseUnit, Unit, fits, stops_fitting
+from app.domain.units import NUTRITION_BASIS, BaseUnit, fits, stops_fitting
 from app.models import Item as ItemRow
 from app.repositories import items as items_repo
 from app.repositories import meals as meals_repo
@@ -84,7 +82,6 @@ from app.services.off_fields import (
     set_brand,
     set_field_value,
     set_name,
-    set_pack_size,
     unmark_edited,
 )
 from app.services.principal import Principal
@@ -126,9 +123,6 @@ async def detail(session: AsyncSession, row: ItemRow) -> Item:
         base_unit=base_unit_name(row.base_unit),
         piece_weight_g=row.attrs().piece_weight_g,
         nutrients=NutrientValues.model_validate(row.nutrients()),
-        quantity_text=row.quantity_text,
-        pack_quantity=row.pack_quantity,
-        pack_unit=None if row.pack_unit is None else Unit(row.pack_unit),
         source=source_name(row.source),
         user_edited_fields=edited_fields(row),
         off_last_modified_at=row.off_last_modified_at,
@@ -180,14 +174,14 @@ async def _check_amounts_fit(
 def _piece_weight_problem(
     piece_weight_g: float | None, base_unit: str, kind: str
 ) -> FieldProblem | None:
-    """Only food counted in pieces takes a piece weight (ING-02, D-32, D-54)."""
+    """Only food counted in pieces takes a piece weight (ING-02, D-32, D-55)."""
     if piece_weight_g is not None and (base_unit != BaseUnit.PIECE or kind == SUPPLY):
         return FieldProblem(("body", "piece_weight_g"), FieldErrorCode.INVALID)
     return None
 
 
 def _nutrient_problems(kind: str, nutrients: NutrientValues | None) -> list[FieldProblem]:
-    """A supply takes no nutrient value; a null one is fine (D-54)."""
+    """A supply takes no nutrient value; a null one is fine (D-55)."""
     if kind != SUPPLY:
         return []
     return [
@@ -199,7 +193,7 @@ def _nutrient_problems(kind: str, nutrients: NutrientValues | None) -> list[Fiel
 
 async def _check_not_in_meals(session: AsyncSession, principal: Principal, item_id: str) -> None:
     """409 `item.used_in_meals` while any meal uses the item, which a supply can't be in
-    (D-54): it counts them and names those the user may see, so that someone else's private
+    (D-55): it counts them and names those the user may see, so that someone else's private
     meal is only counted (VIS-02)."""
     meals = await meals_repo.with_item(session, item_id)
     if not meals:
@@ -212,7 +206,7 @@ async def _check_not_in_meals(session: AsyncSession, principal: Principal, item_
 
 
 def _make_supply(row: ItemRow) -> None:
-    """A supply has no nutrients and no piece weight (D-54): they go, and with them their
+    """A supply has no nutrients and no piece weight (D-55): they go, and with them their
     marks and pending Open Food Facts values, which no longer apply."""
     row.kind = SUPPLY
     row.piece_weight_g = None
@@ -252,7 +246,7 @@ async def search(
     name first, then names starting with the query, then the rest, each in dictionary order by
     name and brand. The exact names are marked (D-41). Without a query: every item (at
     most 1000) in that order. With `category_ids`, only items in any of those categories
-    (UI-01, D-23). With `kind`, only items of that kind (D-54)."""
+    (UI-01, D-23). With `kind`, only items of that kind (D-55)."""
     query_norm = normalize(query or "")
     async with session.begin():
         rows = await items_repo.search(
@@ -292,7 +286,7 @@ async def create_item(
     """Add an item (ING-02), by hand or from an Open Food Facts proposal (`off`, BAR-03):
     then `source` is off, it counts as fetched now, and only the fields the user changed compared
     with the proposal (`off.edited_fields`) are user-edited (BAR-04). It is food unless the request
-    makes it a supply, which takes no nutrient value and no piece weight (D-54)."""
+    makes it a supply, which takes no nutrient value and no piece weight (D-55)."""
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     from_off = body.off is not None
     kind = body.kind or FOOD
@@ -329,7 +323,6 @@ async def create_item(
         )
         set_name(row, body.name)
         set_brand(row, body.brand)
-        set_pack_size(row, body.quantity_text)
         row.set_nutrients((body.nutrients or NutrientValues()).model_dump())
         session.add(row)
         await session.flush()
@@ -347,7 +340,7 @@ def _make_manual(row: ItemRow) -> None:
     """Turn an item from Open Food Facts whose barcode was cleared or changed into a
     manual one, with its values as they are. Without a barcode there is nothing to refresh it
     by; with another one, a refresh would fetch another product and overwrite the name, brand,
-    pack and nutrients with its data. So its Open Food Facts data goes as well."""
+    and nutrients with its data. So its Open Food Facts data goes as well."""
     row.source = "manual"
     row.user_edited_fields = []
     row.pending_update = None
@@ -373,7 +366,7 @@ async def update_item(
     that would leave amounts that fit now not fitting (`stops_fitting`) changes nothing unless
     the request accepts that (D-33). Clearing or changing the barcode makes it a manual
     item (`_make_manual`). A supply takes no nutrient value and no piece weight; switching to
-    supply is refused while meals use the item and clears both (`_make_supply`, D-54)."""
+    supply is refused while meals use the item and clears both (`_make_supply`, D-55)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     async with session.begin():
@@ -413,9 +406,6 @@ async def update_item(
         if "brand" in sent:
             set_brand(row, body.brand)
             edited.append("brand")
-        if "quantity_text" in sent:
-            set_pack_size(row, body.quantity_text)
-            edited.append("quantity_text")
         for key in _nutrient_keys(body.nutrients):
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
@@ -438,7 +428,6 @@ async def update_item(
             if row.source == "off":
                 _make_manual(row)
         if row.source == "off":
-            # Marks on the pack size's amount from before D-38 stay as they are (`edited_fields`).
             row.user_edited_fields = [
                 *row.user_edited_fields,
                 *(field for field in edited if field not in row.user_edited_fields),
@@ -543,7 +532,7 @@ async def merge(
     values and records the admin as the one who changed it last. When their base units differ,
     amounts of the duplicate that won't fit the target's are kept as they are; while there are
     any, nothing is merged unless the request accepts that (D-33). Nothing is merged into a
-    supply while meals use the duplicate (D-54).
+    supply while meals use the duplicate (D-55).
 
     The duplicate's barcode moves to the target if the target has none (only the barcode: the
     target's values, source and Open Food Facts data stay); otherwise it is dropped with the

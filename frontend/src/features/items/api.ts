@@ -19,7 +19,7 @@ export type ItemCreate = components['schemas']['ItemCreate'];
 export type ItemUpdate = components['schemas']['ItemUpdate'];
 export type ItemMerge = components['schemas']['ItemMerge'];
 export type BaseUnit = Item['base_unit'];
-/** Food, or a supply: no nutrients, no piece weight, never in a meal (D-54). */
+/** Food, or a supply: no nutrients, no piece weight, never in a meal (D-55). */
 export type ItemKind = Item['kind'];
 export type NutrientValues = components['schemas']['NutrientValues'];
 export type PendingUpdateField = components['schemas']['PendingUpdateField'];
@@ -66,7 +66,7 @@ export function toSummary(item: Item): ItemSummary {
 /**
  * Items matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
  * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories,
- * with `kind` only food or only supplies (D-54).
+ * with `kind` only food or only supplies (D-55).
  */
 export function itemsQuery(query: string, categoryIds: readonly string[] = [], kind?: ItemKind) {
   const q = query.trim();
@@ -185,7 +185,7 @@ export function unitMismatch(error: unknown): UnitMismatch | null {
   return { meals: count('meals'), lists: count('lists'), amounts: count('amounts') };
 }
 
-/** The meals a switch to supply was refused for (D-54): how many, and those the user may see. */
+/** The meals a switch to supply was refused for (D-55): how many, and those the user may see. */
 export interface UsedInMeals {
   meals: number;
   names: string[];
