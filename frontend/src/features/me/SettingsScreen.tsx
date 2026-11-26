@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Screen } from '@/components/Screen';
+import { Button } from '@/components/ui/button';
 import { useLogout } from '@/features/auth/api';
 import { useCurrentUser } from '@/features/auth/context';
 import { useSyncEngine, useSyncStatus } from '@/features/sync/context';
@@ -110,15 +111,15 @@ function LogoutRow() {
   return (
     <div className="flex flex-col gap-2">
       <div className={SETTINGS_PANEL}>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           data-testid={testIds.logoutButton}
-          disabled={logout.isPending}
+          pending={logout.isPending}
           onClick={() => void onLogout()}
-          className={`min-h-(--tap-target) px-4 py-3 text-center font-medium text-destructive disabled:opacity-50 ${SETTINGS_ROW_FOCUS}`}
+          className={`w-full rounded-none px-4 py-3 text-destructive hover:text-destructive focus-visible:ring-offset-0 ${SETTINGS_ROW_FOCUS}`}
         >
           {t('me.logout')}
-        </button>
+        </Button>
       </div>
       <ConfirmDialog
         open={confirming}

@@ -203,13 +203,18 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
           type="button"
           variant="outline"
           aria-label={t('lists.item.removeLabel', { name })}
+          pending={remove.isPending}
           disabled={busy}
           onClick={onRemove}
+          icon={<Trash2 aria-hidden="true" />}
         >
-          <Trash2 aria-hidden="true" />
           {t('lists.item.remove')}
         </Button>
-        <Button type="submit" disabled={busy || (!linked && text.trim() === '')}>
+        <Button
+          type="submit"
+          pending={update.isPending}
+          disabled={busy || (!linked && text.trim() === '')}
+        >
           {t('common.save')}
         </Button>
       </DialogFooter>

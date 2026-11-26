@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
+import { LoadingState } from '@/components/LoadingState';
 import { ShareLink } from '@/components/ShareLink';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -72,7 +73,7 @@ function CreateInvite() {
           <Button
             type="submit"
             data-testid={testIds.createInviteButton}
-            disabled={create.isPending}
+            pending={create.isPending}
             className="self-start"
           >
             {t('admin.invites.create')}
@@ -105,7 +106,7 @@ function InviteList() {
       <h2 id={headingId} className="text-lg font-semibold">
         {t('admin.invites.listTitle')}
       </h2>
-      {invites.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {invites.isPending && <LoadingState />}
       <ErrorAlert error={invites.error ?? revoke.error} />
       {invites.data?.length === 0 && (
         <p className="text-muted-foreground">{t('admin.invites.empty')}</p>
@@ -161,7 +162,7 @@ function InviteRow({ invite, onRevoke, revoking }: InviteRowProps) {
         <Button
           size="compact"
           variant="outline"
-          disabled={revoking}
+          pending={revoking}
           onClick={onRevoke}
           aria-label={t('admin.invites.revokeLabel', { date: created })}
         >

@@ -1,17 +1,14 @@
 import { CloudOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import { useAuthSession } from './context';
 
 /** Shown while the start-up refresh runs (usually a fraction of a second). */
 export function StartupScreen() {
-  const { t } = useTranslation();
-
   return (
     <main className="flex min-h-dvh items-center justify-center px-4">
-      <p role="status" className="text-muted-foreground">
-        {t('common.loading')}
-      </p>
+      <LoadingState />
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FormField } from '@/components/FormField';
+import { LoadingState } from '@/components/LoadingState';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import type { BaseUnit } from '@/features/items/api';
@@ -143,9 +144,8 @@ export function FreeTextFields({
               value={categoryId}
               onChange={(event) => onCategoryChange(event.target.value)}
             >
-              {!categories.data && (
-                <NativeSelectOption value="">{t('common.loading')}</NativeSelectOption>
-              )}
+              {/* An option can't hold the spinner: it shows below until they arrive (UI-08). */}
+              {!categories.data && <NativeSelectOption value="" />}
               {categories.data && (
                 <CategoryOptions categories={categories.data} selected={categoryId} />
               )}
@@ -153,6 +153,7 @@ export function FreeTextFields({
           )}
         </FormField>
       )}
+      {!withoutCategory && categories.isPending && <LoadingState className="justify-start py-0" />}
     </div>
   );
 }

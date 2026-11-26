@@ -60,7 +60,7 @@ export function ProfileScreen() {
         </FormField>
         {!fields.display_name && <ErrorAlert error={nameUpdate.error} />}
         <div className="flex items-center gap-3">
-          <Button type="submit" size="compact" disabled={unchanged || nameUpdate.isPending}>
+          <Button type="submit" size="compact" pending={nameUpdate.isPending} disabled={unchanged}>
             {t('common.save')}
           </Button>
           <p aria-live="polite" className="text-sm text-muted-foreground">

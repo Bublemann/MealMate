@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ExternalLink } from '@/components/ExternalLink';
+import { LoadingState } from '@/components/LoadingState';
 import { useCurrentUser } from '@/features/auth/context';
 import { OffAttribution } from '@/features/items/OffAttribution';
 import { errorMessage } from '@/i18n/errors';
@@ -29,7 +30,7 @@ export function AboutScreen() {
             </dd>
           ) : (
             <dd className="text-muted-foreground">
-              {version.isError ? errorMessage(t, version.error) : t('common.loading')}
+              {version.isError ? errorMessage(t, version.error) : <LoadingState className="py-0" />}
             </dd>
           )}
         </dl>

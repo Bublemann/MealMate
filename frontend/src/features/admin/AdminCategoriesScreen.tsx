@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -76,7 +77,7 @@ export function AdminCategoriesScreen() {
   return (
     <SettingsPage title={t('admin.categories.title')} testId={testIds.screenAdminCategories}>
       <p className="text-muted-foreground">{t('admin.categories.text')}</p>
-      {categories.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {categories.isPending && <LoadingState />}
       <LoadError error={categories.error} />
       {categories.data && <CategoryOrder categories={categories.data} />}
     </SettingsPage>
@@ -381,7 +382,7 @@ function NamesForm({ initial, save, onDone, extraAction }: NamesFormProps) {
       <ErrorAlert error={needsErrorAlert(fields, NAME_PATHS) ? save.error : null} />
       <DialogFooter>
         {extraAction}
-        <Button type="submit" disabled={!complete || save.isPending}>
+        <Button type="submit" pending={save.isPending} disabled={!complete}>
           {t('common.save')}
         </Button>
       </DialogFooter>
@@ -433,9 +434,11 @@ function DeleteCategory({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('admin.categories.deleteTitle', { name })}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {usage.data
-                ? [
+            <AlertDialogDescription asChild>
+              {/* A div, not the usual <p>: it can hold the spinner (UI-08). */}
+              <div>
+                {usage.data &&
+                  [
                     t('admin.categories.deleteItems', {
                       count: usage.data.items,
                       uncategorized: nameOf(UNCATEGORIZED_KEY),
@@ -445,8 +448,9 @@ function DeleteCategory({
                       other: nameOf(OTHER_KEY),
                     }),
                     t('admin.categories.deleteKeeps'),
-                  ].join(' ')
-                : t('common.loading')}
+                  ].join(' ')}
+                {usage.isPending && <LoadingState />}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ErrorAlert error={usage.error ?? remove.error} />
@@ -454,7 +458,8 @@ function DeleteCategory({
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <Button
               variant="destructive"
-              disabled={!usage.data || remove.isPending}
+              pending={remove.isPending}
+              disabled={!usage.data}
               onClick={() =>
                 remove.mutate(undefined, {
                   onSuccess: () => {

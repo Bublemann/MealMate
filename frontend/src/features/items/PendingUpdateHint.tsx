@@ -76,6 +76,7 @@ export function PendingUpdateHint({ item, fields }: PendingUpdateHintProps) {
           size="compact"
           data-testid={testIds.applyPendingUpdate}
           aria-label={t('items.pending.applyLabel', { name })}
+          pending={apply.isPending}
           disabled={busy}
           onClick={() => apply.mutate()}
         >
@@ -86,6 +87,7 @@ export function PendingUpdateHint({ item, fields }: PendingUpdateHintProps) {
           variant="outline"
           data-testid={testIds.ignorePendingUpdate}
           aria-label={t('items.pending.ignoreLabel', { name })}
+          pending={ignore.isPending}
           disabled={busy}
           onClick={() => ignore.mutate()}
         >
