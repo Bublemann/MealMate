@@ -713,7 +713,7 @@ order.
 | `itemForm`              | `item-form`               | Create/edit item form                            |
 | `itemFormScan`          | `item-form-scan`          | Scan icon next to the name in the form           |
 | `itemFormFooter`        | `item-form-footer`        | The form's pinned footer with "Save"             |
-| `itemUsedInMeals`       | `item-used-in-meals`      | Why the item can't become a supply (D-54)        |
+| `itemUsedInMeals`       | `item-used-in-meals`      | Why the item can't become a supply (D-55)        |
 | `itemScanNotice`        | `item-scan-notice`        | The scan's notice below the barcode              |
 | `itemScanOpen`          | `item-scan-open`          | "open" the item a scan belongs to                |
 | `itemScanTake`          | `item-scan-take`          | "use" it instead, in the picker                  |

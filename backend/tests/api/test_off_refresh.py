@@ -171,6 +171,35 @@ async def test_a_supply_takes_no_nutrients_and_keeps_its_kind(
     assert body["pending_update"] is None
 
 
+async def test_switching_to_supply_drops_the_pending_nutrients(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """A supply has no nutrients, so newer Open Food Facts values for them no longer apply; the
+    other pending values stay (D-55)."""
+    product = await saved_oats(api, anna, edited=["name", "nutrients.kcal"], name="Meine Flocken")
+    newer = oats(
+        nutriments={**oats()["product"]["nutriments"], "energy-kcal_100g": 158},
+        last_modified_t=modified(30),
+    )
+    route(off_api, OATS).respond(json=newer)
+    assert await refresh(app, clock, product["id"]) == Outcome.PENDING
+
+    response = await api.patch(
+        f"/api/items/{product['id']}", json={"kind": "supply"}, headers=anna.headers
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["user_edited_fields"] == ["name"]
+    assert body["pending_update"]["fields"] == [
+        {"field": "name", "current": "Meine Flocken", "proposed": "Haferflocken"}
+    ]
+
+
 async def test_user_edited_fields_become_a_pending_update(
     app: FastAPI,
     api: AsyncClient,

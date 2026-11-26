@@ -121,10 +121,35 @@ async def test_a_supply_refuses_nutrients_and_a_piece_weight(
 
 
 async def test_the_kind_cannot_be_null(api: AsyncClient, anna: Account) -> None:
-    milk = await create_item(api, anna, "Milch")
+    """Left out or null, a new item is food; an update can't clear the kind."""
+    milk = await create_item(api, anna, "Milch", kind=None)
+    assert milk["kind"] == "food"
     response = await patch(api, anna, milk["id"], kind=None)
     assert response.status_code == 422
     assert fields(response) == {("body", "kind"): "invalid"}
+
+
+async def test_a_supply_takes_null_nutrients_without_marking_them(
+    api: AsyncClient, anna: Account
+) -> None:
+    """Null nutrients are fine for a supply, and never count as edited by a user: if it becomes
+    food again, a refresh fills them in (BAR-04)."""
+    tissues = await create_from_off(
+        api,
+        anna,
+        "Taschentücher",
+        EAN_13,
+        kind="supply",
+        nutrients=NO_NUTRIENTS,
+        edited_fields=["name", "nutrients.kcal"],
+    )
+    assert tissues["user_edited_fields"] == ["name"]
+
+    for nutrients in (None, {"kcal": None}):
+        response = await patch(api, anna, tissues["id"], nutrients=nutrients)
+        assert response.status_code == 200, response.text
+        assert response.json()["user_edited_fields"] == ["name"]
+        assert response.json()["nutrients"] == NO_NUTRIENTS
 
 
 async def test_switching_to_supply_clears_nutrients_and_piece_weight(
@@ -238,6 +263,7 @@ async def test_merging_into_a_supply_is_refused_while_meals_use_the_duplicate(
     assert response.status_code == 409
     assert error(response) == "item.used_in_meals"
     assert response.json()["params"] == {"meals": 1, "names": ["Tacos"]}
+    assert (await get(api, anna, paper["id"]))["usage"]["meals"] == 1
     # Not used in meals, it merges.
     unused = await create_item(api, anna, "Küchentücher")
     response = await api.post(

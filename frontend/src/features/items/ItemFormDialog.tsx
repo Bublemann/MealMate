@@ -283,13 +283,10 @@ function ItemForm({
     unitMismatch(mutation.error) === null &&
     needsErrorAlert(serverFields, SHOWN_FIELDS);
   const supply = values.kind === 'supply';
-  // A meal's ingredient is never a supply (D-55).
+  // A meal's ingredient is never a supply (D-55): the hints, the scan's notice and the search
+  // don't offer one to use.
   const takes = (match: ItemSummary) => !foodOnly || match.kind === 'food';
-  const pick =
-    onPickExisting &&
-    ((match: ItemSummary) => {
-      if (takes(match)) pickExisting(match);
-    });
+  const pick = onPickExisting && pickExisting;
   // A proposal belongs to its barcode: a scanned or chosen product keeps it.
   const barcodeFixed = proposed !== null;
   const fromOff = proposed !== null || item?.source === 'off';
@@ -403,7 +400,7 @@ function ItemForm({
       else problems.add('piece_weight_g');
     }
     // A supply has no nutrition (D-55): its hidden fields are neither checked nor sent.
-    const nutrients = {} as Record<NutrientKey, number | null>;
+    const nutrients: Partial<Record<NutrientKey, number | null>> = {};
     for (const key of supply ? [] : NUTRIENT_KEYS) {
       const parsed = parseOptionalAmount(values.nutrients[key]);
       if (parsed.ok) nutrients[key] = parsed.value;
@@ -664,40 +661,40 @@ function ItemForm({
           </FormField>
         )}
         {!supply && (
-        <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 font-semibold">
-            {t('items.form.nutritionTitle', {
-              unit: unitLabel(t, nutritionUnit(values.baseUnit)),
-            })}
-          </legend>
-          <div className="grid grid-cols-2 gap-3">
-            {NUTRIENT_KEYS.map((key) => (
-              <FormField
-                key={key}
-                label={nutrientLabel(t, key)}
-                hint={editedHint(`nutrients.${key}`)}
-                error={fieldError(`nutrients.${key}`)}
-              >
-                {(control) => (
-                  <Input
-                    {...control}
-                    name={`nutrients.${key}`}
-                    inputMode="decimal"
-                    autoComplete="off"
-                    value={values.nutrients[key]}
-                    onChange={(event) => {
-                      const text = event.target.value;
-                      setValues((current) => ({
-                        ...current,
-                        nutrients: { ...current.nutrients, [key]: text },
-                      }));
-                    }}
-                  />
-                )}
-              </FormField>
-            ))}
-          </div>
-        </fieldset>
+          <fieldset className="flex flex-col gap-3">
+            <legend className="mb-1 font-semibold">
+              {t('items.form.nutritionTitle', {
+                unit: unitLabel(t, nutritionUnit(values.baseUnit)),
+              })}
+            </legend>
+            <div className="grid grid-cols-2 gap-3">
+              {NUTRIENT_KEYS.map((key) => (
+                <FormField
+                  key={key}
+                  label={nutrientLabel(t, key)}
+                  hint={editedHint(`nutrients.${key}`)}
+                  error={fieldError(`nutrients.${key}`)}
+                >
+                  {(control) => (
+                    <Input
+                      {...control}
+                      name={`nutrients.${key}`}
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={values.nutrients[key]}
+                      onChange={(event) => {
+                        const text = event.target.value;
+                        setValues((current) => ({
+                          ...current,
+                          nutrients: { ...current.nutrients, [key]: text },
+                        }));
+                      }}
+                    />
+                  )}
+                </FormField>
+              ))}
+            </div>
+          </fieldset>
         )}
       </div>
       <div data-testid={testIds.itemFormFooter} className="flex flex-col gap-3 border-t pt-4">

@@ -14,7 +14,7 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
 };
 
 export const LANGUAGE_STORAGE_KEY = 'mm.language';
-export const DEFAULT_LANGUAGE: Language = 'en';
+const DEFAULT_LANGUAGE: Language = 'en';
 
 export function isLanguage(value: unknown): value is Language {
   return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value);

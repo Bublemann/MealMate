@@ -306,6 +306,8 @@ async def create_item(
         if barcode is not None:
             await _check_barcode_free(session, barcode)
         edited = set(body.off.edited_fields) if body.off is not None else set()
+        if kind == SUPPLY:  # it has no nutrients to keep from a refresh (D-55)
+            edited -= {nutrient_field(key) for key in NUTRIENT_KEYS}
         row = ItemRow(
             barcode=barcode,
             category_id=body.category_id or await _other_category_id(session),
@@ -406,7 +408,8 @@ async def update_item(
         if "brand" in sent:
             set_brand(row, body.brand)
             edited.append("brand")
-        for key in _nutrient_keys(body.nutrients):
+        # A supply's nutrients stay unknown, so its null ones are not the user's (D-55).
+        for key in [] if kind == SUPPLY else _nutrient_keys(body.nutrients):
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
         if body.category_id is not None:
@@ -435,7 +438,7 @@ async def update_item(
             drop_pending(row, decided)
         if to_supply:
             _make_supply(row)
-        elif kind != row.kind:
+        else:
             row.kind = kind
         row.updated_by = principal.user_id
         row.updated_at = now

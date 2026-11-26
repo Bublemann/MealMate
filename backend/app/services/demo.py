@@ -24,7 +24,7 @@
   shared "Salatabend" (one line not bought) and carl's "Vorrat".
 - Recurring items (`_insert_recurring`, LIST-16): the couple's set has "Klopapier", last bought
   five weeks ago with a four-week interval and so due, and "Zahnpasta", bought last week; both
-  are household items and supplies (D-55), the only ones in the catalog.
+  are supplies (D-55), the only ones in the catalog.
 
 The content is fixed; only ids, the password, the invite code and the photo keys differ
 between runs; the times of shopping and finishing, and the days of the last purchases, are

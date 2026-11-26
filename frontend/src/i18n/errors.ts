@@ -1,7 +1,6 @@
 import type { TFunction } from 'i18next';
 import { errorKey, fieldErrorCodes, isApiError, type ErrorParams } from '@/api/errors';
-import i18n, { DEFAULT_LANGUAGE, isLanguage } from '.';
-import { formatList } from './format';
+import i18n from '.';
 
 /** The translated message for any error; codes this app version doesn't know get the generic one. */
 export function errorMessage(t: TFunction, error: unknown): string {
@@ -10,14 +9,12 @@ export function errorMessage(t: TFunction, error: unknown): string {
   return t(key, isApiError(error) ? textParams(error.params) : {});
 }
 
-/** The params as the translations take them: a list of names becomes "A, B und C". */
+/** The params as the translations take them: lists (meal names) are left to their own UI. */
 function textParams(params: ErrorParams): Record<string, string | number | boolean> {
-  const language = isLanguage(i18n.resolvedLanguage) ? i18n.resolvedLanguage : DEFAULT_LANGUAGE;
   return Object.fromEntries(
-    Object.entries(params).map(([key, value]) => [
-      key,
-      Array.isArray(value) ? formatList(value, language) : value,
-    ]),
+    Object.entries(params).filter(
+      (entry): entry is [string, string | number | boolean] => !Array.isArray(entry[1]),
+    ),
   );
 }
 

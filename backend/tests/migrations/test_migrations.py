@@ -1875,7 +1875,9 @@ def constraint_and_index_names(path: Path, table: str) -> set[str]:
 
 
 @pytest.mark.parametrize("table", ["items", *RENAMED_COLUMNS])
-def test_0019_names_the_constraints_as_the_models_do(tmp_path: Path, table: str) -> None:
+def test_the_renamed_tables_name_their_constraints_as_the_models_do(
+    tmp_path: Path, table: str
+) -> None:
     """Autogenerate doesn't compare check constraints or every constraint name, so this does:
     after 0019 (and the later migrations, such as 0021's kind of an item) each renamed table has
     the constraint and index names of its model."""

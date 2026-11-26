@@ -67,7 +67,9 @@ describe('Food or supplies (D-55)', () => {
     ).toEqual(['Food', 'Supplies']);
     expect(within(kind).getByLabelText('Food')).toBeChecked();
     expectInPageOrder([kind, within(form).getByLabelText('Name')]);
-    expect(within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' })).toBeVisible();
+    expect(
+      within(form).getByRole('group', { name: 'Nutrition per 100 g (optional)' }),
+    ).toBeVisible();
   });
 
   it('hides the nutrition and the piece weight for supplies, and sends neither', async () => {
@@ -158,6 +160,53 @@ describe('Food or supplies (D-55)', () => {
     expect(screen.queryByTestId(testIds.itemNutrition)).not.toBeInTheDocument();
   });
 
+  it('opens a supply’s edit pop-up with “Supplies” chosen, and makes it food again', async () => {
+    const { fetchMock, user } = renderItems(
+      { 'PATCH /api/items/ing-klopapier': { ...PAPER, kind: 'food' } },
+      '/items/ing-klopapier',
+    );
+
+    await chooseFromMenu(user, testIds.editItem);
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Klopapier' });
+    expect(within(dialog).getByLabelText('Supplies')).toBeChecked();
+    expect(within(dialog).queryByLabelText('Calories')).not.toBeInTheDocument();
+    await user.click(within(dialog).getByLabelText('Food'));
+    expect(within(dialog).getByLabelText('Calories')).toHaveValue('');
+    expect(within(dialog).getByLabelText('Weight per piece (g)')).toBeVisible();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await expect(
+      requestsTo(fetchMock, 'PATCH /api/items/ing-klopapier')[0]?.json(),
+    ).resolves.toEqual({ kind: 'food' });
+  });
+
+  it('saves a scanned product as a supply without its nutrition or marks on it (BAR-04)', async () => {
+    const { fetchMock, user } = renderItems({
+      'GET /api/items/lookup': lookupResult({
+        found_in: 'off',
+        proposal: proposal({ name: 'Taschentücher', nutrition_basis: 'g' }),
+      }),
+      'POST /api/items': Response.json(PAPER, { status: 201 }),
+    });
+
+    const form = await openNewItem(user);
+    await scanInForm(user, form, '4006381333931');
+    await waitFor(() => expect(within(form).getByLabelText('Name')).toHaveValue('Taschentücher'));
+    await user.clear(within(form).getByLabelText('Calories'));
+    await user.click(within(form).getByLabelText('Supplies'));
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1));
+    const body = (await requestsTo(fetchMock, 'POST /api/items')[0]?.json()) as Record<
+      string,
+      unknown
+    >;
+    expect(body.kind).toBe('supply');
+    expect(body).not.toHaveProperty('nutrients');
+    expect(body.off).toEqual({ off_last_modified_at: '2026-09-01T10:00:00Z', edited_fields: [] });
+  });
+
   it('names the meals that keep an item from becoming a supply, in German', async () => {
     await i18n.changeLanguage('de');
     const { user } = renderItems(
@@ -231,8 +280,8 @@ describe('The meal form’s item search (MEAL-02, D-55)', () => {
     await user.type(screen.getByLabelText('Search item'), 'Ke');
 
     expect(await screen.findByText('Kekse')).toBeVisible();
-    const asked = requestsTo(fetchMock, 'GET /api/items').map(
-      (request) => new URL(request.url).searchParams.get('kind'),
+    const asked = requestsTo(fetchMock, 'GET /api/items').map((request) =>
+      new URL(request.url).searchParams.get('kind'),
     );
     expect(asked).toEqual(['food']);
   });
@@ -253,6 +302,34 @@ describe('The meal form’s item search (MEAL-02, D-55)', () => {
     expect(body).not.toHaveProperty('kind');
   });
 
+  it('shows a supply the Open Food Facts search finds, but doesn’t take it', async () => {
+    const candles = summary('Kerzen', 'other', { kind: 'supply', id: 'ing-kerzen' });
+    const { user } = renderPicker({
+      'GET /api/items/off-search': {
+        q: 'Kerzen',
+        page: 1,
+        has_more: false,
+        results: [
+          {
+            proposal: proposal({ barcode: candles.barcode ?? '4006381333931', name: 'Kerzen' }),
+            in_mealmate: true,
+            item: candles,
+          },
+        ],
+      },
+    });
+
+    await user.type(screen.getByLabelText('Search item'), 'Kerzen');
+    await user.click(await screen.findByTestId(testIds.itemPickerCreate));
+    const form = within(await screen.findByRole('dialog')).getByTestId(testIds.itemForm);
+    await user.click(within(form).getByRole('button', { name: 'Search Open Food Facts' }));
+
+    const search = await screen.findByTestId(testIds.offSearchDialog);
+    const [result] = await within(search).findAllByTestId(testIds.offSearchResult);
+    expect(result).toBeDisabled();
+    expect(result).toHaveTextContent("“Kerzen” is a supply and can't be an ingredient.");
+  });
+
   it('offers no supply a similar name or a scan finds', async () => {
     const candles = summary('Kerzen', 'other', { kind: 'supply', id: 'ing-kerzen' });
     const { user } = renderPicker({
@@ -268,9 +345,11 @@ describe('The meal form’s item search (MEAL-02, D-55)', () => {
     const form = within(await screen.findByRole('dialog')).getByTestId(testIds.itemForm);
 
     const similar = await within(form).findByTestId(testIds.itemSimilar);
-    expect(within(similar).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Use Kerzenwachs-Kekse',
-    ]);
+    expect(
+      within(similar)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Use Kerzenwachs-Kekse']);
     await scanInForm(user, form, '4006381333931');
     const notice = await within(form).findByTestId(testIds.itemScanNotice);
     expect(notice).toHaveTextContent("“Kerzen” is a supply and can't be an ingredient.");
