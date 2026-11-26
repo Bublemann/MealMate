@@ -58,7 +58,7 @@ function renderItems(routes: Record<string, unknown> = {}) {
     'GET /api/items/similar': [],
     ...routes,
   });
-  return { fetchMock, ...renderApp('/ingredients') };
+  return { fetchMock, ...renderApp('/items') };
 }
 
 function categoriesAskedFor(fetchMock: ReturnType<typeof mockApi>) {
@@ -86,23 +86,23 @@ describe('ItemsScreen', () => {
     renderItems({ 'GET /api/items': ingredients.route });
 
     expect(await screen.findByText('Loading…')).toBeVisible();
-    const headline = expectPinnedHeadline('Ingredients');
-    expect(screen.getByLabelText('Search ingredients')).toBeVisible();
-    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('New ingredient');
+    const headline = expectPinnedHeadline('Items');
+    expect(screen.getByLabelText('Search items')).toBeVisible();
+    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('New item');
 
     await ingredients.answer([]);
-    expect(await screen.findByText('No ingredients yet')).toBeVisible();
+    expect(await screen.findByText('No items yet')).toBeVisible();
     expect(screen.queryByTestId(testIds.loadingState)).toBeNull();
-    expect(expectPinnedHeadline('Ingredients')).toBe(headline);
-    expect(screen.getByLabelText('Search ingredients')).toBeVisible();
-    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('New ingredient');
+    expect(expectPinnedHeadline('Items')).toBe(headline);
+    expect(screen.getByLabelText('Search items')).toBeVisible();
+    expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('New item');
   });
 
   it('shows one A–Z list with category and base unit in the grey line, brand and barcode (ING-03)', async () => {
     renderItems();
 
     const list = await screen.findByTestId(testIds.itemList);
-    expect(list).toHaveAccessibleName('Ingredients');
+    expect(list).toHaveAccessibleName('Items');
     expect(screen.queryAllByRole('heading', { level: 2 })).toEqual([]);
     const rows = within(list).getAllByTestId(testIds.itemRow);
     expect(rows.map((row) => row.textContent)).toEqual([
@@ -114,11 +114,11 @@ describe('ItemsScreen', () => {
     ]);
     expect(within(list).getByRole('link', { name: /^Äpfel/ })).toHaveAttribute(
       'href',
-      '/ingredients/ing-äpfel',
+      '/items/ing-äpfel',
     );
     expect(
       within(list).getByRole('link', { name: /^Butter \(Kerrygold\) with barcode/ }),
-    ).toHaveAttribute('href', '/ingredients/ing-butter');
+    ).toHaveAttribute('href', '/items/ing-butter');
   });
 
   it('shows “Stk.” in the grey line of an ingredient counted in pieces (ING-03)', async () => {
@@ -137,7 +137,7 @@ describe('ItemsScreen', () => {
     const { fetchMock, user } = renderItems();
     await screen.findByTestId(testIds.itemList);
 
-    await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
+    await user.type(screen.getByLabelText('Search items'), 'aepfel');
 
     await waitFor(() => expect(searchTerms(fetchMock)).toEqual([null, 'aepfel']));
     const list = screen.getByTestId(testIds.itemList);
@@ -150,19 +150,19 @@ describe('ItemsScreen', () => {
   it('turns the tile into “Create …” while searching, filled in as the new name (ING-03)', async () => {
     const { user } = renderItems();
     await screen.findByTestId(testIds.itemList);
-    const search = screen.getByLabelText('Search ingredients');
+    const search = screen.getByLabelText('Search items');
     const tile = screen.getByTestId(testIds.newItem);
 
     await user.type(search, ' Quitten ');
     expect(tile).toHaveAccessibleName('Create “Quitten”');
     await user.click(tile);
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Quitten');
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await user.clear(search);
-    expect(tile).toHaveAccessibleName('New ingredient');
+    expect(tile).toHaveAccessibleName('New item');
   });
 
   it('keeps the search and the categories until the app closes, but not in the address or browser storage (UI-01)', async () => {
@@ -170,7 +170,7 @@ describe('ItemsScreen', () => {
       'GET /api/items/ing-%C3%A4pfel': itemDetail({ id: 'ing-äpfel', name: 'Äpfel' }),
     });
     await screen.findByTestId(testIds.itemList);
-    await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
+    await user.type(screen.getByLabelText('Search items'), 'aepfel');
     await user.click(screen.getByTestId(testIds.filterButton));
     const panel = await screen.findByTestId(testIds.filterPanel);
     await user.click(within(panel).getByRole('checkbox', { name: 'Fruit & vegetables' }));
@@ -183,7 +183,7 @@ describe('ItemsScreen', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Äpfel' })).toBeVisible();
     await user.click(screen.getByTestId(testIds.tabItems));
 
-    expect(await screen.findByLabelText('Search ingredients')).toHaveValue('aepfel');
+    expect(await screen.findByLabelText('Search items')).toHaveValue('aepfel');
     expect(screen.getByTestId(testIds.newItem)).toHaveAccessibleName('Create “aepfel”');
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
     await waitFor(() => expect(rows()).toHaveLength(1));
@@ -203,7 +203,7 @@ describe('ItemsScreen', () => {
     // Started again, the app has forgotten them.
     unmount();
     renderItems();
-    expect(await screen.findByLabelText('Search ingredients')).toHaveValue('');
+    expect(await screen.findByLabelText('Search items')).toHaveValue('');
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters');
   });
 
@@ -311,7 +311,7 @@ describe('ItemsScreen', () => {
   it('resets every group but keeps the search, and closes with “Done” (UI-01)', async () => {
     const { user } = renderItems();
     await screen.findByTestId(testIds.itemList);
-    const search = screen.getByLabelText('Search ingredients');
+    const search = screen.getByLabelText('Search items');
     await user.type(search, 'aepfel');
     await waitFor(() => expect(rowTexts()).toEqual(['ÄpfelFruit & vegetables · g']));
     const button = screen.getByTestId(testIds.filterButton);
@@ -344,7 +344,7 @@ describe('ItemsScreen', () => {
   it('says “No matches” when the categories hide everything; “Reset filters” clears search and categories (UI-03)', async () => {
     const { user } = renderItems();
     await screen.findByTestId(testIds.itemList);
-    const search = screen.getByLabelText('Search ingredients');
+    const search = screen.getByLabelText('Search items');
     const button = screen.getByTestId(testIds.filterButton);
     await user.click(button);
     const panel = await screen.findByRole('dialog', { name: 'Filters' });
@@ -352,7 +352,7 @@ describe('ItemsScreen', () => {
     await user.click(within(panel).getByRole('checkbox', { name: 'Cheese' }));
     await user.click(within(panel).getByRole('button', { name: 'Done' }));
     expect(await screen.findByText('No matches')).toBeVisible();
-    expect(screen.queryByText('No ingredients yet')).toBeNull();
+    expect(screen.queryByText('No items yet')).toBeNull();
     await user.type(search, 'Quitten');
 
     await user.click(screen.getByRole('button', { name: 'Reset filters' }));
@@ -370,11 +370,11 @@ describe('ItemsScreen', () => {
   it('shows “No matches” with “Reset filters”, which clears the search (UI-03)', async () => {
     const { user } = renderItems();
     await screen.findByTestId(testIds.itemList);
-    const search = screen.getByLabelText('Search ingredients');
+    const search = screen.getByLabelText('Search items');
 
     await user.type(search, 'Quitten');
     expect(await screen.findByText('No matches')).toBeVisible();
-    expectPinnedHeadline('Ingredients');
+    expectPinnedHeadline('Items');
     expect(screen.queryByTestId(testIds.itemList)).toBeNull();
     // The tile offers to create it; there is no other "Create" button any more.
     expect(screen.getAllByRole('button', { name: 'Create “Quitten”' })).toEqual([
@@ -399,7 +399,7 @@ describe('ItemsScreen', () => {
       },
     });
     await screen.findByTestId(testIds.itemList);
-    await user.type(screen.getByLabelText('Search ingredients'), 'Quitten');
+    await user.type(screen.getByLabelText('Search items'), 'Quitten');
     expect(await screen.findByText('No matches')).toBeVisible();
 
     // The cache has dropped the unused full list (after its gcTime), so it is loaded again.
@@ -407,7 +407,7 @@ describe('ItemsScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Reset filters' }));
     await waitFor(() => expect(fullLoads).toBe(2));
 
-    expect(screen.queryByText('No ingredients yet')).toBeNull();
+    expect(screen.queryByText('No items yet')).toBeNull();
     expect(screen.queryByText('No matches')).toBeNull();
     await again.answer(ALL);
     const list = await screen.findByTestId(testIds.itemList);
@@ -517,7 +517,7 @@ describe('ItemsScreen', () => {
   it('shows one line under the pinned block when there are no ingredients yet (UI-03)', async () => {
     const { user } = renderItems({ 'GET /api/items': [] });
 
-    expect(await screen.findByText('No ingredients yet')).toBeVisible();
+    expect(await screen.findByText('No items yet')).toBeVisible();
     const tab = screen.getByTestId(testIds.screenItems);
     expect(within(tab).queryAllByRole('heading', { level: 2 })).toEqual([]);
     // Only the pinned block's filter button and tile; the scanner is no longer linked from the
@@ -529,7 +529,7 @@ describe('ItemsScreen', () => {
     expect(within(tab).queryByRole('link')).toBeNull();
     await user.click(screen.getByTestId(testIds.newItem));
 
-    expect(await screen.findByRole('dialog', { name: 'New ingredient' })).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: 'New item' })).toBeVisible();
   });
 
   it('no longer links the barcode scanner from the tab (BAR-01)', async () => {
@@ -545,7 +545,7 @@ describe('ItemsScreen', () => {
     const { router } = renderApp('/scan');
 
     expect(await screen.findByTestId(testIds.screenItems)).toBeVisible();
-    expect(router.state.location.pathname).toBe('/ingredients');
+    expect(router.state.location.pathname).toBe('/items');
     expect(screen.queryByTestId(testIds.barcodeScanDialog)).not.toBeInTheDocument();
   });
 
@@ -567,7 +567,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'Neue Zutat' });
+    const dialog = await screen.findByRole('dialog', { name: 'Neuer Artikel' });
     // No text below the headline.
     expect(dialog).not.toHaveAccessibleDescription();
     const form = within(dialog).getByTestId(testIds.itemForm);
@@ -623,15 +623,15 @@ describe('ItemFormDialog (create)', () => {
     const { user } = renderItems();
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const empty = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const empty = await screen.findByRole('dialog', { name: 'New item' });
     await waitFor(() => expect(within(empty).getByLabelText('Name')).toHaveFocus());
     await user.keyboard('{Escape}');
     await waitFor(() => expect(empty).not.toBeInTheDocument());
 
     // With “Quitten” filled in, the keyboard would cover the icons and the category.
-    await user.type(screen.getByLabelText('Search ingredients'), 'Quitten');
+    await user.type(screen.getByLabelText('Search items'), 'Quitten');
     await user.click(screen.getByTestId(testIds.newItem));
-    const named = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const named = await screen.findByRole('dialog', { name: 'New item' });
     expect(within(named).getByLabelText('Name')).toHaveValue('Quitten');
     await waitFor(() => expect(named).toHaveFocus());
   });
@@ -643,7 +643,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), '  Birnen ');
     await user.type(within(form).getByLabelText('Brand'), 'Hofgut ');
@@ -658,7 +658,7 @@ describe('ItemFormDialog (create)', () => {
     await user.type(within(form).getByLabelText('Barcode'), '4006381 333931');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-birnen'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/ing-birnen'));
     await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Birnen',
       base_unit: 'g',
@@ -698,7 +698,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), 'Eier');
     const baseUnit = within(form).getByRole('group', { name: 'Base unit' });
@@ -741,7 +741,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const form = within(dialog).getByTestId(testIds.itemForm);
     await user.type(within(form).getByLabelText('Name'), 'Mehl');
     await user.click(within(form).getByLabelText('Pieces (pcs)'));
@@ -773,7 +773,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Other'));
     expect(
@@ -796,7 +796,7 @@ describe('ItemFormDialog (create)', () => {
     const { user } = renderItems({ 'GET /api/categories': CATEGORIES_AFTER_DELETE });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Other'));
     expect(
@@ -820,7 +820,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const category = within(dialog).getByLabelText('Category');
     await waitFor(() => expect(category).toHaveDisplayValue('Other'));
     await user.type(within(dialog).getByLabelText('Name'), 'Feta');
@@ -851,14 +851,14 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
     await user.type(within(dialog).getByLabelText('Barcode'), '4006381333931');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(within(dialog).getByLabelText('Barcode')).toHaveAccessibleDescription(
-        /^Another ingredient already has this barcode/,
+        /^Another item already has this barcode/,
       ),
     );
     expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
@@ -873,7 +873,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.type(within(dialog).getByLabelText('Name'), 'Äpfel');
     await user.type(within(dialog).getByLabelText('Calories'), '1000');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -895,7 +895,7 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.type(within(dialog).getByLabelText('Name'), 'Äpfel');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
@@ -907,7 +907,7 @@ describe('ItemFormDialog (create)', () => {
     const { fetchMock, user } = renderItems();
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.type(within(dialog).getByLabelText('Name'), 'Birnen');
     await user.click(within(dialog).getByLabelText('Pieces (pcs)'));
     await user.type(within(dialog).getByLabelText('Weight per piece (g)'), '1,2,3');
@@ -926,14 +926,14 @@ describe('ItemFormDialog (create)', () => {
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.type(within(dialog).getByLabelText('Name'), 'Apfel');
 
     const hint = await within(dialog).findByTestId(testIds.itemSimilar);
-    expect(hint).toHaveTextContent('Similar ingredients already exist:');
+    expect(hint).toHaveTextContent('Similar items already exist:');
     expect(within(hint).getByRole('link', { name: 'Äpfel' })).toHaveAttribute(
       'href',
-      '/ingredients/ing-äpfel',
+      '/items/ing-äpfel',
     );
     // Debounced: one request for the whole name.
     const names = requestsTo(fetchMock, 'GET /api/items/similar').map((request) =>
@@ -947,8 +947,8 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
   const BARCODE = '4006381333931';
   const LOOKUP = 'GET /api/items/lookup';
 
-  /** Opens "New ingredient" from the tile. */
-  async function openNew(user: ReturnType<typeof renderApp>['user'], title = 'New ingredient') {
+  /** Opens "New item" from the tile. */
+  async function openNew(user: ReturnType<typeof renderApp>['user'], title = 'New item') {
     await user.click(await screen.findByTestId(testIds.newItem));
     return screen.findByRole('dialog', { name: title });
   }
@@ -982,7 +982,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
       'GET /api/items/ing-milch': milk,
     });
 
-    const dialog = await openNew(user, 'Neue Zutat');
+    const dialog = await openNew(user, 'Neuer Artikel');
     await user.type(within(dialog).getByLabelText('Name'), 'Milchig');
     await scanInForm(user, dialog, BARCODE);
 
@@ -998,7 +998,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     expect(open).toHaveAttribute('data-testid', testIds.itemScanOpen);
     await user.click(open);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-milch'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/ing-milch'));
     expect(dialog).not.toBeInTheDocument();
     expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
   });
@@ -1071,7 +1071,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
       'GET /api/items/ing-gnocchi': itemDetail({ id: 'ing-gnocchi' }),
     });
 
-    const dialog = await openNew(user, 'Neue Zutat');
+    const dialog = await openNew(user, 'Neuer Artikel');
     await scanInForm(user, dialog, BARCODE);
     const pack = await within(dialog).findByDisplayValue('250 g');
     expect(pack).toBe(within(dialog).getByLabelText('Packung'));
@@ -1091,7 +1091,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     await i18n.changeLanguage('de');
     const { user } = renderItems({ [LOOKUP]: lookupResult() });
 
-    const dialog = await openNew(user, 'Neue Zutat');
+    const dialog = await openNew(user, 'Neuer Artikel');
     await user.type(within(dialog).getByLabelText('Name'), 'Quitten');
     await scanInForm(user, dialog, BARCODE);
 
@@ -1149,7 +1149,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
           init?.signal?.addEventListener('abort', () => reject(new DOMException('', 'AbortError')));
         });
       });
-      const { user } = renderApp('/ingredients');
+      const { user } = renderApp('/items');
 
       const dialog = await openNew(user);
       await scanInForm(user, dialog, BARCODE);
@@ -1228,7 +1228,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
       'GET /api/items/ing-milch': linked,
     });
 
-    const dialog = await openNew(user, 'Neue Zutat');
+    const dialog = await openNew(user, 'Neuer Artikel');
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
     const hint = await within(dialog).findByTestId(testIds.itemSimilar);
     // Before a scan, the matches are only links.
@@ -1243,7 +1243,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     expect(within(hint).queryByRole('link', { name: 'Milch' })).not.toBeInTheDocument();
     await user.click(attach);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-milch'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/ing-milch'));
     expect(dialog).not.toBeInTheDocument();
     await expect(
       requestsTo(fetchMock, 'POST /api/items/ing-milch/barcode')[0]?.json(),
@@ -1265,9 +1265,9 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     await user.click(await within(hint).findByRole('button', { name: 'Add the barcode to Milch' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      /^This ingredient already has a barcode/,
+      /^This item already has a barcode/,
     );
-    expect(router.state.location.pathname).toBe('/ingredients');
+    expect(router.state.location.pathname).toBe('/items');
     expect(requestsTo(fetchMock, 'POST /api/items/ing-milch/barcode')).toHaveLength(1);
 
     // A barcode typed in by hand is no scan: the match is only a link again.

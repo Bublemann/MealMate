@@ -87,7 +87,7 @@ export function ItemMenu({ item, onError }: ItemMenuProps) {
     merge.mutate(body, {
       onSuccess: (kept) => {
         setTarget(null);
-        void navigate(`/ingredients/${kept.id}`, { replace: true });
+        void navigate(`/items/${kept.id}`, { replace: true });
       },
       // The confirmation stays open to name what won't fit; other errors show below the title.
       onError: (error) => {
@@ -227,7 +227,7 @@ export function ItemMenu({ item, onError }: ItemMenuProps) {
             onConfirm={() => {
               onError(null);
               remove.mutate(undefined, {
-                onSuccess: () => void navigate('/ingredients', { replace: true }),
+                onSuccess: () => void navigate('/items', { replace: true }),
                 onError,
               });
             }}

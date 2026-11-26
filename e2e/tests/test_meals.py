@@ -145,7 +145,7 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     expect(ingredients.get_by_role("listitem")).to_have_count(4)
     expect(
         ingredients.get_by_role("link", name=item_label(milk["name"], "Weidehof"))
-    ).to_have_attribute("href", f"/ingredients/{milk['id']}")
+    ).to_have_attribute("href", f"/items/{milk['id']}")
     expect(page.get_by_test_id(TEST_IDS["mealInstructions"])).to_have_text(
         "Alles verrühren.\nIn der Pfanne backen."
     )
@@ -178,7 +178,7 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     name = f"Eier {tag}"
     dairy = api.category_name(member, "dairy_eggs")
 
-    page.goto("/ingredients")
+    page.goto("/items")
     page.get_by_test_id(TEST_IDS["newItem"]).click()
     dialog = page.get_by_role("dialog", name=text("items.form.createTitle"))
     form = dialog.get_by_test_id(TEST_IDS["itemForm"])
@@ -199,7 +199,7 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     expect(detail).to_contain_text(text("items.baseUnit.piece"))
     expect(detail).to_contain_text("60 g")
 
-    # The grey line on the Ingredients tab names the pieces.
+    # The grey line on the Items tab names the pieces.
     page.get_by_test_id(TEST_IDS["tabItems"]).click()
     page.get_by_test_id(TEST_IDS["itemSearch"]).fill(tag)
     row = page.get_by_test_id(TEST_IDS["itemList"]).get_by_role(

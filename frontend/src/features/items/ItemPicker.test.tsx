@@ -62,9 +62,9 @@ describe('ItemPicker', () => {
     const { fetchMock, onSelect, user } = renderPicker();
 
     expect(screen.getByText('Type a name to search.')).toBeVisible();
-    await user.type(screen.getByLabelText('Search ingredient'), 'apf');
+    await user.type(screen.getByLabelText('Search item'), 'apf');
 
-    const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+    const results = await screen.findByRole('list', { name: 'Matching items' });
     const juice = await within(results).findByRole('button', {
       name: /^Apfelsaft \(Hofgut\) with barcode/,
     });
@@ -82,9 +82,9 @@ describe('ItemPicker', () => {
   it('leaves out excluded ingredients', async () => {
     const { user } = renderPicker({ excludeIds: [APPLES.id] });
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'apf');
+    await user.type(screen.getByLabelText('Search item'), 'apf');
 
-    const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+    const results = await screen.findByRole('list', { name: 'Matching items' });
     await within(results).findByRole('button', { name: /^Apfelsaft/ });
     expect(within(results).queryByRole('button', { name: /^Äpfel/ })).not.toBeInTheDocument();
   });
@@ -92,7 +92,7 @@ describe('ItemPicker', () => {
   it('moves through the results with the arrow keys', async () => {
     const { onSelect, user } = renderPicker();
 
-    const input = screen.getByLabelText('Search ingredient');
+    const input = screen.getByLabelText('Search item');
     await user.type(input, 'apf');
     await screen.findByRole('button', { name: /^Apfelsaft/ });
     await user.keyboard('{ArrowDown}');
@@ -112,7 +112,7 @@ describe('ItemPicker', () => {
     const search = heldRoute();
     const { fetchMock, user } = renderPicker({}, { 'GET /api/items': search.route });
     const picker = screen.getByTestId(testIds.itemPicker);
-    const input = screen.getByLabelText('Search ingredient');
+    const input = screen.getByLabelText('Search item');
     // The picker's buttons in DOM order: what a tap under the field lands on.
     const options = () =>
       within(picker)
@@ -154,7 +154,7 @@ describe('ItemPicker', () => {
   it('says when nothing matches and offers to create it', async () => {
     const { user } = renderPicker();
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'Quitten');
+    await user.type(screen.getByLabelText('Search item'), 'Quitten');
 
     expect(await screen.findByText('Nothing found.')).toBeVisible();
     expect(screen.getByTestId(testIds.itemPickerCreate)).toHaveTextContent('Create “Quitten”');
@@ -167,9 +167,9 @@ describe('ItemPicker', () => {
       { 'POST /api/items': Response.json(created, { status: 201 }) },
     );
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'Quitten');
+    await user.type(screen.getByLabelText('Search item'), 'Quitten');
     await user.click(await screen.findByTestId(testIds.itemPickerCreate));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Quitten');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
@@ -193,9 +193,9 @@ describe('ItemPicker', () => {
   it('picks a similar existing ingredient instead of creating a duplicate', async () => {
     const { fetchMock, onSelect, user } = renderPicker({}, { 'GET /api/items/similar': [APPLES] });
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'Apfl');
+    await user.type(screen.getByLabelText('Search item'), 'Apfl');
     await user.click(await screen.findByTestId(testIds.itemPickerCreate));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     const hint = await within(dialog).findByTestId(testIds.itemSimilar);
     await user.click(within(hint).getByRole('button', { name: 'Use Äpfel' }));
 
@@ -221,9 +221,9 @@ describe('ItemPicker, created from Open Food Facts', () => {
       },
     );
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'Milch');
+    await user.type(screen.getByLabelText('Search item'), 'Milch');
     await user.click(await screen.findByTestId(testIds.itemPickerCreate));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.click(within(dialog).getByTestId(testIds.offSearchButton));
     const search = await screen.findByTestId(testIds.offSearchDialog);
     await user.click(await within(search).findByTestId(testIds.offSearchResult));
@@ -253,9 +253,9 @@ describe('ItemPicker, created from Open Food Facts', () => {
       },
     );
 
-    await user.type(screen.getByLabelText('Search ingredient'), 'Milch');
+    await user.type(screen.getByLabelText('Search item'), 'Milch');
     await user.click(await screen.findByTestId(testIds.itemPickerCreate));
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await user.click(within(dialog).getByTestId(testIds.offSearchButton));
     const search = await screen.findByTestId(testIds.offSearchDialog);
     const result = await within(search).findByRole('button', { name: /Already in MealMate/ });
@@ -267,7 +267,7 @@ describe('ItemPicker, created from Open Food Facts', () => {
   });
 });
 
-describe('ItemPicker, scanning in "New ingredient" (BAR-02, BAR-03)', () => {
+describe('ItemPicker, scanning in "New item" (BAR-02, BAR-03)', () => {
   const BARCODE = '4006381333931';
   const LOOKUP = 'GET /api/items/lookup';
   const HONEY = summary('Honig', 'other');
@@ -277,11 +277,11 @@ describe('ItemPicker, scanning in "New ingredient" (BAR-02, BAR-03)', () => {
     barcode: '4000000000013',
   });
 
-  /** Types `name` into the picker and opens "New ingredient" for it. */
+  /** Types `name` into the picker and opens "New item" for it. */
   async function openNew(user: UserEvent, name: string) {
-    await user.type(screen.getByLabelText('Search ingredient'), name);
+    await user.type(screen.getByLabelText('Search item'), name);
     await user.click(await screen.findByTestId(testIds.itemPickerCreate));
-    return screen.findByRole('dialog', { name: 'New ingredient' });
+    return screen.findByRole('dialog', { name: 'New item' });
   }
 
   it('takes the ingredient a scanned barcode belongs to', async () => {

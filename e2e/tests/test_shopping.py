@@ -232,7 +232,7 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
 def test_two_brands_are_two_lines(
     page: Page, api: Api, invite_user: Callable[..., Account]
 ) -> None:
-    """Two brands of the same thing are different ingredients: separate lines, named with their
+    """Two brands of the same thing are different items: separate lines, named with their
     brand, on the draft and while shopping (owner decision 2026-09-28)."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))

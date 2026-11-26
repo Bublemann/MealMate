@@ -33,7 +33,7 @@ class Category(BaseModel):
     done lists still show it. It keeps its last `sort_order`, which the next category in the
     walking order took over: its lines come right after that one's.
 
-    `item_count`: how many items it holds, so that the Ingredients tab offers
+    `item_count`: how many items it holds, so that the Items tab offers
     *Uncategorized* in its filter only while it holds some (ING-03)."""
 
     id: str

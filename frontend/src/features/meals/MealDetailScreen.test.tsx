@@ -51,7 +51,7 @@ describe('MealDetailScreen', () => {
     ]);
     expect(within(rows[0] as HTMLElement).getByRole('link', { name: 'Mehl' })).toHaveAttribute(
       'href',
-      `/ingredients/${FLOUR.id}`,
+      `/items/${FLOUR.id}`,
     );
 
     const instructions = screen.getByTestId(testIds.mealInstructions);

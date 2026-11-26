@@ -24,7 +24,7 @@ import { ItemName } from './ItemName';
 /**
  * The Items tab (ING-01, ING-03, UI-01, UI-03): the pinned block with the search (name and
  * brand), the filter panel (several categories, any of them, and *Uncategorized* while it holds
- * items) and the "New ingredient" tile, which offers to create what was searched for. Below
+ * items) and the "New item" tile, which offers to create what was searched for. Below
  * it one list in the server's order (dictionary order, best matches first when searching), one
  * line when there are no items yet, or "No matches". The scanner is not linked from here
  * (BAR-01).
@@ -110,7 +110,7 @@ export function ItemsScreen() {
         open={creating}
         onOpenChange={setCreating}
         initialName={searchText}
-        onSaved={(item) => void navigate(`/ingredients/${item.id}`)}
+        onSaved={(item) => void navigate(`/items/${item.id}`)}
       />
     </Screen>
   );
@@ -128,7 +128,7 @@ function ItemList({ items, categories }: { items: ItemSummary[]; categories: Cat
       {items.map((item) => (
         <li key={item.id}>
           <Link
-            to={`/ingredients/${item.id}`}
+            to={`/items/${item.id}`}
             data-testid={testIds.itemRow}
             className="flex min-h-(--tap-target) items-center gap-3 px-4 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
           >

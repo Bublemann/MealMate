@@ -57,12 +57,12 @@ function renderSearch(routes: Record<string, unknown> = {}) {
     'GET /api/items/off-search': page([found(MILK), KNOWN_RESULT]),
     ...routes,
   });
-  return { fetchMock, ...renderApp('/ingredients') };
+  return { fetchMock, ...renderApp('/items') };
 }
 
 type User = ReturnType<typeof renderApp>['user'];
 
-/** Opens "New ingredient" with `name` typed, then the search dialog from the magnifier. */
+/** Opens "New item" with `name` typed, then the search dialog from the magnifier. */
 async function openSearch(user: User, name = 'Milch') {
   await user.click(await screen.findByTestId(testIds.newItem));
   const form = await screen.findByTestId(testIds.itemForm);
@@ -101,7 +101,7 @@ describe('OffSearchDialog', () => {
       ]),
     );
     await within(dialog).findAllByTestId(testIds.offSearchResult);
-    // Enter in the search field must not save the ingredient form behind the dialog.
+    // Enter in the search field must not save the item form behind the dialog.
     expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(0);
 
     await user.click(within(dialog).getByRole('button', { name: 'Search' }));
@@ -169,7 +169,7 @@ describe('OffSearchDialog', () => {
     await user.type(within(form).getByLabelText('Fat'), '3,6');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-vollmilch'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/ing-vollmilch'));
     expect(requestsTo(fetchMock, 'POST /api/items')).toHaveLength(1);
     await expect(requestsTo(fetchMock, 'POST /api/items')[0]?.json()).resolves.toEqual({
       name: 'Frische Vollmilch 3,5 %',
@@ -326,7 +326,7 @@ describe('OffSearchDialog', () => {
     expect(known).toHaveTextContent('Already in MealMate');
     await user.click(known);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ingredients/ing-known'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/items/ing-known'));
     expect(screen.queryByTestId(testIds.itemForm)).not.toBeInTheDocument();
   });
 

@@ -18,6 +18,7 @@ import { SecurityScreen } from '@/features/me/SecurityScreen';
 import { SettingsScreen } from '@/features/me/SettingsScreen';
 import { RecurringScreen } from '@/features/recurring/RecurringScreen';
 import { WalkingOrderScreen } from '@/features/walkingOrder/WalkingOrderScreen';
+import { IngredientsRedirect } from './IngredientsRedirect';
 import { Layout } from './Layout';
 
 /**
@@ -55,10 +56,11 @@ export const routes: RouteObject[] = [
           { path: 'meals/new', element: <MealFormScreen /> },
           { path: 'meals/:id', element: <MealDetailScreen /> },
           { path: 'meals/:id/edit', element: <MealFormScreen /> },
-          { path: 'ingredients', element: <ItemsScreen /> },
-          { path: 'ingredients/:id', element: <ItemDetailScreen /> },
-          // The former scan page; scanning is inside "New ingredient" now (BAR-01, D-37).
-          { path: 'scan', element: <Navigate to="/ingredients" replace /> },
+          { path: 'items', element: <ItemsScreen /> },
+          { path: 'items/:id', element: <ItemDetailScreen /> },
+          { path: 'ingredients/*', element: <IngredientsRedirect /> },
+          // The former scan page; scanning is inside "New item" now (BAR-01, D-37).
+          { path: 'scan', element: <Navigate to="/items" replace /> },
           // The Settings tab and the pages its rows open (D-45); see features/me/settingsRows.ts.
           { path: 'me', element: <SettingsScreen /> },
           { path: 'me/profile', element: <ProfileScreen /> },

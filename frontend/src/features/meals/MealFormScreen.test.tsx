@@ -460,9 +460,9 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     await typeInScanner(user, digits);
   }
 
-  /** "New ingredient", opened by the scan, once its lookup has answered. */
+  /** "New item", opened by the scan, once its lookup has answered. */
   async function scannedPopUp() {
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     await waitFor(() =>
       expect(within(dialog).queryByText(`Looking up ${BARCODE}…`)).not.toBeInTheDocument(),
     );
@@ -479,7 +479,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     const scanner = await screen.findByTestId(testIds.barcodeScanDialog);
     expect(scanner).toHaveAccessibleName('Scan barcode');
     expect(scanner).toHaveAccessibleDescription(
-      'Scan or type the barcode of a package. The ingredient it belongs to is added to the meal.',
+      'Scan or type the barcode of a package. The item it belongs to is added to the meal.',
     );
     await typeInScanner(user, BARCODE);
     expect(await within(form).findByText(`Looking up ${BARCODE}…`)).toBeVisible();
@@ -504,7 +504,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     expect(within(form).getByLabelText('Name')).toHaveValue('Kakao');
   });
 
-  it('opens "New ingredient" for an unknown barcode, filled from Open Food Facts once looked up; Save adds the row (BAR-03)', async () => {
+  it('opens "New item" for an unknown barcode, filled from Open Food Facts once looked up; Save adds the row (BAR-03)', async () => {
     const off = heldRoute();
     const created = itemDetail({
       id: 'ing-kakao',
@@ -521,7 +521,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     await scanInMealForm(user, BARCODE);
 
     // It opens with the barcode being looked up, as after a scan inside it.
-    const dialog = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const dialog = await screen.findByRole('dialog', { name: 'New item' });
     expect(within(dialog).getByTestId(testIds.itemScanNotice)).toHaveTextContent(
       `Looking up ${BARCODE}…`,
     );
@@ -623,7 +623,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     });
 
     await scanInMealForm(user, BARCODE);
-    const dialog = await screen.findByRole('dialog', { name: 'Neue Zutat' });
+    const dialog = await screen.findByRole('dialog', { name: 'Neuer Artikel' });
     await waitFor(() => expect(within(dialog).getByLabelText('Barcode')).toHaveValue(BARCODE));
     await user.type(within(dialog).getByLabelText('Name'), 'Milch');
     const hint = await within(dialog).findByTestId(testIds.itemSimilar);

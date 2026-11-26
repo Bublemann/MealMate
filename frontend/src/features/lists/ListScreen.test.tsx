@@ -846,7 +846,7 @@ describe('ListScreen', () => {
     async function pick(user: ReturnType<typeof renderApp>['user'], name: string) {
       const field = await screen.findByTestId(testIds.extraItemInput);
       await user.type(field, name);
-      const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+      const results = await screen.findByRole('list', { name: 'Matching items' });
       await user.click(
         await within(results).findByRole('button', { name: new RegExp(`^${name}`) }),
       );
@@ -864,8 +864,8 @@ describe('ListScreen', () => {
       const freeText = screen.getByTestId(testIds.itemFreeText);
       const newItem = screen.getByTestId(testIds.itemNewItem);
       expect(freeText).toHaveTextContent('“Me” as an item');
-      expect(newItem).toHaveTextContent('“Me” as a new ingredient');
-      const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+      expect(newItem).toHaveTextContent('“Me” as a new item');
+      const results = await screen.findByRole('list', { name: 'Matching items' });
       expectInPageOrder([field, freeText, newItem, results]);
       expect(screen.getByRole('button', { name: 'Add “Me”' })).toBeEnabled();
     });
@@ -964,7 +964,7 @@ describe('ListScreen', () => {
       });
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'Milch');
-      const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+      const results = await screen.findByRole('list', { name: 'Matching items' });
       await user.click(screen.getByRole('button', { name: 'Add “Milch”' }));
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -1026,7 +1026,7 @@ describe('ListScreen', () => {
 
       await user.type(await screen.findByTestId(testIds.extraItemInput), 'Quitten');
       await user.click(screen.getByTestId(testIds.itemNewItem));
-      const form = await screen.findByRole('dialog', { name: 'New ingredient' });
+      const form = await screen.findByRole('dialog', { name: 'New item' });
       expect(within(form).getByLabelText('Name')).toHaveValue('Quitten');
       await user.click(within(form).getByRole('button', { name: 'Save' }));
 
@@ -1068,7 +1068,7 @@ describe('ListScreen', () => {
 
       await mi.answer([found(MILK)]);
       expect(await screen.findByText('“Mix” as an item')).toBe(options[0]?.lastChild);
-      expect(screen.queryByRole('list', { name: 'Matching ingredients' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('list', { name: 'Matching items' })).not.toBeInTheDocument();
       expect(screen.getByTestId(testIds.itemFreeText)).toBe(options[0]);
       expect(screen.getByTestId(testIds.itemNewItem)).toBe(options[1]);
     });

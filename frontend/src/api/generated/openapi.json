@@ -313,7 +313,7 @@
         "type": "object"
       },
       "Category": {
-        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other* and `uncategorized` for\n*Uncategorized*; the categories admins add have none.\n\nA `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and\ndone lists still show it. It keeps its last `sort_order`, which the next category in the\nwalking order took over: its lines come right after that one's.\n\n`item_count`: how many items it holds, so that the Ingredients tab offers\n*Uncategorized* in its filter only while it holds some (ING-03).",
+        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other* and `uncategorized` for\n*Uncategorized*; the categories admins add have none.\n\nA `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and\ndone lists still show it. It keeps its last `sort_order`, which the next category in the\nwalking order took over: its lines come right after that one's.\n\n`item_count`: how many items it holds, so that the Items tab offers\n*Uncategorized* in its filter only while it holds some (ING-03).",
         "properties": {
           "deleted": {
             "title": "Deleted",

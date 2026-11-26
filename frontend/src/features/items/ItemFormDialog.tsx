@@ -811,7 +811,7 @@ function ScanNotice({ state, onRetry, onPickExisting, onNavigate }: ScanNoticePr
         </Button>
       ) : (
         <Link
-          to={`/ingredients/${owner.id}`}
+          to={`/items/${owner.id}`}
           aria-describedby={textId}
           data-testid={testIds.itemScanOpen}
           onClick={onNavigate}
@@ -882,7 +882,7 @@ function SimilarHint({ name, item, attachBarcode, onPickExisting, onNavigate }: 
             return;
           }
           onNavigate();
-          void navigate(`/ingredients/${linked.id}`);
+          void navigate(`/items/${linked.id}`);
         },
       },
     );
@@ -928,11 +928,7 @@ function SimilarHint({ name, item, attachBarcode, onPickExisting, onNavigate }: 
                       {t('items.similar.attach', { name: label })}
                     </Button>
                   ) : (
-                    <Link
-                      to={`/ingredients/${match.id}`}
-                      onClick={onNavigate}
-                      className={INLINE_LINK}
-                    >
+                    <Link to={`/items/${match.id}`} onClick={onNavigate} className={INLINE_LINK}>
                       {label}
                     </Link>
                   )}

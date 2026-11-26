@@ -18,7 +18,7 @@ const KEYS = Object.keys(NAMES) as (keyof typeof NAMES)[];
 
 /**
  * A few categories in their walking order, named as seeded (the real seed has 18). Their
- * ingredient counts only matter for *Uncategorized*, which the Ingredients tab offers by its count.
+ * item counts only matter for *Uncategorized*, which the Items tab offers by its count.
  */
 export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   id: `cat-${key}`,
@@ -97,7 +97,7 @@ export function unitOptions(select: HTMLElement): [string | null, boolean][] {
 }
 
 /**
- * The elements follow each other on the page in the order given (e.g. the ingredient form's
+ * The elements follow each other on the page in the order given (e.g. the item form's
  * fields); on failure, the indices show which ones are out of place.
  */
 export function expectInPageOrder(elements: HTMLElement[]) {
@@ -235,7 +235,7 @@ export function lookupResult(
 }
 
 /**
- * Taps the scan icon of the ingredient pop-up `dialog` and types `digits` into the scanner, the
+ * Taps the scan icon of the item pop-up `dialog` and types `digits` into the scanner, the
  * fallback without a camera (jsdom has none, BAR-01); returns once the scanner has closed.
  */
 export async function scanInForm(user: UserEvent, dialog: HTMLElement, digits: string) {

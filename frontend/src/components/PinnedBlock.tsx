@@ -16,7 +16,7 @@ interface SearchFieldProps {
 }
 
 interface NewTileProps {
-  /** "Neue Zutat", or "„Quitten“ anlegen" while a search text is present. */
+  /** "Neuer Artikel", or "„Quitten“ anlegen" while a search text is present. */
   label: string;
   onClick: () => void;
   /** E.g. "Neue Liste" offline: creating it needs the server (UI-02). */

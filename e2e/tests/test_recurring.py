@@ -1,4 +1,4 @@
-"""Regelmäßige Artikel: making ingredients recurring on the settings page and from the ingredient's
+"""Regelmäßige Artikel: making items recurring on the settings page and from the item's
 ⋯ menu, the row's value, editing, and the notice when an admin deletes one (LIST-16, D-42, D-51,
 UI-07); a due item in a draft's "Fällig" box, bought and no longer due (LIST-16, QA-04)."""
 
@@ -69,8 +69,8 @@ def test_recurring_items_from_the_page_and_the_menu_with_a_deletion_notice(
     )
     expect(row_of(page, paper["name"])).to_contain_text(text("recurring.due.in_other", count="28"))
 
-    # From the ingredient's ⋯ menu, last bought five weeks ago: due.
-    page.goto(f"/ingredients/{paste['id']}")
+    # From the item's ⋯ menu, last bought five weeks ago: due.
+    page.goto(f"/items/{paste['id']}")
     expect(page.get_by_role("heading", level=1, name=paste_name)).to_be_visible()
     choose_from_menu(page, "buyRegularly")
     dialog = recurring_dialog(page, paste_name)

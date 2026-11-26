@@ -273,7 +273,7 @@ async def test_uncategorized_counts_its_ingredients_until_each_has_a_new_categor
     ingredients: dict[str, Any],
 ) -> None:
     """ING-03, REF-01: the category list counts the ingredients that moved to *Uncategorized*,
-    so that the Ingredients tab offers it until each of them has a new category. A deleted
+    so that the Items tab offers it until each of them has a new category. A deleted
     category holds none."""
     feta = await create_item(api, anna, "Feta", category_id=categories["cheese"])
     assert await item_counts(api, anna) == {

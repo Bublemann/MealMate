@@ -299,7 +299,7 @@ function IngredientsCard({ meal }: { meal: Meal }) {
                 </span>
                 <span className="min-w-0 flex-1 break-words">
                   <Link
-                    to={`/ingredients/${row.item.id}`}
+                    to={`/items/${row.item.id}`}
                     className="inline-flex min-h-(--tap-target) items-center font-medium text-primary underline-offset-4 hover:underline"
                   >
                     {itemLabel(row.item.name, row.item.brand)}

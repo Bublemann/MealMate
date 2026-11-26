@@ -43,7 +43,7 @@ function field() {
 
 /** The field once it takes input: it is inactive until the set has loaded. */
 async function readyField() {
-  const input = await screen.findByRole('searchbox', { name: 'Search ingredient' });
+  const input = await screen.findByRole('searchbox', { name: 'Search item' });
   await waitFor(() => expect(input).toBeEnabled());
   return input;
 }
@@ -63,22 +63,18 @@ afterEach(() => {
 });
 
 describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04)', () => {
-  it('offers “as a new ingredient” right under the field, then the ingredients, no free text', async () => {
+  it('offers “as a new item” right under the field, then the ingredients, no free text', async () => {
     const { user } = renderPage();
 
     await user.type(await readyField(), 'klo');
 
-    const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+    const results = await screen.findByRole('list', { name: 'Matching items' });
     await waitFor(() =>
       expect(
         within(results)
           .getAllByRole('button')
           .map((option) => option.textContent),
-      ).toEqual([
-        '“klo” as a new ingredient',
-        'KlopapierOther · pcs',
-        'KlopapierhalterOther · pcs',
-      ]),
+      ).toEqual(['“klo” as a new item', 'KlopapierOther · pcs', 'KlopapierhalterOther · pcs']),
     );
     expect(screen.getByTestId(testIds.recurringNewItem)).toBe(
       within(results).getAllByRole('button')[0],
@@ -178,7 +174,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
     await user.click(screen.getByRole('button', { name: 'Add “zahnpasta”' }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Matching ingredients' })).toBeVisible();
+    expect(screen.getByRole('list', { name: 'Matching items' })).toBeVisible();
   });
 
   it('opens an ingredient that is recurring already for editing', async () => {
@@ -187,7 +183,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
     });
 
     await user.type(await readyField(), 'klo');
-    const results = await screen.findByRole('list', { name: 'Matching ingredients' });
+    const results = await screen.findByRole('list', { name: 'Matching items' });
     await user.click(await within(results).findByRole('button', { name: /^Klopapier ?Other/ }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Klopapier' });
@@ -196,7 +192,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
     expect(within(dialog).getByTestId(testIds.recurringRemove)).toBeVisible();
   });
 
-  it('creates “as a new ingredient” in “New ingredient”, then opens the pop-up for it', async () => {
+  it('creates “as a new item” in “New item”, then opens the pop-up for it', async () => {
     const created = itemDetail({ id: 'ing-duschgel', name: 'Duschgel', category_id: 'cat-other' });
     const { fetchMock, user } = renderPage({
       'POST /api/items': Response.json(created, { status: 201 }),
@@ -204,7 +200,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
 
     await user.type(await readyField(), 'Duschgel');
     await user.click(await screen.findByTestId(testIds.recurringNewItem));
-    const form = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const form = await screen.findByRole('dialog', { name: 'New item' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Duschgel');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
@@ -218,13 +214,13 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
     ]);
   });
 
-  it('opens “New ingredient” with ＋ when no ingredient has that name', async () => {
+  it('opens “New item” with ＋ when no ingredient has that name', async () => {
     const { user } = renderPage();
 
     await user.type(await readyField(), 'Duschgel');
     await user.click(screen.getByRole('button', { name: 'Add “Duschgel”' }));
 
-    const form = await screen.findByRole('dialog', { name: 'New ingredient' });
+    const form = await screen.findByRole('dialog', { name: 'New item' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Duschgel');
   });
 });
@@ -238,6 +234,6 @@ describe('"Regelmäßige Artikel" offline (SYNC-09)', () => {
     expect(await screen.findByTestId(testIds.offlineNotice)).toHaveTextContent(
       "You're offline. This page needs a connection.",
     );
-    expect(screen.getByRole('searchbox', { name: 'Search ingredient' })).toBeDisabled();
+    expect(screen.getByRole('searchbox', { name: 'Search item' })).toBeDisabled();
   });
 });

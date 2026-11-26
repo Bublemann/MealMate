@@ -244,7 +244,7 @@ function ShowUncategorized({ categories }: { categories: Category[] }) {
       className="max-w-full wrap-anywhere"
       onClick={() => {
         remember({ search: '', categoryIds: [uncategorized.id] });
-        void navigate('/ingredients');
+        void navigate('/items');
       }}
     >
       {t('admin.categories.showUncategorized')}
