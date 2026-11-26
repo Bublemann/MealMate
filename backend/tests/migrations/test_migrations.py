@@ -40,7 +40,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0022"
+HEAD = "0023"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -66,7 +66,7 @@ TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
 # one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one;
-# 0020 drops columns; 0021 and 0022 add one.
+# 0020 drops columns; 0021, 0022 and 0023 add one each.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
@@ -168,6 +168,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0021")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0022")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0023")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0022")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0021")
     assert tables(database_path) == HEAD_TABLES
@@ -1241,7 +1245,7 @@ def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
 @contextmanager
 def no_eaten_meals_yet(path: Path) -> Iterator[None]:
     """The app of today reads whether each meal on a list is eaten (SHOP-07), a column 0021
-    adds, and what a leftover comes from (LIST-17), a column 0022 adds. No meal was eaten or a
+    adds, and what a leftover comes from (LIST-17), a column 0023 adds. No meal was eaten or a
     leftover before, so the columns stand in, false and null, while the app reads, and go again
     before the upgrade adds them."""
     execute(path, "ALTER TABLE list_meals ADD COLUMN eaten BOOLEAN NOT NULL DEFAULT 0")
@@ -1269,13 +1273,15 @@ def rename_items(path: Path, *, back: bool = False) -> None:
 
 @contextmanager
 def items_renamed_meanwhile(path: Path) -> Iterator[None]:
-    """The app of today reads items, which 0019 renamed from ingredients. For an old database,
-    the tables and columns carry the new names while the app reads, and the old ones again
-    before the upgrade."""
+    """The app of today reads items, which 0019 renamed from ingredients and 0022 gave a kind.
+    For an old database, the tables and columns carry the new names and every item is food while
+    the app reads, and the old names and no kind come back before the upgrade."""
     rename_items(path)
+    execute(path, "ALTER TABLE items ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'food'")
     try:
         yield
     finally:
+        execute(path, "ALTER TABLE items DROP COLUMN kind")
         rename_items(path, back=True)
 
 
@@ -1892,11 +1898,14 @@ def constraint_and_index_names(path: Path, table: str) -> set[str]:
 
 
 @pytest.mark.parametrize("table", ["items", *RENAMED_COLUMNS])
-def test_0019_names_the_constraints_as_the_models_do(tmp_path: Path, table: str) -> None:
+def test_the_renamed_tables_name_their_constraints_as_the_models_do(
+    tmp_path: Path, table: str
+) -> None:
     """Autogenerate doesn't compare check constraints or every constraint name, so this does:
-    after 0019 each renamed table has the constraint and index names of its model."""
+    after 0019 (and the later migrations, such as 0022's kind of an item) each renamed table has
+    the constraint and index names of its model."""
     path = tmp_path / "data" / "mealmate.db"
-    command.upgrade(demo_at_0018_with_every_reference(path), "0019")
+    command.upgrade(demo_at_0018_with_every_reference(path), "head")
     model = Base.metadata.tables[table]
     ddl = str(CreateTable(model).compile(dialect=sqlite.dialect()))
     expected = set(re.findall(r"CONSTRAINT (\w+)", ddl)) | {
@@ -2152,6 +2161,43 @@ def test_the_0021_downgrade_drops_eaten(tmp_path: Path) -> None:
 
 # --- 0022 -----------------------------------------------------------------------------------
 
+
+def test_0022_makes_every_item_food_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0021 → 0022 (D-56): every item gets the kind food, with its values
+    as they were; no row and no other table changes. Down to 0021 the items are as they were,
+    and up again as they were at 0022."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0021")
+    items = rows_of(path, "items")
+    assert items
+    rest = sorted_dump_without_items(path)
+
+    command.upgrade(config, "0022")
+
+    assert rows_of(path, "items") == [item | {"kind": "food"} for item in items]
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    at_0022 = rows_of(path, "items")
+    command.downgrade(config, "0021")
+    assert rows_of(path, "items") == items
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0022")
+    assert rows_of(path, "items") == at_0022
+
+
+def test_0022_an_item_is_food_or_a_supply(tmp_path: Path) -> None:
+    """After 0022 an item is food unless it says otherwise, and food or a supply only."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "0022")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("UPDATE items SET kind = 'supply' WHERE name = 'Zwiebeln'")
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: ck_items_kind"):
+            connection.execute("UPDATE items SET kind = 'tool' WHERE name = 'Zwiebeln'")
+    assert query(path, "SELECT DISTINCT kind FROM items WHERE name = 'Zwiebeln'") == [("supply",)]
+
+
 LEFTOVER_COLUMN = ("leftover_of_id", "VARCHAR(36)", 0, None, 0)
 
 
@@ -2162,18 +2208,18 @@ def unique_meal_index(path: Path) -> str:
     return str(sql)
 
 
-def test_0022_adds_leftover_of_and_changes_nothing_else(tmp_path: Path) -> None:
-    """seed-demo data at 0021 → 0022 (LIST-17, D-56): no meal is a leftover, no row, value or
+def test_0023_adds_leftover_of_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0022 → 0023 (LIST-17, D-57): no meal is a leftover, no row, value or
     reference changes; the column comes with its index and foreign key, and the unique index on
     a list's meals leaves leftovers out."""
     path = tmp_path / "data" / "mealmate.db"
     config = demo_at_0018_with_every_reference(path)
-    command.upgrade(config, "0021")
+    command.upgrade(config, "0022")
     counts, references = row_counts(path), non_null_foreign_keys(path)
     columns, names = list_meals_shape(path)
     list_meals, rest = rows_of(path, "list_meals"), dump_without_list_meals(path)
 
-    command.upgrade(config, "0022")
+    command.upgrade(config, "0023")
 
     assert list_meals_shape(path) == (
         columns | {LEFTOVER_COLUMN},
@@ -2187,19 +2233,19 @@ def test_0022_adds_leftover_of_and_changes_nothing_else(tmp_path: Path) -> None:
     assert_clean(path)
 
 
-def test_the_0022_downgrade_deletes_the_leftovers(tmp_path: Path) -> None:
-    """Down to 0021 the leftovers go (they add no lines, so no list changes otherwise) and the
-    database is as it was at 0021 (QA-02)."""
+def test_the_0023_downgrade_deletes_the_leftovers(tmp_path: Path) -> None:
+    """Down to 0022 the leftovers go (they add no lines, so no list changes otherwise) and the
+    database is as it was at 0022 (QA-02)."""
     path = tmp_path / "data" / "mealmate.db"
     config = demo_at_0018_with_every_reference(path)
-    command.upgrade(config, "0021")
+    command.upgrade(config, "0022")
     shape, list_meals, rest = (
         list_meals_shape(path),
         rows_of(path, "list_meals"),
         dump_without_list_meals(path),
     )
     index = unique_meal_index(path)
-    command.upgrade(config, "0022")
+    command.upgrade(config, "0023")
     with closing(sqlite3.connect(path)) as connection, connection:
         source_id, meal_id = connection.execute(
             "SELECT m.id, m.meal_id FROM list_meals m JOIN shopping_lists s ON s.id = m.list_id"
@@ -2222,7 +2268,7 @@ def test_the_0022_downgrade_deletes_the_leftovers(tmp_path: Path) -> None:
             (str(uuid.uuid7()), draft_id, source_id),
         )
 
-    command.downgrade(config, "0021")
+    command.downgrade(config, "0022")
 
     assert (list_meals_shape(path), rows_of(path, "list_meals")) == (shape, list_meals)
     assert unique_meal_index(path) == index

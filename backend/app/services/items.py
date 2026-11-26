@@ -1,10 +1,13 @@
 """Items: the shared wiki (ING-01..06) with their own nutrition (NUT-02), barcode and Open
 Food Facts data (BAR-03..06), and the admin actions merge and delete (ING-05).
 
-There is one kind of item: typed by hand, with a brand, or created from an Open Food Facts
-proposal (a scan or the name search) in one request. Names need not be unique (two brands of
-"Milch" are two items); the "similar item exists" hint is only a hint. A barcode
-belongs to at most one item.
+An item is typed by hand, with a brand, or created from an Open Food Facts proposal (a scan or
+the name search) in one request. It is food or a supply (D-56): a supply holds no nutrients and
+no piece weight (`_nutrient_problems`, `_piece_weight_problem`, `_make_supply`), and no meal
+uses it as an ingredient (`_check_not_in_meals`, `services.meals`); Open Food Facts never sets
+the kind, and a refresh leaves a supply's nutrients alone (`services.off_refresh`). Names need
+not be unique (two brands of "Milch" are two items); the "similar item exists" hint is only a
+hint. A barcode belongs to at most one item.
 
 Everyone views and edits items (plan § 5.5, `services.access`); merging and deleting need
 an admin, which the API checks. Barcode uniqueness is checked inside the write transaction,
@@ -42,7 +45,7 @@ from app.core.errors import (
     validation_error,
 )
 from app.domain.barcodes import normalize_barcode
-from app.domain.catalog import OFF_FIELDS, nutrient_field
+from app.domain.catalog import FOOD, OFF_FIELDS, SUPPLY, nutrient_field
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.similarity import SIMILAR_LIMIT, similar_names
@@ -50,12 +53,14 @@ from app.domain.text import normalize, same_name
 from app.domain.units import NUTRITION_BASIS, BaseUnit, fits, stops_fitting
 from app.models import Item as ItemRow
 from app.repositories import items as items_repo
+from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction
 from app.schemas.items import (
     Item,
     ItemBarcodeLink,
     ItemCreate,
+    ItemKind,
     ItemMerge,
     ItemSearchResult,
     ItemSource,
@@ -63,9 +68,10 @@ from app.schemas.items import (
     ItemUpdate,
     ItemUsage,
     base_unit_name,
+    kind_name,
 )
 from app.schemas.nutrition import NutrientValues
-from app.services import events, hooks, reference
+from app.services import access, events, hooks, reference
 from app.services.off_fields import (
     IGNORED,
     drop_pending,
@@ -97,6 +103,7 @@ def summary(row: ItemRow) -> ItemSummary:
         brand=row.brand,
         barcode=row.barcode,
         source=source_name(row.source),
+        kind=kind_name(row.kind),
         category_id=row.category_id,
         base_unit=base_unit_name(row.base_unit),
     )
@@ -111,6 +118,7 @@ async def detail(session: AsyncSession, row: ItemRow) -> Item:
         name=row.name,
         brand=row.brand,
         barcode=row.barcode,
+        kind=kind_name(row.kind),
         category_id=row.category_id,
         base_unit=base_unit_name(row.base_unit),
         piece_weight_g=row.attrs().piece_weight_g,
@@ -163,11 +171,51 @@ async def _check_amounts_fit(
         raise ApiError(ErrorCode.ITEM_UNIT_MISMATCH, status_code=409, params=counts)
 
 
-def _piece_weight_problem(piece_weight_g: float | None, base_unit: str) -> FieldProblem | None:
-    """Only an item counted in pieces takes a piece weight (ING-02, D-32)."""
-    if piece_weight_g is not None and base_unit != BaseUnit.PIECE:
+def _piece_weight_problem(
+    piece_weight_g: float | None, base_unit: str, kind: str
+) -> FieldProblem | None:
+    """Only food counted in pieces takes a piece weight (ING-02, D-32, D-56)."""
+    if piece_weight_g is not None and (base_unit != BaseUnit.PIECE or kind == SUPPLY):
         return FieldProblem(("body", "piece_weight_g"), FieldErrorCode.INVALID)
     return None
+
+
+def _nutrient_problems(kind: str, nutrients: NutrientValues | None) -> list[FieldProblem]:
+    """A supply takes no nutrient value; a null one is fine (D-56)."""
+    if kind != SUPPLY:
+        return []
+    return [
+        FieldProblem(("body", "nutrients", key), FieldErrorCode.INVALID)
+        for key in _nutrient_keys(nutrients)
+        if getattr(nutrients, key) is not None
+    ]
+
+
+async def _check_not_in_meals(session: AsyncSession, principal: Principal, item_id: str) -> None:
+    """409 `item.used_in_meals` while any meal uses the item, which a supply can't be in
+    (D-56): it counts them and names those the user may see, so that someone else's private
+    meal is only counted (VIS-02)."""
+    meals = await meals_repo.with_item(session, item_id)
+    if not meals:
+        return
+    visible = await access.visible_owner_ids(session, principal.user_id, "meals")
+    names = [name for owner_id, name in meals if owner_id in visible]
+    raise ApiError(
+        ErrorCode.ITEM_USED_IN_MEALS, status_code=409, params={"meals": len(meals), "names": names}
+    )
+
+
+def _make_supply(row: ItemRow) -> None:
+    """A supply has no nutrients and no piece weight (D-56): they go, and with them their
+    marks and pending Open Food Facts values, which no longer apply."""
+    row.kind = SUPPLY
+    row.piece_weight_g = None
+    row.set_nutrients(dict.fromkeys(NUTRIENT_KEYS))
+    nutrient_fields = [nutrient_field(key) for key in NUTRIENT_KEYS]
+    row.user_edited_fields = [
+        field for field in row.user_edited_fields if field not in nutrient_fields
+    ]
+    drop_pending(row, nutrient_fields)
 
 
 async def _category_problem(
@@ -188,17 +236,21 @@ async def _other_category_id(session: AsyncSession) -> str:
 
 
 async def search(
-    session: AsyncSession, *, query: str | None, category_ids: Sequence[str]
+    session: AsyncSession,
+    *,
+    query: str | None,
+    category_ids: Sequence[str],
+    kind: ItemKind | None = None,
 ) -> list[ItemSearchResult]:
     """Search name and brand ignoring case, umlaut spelling and accents (ING-03): an exact
     name first, then names starting with the query, then the rest, each in dictionary order by
     name and brand. The exact names are marked (D-41). Without a query: every item (at
     most 1000) in that order. With `category_ids`, only items in any of those categories
-    (UI-01, D-23)."""
+    (UI-01, D-23). With `kind`, only items of that kind (D-56)."""
     query_norm = normalize(query or "")
     async with session.begin():
         rows = await items_repo.search(
-            session, query=query_norm, category_ids=category_ids, limit=SEARCH_LIMIT
+            session, query=query_norm, category_ids=category_ids, kind=kind, limit=SEARCH_LIMIT
         )
     return [
         ItemSearchResult(**summary(row).model_dump(), exact=same_name(row.name_norm, query_norm))
@@ -233,15 +285,18 @@ async def create_item(
 ) -> Item:
     """Add an item (ING-02), by hand or from an Open Food Facts proposal (`off`, BAR-03):
     then `source` is off, it counts as fetched now, and only the fields the user changed compared
-    with the proposal (`off.edited_fields`) are user-edited (BAR-04)."""
+    with the proposal (`off.edited_fields`) are user-edited (BAR-04). It is food unless the request
+    makes it a supply, which takes no nutrient value and no piece weight (D-56)."""
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     from_off = body.off is not None
+    kind = body.kind or FOOD
     async with session.begin():
         problems: list[FieldProblem] = []
         if from_off and barcode is None:
             problems.append(FieldProblem(("body", "barcode"), FieldErrorCode.REQUIRED))
-        if problem := _piece_weight_problem(body.piece_weight_g, body.base_unit):
+        if problem := _piece_weight_problem(body.piece_weight_g, body.base_unit, kind):
             problems.append(problem)
+        problems.extend(_nutrient_problems(kind, body.nutrients))
         if body.category_id is not None and (
             problem := await _category_problem(session, body.category_id)
         ):
@@ -251,9 +306,12 @@ async def create_item(
         if barcode is not None:
             await _check_barcode_free(session, barcode)
         edited = set(body.off.edited_fields) if body.off is not None else set()
+        if kind == SUPPLY:  # it has no nutrients to keep from a refresh (D-56)
+            edited -= {nutrient_field(key) for key in NUTRIENT_KEYS}
         row = ItemRow(
             barcode=barcode,
             category_id=body.category_id or await _other_category_id(session),
+            kind=kind,
             base_unit=body.base_unit,
             piece_weight_g=body.piece_weight_g,
             source="off" if from_off else "manual",
@@ -309,7 +367,8 @@ async def update_item(
     item is, or becomes, counted in pieces; a null one is ignored then. A base-unit change
     that would leave amounts that fit now not fitting (`stops_fitting`) changes nothing unless
     the request accepts that (D-33). Clearing or changing the barcode makes it a manual
-    item (`_make_manual`)."""
+    item (`_make_manual`). A supply takes no nutrient value and no piece weight; switching to
+    supply is refused while meals use the item and clears both (`_make_supply`, D-56)."""
     sent = body.model_fields_set
     barcode = None if body.barcode is None else canonical_barcode(body.barcode)
     async with session.begin():
@@ -317,17 +376,22 @@ async def update_item(
         if row is None:
             raise not_found()
         base_unit = body.base_unit or row.base_unit
+        kind = body.kind or row.kind
         problems: list[FieldProblem] = []
         if body.category_id is not None and (
             problem := await _category_problem(session, body.category_id, current=row.category_id)
         ):
             problems.append(problem)
-        if problem := _piece_weight_problem(body.piece_weight_g, base_unit):
+        if problem := _piece_weight_problem(body.piece_weight_g, base_unit, kind):
             problems.append(problem)
+        problems.extend(_nutrient_problems(kind, body.nutrients))
         if problems:
             raise validation_error(problems)
         if barcode is not None:
             await _check_barcode_free(session, barcode, except_id=row.id)
+        to_supply = kind == SUPPLY and row.kind != SUPPLY
+        if to_supply:
+            await _check_not_in_meals(session, principal, row.id)
         if base_unit != row.base_unit:
             before = row.base_unit
             await _check_amounts_fit(
@@ -344,7 +408,9 @@ async def update_item(
         if "brand" in sent:
             set_brand(row, body.brand)
             edited.append("brand")
-        for key in _nutrient_keys(body.nutrients):
+        # A supply's nutrients stay unknown, so its null ones are not the user's (D-56).
+        sent_nutrients = [] if kind == SUPPLY else _nutrient_keys(body.nutrients)
+        for key in sent_nutrients:
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
         if body.category_id is not None:
@@ -371,6 +437,10 @@ async def update_item(
                 *(field for field in edited if field not in row.user_edited_fields),
             ]
             drop_pending(row, decided)
+        if to_supply:
+            _make_supply(row)
+        else:
+            row.kind = kind
         row.updated_by = principal.user_id
         row.updated_at = now
         await session.flush()
@@ -465,7 +535,8 @@ async def merge(
     moves to `into_id`, then the duplicate is deleted. The target keeps its own attributes and
     values and records the admin as the one who changed it last. When their base units differ,
     amounts of the duplicate that won't fit the target's are kept as they are; while there are
-    any, nothing is merged unless the request accepts that (D-33).
+    any, nothing is merged unless the request accepts that (D-33). Nothing is merged into a
+    supply while meals use the duplicate (D-56).
 
     The duplicate's barcode moves to the target if the target has none (only the barcode: the
     target's values, source and Open Food Facts data stay); otherwise it is dropped with the
@@ -481,6 +552,8 @@ async def merge(
         target = await items_repo.get(session, into_id)
         if target is None:
             raise validation_error([FieldProblem(("body", "into_id"), FieldErrorCode.INVALID)])
+        if target.kind == SUPPLY:
+            await _check_not_in_meals(session, actor, source.id)
         if source.base_unit != target.base_unit:
             into_base_unit = target.base_unit
             await _check_amounts_fit(

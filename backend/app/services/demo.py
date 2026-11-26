@@ -24,7 +24,7 @@
   shared "Salatabend" (one line not bought) and carl's "Vorrat".
 - Recurring items (`_insert_recurring`, LIST-16): the couple's set has "Klopapier", last bought
   five weeks ago with a four-week interval and so due, and "Zahnpasta", bought last week; both
-  are household items, the only ones in the catalog.
+  are supplies (D-56), the only ones in the catalog.
 
 The content is fixed; only ids, the password, the invite code and the photo keys differ
 between runs; the times of shopping and finishing, and the days of the last purchases, are
@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.passwords import hash_password
 from app.db.ids import new_id
+from app.domain.catalog import FOOD, SUPPLY
 from app.domain.lists import item_key, text_key
 from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.recurring import local_date, weeks_to_days
@@ -95,6 +96,8 @@ class DemoItem:
     category: str
     creator: str
     base_unit: str = "g"
+    # Food, or a supply without nutrients (D-56).
+    kind: str = FOOD
     # Only for base unit piece (D-32).
     piece_weight_g: float | None = None
     nutrients: Mapping[str, float] = field(default_factory=dict)
@@ -152,8 +155,8 @@ DEMO_ITEMS: tuple[DemoItem, ...] = (
     DemoItem("Zartbitterschokolade", "snacks_sweets", "carl"),
     DemoItem("Erbsen (TK)", "frozen", "anna"),
     DemoItem("Kaffee", "drinks", "carl"),
-    DemoItem("Klopapier", "household_hygiene", "anna", base_unit="piece"),
-    DemoItem("Zahnpasta", "household_hygiene", "ben", base_unit="piece"),
+    DemoItem("Klopapier", "household_hygiene", "anna", base_unit="piece", kind=SUPPLY),
+    DemoItem("Zahnpasta", "household_hygiene", "ben", base_unit="piece", kind=SUPPLY),
 )  # fmt: skip
 
 
@@ -552,6 +555,7 @@ async def _insert_catalog(
         item = Item(
             barcode=demo_item.barcode,
             category_id=categories[demo_item.category],
+            kind=demo_item.kind,
             base_unit=demo_item.base_unit,
             piece_weight_g=demo_item.piece_weight_g,
             source="manual",

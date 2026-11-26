@@ -16,6 +16,7 @@ from app.schemas.items import (
     Item,
     ItemBarcodeLink,
     ItemCreate,
+    ItemKind,
     ItemSearchResult,
     ItemSummary,
     ItemUpdate,
@@ -45,13 +46,15 @@ async def list_items(
     session: ReadSession,
     q: Annotated[str | None, Query(max_length=100)] = None,
     category_id: Annotated[list[CategoryId] | None, Query(max_length=100)] = None,
+    kind: Annotated[ItemKind | None, Query()] = None,
 ) -> list[ItemSearchResult]:
     """Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,
     then names starting with `q`, then the rest, each in dictionary order by name and brand
     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
     items in that order (at most 1000). `category_id`
-    is repeatable: an item matches if it is in any of the given categories."""
-    return await items.search(session, query=q, category_ids=category_id or [])
+    is repeatable: an item matches if it is in any of the given categories. With `kind`, only
+    food or only supplies (the meal form's search asks for food, D-56)."""
+    return await items.search(session, query=q, category_ids=category_id or [], kind=kind)
 
 
 @router.get("/similar")
