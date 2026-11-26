@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -63,7 +64,8 @@ class ListMeal(IdMixin, TimestampMixin, Base):
     meal is added and refreshed when it is frozen; `meal_owner_id_snapshot` decides who may see
     a detached meal's details (VIS-06). A meal is on a list at most once while it exists.
     `added_by` and `last_added_at` say who added it last and when, also when it was added again
-    (LIST-04): the "recently used" meals (MEAL-09).
+    (LIST-04): the "recently used" meals (MEAL-09). `eaten` is set and cleared on done lists only
+    (SHOP-07, D-54), an on/off flag with no history; it stays when the list is reopened.
     """
 
     __tablename__ = "list_meals"
@@ -103,6 +105,7 @@ class ListMeal(IdMixin, TimestampMixin, Base):
     frozen_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     detached_reason: Mapped[str | None] = mapped_column(String(12))
     position: Mapped[int] = mapped_column(Integer)
+    eaten: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class ListMealIngredient(IdMixin, TimestampMixin, Base):

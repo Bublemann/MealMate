@@ -1138,6 +1138,27 @@ export interface paths {
         patch: operations["update_list_meal"];
         trace?: never;
     };
+    "/api/lists/{list_id}/meals/{list_meal_id}/eaten": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set List Meal Eaten
+         * @description Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change
+         *     a done list takes. 409 `list.not_done` in a draft or while shopping.
+         */
+        put: operations["set_list_meal_eaten"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lists/{list_id}/ops": {
         parameters: {
             query?: never;
@@ -2865,6 +2886,14 @@ export interface components {
             servings?: number | null;
         };
         /**
+         * ListMealEaten
+         * @description Mark a meal on a done list eaten, or clear that (SHOP-07).
+         */
+        ListMealEaten: {
+            /** Eaten */
+            eaten: boolean;
+        };
+        /**
          * ListMealEntry
          * @description A meal on a list with its servings (LIST-04).
          *
@@ -2873,10 +2902,13 @@ export interface components {
          *     keeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is
          *     the one it had). `meal_servings` is what the meal's rows are written for; the rows are
          *     scaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.
+         *     `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
          */
         ListMealEntry: {
             /** Detached */
             detached: ("deleted" | "unavailable") | null;
+            /** Eaten */
+            eaten: boolean;
             /** Id */
             id: string;
             /** Meal Id */
@@ -5716,6 +5748,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ListMealUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_list_meal_eaten: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                list_meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListMealEaten"];
             };
         };
         responses: {

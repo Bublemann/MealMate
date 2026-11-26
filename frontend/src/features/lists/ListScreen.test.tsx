@@ -500,8 +500,9 @@ describe('ListScreen', () => {
       expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
       unmount();
 
+      // A done list counts its eaten meals in the heading (SHOP-07).
       renderList({ [`GET ${BASE}`]: doneList() });
-      expect(await screen.findByRole('heading', { name: 'Meals' })).toBeVisible();
+      expect(await screen.findByRole('heading', { name: 'Meals 0 of 3 eaten' })).toBeVisible();
       expect(screen.getByRole('heading', { name: 'Items' })).toBeVisible();
       expect(screen.queryByTestId(testIds.mealField)).not.toBeInTheDocument();
       expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();

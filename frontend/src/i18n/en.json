@@ -321,6 +321,8 @@
   "lists.meals.detached": "no longer available",
   "lists.meals.remove": "Remove {{name}}",
   "lists.meals.removeAction": "Remove",
+  "lists.meals.eatenCount": "{{eaten}} of {{count}} eaten",
+  "lists.meals.eaten": "{{name}} eaten",
   "lists.addField.add": "Add",
   "lists.addField.plus": "Add “{{name}}”",
   "lists.mealField.label": "Add a meal",

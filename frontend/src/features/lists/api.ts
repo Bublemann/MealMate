@@ -339,6 +339,32 @@ export function useSetListMealServings(listId: string) {
 }
 
 /**
+ * SHOP-07: marks a meal on a done list eaten, or clears that. The box and the count change at
+ * once; the server refuses it on drafts and lists being shopped, and for those who may only see
+ * the list. Needs a connection, like the rest of a done list.
+ */
+export function useSetListMealEaten(listId: string) {
+  return useListChange(
+    listId,
+    ({ listMealId, eaten }: { listMealId: string; eaten: boolean }) =>
+      unwrap(
+        api.PUT('/api/lists/{list_id}/meals/{list_meal_id}/eaten', {
+          params: { path: { list_id: listId, list_meal_id: listMealId } },
+          body: { eaten },
+        }),
+      ),
+    {
+      optimistic:
+        ({ listMealId, eaten }) =>
+        (list) => ({
+          ...list,
+          meals: list.meals.map((meal) => (meal.id === listMealId ? { ...meal, eaten } : meal)),
+        }),
+    },
+  );
+}
+
+/**
  * Also removes detached meals ("no longer available", LIST-15). The row goes at once, the lines
  * change when the server answered (LIST-04, D-40).
  */

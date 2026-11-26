@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-11-26 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38; finding uncategorized ingredients, ING-03 and REF-01; backlog grilling, D-39..D-51; Python versions, D-52; items, D-53) |
+| Status | Agreed baseline, 2026-09-26 (reviewed; owner decisions Q-1..Q-3 answered, see [§ 8](#8-owner-decisions)); last updated 2026-11-26 (UI rework, D-22..D-29; admin-maintained categories, D-30..D-31; new-ingredient redesign, D-32..D-38; finding uncategorized ingredients, ING-03 and REF-01; backlog grilling, D-39..D-51; Python versions, D-52; items, D-53; eaten meals, SHOP-07 and D-54) |
 | Owner | Tobias Fischer (@Bublemann) |
 | Companion document | [`plan.md`](plan.md): architecture, data model and milestones |
 
@@ -300,7 +300,7 @@ The domain terms (item, meal, shopping list, line, couple and the rest) are defi
   |---|---|
   | `draft` | Being planned. Lines are computed live from the current meals (except detached ones, LIST-15). |
   | `shopping` | "Start shopping" pressed. Meal ingredients are frozen (LIST-11) and items are checked off. |
-  | `done` | "Finish shopping" pressed. Read-only. Stays in the Lists feed, marked as done (UI-02, SHOP-05). |
+  | `done` | "Finish shopping" pressed. Read-only, except that its meals are marked eaten (SHOP-07). Stays in the Lists feed, marked as done (UI-02, SHOP-05). |
 
 - **LIST-11** **Freezing:** on "Start shopping", each meal's current ingredients are copied into the list, together with the item data needed to calculate them: the base unit, the piece weight and the category. Linked extra items get the same copy.
   - From then on, edits to the meal, deletion of the meal, or wiki edits of the items no longer change this list or its history.
@@ -363,6 +363,10 @@ The domain terms (item, meal, shopping list, line, couple and the rest) are defi
 - **SHOP-06** A done list offers two actions:
   - **"Shop again"** creates a new draft with the same meals (current versions), servings and extra items, all unchecked. Meals that are deleted or not visible are left out with a notice (VIS-06).
   - **"Reopen"** moves it back to *shopping*, in case *Finish* was tapped by mistake.
+- **SHOP-07** **Eaten meals** (D-54): on a done list, each meal has a checkbox that marks it **eaten**; an eaten meal is struck through, and the Gerichte heading says "1 von 3 gegessen". Unticking clears it.
+  - Eaten is per meal, on or off, with no history. It stays when the list is reopened; "Shop again" and "Copy to my lists" copy the meals as not eaten.
+  - Whoever can edit the list ticks: the owner, and the partner on a shared list. On read-only lists the checkboxes only show the state. Drafts and lists being shopped have no checkbox.
+  - Nothing else on a done list becomes editable. Like the rest of a done list, the checkboxes need a connection (SYNC-02).
 
 ### 4.12 Offline use and sync (SYNC)
 
@@ -805,6 +809,7 @@ These are not in v2.0. The data model should not make them hard.
 | D-51 | The Settings tab icon carries a small count of what waits for the user to act on: incoming couple requests and unread notices. The matching row shows it too ("1 Anfrage", "1 Hinweis"), and screen readers hear it in the tab's name. The first notice: when an admin deletes an ingredient that someone has as a recurring item, each such user (both partners of a couple) finds "„Klopapier“ wurde von einem Admin gelöscht und ist nicht mehr regelmäßig." at the top of "Regelmäßige Artikel" until they dismiss it. Due recurring items don't count. No push notifications (§6) (2026-10-15) | a couple request moved one level deeper with the settings rows and would be missed; deleting an ingredient shouldn't silently drop someone's reminder; a count that only shows what needs doing stays meaningful, while due items already show on every draft |
 | D-52 | New Python versions (3.15 on) wait for the quarterly `chore(deps)` ticket like majors, although Dependabot counts them as minor updates of the Python image; `.github/dependabot.yml` ignores them. 3.14 patch releases keep arriving (2026-10-16) | a new Python version moves the whole backend at once: `requires-python`, ruff's and mypy's target, and wheels for linux/arm64 for every main dependency (plan § 15, O-8) must be ready, the same check a major needs |
 | D-53 | What one buys is an **item** ("Artikel" / "Item"), shared by all users; an **ingredient** is only an item as used in a meal, with its amount (GLOSSARY.md). The Ingredients tab becomes "Artikel" / "Items" at `/items`, "Neue Zutat" becomes "Neuer Artikel", and the search hints, pop-ups, notices and errors about items say "Artikel" / "item"; a meal's rows stay "Zutaten". `/ingredients` and every path below it lead to the same place under `/items`. The texts quoted in D-35..D-37, D-41, D-44 and D-46 change accordingly; D-44's third headline is replaced (2026-11-26, replaces D-44 in part) | toilet paper is bought, never cooked with, so "Zutat" was the wrong word for it, while "Artikel" fits milk and toilet paper alike and already names a list's Artikel section; recipes still read naturally with "Zutaten"; old links and bookmarks keep working |
+| D-54 | A meal on a done list can be marked **eaten** (SHOP-07): an on/off flag per meal on the list, with no history, set and cleared by whoever may edit the list, and only once it is done; drafts and lists being shopped refuse it (409 `list.not_done`). It is the one change a done list takes, so the list otherwise stays read-only (LIST-10), and its checkboxes need a connection like the rest of it. Reopening keeps the flag; "Shop again" and "Copy to my lists" don't copy it (2026-11-26) | meals bought last week are often still at home; ticking what was eaten shows at a glance what is left, and is what leftover meals in the next draft build on (spec #169); a flag without dates is all that needs, and keeping done lists otherwise unchanged keeps the history trustworthy |
 
 ## 8. Owner decisions
 

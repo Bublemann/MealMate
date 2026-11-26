@@ -17,8 +17,9 @@ interface DoneViewProps {
 }
 
 /**
- * A finished list, read-only (LIST-10): the note when it was bought, then its meals and lines;
- * checked lines count as bought, the others are greyed (SHOP-05). "Shop again" and "Reopen"
+ * A finished list, read-only (LIST-10) except for ticking its meals eaten (SHOP-07): the note when
+ * it was bought, then its meals and lines; checked lines count as bought, the others are greyed
+ * (SHOP-05). "Shop again" and "Reopen"
  * (SHOP-06) are in the ⋯ menu (`ListMenu`). A list finished here but not sent yet shows as done
  * already.
  */
@@ -39,7 +40,7 @@ export function DoneView({ list, categories }: DoneViewProps) {
           <p>{t('lists.done.note', { date: formatDayMonth(list.finished_at, language) })}</p>
         </Card>
       )}
-      <ListMeals list={list} editable={false} />
+      <ListMeals list={list} editable={false} eatenBoxes />
       <section aria-labelledby={headingId} className="flex flex-col gap-4">
         <h2 id={headingId} className="text-xl font-semibold">
           {t('lists.lines.title')}

@@ -171,7 +171,8 @@ def test_couple_shops_together(
 
 
 def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
-    """SHOP-06: a done list starts a new draft with the same meals, or goes back to shopping."""
+    """SHOP-06: a done list starts a new draft with the same meals, or goes back to shopping;
+    its meals are ticked eaten first (SHOP-07)."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     rice = api.create_item(anna, f"Reis {tag}")
@@ -195,6 +196,16 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     expect(page).to_have_url(re.compile(f"/lists/{done['id']}$"))
     bought = page.get_by_test_id(TEST_IDS["doneLines"]).get_by_role("listitem")
     expect(bought.filter(has_text=rice["name"])).to_contain_text(f"({text('lists.done.bought')})")
+
+    # The curry was eaten: ticked, it is struck through and counted, also after a reload (SHOP-07).
+    eaten = page.get_by_role("checkbox", name=text("lists.meals.eaten", name=curry["name"]))
+    eaten.check()
+    count = text("lists.meals.eatenCount", eaten="1", count="1")
+    heading = page.get_by_role("heading", name=f"{text('lists.meals.title')} {count}")
+    expect(heading).to_be_visible()
+    page.reload()
+    expect(eaten).to_be_checked()
+    expect(heading).to_be_visible()
 
     # The done note stands alone; no bar on a done list (D-39).
     expect(page.get_by_test_id(TEST_IDS["listDone"]).get_by_role("button")).to_have_count(0)

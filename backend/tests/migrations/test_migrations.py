@@ -40,7 +40,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0019"
+HEAD = "0020"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -65,7 +65,8 @@ LIST_TABLES = {
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
-# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one.
+# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one; 0020
+# adds a column.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
@@ -161,6 +162,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0018")
     assert tables(database_path) == TABLES_0018
     command.upgrade(config, "0019")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0020")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0019")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0018")
     assert tables(database_path) == TABLES_0018
@@ -1225,6 +1230,18 @@ def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
             connection.execute("DROP TABLE walking_order_entries")
 
 
+@contextmanager
+def no_eaten_meals_yet(path: Path) -> Iterator[None]:
+    """The app of today reads whether each meal on a list is eaten (SHOP-07), a column 0020
+    adds. No meal was eaten before, so the column stands in, false, while the app reads, and
+    goes again before the upgrade adds it."""
+    execute(path, "ALTER TABLE list_meals ADD COLUMN eaten BOOLEAN NOT NULL DEFAULT 0")
+    try:
+        yield
+    finally:
+        execute(path, "ALTER TABLE list_meals DROP COLUMN eaten")
+
+
 def rename_items(path: Path, *, back: bool = False) -> None:
     """Rename what 0019 renames, the tables and columns only (or `back`), in the tables the
     database has."""
@@ -1275,7 +1292,7 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
     settings = demo_settings(data_dir)
-    with no_own_walking_orders_yet(path), items_renamed_meanwhile(path):
+    with no_own_walking_orders_yet(path), items_renamed_meanwhile(path), no_eaten_meals_yet(path):
         before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
 
     upgrade_database(data_dir)
@@ -1910,6 +1927,90 @@ def test_the_0019_downgrade_restores_the_ingredients(tmp_path: Path) -> None:
     assert_clean(path)
     command.upgrade(config, "0019")
     assert sorted(dump_without(path, "alembic_version")) == at_0019
+
+
+# --- 0020 -----------------------------------------------------------------------------------
+
+
+def list_meals_but_eaten(path: Path) -> list[dict[str, object]]:
+    return [
+        {column: value for column, value in row.items() if column != "eaten"}
+        for row in rows_of(path, "list_meals")
+    ]
+
+
+def list_meals_shape(path: Path) -> tuple[set[tuple[object, ...]], set[str]]:
+    """The list meals' columns (name, type, NOT NULL, default, primary key) and the names of
+    their constraints and indexes."""
+    columns = query(
+        path, "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('list_meals')"
+    )
+    return set(columns), constraint_and_index_names(path, "list_meals")
+
+
+def dump_without_list_meals(path: Path) -> list[str]:
+    """The database as SQL, without the list meals' table, indexes and rows, in order."""
+    schema = ('CREATE TABLE "list_meals"', "CREATE TABLE list_meals", "CREATE INDEX ix_list_meals_")
+    return sorted(
+        line
+        for line in dump_without(path, "list_meals", "alembic_version")
+        if not line.startswith(schema)
+    )
+
+
+EATEN_COLUMN = ("eaten", "BOOLEAN", 1, "0", 0)
+
+
+def test_0020_adds_eaten_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0019 → 0020 (SHOP-07, D-54): every meal on a list, on drafts, lists
+    being shopped and done lists alike, starts not eaten; no other row, value, reference,
+    column or constraint changes (`version` and `updated_at` included: this is nobody's
+    edit)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0019")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    columns, names = list_meals_shape(path)
+    list_meals, rest = rows_of(path, "list_meals"), dump_without_list_meals(path)
+    statuses = query(
+        path,
+        "SELECT DISTINCT s.status FROM list_meals m JOIN shopping_lists s ON s.id = m.list_id"
+        " ORDER BY s.status",
+    )
+    assert statuses == [("done",), ("draft",), ("shopping",)]
+
+    command.upgrade(config, "0020")
+
+    assert list_meals_shape(path) == (columns | {EATEN_COLUMN}, names)
+    assert list_meals_but_eaten(path) == list_meals
+    assert {row["eaten"] for row in rows_of(path, "list_meals")} == {0}
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+
+
+def test_the_0020_downgrade_drops_eaten(tmp_path: Path) -> None:
+    """Eaten is only a note: down to 0019 the column goes, eaten meals included, and the
+    database is as it was at 0019 (QA-02); up again every meal starts not eaten."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0019")
+    shape, list_meals, rest = (
+        list_meals_shape(path),
+        rows_of(path, "list_meals"),
+        dump_without_list_meals(path),
+    )
+    command.upgrade(config, "0020")
+    execute(path, "UPDATE list_meals SET eaten = 1")
+
+    command.downgrade(config, "0019")
+
+    assert (list_meals_shape(path), rows_of(path, "list_meals")) == (shape, list_meals)
+    assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0020")
+    assert {row["eaten"] for row in rows_of(path, "list_meals")} == {0}
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
