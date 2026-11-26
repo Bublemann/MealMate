@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { LANGUAGE_STORAGE_KEY } from '@/i18n';
-import { errorResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
+import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -76,5 +76,29 @@ describe('ProfileScreen', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
     const last = requestsTo(fetchMock, 'PATCH /api/me').at(-1);
     await expect(last?.json()).resolves.toEqual({ display_name: 'Annie' });
+  });
+
+  it('shows the small spinner in Save while it saves and sends one request (UI-08)', async () => {
+    const save = heldRoute();
+    const fetchMock = mockApi({ 'PATCH /api/me': save.route });
+    const { user } = renderApp('/me/profile');
+
+    const input = screen.getByTestId(testIds.displayNameInput);
+    await user.clear(input);
+    await user.type(input, 'Ben');
+    const button = screen.getByRole('button', { name: 'Save' });
+    await user.click(button);
+    await user.click(button);
+    await user.type(input, '{Enter}');
+
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(await within(button).findByTestId(testIds.spinner)).toBeVisible();
+    expect(requestsTo(fetchMock, 'PATCH /api/me')).toHaveLength(1);
+
+    await save.answer({ ...TEST_USER, display_name: 'Ben' });
+    expect(await screen.findByText('Saved.')).toBeVisible();
+    expect(within(button).queryByTestId(testIds.spinner)).not.toBeInTheDocument();
+    expect(button).not.toHaveAttribute('aria-busy');
   });
 });

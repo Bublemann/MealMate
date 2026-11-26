@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '@/components/LoadingState';
 import { SettingsPage } from '@/features/me/SettingsPage';
 import { useLanguage } from '@/i18n';
 import { formatDateTime } from '@/i18n/format';
@@ -15,7 +16,7 @@ export function AdminEventsScreen() {
 
   return (
     <SettingsPage title={t('admin.events.title')} testId={testIds.screenAdminEvents}>
-      {events.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {events.isPending && <LoadingState />}
       <LoadError error={events.error} />
       {events.data?.length === 0 && (
         <p className="text-muted-foreground">{t('admin.events.empty')}</p>

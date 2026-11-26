@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Screen } from '@/components/Screen';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCategories } from '@/features/reference/api';
@@ -43,7 +44,7 @@ function ItemDetail({ id }: { id: string }) {
       action={item.data && <ItemMenu item={item.data} onError={setActionError} />}
     >
       <ErrorAlert error={actionError} />
-      {item.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {item.isPending && <LoadingState />}
       <LoadError error={item.error} />
       {item.data && (
         <>

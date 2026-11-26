@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { ShareLink } from '@/components/ShareLink';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,7 @@ export function AdminUsersScreen() {
 
   return (
     <SettingsPage title={t('admin.users.title')} testId={testIds.screenAdminUsers}>
-      {users.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {users.isPending && <LoadingState />}
       <LoadError error={users.error} />
       {users.data && (
         <ul data-testid={testIds.adminUserList} className="flex flex-col gap-4">
@@ -86,6 +87,9 @@ function UserActions({ user }: { user: AdminUser }) {
   const resetLink = useCreateResetLink(user.id);
   const name = user.display_name;
   const busy = update.isPending || remove.isPending;
+  // The button whose change runs shows the spinner (UI-08).
+  const changingRole = update.isPending && update.variables.role !== undefined;
+  const changingActive = update.isPending && update.variables.is_active !== undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,6 +97,7 @@ function UserActions({ user }: { user: AdminUser }) {
         <Button
           size="compact"
           variant="outline"
+          pending={changingRole}
           disabled={busy}
           onClick={() => update.mutate({ role: user.role === 'admin' ? 'user' : 'admin' })}
           aria-label={
@@ -109,6 +114,7 @@ function UserActions({ user }: { user: AdminUser }) {
               <Button
                 size="compact"
                 variant="outline"
+                pending={changingActive}
                 disabled={busy}
                 aria-label={t('admin.users.deactivateLabel', { name })}
               >
@@ -125,6 +131,7 @@ function UserActions({ user }: { user: AdminUser }) {
           <Button
             size="compact"
             variant="outline"
+            pending={changingActive}
             disabled={busy}
             onClick={() => update.mutate({ is_active: true })}
             aria-label={t('admin.users.reactivateLabel', { name })}
@@ -135,7 +142,8 @@ function UserActions({ user }: { user: AdminUser }) {
         <Button
           size="compact"
           variant="outline"
-          disabled={busy || resetLink.isPending}
+          pending={resetLink.isPending}
+          disabled={busy}
           onClick={() => resetLink.mutate()}
           aria-label={t('admin.users.resetLinkLabel', { name })}
         >
@@ -146,6 +154,7 @@ function UserActions({ user }: { user: AdminUser }) {
             <Button
               size="compact"
               variant="destructive"
+              pending={remove.isPending}
               disabled={busy}
               aria-label={t('admin.users.deleteLabel', { name })}
             >

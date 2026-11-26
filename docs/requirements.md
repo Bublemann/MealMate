@@ -484,7 +484,7 @@ The domain terms (item, meal, shopping list, line, couple and the rest) are defi
   - **Local copy:** until the feed's first page arrives, also online, the tab shows the local copy (SYNC-02, SYNC-09), sorted like the feed. **Offline** it shows only the local copy, whatever the saved user filter and state filter say, and disables the filter button and the "Neue Liste" tile. Read-only and done lists need a connection.
   - Opening a done list shows it read-only, with its two actions (SHOP-06). An old link to the former history page leads to the Lists tab.
 - **UI-03** Lists, Meals and Items show their pinned block (UI-01) at once. Below it:
-  - while the tab's first load runs, the loading placeholder;
+  - while the tab's first load runs, the spinner (UI-08);
   - on an empty tab, one short line ("Noch keine Listen" / "Noch keine Gerichte" / "Noch keine Artikel"), with no icon, heading or button: the "Neu…" tile is the action;
   - when the search or the filters hide everything, "Keine Treffer" with a "Filter zurücksetzen" button, which clears the search text and resets every filter group.
 - **UI-04** Dark mode follows the iPhone setting automatically.
@@ -497,6 +497,12 @@ The domain terms (item, meal, shopping list, line, couple and the rest) are defi
   - the tab's gear icon shows a small count of incoming couple requests and unread notices (D-51), which screen readers hear in its name.
 
   A row shows a short value where it helps: the display name, the partner or "1 Anfrage" for an incoming couple request, how many recurring items are due and "1 Hinweis" for unread notices, the last backup (or "Fehlgeschlagen" after a failed run, with the day of the last successful backup when the host knows it), the version. The headline scrolls with the page.
+- **UI-08** **Spinner:** one spinner shows wherever the user waits for data, instead of a "Wird geladen …" text or nothing:
+  - on the tab feeds and their further pages, a shopping list, a meal and an item, the meal form, the Settings pages (couple and security included), the admin pages, pop-ups that fetch (e.g. a category's counts before it is deleted), the start-up and a link's check, the Open Food Facts search and the barcode lookup (these two with their text next to it, "Suche bei Open Food Facts …");
+  - it appears only once a load has taken about 300 ms, so quick loads don't flicker, centred in its screen or section;
+  - screen readers hear it as loading ("Wird geladen …", or the text next to it);
+  - a save or another change shows a small spinner inside its button, after the same 300 ms; the button takes no second press while the change runs;
+  - under Reduce Motion it stands still (A11Y-02).
 
 ## 5. Non-functional requirements
 

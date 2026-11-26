@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
+import { LoadingState } from '@/components/LoadingState';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +30,7 @@ export function AdminSystemScreen() {
 
   return (
     <SettingsPage title={t('admin.system.title')} testId={testIds.screenAdminSystem}>
-      {system.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {system.isPending && <LoadingState />}
       <ErrorAlert error={system.error} />
       {system.data && (
         <>
@@ -131,11 +132,11 @@ function BackupCard({ backup }: { backup: BackupStatus | null }) {
         <ErrorAlert error={request.error} />
         <Button
           data-testid={testIds.backupNow}
-          disabled={request.isPending}
+          pending={request.isPending}
           onClick={() => request.mutate()}
           className="self-start"
+          icon={<DatabaseBackup aria-hidden="true" />}
         >
-          <DatabaseBackup aria-hidden="true" />
           {t('admin.system.backupNow')}
         </Button>
         <p role="status" className="text-sm text-muted-foreground">

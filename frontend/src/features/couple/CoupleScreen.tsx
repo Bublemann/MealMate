@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -34,7 +35,7 @@ export function CoupleScreen() {
     <SettingsPage title={t('couple.title')} testId={testIds.screenCouple}>
       <div data-testid={testIds.coupleSection} className="flex flex-col gap-5">
         <p className="text-muted-foreground">{t('couple.text')}</p>
-        {couple.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+        {couple.isPending && <LoadingState />}
         <LoadError error={couple.error} />
         {couple.data && <CoupleContent state={couple.data} />}
       </div>
@@ -80,7 +81,7 @@ function Partner({ state }: { state: CoupleState }) {
       </p>
       <ConfirmDialog
         trigger={
-          <Button variant="outline" className="self-start" disabled={end.isPending}>
+          <Button variant="outline" className="self-start" pending={end.isPending}>
             {t('couple.end')}
           </Button>
         }
@@ -106,7 +107,7 @@ function Outgoing({ request, answer }: { request: CoupleRequest; answer: Answer 
       <Button
         variant="outline"
         className="self-start"
-        disabled={answer.isPending}
+        pending={answer.isPending}
         onClick={() => answer.mutate({ requestId: request.id, action: 'cancel' })}
       >
         {t('couple.cancelRequest')}
@@ -117,6 +118,11 @@ function Outgoing({ request, answer }: { request: CoupleRequest; answer: Answer 
 
 function Incoming({ requests, answer }: { requests: CoupleRequest[]; answer: Answer }) {
   const { t } = useTranslation();
+  /** Whether this answer to this request is being sent. */
+  const answering = (requestId: string, action: 'accept' | 'decline') =>
+    answer.isPending &&
+    answer.variables.requestId === requestId &&
+    answer.variables.action === action;
 
   return (
     <ul className="flex flex-col gap-3" aria-label={t('couple.incomingLabel')}>
@@ -128,6 +134,7 @@ function Incoming({ requests, answer }: { requests: CoupleRequest[]; answer: Ans
             <div className="flex flex-wrap gap-2">
               <Button
                 size="compact"
+                pending={answering(request.id, 'accept')}
                 disabled={answer.isPending}
                 aria-label={t('couple.acceptLabel', { name })}
                 onClick={() => answer.mutate({ requestId: request.id, action: 'accept' })}
@@ -137,6 +144,7 @@ function Incoming({ requests, answer }: { requests: CoupleRequest[]; answer: Ans
               <Button
                 size="compact"
                 variant="outline"
+                pending={answering(request.id, 'decline')}
                 disabled={answer.isPending}
                 aria-label={t('couple.declineLabel', { name })}
                 onClick={() => answer.mutate({ requestId: request.id, action: 'decline' })}
@@ -202,7 +210,7 @@ function RequestForm() {
         ))}
       </NativeSelect>
       <ErrorAlert error={users.error ?? send.error} />
-      <Button type="submit" className="self-start" disabled={!userId || send.isPending}>
+      <Button type="submit" className="self-start" pending={send.isPending} disabled={!userId}>
         {t('couple.send')}
       </Button>
     </form>

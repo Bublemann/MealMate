@@ -16,6 +16,7 @@ import { Link, useNavigate } from 'react-router';
 import { fieldErrorCodes, isApiError } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
+import { LoadingState } from '@/components/LoadingState';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -703,7 +704,8 @@ function ItemForm({
         <Button
           type="submit"
           className="w-full"
-          disabled={mutation.isPending || values.name.trim() === ''}
+          pending={mutation.isPending}
+          disabled={values.name.trim() === ''}
         >
           {t('common.save')}
         </Button>
@@ -847,13 +849,20 @@ function ScanNotice({ state, onRetry, onPickExisting, takes, onNavigate }: ScanN
   const { t } = useTranslation();
   const textId = useId();
   if (state.kind === 'failed') return <ErrorAlert error={state.error} />;
+  if (state.kind === 'lookingUp') {
+    return (
+      <div data-testid={testIds.itemScanNotice} className="text-sm">
+        <LoadingState
+          label={t('scanner.lookingUp', { barcode: state.barcode })}
+          className="justify-start py-0"
+        />
+      </div>
+    );
+  }
 
   let text: string;
   let action: ReactNode = null;
   switch (state.kind) {
-    case 'lookingUp':
-      text = t('scanner.lookingUp', { barcode: state.barcode });
-      break;
     case 'invalid':
       text = t('scanner.invalidBarcode', { barcode: state.barcode });
       break;
@@ -923,9 +932,7 @@ function ScanNotice({ state, onRetry, onPickExisting, takes, onNavigate }: ScanN
           state.kind === 'invalid' && 'font-medium text-destructive',
         )}
       >
-        {state.kind !== 'lookingUp' && (
-          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        )}
+        <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         {text}
       </p>
       {action}
@@ -971,6 +978,11 @@ function SimilarHint({
     ? (similar.data ?? []).filter((match) => match.id !== item?.id && takes(match))
     : [];
 
+  /** Whether the barcode is being given to this match. */
+  function linking(id: string): boolean {
+    return link.isPending && link.variables.id === id;
+  }
+
   function attach(match: ItemSummary, barcode: string) {
     link.mutate(
       { id: match.id, barcode },
@@ -1009,6 +1021,7 @@ function SimilarHint({
                       type="button"
                       size="compact"
                       variant="outline"
+                      pending={linking(match.id)}
                       disabled={link.isPending}
                       onClick={() =>
                         toAttach === null ? onPickExisting(match) : attach(match, toAttach)
@@ -1021,6 +1034,7 @@ function SimilarHint({
                       type="button"
                       size="compact"
                       variant="outline"
+                      pending={linking(match.id)}
                       disabled={link.isPending}
                       onClick={() => attach(match, toAttach)}
                     >

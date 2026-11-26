@@ -1,7 +1,9 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+import { useDelayed } from '@/lib/useDelayed';
 import { cn } from '@/lib/utils';
+import { Spinner } from './spinner';
 
 // Every size keeps a tap target of at least 44 × 44 pt (A11Y-01, --tap-target in tokens.css).
 // The focus ring has full contrast and an offset, so it also shows next to a primary button.
@@ -29,24 +31,48 @@ const buttonVariants = cva(
   },
 );
 
+/**
+ * `pending` marks a save or another change that is running (UI-08): the button ignores further
+ * presses at once and, after about 300 ms, shows the small spinner in place of its `icon` (or of
+ * an icon button's only child), else before its label. An `asChild` button shows no spinner.
+ */
 function Button({
   className,
   variant,
   size,
   asChild = false,
+  pending = false,
+  disabled,
+  icon,
+  children,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    pending?: boolean;
+    /** The icon before the label, which the spinner stands in for while pending. */
+    icon?: React.ReactNode;
   }) {
   const Comp = asChild ? Slot : 'button';
+  const spinning = useDelayed(pending);
 
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled || pending}
+      aria-busy={pending || undefined}
       {...props}
-    />
+    >
+      {asChild ? (
+        children
+      ) : (
+        <>
+          {spinning ? <Spinner size="small" /> : icon}
+          {!(spinning && size === 'icon') && children}
+        </>
+      )}
+    </Comp>
   );
 }
 

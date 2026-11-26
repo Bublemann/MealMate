@@ -149,7 +149,7 @@ function JoinForm({ code, expiresAt }: { code: string; expiresAt: string }) {
       </div>
       {/* Field problems show next to their fields; everything else (e.g. a used code) here. */}
       {!hasFieldErrors && <ErrorAlert error={join.error} />}
-      <Button type="submit" disabled={join.isPending || status === 'loading'}>
+      <Button type="submit" pending={join.isPending} disabled={status === 'loading'}>
         {t('auth.join.submit')}
       </Button>
     </form>
