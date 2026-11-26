@@ -409,7 +409,8 @@ async def update_item(
             set_brand(row, body.brand)
             edited.append("brand")
         # A supply's nutrients stay unknown, so its null ones are not the user's (D-55).
-        for key in [] if kind == SUPPLY else _nutrient_keys(body.nutrients):
+        sent_nutrients = [] if kind == SUPPLY else _nutrient_keys(body.nutrients)
+        for key in sent_nutrients:
             row.set_nutrient(key, getattr(body.nutrients, key))
             edited.append(nutrient_field(key))
         if body.category_id is not None:
