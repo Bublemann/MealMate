@@ -94,6 +94,8 @@ function parseParams(value: unknown): ErrorParams {
   for (const [key, param] of Object.entries(value)) {
     if (typeof param === 'string' || typeof param === 'number' || typeof param === 'boolean') {
       params[key] = param;
+    } else if (Array.isArray(param) && param.every((entry) => typeof entry === 'string')) {
+      params[key] = param;
     }
   }
   return params;

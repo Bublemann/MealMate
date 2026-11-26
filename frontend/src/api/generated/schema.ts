@@ -702,7 +702,8 @@ export interface paths {
          *     then names starting with `q`, then the rest, each in dictionary order by name and brand
          *     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
          *     items in that order (at most 1000). `category_id`
-         *     is repeatable: an item matches if it is in any of the given categories.
+         *     is repeatable: an item matches if it is in any of the given categories. With `kind`, only
+         *     food or only supplies (the meal form's search asks for food, D-56).
          */
         get: operations["list_items"];
         put?: never;
@@ -2082,7 +2083,7 @@ export interface components {
          * @description What went wrong; the frontend shows the translation `error.<code>`.
          * @enum {string}
          */
-        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "item.in_use" | "item.barcode_taken" | "item.has_barcode" | "item.no_pending_update" | "item.unit_mismatch" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
+        ErrorCode: "common.internal" | "common.not_found" | "common.method_not_allowed" | "common.validation" | "common.rate_limited" | "common.unauthorized" | "common.forbidden" | "common.service_unavailable" | "common.payload_too_large" | "auth.invalid_credentials" | "auth.account_deactivated" | "auth.token_expired" | "auth.session_expired" | "auth.session_revoked" | "auth.login_required" | "auth.csrf" | "auth.code_invalid" | "auth.password_incorrect" | "auth.user_mismatch" | "couple.already_in_couple" | "couple.target_in_couple" | "couple.request_pending" | "admin.self_forbidden" | "admin.last_admin" | "admin.public_url_missing" | "category.not_deletable" | "category.not_renamable" | "item.in_use" | "item.barcode_taken" | "item.has_barcode" | "item.no_pending_update" | "item.unit_mismatch" | "item.used_in_meals" | "off.busy" | "off.unavailable" | "list.not_draft" | "list.done" | "list.not_done" | "list.not_shopping" | "extra.id_taken" | "media.too_large" | "media.unsupported_type" | "media.too_many_pixels";
         /**
          * ErrorResponse
          * @description `params` fill placeholders in the translation; `fields` lists rejected request fields.
@@ -2093,7 +2094,7 @@ export interface components {
             fields: components["schemas"]["FieldError"][];
             /** Params */
             params: {
-                [key: string]: string | number | boolean;
+                [key: string]: string | number | boolean | string[];
             };
         };
         /**
@@ -2291,7 +2292,7 @@ export interface components {
          * @description Why a single request field was rejected (`fields[].code` in the envelope).
          * @enum {string}
          */
-        FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username" | "unit_mismatch";
+        FieldErrorCode: "required" | "invalid" | "too_short" | "too_long" | "out_of_range" | "invalid_format" | "taken" | "too_common" | "same_as_username" | "unit_mismatch" | "supply";
         /**
          * FilterHidden
          * @description What this user's saved filters hide; empty shows everything. `meals` and `lists` are the
@@ -2360,6 +2361,8 @@ export interface components {
          * @description An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
          *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count
          *     with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
+         *     `kind` food or supply (D-56): a supply's nutrients and piece weight are always null, and it
+         *     is never an ingredient in a meal.
          *
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
          *     (BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,
@@ -2389,6 +2392,11 @@ export interface components {
             fetched_at: string | null;
             /** Id */
             id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "food" | "supply";
             /** Name */
             name: string;
             nutrients: components["schemas"]["NutrientValues"];
@@ -2426,9 +2434,11 @@ export interface components {
          * ItemCreate
          * @description A new item (ING-02), in one request also when it was scanned.
          *
-         *     `category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:
-         *     0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per
-         *     100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
+         *     `category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out
+         *     or null; D-56). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
+         *     otherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes
+         *     neither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).
+         *     Open Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
          *     valid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13
          *     (UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another
          *     item has is 409 `item.barcode_taken`.
@@ -2450,6 +2460,8 @@ export interface components {
             brand?: string | null;
             /** Category Id */
             category_id?: string | null;
+            /** Kind */
+            kind?: ("food" | "supply") | null;
             /** Name */
             name: string;
             nutrients?: components["schemas"]["NutrientValues"] | null;
@@ -2462,7 +2474,8 @@ export interface components {
          * @description Merge the item into `into_id` (ING-05). A merge across base units that would leave
          *     amounts of the item not fitting the base unit of `into_id` is refused (409
          *     `item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
-         *     isn't).
+         *     isn't). A merge into a supply is refused while meals use the item (409
+         *     `item.used_in_meals`, D-56).
          */
         ItemMerge: {
             /** Accept Unit Mismatch */
@@ -2505,6 +2518,11 @@ export interface components {
             exact: boolean;
             /** Id */
             id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "food" | "supply";
             /** Name */
             name: string;
             /**
@@ -2517,7 +2535,7 @@ export interface components {
          * ItemSummary
          * @description A search result, list entry or meal row's item. It is shown as `name` with the
          *     `brand` in brackets when there is one ("Milch (Weihenstephan)"); `barcode` is set for
-         *     scanned items.
+         *     scanned items. A `kind` supply is never an ingredient in a meal (D-56).
          */
         ItemSummary: {
             /** Barcode */
@@ -2533,6 +2551,11 @@ export interface components {
             category_id: string;
             /** Id */
             id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "food" | "supply";
             /** Name */
             name: string;
             /**
@@ -2558,6 +2581,10 @@ export interface components {
          *     drafts not fitting is refused (409 `item.unit_mismatch`, D-33) unless
          *     `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
          *     they are and flagged.
+         *
+         *     `kind` (D-56): an item that is (or becomes) a supply takes neither a piece weight nor a
+         *     nutrient value (422 `invalid`). Switching to supply clears both, and is refused while any
+         *     meal uses the item (409 `item.used_in_meals`).
          */
         ItemUpdate: {
             /** Accept Unit Mismatch */
@@ -2570,6 +2597,8 @@ export interface components {
             brand?: string | null;
             /** Category Id */
             category_id?: string | null;
+            /** Kind */
+            kind?: ("food" | "supply") | null;
             /** Name */
             name?: string | null;
             nutrients?: components["schemas"]["NutrientValues"] | null;
@@ -4885,6 +4914,7 @@ export interface operations {
             query?: {
                 q?: string | null;
                 category_id?: string[] | null;
+                kind?: ("food" | "supply") | null;
             };
             header?: never;
             path?: never;

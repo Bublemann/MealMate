@@ -403,6 +403,7 @@ async def test_save_a_proposal_in_one_request(
         "name": "Zarte Haferflocken",
         "brand": "MealMate Test Kitchen",
         "barcode": OATS,
+        "kind": "food",
         "category_id": body["category_id"],
         "base_unit": "g",
         "piece_weight_g": None,

@@ -180,6 +180,7 @@ describe('ItemPicker', () => {
         brand: null,
         barcode: null,
         source: 'manual',
+        kind: 'food',
         category_id: 'cat-other',
         base_unit: 'g',
       }),
