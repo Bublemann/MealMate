@@ -1365,17 +1365,21 @@ describe('eaten meals on a done list (SHOP-07)', () => {
   });
 
   it('unticks a meal marked by mistake', async () => {
-    const { user, fetchMock } = renderList({
+    const { fetchMock } = renderList({
       [`GET ${BASE}`]: doneList({ meals: [listMeal({ eaten: true })] }),
-      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: doneList({ version: 10 }),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: doneList({ version: 10, meals: [listMeal()] }),
     });
     const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
     expect(box).toBeChecked();
     expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 1 eaten');
 
-    await user.click(box);
+    fireEvent.click(box);
 
+    // At once, not only once the change reached the cache.
     expect(box).not.toBeChecked();
+    await waitFor(() =>
+      expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 0 of 1 eaten'),
+    );
     expect(screen.getByRole('link', { name: 'Pfannkuchen' })).not.toHaveClass('line-through');
     expect(await bodyOf(fetchMock, `PUT ${BASE}/meals/lm-pancakes/eaten`)).toEqual({
       eaten: false,

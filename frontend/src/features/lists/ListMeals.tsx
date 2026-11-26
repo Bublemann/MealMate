@@ -1,5 +1,5 @@
 import { Check, CookingPot, Trash2 } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -78,7 +78,8 @@ export function ListMeals({
                 eatenBoxes
                   ? {
                       disabled: !list.can_edit || offline,
-                      onChange: (eaten) => setEaten.mutate({ listMealId: entry.id, eaten }),
+                      onChange: (eaten, settled) =>
+                        setEaten.mutate({ listMealId: entry.id, eaten }, { onSettled: settled }),
                     }
                   : undefined
               }
@@ -128,7 +129,7 @@ interface MealEntryProps {
   onServings: (servings: number) => void;
   onRemove: () => void;
   /** The eaten checkbox of a done list (SHOP-07). */
-  eatenBox?: { disabled: boolean; onChange: (eaten: boolean) => void };
+  eatenBox?: { disabled: boolean; onChange: (eaten: boolean, settled: () => void) => void };
 }
 
 /**
@@ -156,22 +157,12 @@ function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }:
       >
         <div className="group flex items-center gap-3 px-3 py-2">
           {eatenBox && (
-            <span className="relative flex size-(--tap-target) shrink-0 items-center justify-center">
-              <input
-                type="checkbox"
-                aria-label={t('lists.meals.eaten', { name })}
-                checked={entry.eaten}
-                disabled={eatenBox.disabled}
-                onChange={(event) => eatenBox.onChange(event.target.checked)}
-                className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
-              />
-              <span
-                aria-hidden="true"
-                className="flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60"
-              >
-                {entry.eaten && <Check className="size-6" strokeWidth={3} />}
-              </span>
-            </span>
+            <EatenBox
+              label={t('lists.meals.eaten', { name })}
+              eaten={entry.eaten}
+              disabled={eatenBox.disabled}
+              onChange={eatenBox.onChange}
+            />
           )}
           {entry.thumb_url ? (
             // The name next to it says what it shows, so the thumbnail is decorative.
@@ -236,5 +227,47 @@ function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }:
         </div>
       </SwipeRow>
     </li>
+  );
+}
+
+interface EatenBoxProps {
+  label: string;
+  eaten: boolean;
+  disabled: boolean;
+  /** Sends the change; `settled` is called once it has its answer, or failed. */
+  onChange: (eaten: boolean, settled: () => void) => void;
+}
+
+/**
+ * The eaten checkbox of a meal on a done list (SHOP-07). A tap shows at once and stays until the
+ * change has its answer: the list's change reaches the cache only after a tick, and a box bound
+ * to the cache alone would jump back for a moment. Then the box shows the cached list again, which
+ * is the server's answer, or the list loaded again after a failure.
+ */
+function EatenBox({ label, eaten, disabled, onChange }: EatenBoxProps) {
+  const [tapped, setTapped] = useState<boolean | null>(null);
+  const checked = tapped ?? eaten;
+
+  return (
+    <span className="relative flex size-(--tap-target) shrink-0 items-center justify-center">
+      <input
+        type="checkbox"
+        aria-label={label}
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => {
+          const value = event.target.checked;
+          setTapped(value);
+          onChange(value, () => setTapped((current) => (current === value ? null : current)));
+        }}
+        className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
+      />
+      <span
+        aria-hidden="true"
+        className="flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60"
+      >
+        {checked && <Check className="size-6" strokeWidth={3} />}
+      </span>
+    </span>
   );
 }
