@@ -251,6 +251,12 @@ describe('leftover meals in a draft (LIST-17)', () => {
     );
   });
 
+  it('can’t be ticked by those who may only see the draft', async () => {
+    renderList({ [`GET ${BASE}`]: listDetail({ can_edit: false, meals: [CHILI, PANCAKES] }) });
+
+    expect(await screen.findByRole('checkbox', { name: 'Chili eaten' })).toBeDisabled();
+  });
+
   it('needs a connection for its menu', async () => {
     const { fetchMock, user } = renderList();
     await screen.findByRole('checkbox', { name: 'Chili eaten' });
@@ -303,5 +309,9 @@ describe('leftover meals in a draft (LIST-17)', () => {
     expect(chiliRow()).toBeVisible();
     expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Meals/ })).toHaveTextContent('Meals 1 of 2 eaten');
+
+    // Done lists aren't in the local copy: their boxes need a connection (D-59).
+    goOffline(fetchMock);
+    await waitFor(() => expect(box).toBeDisabled());
   });
 });

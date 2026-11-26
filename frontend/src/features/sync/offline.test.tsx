@@ -537,9 +537,11 @@ describe('a leftover ticked offline (LIST-17, SYNC-03)', () => {
     });
     serverGone(FAIL);
     const first = renderApp(`/lists/${LIST_ID}`);
+    const box = await screen.findByRole('checkbox', { name: 'Chili eaten' });
     goOffline();
+    expect(await screen.findByTestId(testIds.offlineBanner)).toBeVisible();
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
+    fireEvent.click(box);
 
     await waitFor(() =>
       expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument(),

@@ -579,6 +579,7 @@ async def test_the_last_change_to_arrive_wins(
     await make_couple(api, anna, ben)
     done = await done_list(api, anna, [meals["Brot"]])
     draft = await create_list(api, anna)
+    his = await create_list(api, ben)
     tapped = clock.now
     clock.advance(minutes=30)
     await login(api, anna)
@@ -590,6 +591,10 @@ async def test_the_last_change_to_arrive_wins(
     await applied(api, anna, draft["id"], eaten_op(brot["id"], at=tapped))
 
     assert meal_rows(await detail(api, ben, done["id"])) == [("Brot", False, True)]
+
+    # Two queued changes from two drafts: the one arriving last wins, whatever its `at`.
+    await applied(api, ben, his["id"], eaten_op(brot["id"], eaten=False, at=tapped))
+    assert meal_rows(await detail(api, anna, done["id"])) == [("Brot", False, False)]
 
 
 async def test_the_op_is_rejected_without_the_leftover_or_the_rights_on_its_source(

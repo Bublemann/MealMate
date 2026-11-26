@@ -15,7 +15,7 @@ import { RECURRING_KEY } from '@/features/recurring/api';
 import { CATEGORIES_KEY, categoriesQuery } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import { errorMessage } from '@/i18n/errors';
-import { withLeftoversEaten } from './applyPending';
+import { isLeftoverEaten, withLeftoversEaten } from './applyPending';
 import { flushEntries, type FlushResult, type SendOutcome } from './flush';
 import {
   applyPendingWipes,
@@ -735,7 +735,7 @@ export class SyncEngine {
       notifyManager.schedule(() => this.removeFromOutbox(seqs));
     });
     this.keepInCopy(userId, list);
-    this.leftoversEatenElsewhere(list.id, batch);
+    this.leftoversEatenElsewhere(userId, list.id, batch, results);
     void this.queryClient.invalidateQueries({ queryKey: FEED_KEY });
     // A done list's checked lines are purchases of recurring items (LIST-16): the server has
     // recorded them with this batch, so the set's dates and due items change.
@@ -760,12 +760,23 @@ export class SyncEngine {
   }
 
   /**
-   * Leftovers ticked in the batch leave the other lists too (LIST-17): their cached lists show
-   * that until they are loaded again, which they are at once, so none shows a ticked leftover
-   * again once its op left the outbox.
+   * Leftovers the server ticked with the batch leave the other lists too (LIST-17): their cached
+   * and stored lists show that until they are loaded again (at once while on screen), so none
+   * shows a ticked leftover again once its op left the outbox, also offline after a restart. A
+   * rejected op changes nothing elsewhere.
    */
-  private leftoversEatenElsewhere(listId: string, batch: readonly OutboxEntry[]): void {
-    const ops = batch.map((entry) => entry.op).filter((op) => op.type === 'leftover.eaten');
+  private leftoversEatenElsewhere(
+    userId: string,
+    listId: string,
+    batch: readonly OutboxEntry[],
+    results: readonly OpResult[],
+  ): void {
+    const done = new Set(
+      results.filter((result) => result.status !== 'rejected').map((result) => result.op_id),
+    );
+    const ops = batch
+      .map((entry) => entry.op)
+      .filter((op) => isLeftoverEaten(op) && done.has(op.op_id));
     if (ops.length === 0) return;
     for (const [key, detail] of this.queryClient.getQueriesData<ListDetail>({
       queryKey: ['lists', 'detail'],
@@ -774,6 +785,7 @@ export class SyncEngine {
       const shown = withLeftoversEaten(detail, ops);
       if (shown === detail) continue;
       this.queryClient.setQueryData(key, shown);
+      this.keepInCopy(userId, shown);
       void this.queryClient.invalidateQueries({ queryKey: key, exact: true });
     }
   }

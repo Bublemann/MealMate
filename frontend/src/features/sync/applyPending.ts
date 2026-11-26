@@ -71,8 +71,6 @@ export function applyPending(
   const list: PendingList = { ...detail, pendingFinish: false };
   /** The op id of the waiting check-off each line shows, for the tie-break. */
   const shownOps = new Map<string, string>();
-  /** The eaten state each source meal will have, by the last waiting op (LIST-17). */
-  const eaten = new Map<string, boolean>();
   for (const op of ops) {
     switch (op.type) {
       case 'line.check':
@@ -94,19 +92,31 @@ export function applyPending(
           list.pendingFinish = true;
         }
         break;
-      case 'leftover.eaten':
-        eaten.set(op.payload.leftover_of, op.payload.eaten);
-        break;
     }
   }
-  if (eaten.size > 0) list.meals = markEaten(list, eaten);
+  list.meals = markEaten(list, leftoverStates(ops));
   return list;
+}
+
+type LeftoverEaten = Extract<Op, { type: 'leftover.eaten' }>;
+
+/** A ticked leftover (LIST-17): the one op that shows on lists other than its own. */
+export function isLeftoverEaten(op: Op): op is LeftoverEaten {
+  return op.type === 'leftover.eaten';
+}
+
+/** The eaten state each source meal will have, by the last of the ops that ticks it. */
+function leftoverStates(ops: readonly Op[]): Map<string, boolean> {
+  const states = new Map<string, boolean>();
+  for (const op of ops.filter(isLeftoverEaten))
+    states.set(op.payload.leftover_of, op.payload.eaten);
+  return states;
 }
 
 /** Which ops of the outbox the view of list `listId` applies: its own, and every ticked leftover. */
 export function opsForList(entries: readonly OutboxEntry[], listId: string): Op[] {
   return entries
-    .filter((entry) => entry.listId === listId || entry.op.type === 'leftover.eaten')
+    .filter((entry) => entry.listId === listId || isLeftoverEaten(entry.op))
     .map((entry) => entry.op);
 }
 
@@ -115,11 +125,7 @@ export function opsForList(entries: readonly OutboxEntry[], listId: string): Op[
  * list when they change nothing on it.
  */
 export function withLeftoversEaten(detail: ListDetail, ops: readonly Op[]): ListDetail {
-  const eaten = new Map<string, boolean>();
-  for (const op of ops) {
-    if (op.type === 'leftover.eaten') eaten.set(op.payload.leftover_of, op.payload.eaten);
-  }
-  const meals = markEaten(detail, eaten);
+  const meals = markEaten(detail, leftoverStates(ops));
   return meals === detail.meals ? detail : { ...detail, meals };
 }
 
@@ -127,8 +133,13 @@ function markEaten(
   list: Pick<ListDetail, 'meals' | 'status'>,
   eaten: ReadonlyMap<string, boolean>,
 ): ListDetail['meals'] {
+  // A done list shows the source meal itself ticked too.
   const stateOf = (meal: ListDetail['meals'][number]) =>
-    eaten.get(meal.leftover_of ?? '') ?? (list.status === 'done' ? eaten.get(meal.id) : undefined);
+    meal.leftover_of !== null
+      ? eaten.get(meal.leftover_of)
+      : list.status === 'done'
+        ? eaten.get(meal.id)
+        : undefined;
   if (!list.meals.some((meal) => stateOf(meal) !== undefined)) return list.meals;
   return (
     list.meals

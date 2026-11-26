@@ -102,7 +102,8 @@ export function ListMeals({
   /** The box of a leftover that leaves the list when ticked; undefined for any other. */
   function queuedEatenBox(entry: ListMealEntry): MealEntryProps['eatenBox'] {
     const sourceId = entry.leftover_of;
-    if (!entry.leftover || sourceId === null || !leavesList) return undefined;
+    // `leftover_of` is set exactly on leftovers.
+    if (sourceId === null || !leavesList) return undefined;
     return {
       disabled: !list.can_edit,
       onChange: (eaten, settled) => {

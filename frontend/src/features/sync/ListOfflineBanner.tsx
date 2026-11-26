@@ -11,10 +11,10 @@ import { useConnected } from './context';
  */
 export function ListOfflineBanner({
   shopping,
-  leftovers = false,
+  leftovers,
 }: {
   shopping: boolean;
-  leftovers?: boolean;
+  leftovers: boolean;
 }) {
   const { t } = useTranslation();
   if (useConnected()) return null;
