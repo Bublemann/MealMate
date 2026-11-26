@@ -1,4 +1,4 @@
-"""leftover meals: list_meals.leftover_of_id (LIST-17, D-57)
+"""leftover meals: list_meals.leftover_of_id (LIST-17, D-58)
 
 A new draft brings along the uneaten meals of the last done list as leftover meals: list meals
 that point at the meal on the done list they come from (`leftover_of_id`, deleted with it). A

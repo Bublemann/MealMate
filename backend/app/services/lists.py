@@ -12,7 +12,7 @@ The states (LIST-10): meals, servings and extra items change in a draft and whil
 done list is read-only (409 `list.done`) until it is reopened, except that its meals are marked
 eaten (SHOP-07). Lines are hidden and restored only in a draft (409 `list.not_draft`).
 
-Leftover meals (LIST-17, D-57): a new draft gets the uneaten meals of the last done list the
+Leftover meals (LIST-17, D-58): a new draft gets the uneaten meals of the last done list the
 principal can edit, if it was finished at most `LEFTOVER_DAYS` ago, as leftovers of the meal
 they come from (the source; a leftover of a leftover is one of its source). Marking a leftover
 eaten, on any list, marks its source, and bumps every list that shows it.

@@ -2209,7 +2209,7 @@ def unique_meal_index(path: Path) -> str:
 
 
 def test_0023_adds_leftover_of_and_changes_nothing_else(tmp_path: Path) -> None:
-    """seed-demo data at 0022 → 0023 (LIST-17, D-57): no meal is a leftover, no row, value or
+    """seed-demo data at 0022 → 0023 (LIST-17, D-58): no meal is a leftover, no row, value or
     reference changes; the column comes with its index and foreign key, and the unique index on
     a list's meals leaves leftovers out."""
     path = tmp_path / "data" / "mealmate.db"

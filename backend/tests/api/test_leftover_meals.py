@@ -1,4 +1,4 @@
-"""Leftover meals (LIST-17, D-57): a new draft brings along the meals of the most recently
+"""Leftover meals (LIST-17, D-58): a new draft brings along the meals of the most recently
 finished list one can edit that aren't eaten, if that list was finished at most 14 days ago.
 They add no lines; ticking one marks its source meal eaten, which takes it off every draft;
 "Doch einkaufen" makes it a normal meal again and "Entfernen" takes it off one draft."""
