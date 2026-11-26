@@ -79,5 +79,5 @@ async def set_stored(app: FastAPI, item_id: str, **values: Any) -> None:
 
 def summary(ingredient: Any) -> dict[str, Any]:
     """An ingredient as other objects embed it (`ItemSummary`)."""
-    keys = ("id", "name", "brand", "barcode", "source", "category_id", "base_unit")
+    keys = ("id", "name", "brand", "barcode", "source", "kind", "category_id", "base_unit")
     return {key: ingredient[key] for key in keys}

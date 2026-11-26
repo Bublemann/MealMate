@@ -40,7 +40,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0021"
+HEAD = "0022"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -66,7 +66,7 @@ TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
 # one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one;
-# 0020 drops columns; 0021 adds one.
+# 0020 drops columns; 0021 and 0022 add one each.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
@@ -166,6 +166,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0020")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0021")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0022")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0021")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0020")
     assert tables(database_path) == HEAD_TABLES
@@ -1262,13 +1266,15 @@ def rename_items(path: Path, *, back: bool = False) -> None:
 
 @contextmanager
 def items_renamed_meanwhile(path: Path) -> Iterator[None]:
-    """The app of today reads items, which 0019 renamed from ingredients. For an old database,
-    the tables and columns carry the new names while the app reads, and the old ones again
-    before the upgrade."""
+    """The app of today reads items, which 0019 renamed from ingredients and 0022 gave a kind.
+    For an old database, the tables and columns carry the new names and every item is food while
+    the app reads, and the old names and no kind come back before the upgrade."""
     rename_items(path)
+    execute(path, "ALTER TABLE items ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'food'")
     try:
         yield
     finally:
+        execute(path, "ALTER TABLE items DROP COLUMN kind")
         rename_items(path, back=True)
 
 
@@ -1885,11 +1891,14 @@ def constraint_and_index_names(path: Path, table: str) -> set[str]:
 
 
 @pytest.mark.parametrize("table", ["items", *RENAMED_COLUMNS])
-def test_0019_names_the_constraints_as_the_models_do(tmp_path: Path, table: str) -> None:
+def test_the_renamed_tables_name_their_constraints_as_the_models_do(
+    tmp_path: Path, table: str
+) -> None:
     """Autogenerate doesn't compare check constraints or every constraint name, so this does:
-    after 0019 each renamed table has the constraint and index names of its model."""
+    after 0019 (and the later migrations, such as 0022's kind of an item) each renamed table has
+    the constraint and index names of its model."""
     path = tmp_path / "data" / "mealmate.db"
-    command.upgrade(demo_at_0018_with_every_reference(path), "0019")
+    command.upgrade(demo_at_0018_with_every_reference(path), "head")
     model = Base.metadata.tables[table]
     ddl = str(CreateTable(model).compile(dialect=sqlite.dialect()))
     expected = set(re.findall(r"CONSTRAINT (\w+)", ddl)) | {
@@ -2136,6 +2145,45 @@ def test_the_0021_downgrade_drops_eaten(tmp_path: Path) -> None:
     assert_clean(path)
     command.upgrade(config, "0021")
     assert {row["eaten"] for row in rows_of(path, "list_meals")} == {0}
+
+
+# --- 0022 -----------------------------------------------------------------------------------
+
+
+def test_0022_makes_every_item_food_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0021 → 0022 (D-56): every item gets the kind food, with its values
+    as they were; no row and no other table changes. Down to 0021 the items are as they were,
+    and up again as they were at 0022."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0021")
+    items = rows_of(path, "items")
+    assert items
+    rest = sorted_dump_without_items(path)
+
+    command.upgrade(config, "0022")
+
+    assert rows_of(path, "items") == [item | {"kind": "food"} for item in items]
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    at_0022 = rows_of(path, "items")
+    command.downgrade(config, "0021")
+    assert rows_of(path, "items") == items
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0022")
+    assert rows_of(path, "items") == at_0022
+
+
+def test_0022_an_item_is_food_or_a_supply(tmp_path: Path) -> None:
+    """After 0022 an item is food unless it says otherwise, and food or a supply only."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "0022")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("UPDATE items SET kind = 'supply' WHERE name = 'Zwiebeln'")
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: ck_items_kind"):
+            connection.execute("UPDATE items SET kind = 'tool' WHERE name = 'Zwiebeln'")
+    assert query(path, "SELECT DISTINCT kind FROM items WHERE name = 'Zwiebeln'") == [("supply",)]
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------

@@ -149,6 +149,57 @@ async def test_fields_not_edited_update_silently(
     assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
 
 
+async def test_a_supply_takes_no_nutrients_and_keeps_its_kind(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """A supply has no nutrients, so a refresh brings none, and Open Food Facts never sets the
+    kind (D-56)."""
+    product = await saved_oats(api, anna, edited=[], kind="supply", nutrients=None)
+    newer = oats(product_name_de="Zarte Haferflocken", last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=newer)
+    await later(api, clock, anna, days=40)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert (body["name"], body["kind"]) == ("Zarte Haferflocken", "supply")
+    assert set(body["nutrients"].values()) == {None}
+    assert body["pending_update"] is None
+
+
+async def test_switching_to_supply_drops_the_pending_nutrients(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """A supply has no nutrients, so newer Open Food Facts values for them no longer apply; the
+    other pending values stay (D-56)."""
+    product = await saved_oats(api, anna, edited=["name", "nutrients.kcal"], name="Meine Flocken")
+    newer = oats(
+        nutriments={**oats()["product"]["nutriments"], "energy-kcal_100g": 158},
+        last_modified_t=modified(30),
+    )
+    route(off_api, OATS).respond(json=newer)
+    assert await refresh(app, clock, product["id"]) == Outcome.PENDING
+
+    response = await api.patch(
+        f"/api/items/{product['id']}", json={"kind": "supply"}, headers=anna.headers
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["user_edited_fields"] == ["name"]
+    assert body["pending_update"]["fields"] == [
+        {"field": "name", "current": "Meine Flocken", "proposed": "Haferflocken"}
+    ]
+
+
 async def test_user_edited_fields_become_a_pending_update(
     app: FastAPI,
     api: AsyncClient,

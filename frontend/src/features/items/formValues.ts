@@ -1,5 +1,5 @@
 import type { Language } from '@/i18n';
-import type { BaseUnit, EditedField, Item, OffProposal } from './api';
+import type { BaseUnit, EditedField, Item, ItemKind, OffProposal } from './api';
 import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
 
 /** The longest item name the server accepts; a name from Open Food Facts may be longer. */
@@ -15,6 +15,8 @@ export type TextField = (typeof TEXT_FIELDS)[number];
  * turned into something else, and a field counts as changed only when its text changed.
  */
 export interface FormValues {
+  /** Food or a supply (D-56); Open Food Facts never sets it. */
+  kind: ItemKind;
   name: string;
   brand: string;
   /** The chosen category; null until one is chosen, then `categoryKey` or "other" is shown. */
@@ -40,6 +42,7 @@ function nutrientTexts(
 /** An empty form, optionally with a name (e.g. what was searched for). */
 export function emptyValues(name = '', language: Language): FormValues {
   return {
+    kind: 'food',
     name,
     brand: '',
     categoryId: null,
@@ -54,6 +57,7 @@ export function emptyValues(name = '', language: Language): FormValues {
 /** The form of an existing item. */
 export function valuesFromItem(item: Item, language: Language): FormValues {
   return {
+    kind: item.kind,
     name: item.name,
     brand: item.brand ?? '',
     categoryId: item.category_id,

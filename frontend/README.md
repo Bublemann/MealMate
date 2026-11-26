@@ -337,7 +337,7 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
   filter. Until its first page arrives the feed is the local copy (`showsLocalCopy`), which they
   don't narrow. Online, `ListFeed` shows the spinner instead of that copy for up to 3 s
-  (`COPY_STANDS_IN_AFTER_MS`, D-56); offline it shows the copy at once. The feed query is never
+  (`COPY_STANDS_IN_AFTER_MS`, D-57); offline it shows the copy at once. The feed query is never
   garbage-collected (`gcTime: Infinity`), so the copy that stood in stays on coming back.
   Icons with an accessible name mark a shared list, a read-only one (lock), one being shopped and
   a done one.
@@ -727,6 +727,7 @@ order.
 | `itemForm`              | `item-form`               | Create/edit item form                            |
 | `itemFormScan`          | `item-form-scan`          | Scan icon next to the name in the form           |
 | `itemFormFooter`        | `item-form-footer`        | The form's pinned footer with "Save"             |
+| `itemUsedInMeals`       | `item-used-in-meals`      | Why the item can't become a supply (D-56)        |
 | `itemScanNotice`        | `item-scan-notice`        | The scan's notice below the barcode              |
 | `itemScanOpen`          | `item-scan-open`          | "open" the item a scan belongs to                |
 | `itemScanTake`          | `item-scan-take`          | "use" it instead, in the picker                  |

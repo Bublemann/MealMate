@@ -45,14 +45,21 @@ def _label_norm() -> ColumnElement[str]:
 
 
 async def search(
-    session: AsyncSession, *, query: str, category_ids: Sequence[str], limit: int
+    session: AsyncSession,
+    *,
+    query: str,
+    category_ids: Sequence[str],
+    kind: str | None = None,
+    limit: int,
 ) -> Sequence[Item]:
     """With a normalised `query`: the items whose normalised name or brand, or both
     together ("name brand"), contain it (also with umlaut spellings folded, so "apfel" finds
     "Äpfel"); an exact name first, then names starting with it, each in dictionary order by
     name and brand. Without one: all of them in that order. With `category_ids`, only those in
-    any of the categories."""
+    any of the categories, with `kind` only those of that kind."""
     statement = select(Item)
+    if kind is not None:
+        statement = statement.where(Item.kind == kind)
     if category_ids:
         statement = statement.where(Item.category_id.in_(category_ids))
     order = (Item.name_sort, func.coalesce(Item.brand_sort, ""), Item.id)

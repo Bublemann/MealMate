@@ -504,6 +504,25 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     expect(within(form).getByLabelText('Name')).toHaveValue('Kakao');
   });
 
+  it('says a scanned supply can’t be an ingredient, and adds no row (D-56)', async () => {
+    const { user } = renderForm('/meals/new', {
+      [LOOKUP]: lookupResult({
+        found_in: 'db',
+        item: itemDetail({ name: 'Kerzen', kind: 'supply', barcode: BARCODE }),
+      }),
+    });
+    const form = await screen.findByTestId(testIds.mealForm);
+
+    await user.click(within(form).getByRole('button', { name: 'Scan barcode' }));
+    await typeInScanner(user, BARCODE);
+
+    expect(
+      await within(form).findByText("“Kerzen” is a supply and can't be an ingredient."),
+    ).toBeVisible();
+    expect(within(form).queryByRole('listitem', { name: /^Ingredient/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('opens "New item" for an unknown barcode, filled from Open Food Facts once looked up; Save adds the row (BAR-03)', async () => {
     const off = heldRoute();
     const created = itemDetail({
