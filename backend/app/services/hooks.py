@@ -175,7 +175,7 @@ async def before_item_deleted(session: AsyncSession, item_id: str, *, now: datet
         return
     item = await items_repo.get(session, item_id)
     if item is None:  # pragma: no cover -- the caller has just loaded it
-        raise RuntimeError("the deleted ingredient is missing")
+        raise RuntimeError("the deleted item is missing")
     users = {recurring.user_id for recurring in recurring_items if recurring.user_id is not None}
     couples = {
         recurring.couple_id for recurring in recurring_items if recurring.couple_id is not None

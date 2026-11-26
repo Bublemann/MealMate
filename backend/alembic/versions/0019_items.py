@@ -43,7 +43,7 @@ COLUMNS = {
     "ingredient_name_snapshot": "item_name_snapshot",
     "ingredient_brand_snapshot": "item_brand_snapshot",
 }
-# The constraints and indexes of the items table (`pk_ingredients`, `ix_ingredients_name_norm`).
+# The constraint and index names of the renamed table, `{}` standing for its name.
 ITEM_NAMES = (
     "pk_{}",
     "fk_{}_category_id_categories",
@@ -72,6 +72,8 @@ RENAMES: Mapping[str, str] = {
 
 
 def _renamed(sql: str, renames: Mapping[str, str]) -> str:
+    # Whole words only, so `meal_ingredients` stays; this would also rewrite a word in a string
+    # literal, but no CHECK or index in these tables has one that is renamed.
     return re.sub(r"\w+", lambda word: renames.get(word[0], word[0]), sql)
 
 

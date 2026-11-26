@@ -194,7 +194,7 @@ async def create_item(
 async def _item_of(session: AsyncSession, recurring_item: RecurringItemRow) -> ItemRow:
     item = await items_repo.get(session, recurring_item.item_id)
     if item is None:  # pragma: no cover -- deleting it deletes its recurring items
-        raise RuntimeError("a recurring item's ingredient is missing")
+        raise RuntimeError("a recurring item's item is missing")
     return item
 
 

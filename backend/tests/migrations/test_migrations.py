@@ -3,7 +3,7 @@ import json
 import re
 import sqlite3
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
@@ -12,9 +12,7 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
-from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, Engine, event
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.schema import CreateTable
@@ -1227,34 +1225,30 @@ def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
             connection.execute("DROP TABLE walking_order_entries")
 
 
+def rename_items(path: Path, *, back: bool = False) -> None:
+    """Rename what 0019 renames, the tables and columns only (or `back`), in the tables the
+    database has."""
+    with closing(sqlite3.connect(path)) as connection, connection:
+        old, new = ("items", "ingredients") if back else ("ingredients", "items")
+        connection.execute(f"ALTER TABLE {old} RENAME TO {new}")
+        for table, columns in RENAMED_COLUMNS.items():
+            present = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+            for before, after in columns.items():
+                before, after = (after, before) if back else (before, after)
+                if before in present:
+                    connection.execute(f"ALTER TABLE {table} RENAME COLUMN {before} TO {after}")
+
+
 @contextmanager
 def items_renamed_meanwhile(path: Path) -> Iterator[None]:
     """The app of today reads items, which 0019 renamed from ingredients. For an old database,
-    0019 rebuilds the tables it has under the new names while the app reads, and back again
+    the tables and columns carry the new names while the app reads, and the old ones again
     before the upgrade."""
-    revision = ScriptDirectory.from_config(alembic_config(path)).get_revision("0019")
-    assert revision is not None
-    module = revision.module
-    old = [table for table in (module.OLD_TABLE, *module.REFERRING_TABLES) if table in tables(path)]
-
-    def rebuild(names: list[str], renames: Mapping[str, str]) -> None:
-        engine = create_migration_engine(path)
-        try:
-            with (
-                engine.begin() as connection,
-                Operations.context(MigrationContext.configure(connection)),
-            ):
-                for table in names:
-                    module._rebuild(table, renames)
-        finally:
-            engine.dispose()
-
-    rebuild(old, module.RENAMES)
+    rename_items(path)
     try:
         yield
     finally:
-        back = {new: old for old, new in module.RENAMES.items()}
-        rebuild([module.RENAMES.get(table, table) for table in old], back)
+        rename_items(path, back=True)
 
 
 def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
@@ -1835,6 +1829,8 @@ def test_0019_renames_ingredients_to_items_and_keeps_every_row(tmp_path: Path) -
     )
     assert frozen == [("done", 10), ("shopping", 15)]
     assert all(referring.values())
+    linked = [row for row in referring["list_extra_items"] if row["item_id"] is not None]
+    assert {row["attrs_snapshot"] is None for row in linked} == {True, False}
 
     command.upgrade(config, "0019")
 

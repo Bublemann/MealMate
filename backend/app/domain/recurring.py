@@ -129,7 +129,7 @@ def add_measured(measured: Sequence[int], *, previous: date, purchased_on: date)
 
 
 def preferred_stays(preferred: date, other: date) -> bool:
-    """When one set would hold two items of one item, the one bought more recently stays,
+    """When one set would hold two recurring items of one item, the one bought more recently stays,
     with all its values; on a tie the preferred one: the requester's when a couple forms, the
     surviving item's on a merge (D-42). Takes the two last purchase dates."""
     return preferred >= other

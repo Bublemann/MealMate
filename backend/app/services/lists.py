@@ -964,7 +964,7 @@ async def _extra_base_unit(
         return str(extra.attrs_snapshot["base_unit"])
     item = await items_repo.get(session, str(extra.item_id))
     if item is None:  # pragma: no cover -- the foreign key restricts deleting it
-        raise RuntimeError("a linked extra item's ingredient is missing")
+        raise RuntimeError("a linked extra item's item is missing")
     return item.base_unit
 
 
