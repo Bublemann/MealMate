@@ -61,6 +61,9 @@ export function useListFeed() {
     getNextPageParam: (page) => page.next_cursor,
     initialData: () => engine.copiedFeed(),
     initialDataUpdatedAt: COPY_UPDATED_AT,
+    // Kept until the session ends, so coming back to the tab after a while in a list shows what it
+    // showed, never the spinner again in the shop (D-57).
+    gcTime: Infinity,
   });
 }
 
