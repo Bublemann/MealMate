@@ -22,6 +22,18 @@ describe('errorMessage', () => {
     expect(errorMessage(t, unknown)).toBe(generic);
     expect(errorMessage(t, new Error('boom'))).toBe(generic);
   });
+
+  it('reads list params from the envelope and leaves them to their own UI (D-55)', () => {
+    const error = ApiError.fromResponse(409, {
+      code: 'item.used_in_meals',
+      params: { meals: 2, names: ['Chili sin Carne', 'Tacos'] },
+    });
+
+    expect(error.params).toEqual({ meals: 2, names: ['Chili sin Carne', 'Tacos'] });
+    expect(errorMessage(t, error)).toBe(
+      "Meals use this item as an ingredient. A supply can't be an ingredient.",
+    );
+  });
 });
 
 describe('fieldErrorMessagesByPath', () => {
