@@ -457,9 +457,9 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   said `ingredient` where the API says `item` (a line's `kind` and `ingredient_id`, an extra
   item's `ingredient_id`, a due item's `ingredient`), are read with the new names
   (`fromOlderApp`) until the next sync replaces them. The outbox needs nothing of the kind: its
-  ops never named an item (a line is `i:<id>`, extra items are free text). The copy seeds the query cache
-  (`initialData` of `useList` and of the list feed's first page on the Lists tab), so they show at
-  once and stay when the server can't be reached.
+  ops never named an item (a line is `i:<id>`, extra items are free text). The copy seeds the
+  query cache (`initialData` of `useList` and of the list feed's first page on the Lists tab), so
+  they show at once and stay when the server can't be reached.
 - **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
   queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
   user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush

@@ -120,8 +120,8 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
   // or until the next action (`show`, another ✕). Compared by their items: a reload with
   // the same items is no change.
   const hideFailed = hideDue.isError;
-  const dueIds = due.map((item) => item.item.id).join(' ');
-  const rowBack = hideFailed && due.some((item) => item.item.id === hideDue.variables);
+  const dueIds = due.map((entry) => entry.item.id).join(' ');
+  const rowBack = hideFailed && due.some((entry) => entry.item.id === hideDue.variables);
   const resetHide = hideDue.reset;
   const failedWith = useRef<string | null>(null);
   useEffect(() => {
@@ -328,7 +328,7 @@ export function ItemField({ listId, due = [], shopping = false }: ItemFieldProps
         disabled={!connected}
         frozen={request !== null}
         onAdd={chooseDue}
-        onHide={(item) => hideDue.mutate(item.item.id)}
+        onHide={(entry) => hideDue.mutate(entry.item.id)}
         onEmpty={() => inputRef.current?.focus()}
       />
       <ErrorAlert error={hideDue.error} />

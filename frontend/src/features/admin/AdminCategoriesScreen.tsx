@@ -436,11 +436,11 @@ function DeleteCategory({
             <AlertDialogDescription>
               {usage.data
                 ? [
-                    t('admin.categories.deleteToUncategorized', {
+                    t('admin.categories.deleteItems', {
                       count: usage.data.items,
                       uncategorized: nameOf(UNCATEGORIZED_KEY),
                     }),
-                    t('admin.categories.deleteItems', {
+                    t('admin.categories.deleteFreeText', {
                       count: usage.data.extra_items,
                       other: nameOf(OTHER_KEY),
                     }),

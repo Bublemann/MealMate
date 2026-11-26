@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient, Response
 
 from tests.accounts import Account, FakeClock, error, make_couple, make_user
-from tests.catalog import create_ingredient
+from tests.catalog import create_item
 from tests.recurring import make_recurring, notices, recurring
 
 
@@ -37,7 +37,7 @@ async def admin(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def toilet_paper(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Klopapier", base_unit="piece")
+    return await create_item(api, anna, "Klopapier", base_unit="piece")
 
 
 async def delete_ingredient(api: AsyncClient, admin: Account, item_id: str) -> None:
@@ -93,8 +93,8 @@ async def test_both_partners_get_a_notice_and_no_one_else(
 ) -> None:
     """The couple's set had it, so anna and ben get one notice each; carl, who keeps only
     another ingredient, gets none."""
-    toilet_paper = await create_ingredient(api, anna, "Klopapier", brand="Zewa")
-    toothpaste = await create_ingredient(api, carl, "Zahnpasta")
+    toilet_paper = await create_item(api, anna, "Klopapier", brand="Zewa")
+    toothpaste = await create_item(api, carl, "Zahnpasta")
     await make_couple(api, anna, ben)
     await make_recurring(api, ben, toilet_paper["id"])
     await make_recurring(api, carl, toothpaste["id"])
@@ -111,7 +111,7 @@ async def test_both_partners_get_a_notice_and_no_one_else(
 async def test_unread_notices_come_newest_first(
     api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any, clock: FakeClock
 ) -> None:
-    toothpaste = await create_ingredient(api, anna, "Zahnpasta")
+    toothpaste = await create_item(api, anna, "Zahnpasta")
     await make_recurring(api, anna, toothpaste["id"])
     await make_recurring(api, anna, toilet_paper["id"])
     await delete_ingredient(api, admin, toothpaste["id"])
@@ -161,7 +161,7 @@ async def test_dismissing_a_notice_leaves_the_users_others_unread(
     api: AsyncClient, anna: Account, admin: Account, toilet_paper: Any, clock: FakeClock
 ) -> None:
     """anna dismisses the older of her two notices; the newer one stays unread."""
-    toothpaste = await create_ingredient(api, anna, "Zahnpasta")
+    toothpaste = await create_item(api, anna, "Zahnpasta")
     await make_recurring(api, anna, toothpaste["id"])
     await make_recurring(api, anna, toilet_paper["id"])
     await delete_ingredient(api, admin, toothpaste["id"])

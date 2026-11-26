@@ -24,7 +24,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import EAN_13, create_ingredient, ref, set_stored
+from tests.catalog import EAN_13, create_item, ref, set_stored
 from tests.meals import create_meal, get_meal, list_meals, upload
 
 NO_VALUES = {"kcal": None, "protein": None, "carbs": None, "sugar": None, "fat": None}
@@ -70,12 +70,12 @@ async def cuisines(api: AsyncClient, anna: Account) -> dict[str, str]:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl", nutrients=values(364, 10, 76, 0.7, 1))
+    return await create_item(api, anna, "Mehl", nutrients=values(364, 10, 76, 0.7, 1))
 
 
 @pytest.fixture
 async def salt(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Salz")
+    return await create_item(api, anna, "Salz")
 
 
 def summary(ingredient: Any) -> dict[str, Any]:
@@ -127,7 +127,7 @@ async def test_create_with_only_a_name(api: AsyncClient, anna: Account) -> None:
 async def test_create_with_everything(
     api: AsyncClient, anna: Account, cuisines: dict[str, str], flour: Any, salt: Any
 ) -> None:
-    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    eggs = await create_item(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
 
     meal = await create_meal(
         api,
@@ -344,7 +344,7 @@ def unit_row(ingredient: Any, unit: str | None, amount: float = 2) -> dict[str, 
 
 @pytest.mark.parametrize("base_unit", ["g", "ml", "piece"])
 async def test_units_that_fit_are_taken(api: AsyncClient, anna: Account, base_unit: str) -> None:
-    ingredient = await create_ingredient(api, anna, "Zutat", base_unit=base_unit)
+    ingredient = await create_item(api, anna, "Zutat", base_unit=base_unit)
     rows = [unit_row(ingredient, unit) for unit in FITTING[base_unit]]
     rows.append({"item_id": ingredient["id"], "note": "nach Geschmack"})
 
@@ -358,7 +358,7 @@ async def test_units_that_do_not_fit_are_refused(
     api: AsyncClient, anna: Account, salt: Any, base_unit: str
 ) -> None:
     """A new amount that doesn't fit is refused on its row's unit, on create and update."""
-    ingredient = await create_ingredient(api, anna, "Zutat", base_unit=base_unit)
+    ingredient = await create_item(api, anna, "Zutat", base_unit=base_unit)
     rows = [unit_row(salt, "g"), *(unit_row(ingredient, unit) for unit in NOT_FITTING[base_unit])]
     expected = {
         ("body", "ingredients", index, "unit"): "unit_mismatch" for index in range(1, len(rows))
@@ -382,7 +382,7 @@ async def test_rows_that_do_not_fit_are_kept_as_they_are(
     """MEAL-02, D-33: an older row that doesn't fit stays, flagged, while it is sent back as it
     is (same ingredient, amount and unit), wherever it moved; changing it needs a fitting
     unit. Its nutrition is unknown and named in the marker (NUT-05)."""
-    onions = await create_ingredient(
+    onions = await create_item(
         api, anna, "Zwiebeln", base_unit="piece", piece_weight_g=150, nutrients={"kcal": 40}
     )
     meal = await create_meal(
@@ -438,10 +438,10 @@ async def test_rows_that_do_not_fit_are_kept_as_they_are(
 async def test_nutrition_per_meal_and_per_serving(
     api: AsyncClient, anna: Account, flour: Any, salt: Any
 ) -> None:
-    milk = await create_ingredient(
+    milk = await create_item(
         api, anna, "Milch", base_unit="ml", nutrients=values(64, 3.4, 4.8, 4.8, 3.5)
     )
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -479,11 +479,11 @@ async def test_nutrition_per_meal_and_per_serving(
 
 
 async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
-    butter = await create_ingredient(api, anna, "Butter", nutrients=values(741, 0.6, 0.6, 0.6, 82))
-    bread = await create_ingredient(
+    butter = await create_item(api, anna, "Butter", nutrients=values(741, 0.6, 0.6, 0.6, 82))
+    bread = await create_item(
         api, anna, "Brot", base_unit="piece", nutrients=values(245, 8.5, 45, 3, 1.6)
     )
-    pasta = await create_ingredient(
+    pasta = await create_item(
         api, anna, "Nudeln", brand="Barilla", barcode=EAN_13, nutrients=values(355, 12, 70, 3, 2)
     )
 
@@ -516,7 +516,7 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
     """NUT-05: pieces of a Stück ingredient, and an amount without a unit, count with the piece
     weight against the values per 100 g. Without a piece weight they are unknown and named as
     such."""
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -524,7 +524,7 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
         piece_weight_g=60,
         nutrients=values(155, 13, 1.1, 1.1, 11),
     )
-    rolls = await create_ingredient(
+    rolls = await create_item(
         api, anna, "Brötchen", base_unit="piece", nutrients=values(270, 9, 50, 3, 3)
     )
     meal = await create_meal(
@@ -564,7 +564,7 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
 
 
 async def test_unknown_values_are_listed_per_nutrient(api: AsyncClient, anna: Account) -> None:
-    cream = await create_ingredient(api, anna, "Sahne", base_unit="ml", nutrients={"kcal": 300})
+    cream = await create_item(api, anna, "Sahne", base_unit="ml", nutrients={"kcal": 300})
     meal = await create_meal(
         api, anna, "Soße", ingredients=[{"item_id": cream["id"], "amount": 0.5, "unit": "l"}]
     )

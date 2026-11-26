@@ -46,7 +46,7 @@ class RecurringItem(BaseModel):
 
 class RecurringItemList(BaseModel):
     """The caller's set (their couple's while in one, else their own), sorted by due date and
-    then by the item's name, and how many items are due."""
+    then by the item's name, and how many recurring items are due."""
 
     items: list[RecurringItem]
     due_count: int

@@ -12,7 +12,7 @@ from app.domain.reference import CATEGORY_KEYS, CUISINE_KEYS, SEEDED_CATEGORIES
 from app.domain.text import normalize
 from app.models import AdminEvent, Cuisine, Tag
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import category_ids, create_ingredient, ingredient_counts, set_category
+from tests.catalog import category_ids, create_item, item_counts, set_category
 
 CATALOG_ROUTES = [
     ("GET", "/api/categories"),
@@ -99,11 +99,11 @@ async def test_categories_count_their_ingredients(
     *Uncategorized* only while it holds some (ING-03). The answers of a new order and a rename
     count them too."""
     categories = await category_ids(api, anna)
-    gouda = await create_ingredient(api, anna, "Gouda", category_id=categories["cheese"])
-    await create_ingredient(api, anna, "Feta", category_id=categories["cheese"])
-    await create_ingredient(api, anna, "Salz")
+    gouda = await create_item(api, anna, "Gouda", category_id=categories["cheese"])
+    await create_item(api, anna, "Feta", category_id=categories["cheese"])
+    await create_item(api, anna, "Salz")
 
-    counts = await ingredient_counts(api, anna)
+    counts = await item_counts(api, anna)
 
     assert counts == {**dict.fromkeys(CATEGORY_KEYS, 0), "cheese": 2, "other": 1}
     listed = await listed_categories(api, anna)
@@ -114,7 +114,7 @@ async def test_categories_count_their_ingredients(
 
     await set_category(api, anna, gouda["id"], categories["dairy_eggs"])
 
-    counts = await ingredient_counts(api, anna)
+    counts = await item_counts(api, anna)
     assert (counts["cheese"], counts["dairy_eggs"]) == (1, 1)
 
 

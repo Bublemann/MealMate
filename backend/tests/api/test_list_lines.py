@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from tests.accounts import Account, fields, make_user
-from tests.catalog import category_ids, create_ingredient, ref, set_stored
+from tests.catalog import category_ids, create_item, ref, set_stored
 from tests.lists import (
     UNCHECKED,
     add_extra,
@@ -53,7 +53,7 @@ async def ingredients(
         "Salz": {"category_id": categories["sauces_spices_oils"]},
         "Brötchen": {"category_id": categories["bread_bakery"], "base_unit": "piece"},
     }
-    return {name: await create_ingredient(api, anna, name, **body) for name, body in specs.items()}
+    return {name: await create_item(api, anna, name, **body) for name, body in specs.items()}
 
 
 def row(ingredient: Any, amount: float | None = None, unit: str | None = None) -> dict[str, Any]:
@@ -266,7 +266,7 @@ async def test_a_piece_ingredient_in_whole_pieces(
     """AGG-03/04: a Stück ingredient's pieces, with or without the unit, merge into one total in
     Stk., rounded up; amounts in other units are refused, and an older one sits beside it, even
     with a piece weight."""
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -416,7 +416,7 @@ async def test_lines_of_a_new_category(
         headers=admin.headers,
     )
     counter = response.json()["id"]
-    gouda = await create_ingredient(api, anna, "Gouda", category_id=counter)
+    gouda = await create_item(api, anna, "Gouda", category_id=counter)
     shopping_list = await create_list(api, anna)
     await extra_added(api, anna, shopping_list["id"], item_id=gouda["id"], amount=200, unit="g")
     await extra_added(api, anna, shopping_list["id"], text="Feta", category_id=counter)

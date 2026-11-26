@@ -104,7 +104,7 @@ MealMate/
 │   └── src/
 │       ├── api/               # generated/schema.ts (generated), client.ts, errors.ts
 │       ├── app/               # router, providers, layout, bottom tab bar
-│       ├── features/          # auth, lists, shopping, meals, ingredients, scanner,
+│       ├── features/          # auth, lists, shopping, meals, items, scanner,
 │       │                      # me, admin, couple, sync
 │       ├── components/ui/     # shadcn/ui components (copied source)
 │       ├── components/        # shared app components
@@ -275,7 +275,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   1. **Sources.** Each list meal contributes rows. If it is live (draft and not detached), the rows come from the current meal with the ingredients' live attributes. If it is frozen (shopping/done, or detached, LIST-15), they come from `list_meal_ingredients` with the attributes and category captured at freezing time. Aggregation knows every category, deleted ones included (D-30): live rows use the ingredient's current category, frozen rows the category captured at freezing time.
   2. Each row gets factor = `list_servings / meal_servings`, and becomes a part `(ingredient, amount × factor, unit, attrs, source)`.
   3. Linked extra items become parts of their ingredient. Once the list has left `draft`, they always use their `attrs_snapshot`. Free-text extra items become their own lines.
-  4. **Grouping.** Parts are grouped by line key: `i:<ingredient_id>` for ingredients, `x:<extra_item_id>` for free text.
+  4. **Grouping.** Parts are grouped by line key: `i:<item_id>` for ingredients, `x:<extra_item_id>` for free text.
   5. **Totals.** If all parts with an amount can be converted to the base unit, there is one total. Otherwise there is one **segment** per unit kind (`mass_g`, `volume_ml`, `count`), e.g. "500 g + 2 Stk.". Live parts convert only within the base unit's kind, so spoons of a `g` ingredient and amounts that don't fit become segments of their own, and a `piece` ingredient's total is in pieces (AGG-03). Parts frozen before D-32 still convert with the piece weight and density they copied. Parts without an amount set `has_unspecified`.
   6. **Display rounding** (AGG-04) produces `display: [{value, unit}]`, while the exact segment totals are kept.
   7. **Check state** is applied from `list_line_states` (§ 5.7). Lines hidden in the draft (LIST-07) are returned with `hidden: true`.
@@ -326,7 +326,7 @@ Each rule has API tests, including negative cases and the switch combinations in
   | `extra.delete` | `{extra_id}` | Soft delete (tombstone) |
   | `list.finish` | `{}` | No-op if already `done`. Records the purchases of recurring items (below) |
 
-- **Purchases of recurring items** (LIST-16, D-42): at the end of a batch in which a `list.finish` or a `line.check` changed something and whose list is `done` afterwards, one service function records the done list's purchases. Every line the done list shows as checked (a line that needs more since, LIST-12, doesn't count) with an ingredient key `i:<ingredient_id>` whose ingredient is in the list owner's current set (the couple's while in one, so a partner's finish counts for the same set, CPL-03) is a purchase. Free-text lines never count.
+- **Purchases of recurring items** (LIST-16, D-42): at the end of a batch in which a `list.finish` or a `line.check` changed something and whose list is `done` afterwards, one service function records the done list's purchases. Every line the done list shows as checked (a line that needs more since, LIST-12, doesn't count) with an ingredient key `i:<item_id>` whose ingredient is in the list owner's current set (the couple's while in one, so a partner's finish counts for the same set, CPL-03) is a purchase. Free-text lines never count.
   - Its date is the calendar day of the line's `checked_at` (the clamped tap time) in `TIME_ZONE`, at most today, not the day the op arrived, so a list finished offline counts on the right day.
   - Its amount is the line's display amount when it has exactly one; otherwise the previous last amount stays.
   - A purchase from the item's `last_list_id` changes nothing, so a list counts once: after "Reopen" and a second finish, and when a batch is resent. One dated before `last_purchased_on` changes nothing either. One on the same day takes its amount and the list but adds no measured interval.
@@ -542,7 +542,7 @@ All endpoints are under `/api`, return JSON, and use the error envelope. The sou
   - checked lines go into the "In the cart" section;
   - there are badges "+300 g" / "changed" for lines that need more (LIST-12);
   - polling every 5 s while visible, with `If-None-Match`.
-- **Scanner:** a lazily loaded chunk without a route of its own (PERF-03). The scan icon in "Neue Zutat" and in the edit pop-up, and the meal form's "Barcode scannen", open it over the pop-up or the form, and only then is it loaded and the camera started (BAR-01). It hands the barcode back; the lookup (`GET /ingredients/lookup`) and what follows (BAR-02/03) belong to the pop-up and the meal form, so the scanner doesn't import the ingredient form.
+- **Scanner:** a lazily loaded chunk without a route of its own (PERF-03). The scan icon in "Neue Zutat" and in the edit pop-up, and the meal form's "Barcode scannen", open it over the pop-up or the form, and only then is it loaded and the camera started (BAR-01). It hands the barcode back; the lookup (`GET /items/lookup`) and what follows (BAR-02/03) belong to the pop-up and the meal form, so the scanner doesn't import the ingredient form.
   - The wasm binary is bundled and served by the app (`import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'` plus `prepareZXingModule({overrides: {locateFile}})`), never loaded from a CDN (SEC-08).
   - It uses the camera through `getUserMedia({video: {facingMode: "environment"}})`.
   - It shows a manual barcode input when the camera is unavailable or denied.

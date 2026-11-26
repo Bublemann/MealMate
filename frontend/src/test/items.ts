@@ -157,7 +157,7 @@ export const APPLES: Schemas['Item'] = {
   updated_at: '2026-09-26T10:00:00Z',
 };
 
-export function ingredient(overrides: Partial<Schemas['Item']> = {}): Schemas['Item'] {
+export function itemDetail(overrides: Partial<Schemas['Item']> = {}): Schemas['Item'] {
   return {
     id: 'ing-new',
     name: 'New',
@@ -185,7 +185,7 @@ export function ingredient(overrides: Partial<Schemas['Item']> = {}): Schemas['I
 }
 
 /** Weidehof's whole milk from Open Food Facts, with its barcode; the fat was corrected by hand. */
-export const WEIDEHOF_MILK: Schemas['Item'] = ingredient({
+export const WEIDEHOF_MILK: Schemas['Item'] = itemDetail({
   id: 'ing-milch-weidehof',
   name: 'Vollmilch',
   brand: 'Weidehof',

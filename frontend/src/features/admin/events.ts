@@ -57,8 +57,9 @@ export function describeEvent(t: TFunction, event: AdminEvent, language: Languag
     return t(ACTION_KEYS[event.action], {
       actor,
       name: category(),
-      ingredients: t('admin.events.items', { count: count('ingredients') }),
-      items: t('admin.events.extraItems', { count: count('extra_items') }),
+      // The event's details keep the key `ingredients` they were stored with.
+      itemCount: t('admin.events.items', { count: count('ingredients') }),
+      freeTextCount: t('admin.events.extraItems', { count: count('extra_items') }),
     });
   }
   if (event.action === 'category.rename') {

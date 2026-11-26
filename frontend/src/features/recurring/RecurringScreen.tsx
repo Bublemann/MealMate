@@ -99,17 +99,17 @@ function ItemList({
       data-testid={testIds.recurringList}
       className={SETTINGS_PANEL}
     >
-      {items.map((item) => (
-        <li key={item.id}>
+      {items.map((recurring) => (
+        <li key={recurring.id}>
           <button
             type="button"
             data-testid={testIds.recurringItem}
-            onClick={() => onOpen(item)}
+            onClick={() => onOpen(recurring)}
             className={`flex min-h-(--tap-target) w-full flex-col items-start px-4 py-3 text-left ${SETTINGS_ROW_FOCUS}`}
           >
-            <ItemName item={item.item} />
+            <ItemName item={recurring.item} />
             <span className="text-sm text-muted-foreground">
-              {recurringLine(t, language, item)}
+              {recurringLine(t, language, recurring)}
             </span>
           </button>
         </li>

@@ -31,14 +31,14 @@ async def category_ids(api: AsyncClient, user: Account) -> dict[str, str]:
     return {item["key"]: item["id"] for item in response.json()}
 
 
-async def ingredient_counts(api: AsyncClient, user: Account) -> dict[str, int]:
+async def item_counts(api: AsyncClient, user: Account) -> dict[str, int]:
     """Each category's number of ingredients, by key."""
     response = await api.get("/api/categories", headers=user.headers)
     assert response.status_code == 200, response.text
     return {item["key"]: item["item_count"] for item in response.json()}
 
 
-async def create_ingredient(api: AsyncClient, user: Account, name: str, **body: Any) -> Any:
+async def create_item(api: AsyncClient, user: Account, name: str, **body: Any) -> Any:
     response = await api.post("/api/items", json={"name": name, **body}, headers=user.headers)
     assert response.status_code == 201, response.text
     return response.json()
@@ -65,7 +65,7 @@ async def create_from_off(
 ) -> Any:
     """An ingredient saved from an Open Food Facts proposal (`source` off)."""
     off = {"edited_fields": edited_fields or [], "off_last_modified_at": off_last_modified_at}
-    return await create_ingredient(api, user, name, barcode=barcode, off=off, **body)
+    return await create_item(api, user, name, barcode=barcode, off=off, **body)
 
 
 async def set_stored(app: FastAPI, item_id: str, **values: Any) -> None:

@@ -13,7 +13,7 @@ import {
   SALT,
 } from '@/test/meals';
 import { LIST_ID, listDetail } from '@/test/lists';
-import { ingredient, lookupResult, proposal, typeInScanner, unitOptions } from '@/test/items';
+import { itemDetail, lookupResult, proposal, typeInScanner, unitOptions } from '@/test/items';
 import i18n from '@/i18n';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -486,7 +486,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     await own.answer(
       lookupResult({
         found_in: 'db',
-        item: ingredient({ ...MILK, brand: 'Weidehof', barcode: BARCODE }),
+        item: itemDetail({ ...MILK, brand: 'Weidehof', barcode: BARCODE }),
       }),
     );
 
@@ -506,7 +506,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
 
   it('opens "New ingredient" for an unknown barcode, filled from Open Food Facts once looked up; Save adds the row (BAR-03)', async () => {
     const off = heldRoute();
-    const created = ingredient({
+    const created = itemDetail({
       id: 'ing-kakao',
       name: 'Kakaopulver',
       brand: 'Bio',
@@ -562,7 +562,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
   });
 
   it('fills in only a barcode Open Food Facts does not know, with its notice; Save adds the row (BAR-03)', async () => {
-    const created = ingredient({ id: 'ing-quitten', name: 'Quitten', barcode: BARCODE });
+    const created = itemDetail({ id: 'ing-quitten', name: 'Quitten', barcode: BARCODE });
     const { fetchMock, user } = renderForm('/meals/new', {
       [LOOKUP]: lookupRoute(() => lookupResult()),
       'POST /api/items': Response.json(created, { status: 201 }),
@@ -619,7 +619,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     const { fetchMock, user } = renderForm('/meals/new', {
       [LOOKUP]: lookupRoute(() => lookupResult()),
       'GET /api/items/similar': [MILK],
-      'POST /api/items/ing-milch/barcode': ingredient({ ...MILK, barcode: BARCODE }),
+      'POST /api/items/ing-milch/barcode': itemDetail({ ...MILK, barcode: BARCODE }),
     });
 
     await scanInMealForm(user, BARCODE);

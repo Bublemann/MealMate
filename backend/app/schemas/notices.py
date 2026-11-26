@@ -8,8 +8,9 @@ from typing import Literal
 from pydantic import BaseModel
 
 # Plain alias (not a `type` statement) so the OpenAPI schema inlines the literal.
-# `recurring_item.ingredient_deleted`: an admin deleted an ingredient the user kept as a
-# recurring item (ING-05); params `name` and `brand` (or null) as they were.
+# `recurring_item.ingredient_deleted`: an admin deleted an item the user kept as a recurring
+# item (ING-05); params `name` and `brand` (or null) as they were. The kind keeps the value it is
+# stored with in `notices.kind`.
 NoticeKind = Literal["recurring_item.ingredient_deleted"]
 
 

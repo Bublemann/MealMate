@@ -9,7 +9,7 @@ import {
   CATEGORIES_WITH_ADDED,
   CATEGORIES_WITH_UNCATEGORIZED,
   expectInPageOrder,
-  ingredient,
+  itemDetail,
   lookupResult,
   proposal,
   REFERENCE_ROUTES,
@@ -167,7 +167,7 @@ describe('ItemsScreen', () => {
 
   it('keeps the search and the categories until the app closes, but not in the address or browser storage (UI-01)', async () => {
     const { router, unmount, user } = renderItems({
-      'GET /api/items/ing-%C3%A4pfel': ingredient({ id: 'ing-äpfel', name: 'Äpfel' }),
+      'GET /api/items/ing-%C3%A4pfel': itemDetail({ id: 'ing-äpfel', name: 'Äpfel' }),
     });
     await screen.findByTestId(testIds.itemList);
     await user.type(screen.getByLabelText('Search ingredients'), 'aepfel');
@@ -456,7 +456,7 @@ describe('ItemsScreen', () => {
   });
 
   it('keeps Uncategorized ticked after its last ingredient got a new category, until it is unticked (ING-03)', async () => {
-    let gouda = ingredient({ id: 'ing-gouda', name: 'Gouda', category_id: 'cat-uncategorized' });
+    let gouda = itemDetail({ id: 'ing-gouda', name: 'Gouda', category_id: 'cat-uncategorized' });
     const { fetchMock, user } = renderItems({
       'GET /api/categories': () => [
         ...CATEGORIES,
@@ -637,7 +637,7 @@ describe('ItemFormDialog (create)', () => {
   });
 
   it('creates an ingredient with brand, barcode and decimal commas, and opens it', async () => {
-    const created = ingredient({ id: 'ing-birnen', name: 'Birnen', brand: 'Hofgut' });
+    const created = itemDetail({ id: 'ing-birnen', name: 'Birnen', brand: 'Hofgut' });
     const { fetchMock, user, router } = renderItems({
       'POST /api/items': Response.json(created, { status: 201 }),
     });
@@ -672,8 +672,8 @@ describe('ItemFormDialog (create)', () => {
 
   it('takes a pack size typed in (ING-02, D-47)', async () => {
     const { fetchMock, user } = renderItems({
-      'POST /api/items': Response.json(ingredient({ id: 'ing-wasser' }), { status: 201 }),
-      'GET /api/items/ing-wasser': ingredient({ id: 'ing-wasser' }),
+      'POST /api/items': Response.json(itemDetail({ id: 'ing-wasser' }), { status: 201 }),
+      'GET /api/items/ing-wasser': itemDetail({ id: 'ing-wasser' }),
     });
 
     await user.click(await screen.findByTestId(testIds.newItem));
@@ -692,7 +692,7 @@ describe('ItemFormDialog (create)', () => {
   });
 
   it('counts an ingredient in pieces: “Pieces” shows the weight per piece, nutrition per 100 g (ING-02)', async () => {
-    const created = ingredient({ id: 'ing-eier', name: 'Eier', base_unit: 'piece' });
+    const created = itemDetail({ id: 'ing-eier', name: 'Eier', base_unit: 'piece' });
     const { fetchMock, user } = renderItems({
       'POST /api/items': Response.json(created, { status: 201 }),
     });
@@ -735,7 +735,7 @@ describe('ItemFormDialog (create)', () => {
   });
 
   it('sends the weight per piece only for “Pieces” (ING-02)', async () => {
-    const created = ingredient({ id: 'ing-mehl', name: 'Mehl' });
+    const created = itemDetail({ id: 'ing-mehl', name: 'Mehl' });
     const { fetchMock, user } = renderItems({
       'POST /api/items': Response.json(created, { status: 201 }),
     });
@@ -766,7 +766,7 @@ describe('ItemFormDialog (create)', () => {
   });
 
   it('offers a category an admin added in walking order, and still starts with Other (REF-01)', async () => {
-    const created = ingredient({ id: 'ing-feta', name: 'Feta' });
+    const created = itemDetail({ id: 'ing-feta', name: 'Feta' });
     const { fetchMock, user } = renderItems({
       'GET /api/categories': CATEGORIES_WITH_ADDED,
       'POST /api/items': Response.json(created, { status: 201 }),
@@ -971,7 +971,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
 
   it('names the ingredient a scanned barcode belongs to, fills in nothing and opens it', async () => {
     await i18n.changeLanguage('de');
-    const milk = ingredient({
+    const milk = itemDetail({
       id: 'ing-milch',
       name: 'Milch',
       brand: 'Weihenstephan',
@@ -1010,10 +1010,10 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     });
     const { fetchMock, user } = renderItems({
       [LOOKUP]: lookupResult({ found_in: 'off', proposal: hit }),
-      'POST /api/items': Response.json(ingredient({ id: 'ing-vollmilch' }), {
+      'POST /api/items': Response.json(itemDetail({ id: 'ing-vollmilch' }), {
         status: 201,
       }),
-      'GET /api/items/ing-vollmilch': ingredient({ id: 'ing-vollmilch' }),
+      'GET /api/items/ing-vollmilch': itemDetail({ id: 'ing-vollmilch' }),
     });
 
     const dialog = await openNew(user);
@@ -1067,8 +1067,8 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
     const hit = proposal({ name: 'Kartoffel-Gnocchi', brand: 'Henglein', quantity_text: '250 g' });
     const { fetchMock, user } = renderItems({
       [LOOKUP]: lookupResult({ found_in: 'off', proposal: hit }),
-      'POST /api/items': Response.json(ingredient({ id: 'ing-gnocchi' }), { status: 201 }),
-      'GET /api/items/ing-gnocchi': ingredient({ id: 'ing-gnocchi' }),
+      'POST /api/items': Response.json(itemDetail({ id: 'ing-gnocchi' }), { status: 201 }),
+      'GET /api/items/ing-gnocchi': itemDetail({ id: 'ing-gnocchi' }),
     });
 
     const dialog = await openNew(user, 'Neue Zutat');
@@ -1220,7 +1220,7 @@ describe('ItemFormDialog, scanning (BAR-02, BAR-03)', () => {
   it('adds a scanned barcode to a similar ingredient without one, and opens it (BAR-03)', async () => {
     await i18n.changeLanguage('de');
     const milk = ALL[3]!;
-    const linked = ingredient({ ...milk, barcode: BARCODE });
+    const linked = itemDetail({ ...milk, barcode: BARCODE });
     const { fetchMock, user, router } = renderItems({
       [LOOKUP]: lookupResult(),
       'GET /api/items/similar': [milk, ALL[2]],

@@ -173,7 +173,7 @@ class ExtraItem(BaseModel):
     """An extra item (LIST-06): linked to an item (`item_id`, optional `amount`
     and `unit`) or free text (`text`, optional `amount_text`, `category_id`).
 
-    A linked item's `base_unit` is the one its line is calculated with: its item's, or
+    A linked extra item's `base_unit` is the one its line is calculated with: its item's, or
     the one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false
     for an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,
     or left by a base-unit change or a merge, and is kept as it is (D-33). Free text always
@@ -322,9 +322,9 @@ class ExtraItemCreate(BaseModel):
 
 class ExtraItemUpdate(BaseModel):
     """Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of
-    item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
+    extra item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
     unit or amount text, and is refused for `item_id`, `text` and `category_id`. A linked
-    item whose amount doesn't fit stays as it is while its item, amount and unit stay the
+    extra item whose amount doesn't fit stays as it is while its item, amount and unit stay the
     same; changing any of them needs a unit that fits (D-33)."""
 
     item_id: IdInput | None = None

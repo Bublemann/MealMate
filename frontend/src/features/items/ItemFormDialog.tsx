@@ -856,7 +856,7 @@ interface SimilarHintProps {
 }
 
 /**
- * ING-03: "Similar items already exist", with links to them (or buttons in the picker). A
+ * ING-03: "Similar ingredients already exist", with links to them (or buttons in the picker). A
  * hint only: two brands of the same thing are different items. After a scan, a match
  * without a barcode can get the scanned one (BAR-03): "Use Milch" in the picker gives it the
  * barcode before taking it, "Add the barcode to Milch" elsewhere before opening it. A match that

@@ -431,10 +431,10 @@ def test_admin_deletes_a_category(page: Page, api: Api, admin: Account) -> None:
     dialog.get_by_role("button", name=text("admin.categories.delete"), exact=True).click()
     confirm = page.get_by_role("alertdialog", name=text("admin.categories.deleteTitle", name=name))
     expect(confirm).to_contain_text(
-        text("admin.categories.deleteToUncategorized_one", count="1", uncategorized=uncategorized)
+        text("admin.categories.deleteItems_one", count="1", uncategorized=uncategorized)
     )
     expect(confirm).to_contain_text(
-        text("admin.categories.deleteItems_other", count="0", other=other)
+        text("admin.categories.deleteFreeText_other", count="0", other=other)
     )
     confirm.get_by_role("button", name=text("admin.categories.deleteConfirm"), exact=True).click()
     screen = page.get_by_test_id(TEST_IDS["screenAdminCategories"])

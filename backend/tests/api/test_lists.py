@@ -29,7 +29,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref, set_stored
+from tests.catalog import category_ids, create_item, ref, set_stored
 from tests.lists import (
     add_extra,
     add_meal,
@@ -76,12 +76,12 @@ async def admin(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl")
+    return await create_item(api, anna, "Mehl")
 
 
 @pytest.fixture
 async def salt(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Salz")
+    return await create_item(api, anna, "Salz")
 
 
 async def patch(api: AsyncClient, user: Account, list_id: str, **body: Any) -> Any:
@@ -804,7 +804,7 @@ async def test_linked_and_free_text_items(
     assert uuid.UUID(item["id"]).version == 7
     assert body["version"] == 1
 
-    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
+    eggs = await create_item(api, anna, "Eier", base_unit="piece")
     body = await extra_added(api, anna, shopping_list["id"], item_id=eggs["id"], amount=2)
     eggs_item = body["extra_items"][1]
     # An amount without a unit counts as pieces.
@@ -959,7 +959,7 @@ async def test_linked_items_that_do_not_fit_are_kept(
     """LIST-06, D-33: an older item whose unit doesn't fit stays, flagged, while its
     ingredient, amount and unit stay; changing them needs a unit that fits the base unit its
     line is calculated with, the one it copied once shopping started (LIST-11)."""
-    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece")
+    eggs = await create_item(api, anna, "Eier", base_unit="piece")
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     body = await extra_added(api, anna, list_id, item_id=eggs["id"], amount=2)
@@ -1355,7 +1355,7 @@ async def fill(
 async def test_a_list_takes_a_fixed_number_of_queries(
     app: FastAPI, api: AsyncClient, anna: Account, carl: Account
 ) -> None:
-    ingredients = [await create_ingredient(api, anna, f"Zutat {index}") for index in range(20)]
+    ingredients = [await create_item(api, anna, f"Zutat {index}") for index in range(20)]
     small = await create_list(api, anna)
     await fill(api, anna, small["id"], ingredients[:1], 1)
     big = await create_list(api, anna)

@@ -17,8 +17,8 @@ const BarcodeScanDialog = lazy(() =>
 );
 
 interface MealScanProps {
-  /** Called with the barcode's ingredient: the known one, or the one saved or taken in the pop-up. */
-  onItem: (ingredient: ItemSummary) => void;
+  /** Called with the barcode's item: the known one, or the one saved or taken in the pop-up. */
+  onItem: (item: ItemSummary) => void;
 }
 
 /**
@@ -100,7 +100,7 @@ export function MealScan({ onItem }: MealScanProps) {
           if (!open) setUnknown(null);
         }}
         initialScan={unknown ?? undefined}
-        onSaved={(ingredient) => onItem(toSummary(ingredient))}
+        onSaved={(item) => onItem(toSummary(item))}
         onPickExisting={onItem}
       />
     </>

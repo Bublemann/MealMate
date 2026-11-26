@@ -24,7 +24,7 @@ from app.schemas.items import Item
 from app.services import off_refresh
 from app.services.off_refresh import OffRefresher, Outcome
 from tests.accounts import Account, FakeClock, error, login, make_user
-from tests.catalog import EAN_13, create_from_off, create_ingredient, set_stored
+from tests.catalog import EAN_13, create_from_off, create_item, set_stored
 from tests.off import (
     MILK,
     OATS,
@@ -456,7 +456,7 @@ async def test_busy_and_skipped(
     clock: FakeClock,
 ) -> None:
     product = await saved_oats(api, anna, edited=[])
-    manual = await create_ingredient(api, anna, "Hafer", barcode=EAN_13)
+    manual = await create_item(api, anna, "Hafer", barcode=EAN_13)
     app.state.off_refresh = refresher(SlidingWindow(1, clock=clock.monotonic))
     the_refresher(app).off.rate_limit.reserve(max_wait=None)
 
@@ -740,7 +740,7 @@ async def test_scanning_refreshes_a_stale_ingredient(
     clock: FakeClock,
 ) -> None:
     product = await saved_oats(api, anna, edited=[])
-    manual = await create_ingredient(api, anna, "Hafer", barcode=EAN_13)  # never refreshed
+    manual = await create_item(api, anna, "Hafer", barcode=EAN_13)  # never refreshed
     request = route(off_api, OATS).respond(json=oats(brands="Neu"))
     await later(api, clock, anna, days=31)
 
@@ -889,7 +889,7 @@ async def test_refresh_stale_oldest_first(
     older = await saved_oats(api, anna, edited=[])
     await later(api, clock, anna, days=5)
     newer = await saved_milk(api, anna)
-    await create_ingredient(api, anna, "Hafer", barcode=EAN_13)
+    await create_item(api, anna, "Hafer", barcode=EAN_13)
     never = await saved_milk(api, anna, "2000000000039")
     async with database(app).write_sessions() as session, session.begin():
         await session.execute(

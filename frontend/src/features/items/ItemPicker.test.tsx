@@ -7,7 +7,7 @@ import type { components } from '@/api/generated/schema';
 import { createQueryClient } from '@/app/queryClient';
 import { heldRoute, mockApi, requestsTo } from '@/test/api';
 import {
-  ingredient,
+  itemDetail,
   lookupResult,
   proposal,
   REFERENCE_ROUTES,
@@ -161,7 +161,7 @@ describe('ItemPicker', () => {
   });
 
   it('creates the typed ingredient inline and picks it', async () => {
-    const created = ingredient({ id: 'ing-quitten', name: 'Quitten', category_id: 'cat-other' });
+    const created = itemDetail({ id: 'ing-quitten', name: 'Quitten', category_id: 'cat-other' });
     const { fetchMock, onSelect, user } = renderPicker(
       {},
       { 'POST /api/items': Response.json(created, { status: 201 }) },
@@ -212,7 +212,7 @@ describe('ItemPicker, created from Open Food Facts', () => {
   }
 
   it('fills the new ingredient from a search result and picks it once saved', async () => {
-    const created = ingredient({ id: 'ing-vollmilch', name: MILK.name ?? '', brand: 'Weidehof' });
+    const created = itemDetail({ id: 'ing-vollmilch', name: MILK.name ?? '', brand: 'Weidehof' });
     const { fetchMock, onSelect, user } = renderPicker(
       {},
       {
@@ -285,7 +285,7 @@ describe('ItemPicker, scanning in "New ingredient" (BAR-02, BAR-03)', () => {
   }
 
   it('takes the ingredient a scanned barcode belongs to', async () => {
-    const known = ingredient({ id: 'ing-honig', name: 'Honig', barcode: BARCODE });
+    const known = itemDetail({ id: 'ing-honig', name: 'Honig', barcode: BARCODE });
     const { fetchMock, onSelect, user } = renderPicker(
       {},
       { [LOOKUP]: lookupResult({ found_in: 'db', item: known }) },
@@ -308,7 +308,7 @@ describe('ItemPicker, scanning in "New ingredient" (BAR-02, BAR-03)', () => {
   });
 
   it('gives a similar ingredient without a barcode the scanned one, then takes it', async () => {
-    const linked = ingredient({ ...HONEY, barcode: BARCODE });
+    const linked = itemDetail({ ...HONEY, barcode: BARCODE });
     const { fetchMock, onSelect, user } = renderPicker(
       {},
       {

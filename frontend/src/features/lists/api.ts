@@ -364,7 +364,7 @@ export function useRemoveListMeal(listId: string) {
 function withoutDue(list: ListDetail, itemId: string): ListDetail {
   return {
     ...list,
-    due_items: list.due_items.filter((item) => item.item.id !== itemId),
+    due_items: list.due_items.filter((due) => due.item.id !== itemId),
   };
 }
 
@@ -372,7 +372,7 @@ function withoutDue(list: ListDetail, itemId: string): ListDetail {
  * LIST-06: a linked or free-text extra item. Its id comes with it (made by the input, which keeps
  * it while the item is sent again), so a retry after a lost answer doesn't add it twice. While
  * shopping, a free-text item is an `extra.add` op of the outbox instead (SHOP-02, SYNC-03).
- * A linked item's item leaves the "Fällig" box at once: it is on the list now (LIST-16).
+ * A linked extra item's due item leaves the "Fällig" box at once: it is on the list now (LIST-16).
  */
 export function useAddExtraItem(listId: string) {
   return useListChange(

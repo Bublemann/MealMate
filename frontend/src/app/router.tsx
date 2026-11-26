@@ -57,7 +57,7 @@ export const routes: RouteObject[] = [
           { path: 'meals/:id/edit', element: <MealFormScreen /> },
           { path: 'ingredients', element: <ItemsScreen /> },
           { path: 'ingredients/:id', element: <ItemDetailScreen /> },
-          // The former scan page; scanning is inside "New item" now (BAR-01, D-37).
+          // The former scan page; scanning is inside "New ingredient" now (BAR-01, D-37).
           { path: 'scan', element: <Navigate to="/ingredients" replace /> },
           // The Settings tab and the pages its rows open (D-45); see features/me/settingsRows.ts.
           { path: 'me', element: <SettingsScreen /> },

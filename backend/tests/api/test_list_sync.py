@@ -14,7 +14,7 @@ from sqlalchemy import Connection, event
 from app.db.session import Database
 from app.schemas.lists import ListsSync
 from tests.accounts import Account, FakeClock, error, make_couple, make_user
-from tests.catalog import create_ingredient
+from tests.catalog import create_item
 from tests.lists import (
     added,
     applied,
@@ -47,7 +47,7 @@ async def carl(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl")
+    return await create_item(api, anna, "Mehl")
 
 
 async def sync(api: AsyncClient, user: Account, etag: str | None = None) -> Response:
@@ -227,7 +227,7 @@ async def test_one_detail_build_per_list_and_the_cache(
     """Each list costs the queries of one detail build, whatever it holds; lists that did not
     change since they were last read come from the list cache, shared with polling."""
     await make_couple(api, anna, ben)
-    salt = await create_ingredient(api, anna, "Salz")
+    salt = await create_item(api, anna, "Salz")
     rows = [{"item_id": item["id"], "amount": 10, "unit": "g"} for item in (flour, salt)]
     meal = await create_meal(api, anna, "Brot", ingredients=rows)
     empty = await queries_of_a_sync(app, api, anna)

@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
 import type { components } from '@/api/generated/schema';
-import { found, ingredient, REFERENCE_ROUTES, summary } from '@/test/items';
+import { found, itemDetail, REFERENCE_ROUTES, summary } from '@/test/items';
 import { recurringItem, recurringList, stubResizeObserver } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -197,7 +197,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
   });
 
   it('creates “as a new ingredient” in “New ingredient”, then opens the pop-up for it', async () => {
-    const created = ingredient({ id: 'ing-duschgel', name: 'Duschgel', category_id: 'cat-other' });
+    const created = itemDetail({ id: 'ing-duschgel', name: 'Duschgel', category_id: 'cat-other' });
     const { fetchMock, user } = renderPage({
       'POST /api/items': Response.json(created, { status: 201 }),
     });

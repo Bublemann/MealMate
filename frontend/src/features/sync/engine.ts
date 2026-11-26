@@ -97,16 +97,12 @@ function hasNames(stored: StoredCategories): boolean {
   return stored.categories.every((category) => typeof category.names === 'object');
 }
 
-/**
- * App versions before #171 stored the lists with "ingredient" where the API now says "item": a
- * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
- * `ingredient`. Read that way, they show as before until the next sync replaces them.
- */
 type Stored = Record<string, unknown>;
 
 /** `ingredient_id` as `item_id`, and a line's `kind` "ingredient" as "item"; else unchanged. */
-function renamed({ ingredient_id, ...rest }: Stored): Stored {
-  if (ingredient_id === undefined) return rest;
+function renamed(entry: Stored): Stored {
+  const { ingredient_id, ...rest } = entry;
+  if (ingredient_id === undefined) return entry;
   return {
     ...rest,
     item_id: ingredient_id,
@@ -114,21 +110,30 @@ function renamed({ ingredient_id, ...rest }: Stored): Stored {
   };
 }
 
+/** A due item's `ingredient` as `item`; else unchanged. */
+function renamedDue(entry: Stored): Stored {
+  const { ingredient, ...rest } = entry;
+  return ingredient === undefined ? entry : { ...rest, item: ingredient };
+}
+
+/**
+ * App versions before #171 stored the lists with "ingredient" where the API now says "item": a
+ * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
+ * `ingredient`. Read that way, they show as before until the next sync replaces them. A field an
+ * even older version didn't store (`due_items`) stays missing, as it was. This can go once no
+ * device keeps a copy from before #171.
+ */
 function fromOlderApp(entry: StoredList): StoredList {
-  const detail = entry.detail as unknown as {
-    lines: Stored[];
-    extra_items: Stored[];
-    due_items: Stored[];
-  };
-  const due = detail.due_items.map(({ ingredient, ...rest }) =>
-    ingredient === undefined ? rest : { ...rest, item: ingredient },
-  );
-  const upgraded = {
-    ...detail,
-    lines: detail.lines.map(renamed),
-    extra_items: detail.extra_items.map(renamed),
-    due_items: due,
-  };
+  const detail = entry.detail as unknown as Record<string, Stored[] | undefined>;
+  const upgraded = { ...detail };
+  for (const [field, rename] of [
+    ['lines', renamed],
+    ['extra_items', renamed],
+    ['due_items', renamedDue],
+  ] as const) {
+    const entries = detail[field];
+    if (entries) upgraded[field] = entries.map(rename);
+  }
   return { ...entry, detail: upgraded as unknown as ListDetail };
 }
 

@@ -28,7 +28,7 @@ from tests.accounts import (
     make_couple,
     make_user,
 )
-from tests.catalog import category_ids, create_ingredient, summary
+from tests.catalog import category_ids, create_item, summary
 from tests.recurring import (
     create_recurring,
     make_recurring,
@@ -63,7 +63,7 @@ async def admin(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def toilet_paper(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Klopapier", base_unit="piece")
+    return await create_item(api, anna, "Klopapier", base_unit="piece")
 
 
 # --- create and list ------------------------------------------------------------------------
@@ -100,7 +100,7 @@ async def test_the_set_is_sorted_by_due_date_then_by_name(api: AsyncClient, anna
         ("Äpfel", 4, None),
         ("Klopapier", 4, date(2026, 8, 23)),
     ):
-        ingredient = await create_ingredient(api, anna, name)
+        ingredient = await create_item(api, anna, name)
         await make_recurring(api, anna, ingredient["id"], weeks, last_purchased_on)
 
     body = await recurring(api, anna)
@@ -141,7 +141,7 @@ async def test_the_last_amount_shows_only_while_it_fits(
 ) -> None:
     """The last purchase's amount comes with the item when its unit fits the ingredient's base
     unit (REF-02); an amount without a unit counts as pieces."""
-    ingredient = await create_ingredient(api, anna, "Waschmittel", base_unit=base_unit)
+    ingredient = await create_item(api, anna, "Waschmittel", base_unit=base_unit)
     item = await make_recurring(api, anna, ingredient["id"])
     await store_purchases(app, item["id"], last_amount=amount, last_unit=unit)
     assert (await recurring(api, anna))["items"][0]["last_amount"] == shown
@@ -151,7 +151,7 @@ async def test_the_last_amount_follows_the_current_base_unit(
     app: FastAPI, api: AsyncClient, anna: Account
 ) -> None:
     """A base unit changed after the purchase hides the amount; changed back, it shows again."""
-    ingredient = await create_ingredient(api, anna, "Waschpulver", base_unit="g")
+    ingredient = await create_item(api, anna, "Waschpulver", base_unit="g")
     item = await make_recurring(api, anna, ingredient["id"])
     await store_purchases(app, item["id"], last_amount=1.5, last_unit="kg")
 
@@ -219,8 +219,8 @@ async def test_values_out_of_range_are_refused(
 
 async def test_the_bounds_are_allowed(api: AsyncClient, anna: Account) -> None:
     """1 and 52 weeks; "zuletzt gekauft" today or 730 days back."""
-    soap = await create_ingredient(api, anna, "Seife")
-    salt = await create_ingredient(api, anna, "Spülmaschinensalz")
+    soap = await create_item(api, anna, "Seife")
+    salt = await create_item(api, anna, "Spülmaschinensalz")
     weekly = await make_recurring(
         api, anna, soap["id"], weeks=1, last_purchased_on=date(2024, 9, 27)
     )
@@ -471,7 +471,7 @@ async def test_forming_a_couple_combines_both_sets(
     last amount and measured intervals included; on a tie the requester's (anna's), whoever
     made the ingredient recurring first. The others move as they are."""
     toilet_paper, toothpaste, dish_soap, coffee, milk = [
-        (await create_ingredient(api, anna, name))["id"]
+        (await create_item(api, anna, name))["id"]
         for name in ("Klopapier", "Zahnpasta", "Spülmittel", "Kaffee", "Milch")
     ]
     await make_recurring(api, anna, toilet_paper, weeks=4, last_purchased_on=date(2026, 9, 1))
@@ -583,7 +583,7 @@ async def test_a_merge_moves_the_item_to_the_surviving_ingredient(
 ) -> None:
     """Merging "WC-Papier" into "Klopapier" keeps anna's item with all its values, its last
     amount and measured intervals included; she gets no notice."""
-    duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
+    duplicate = await create_item(api, anna, "WC-Papier", base_unit="piece")
     item = await make_recurring(api, anna, duplicate["id"], last_purchased_on=date(2026, 9, 1))
     await store_purchases(
         app, item["id"], last_amount=2, last_unit="piece", measured_intervals=[10, 12]
@@ -609,7 +609,7 @@ async def test_when_a_set_has_both_the_later_purchase_stays(
     """anna bought "WC-Papier" more recently, so that item stays with all its values (now of
     "Klopapier"); the admin bought "Klopapier" more recently, so that item stays; the couple
     ben and carl bought both on one day, so their "Klopapier" item stays (D-42)."""
-    duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
+    duplicate = await create_item(api, anna, "WC-Papier", base_unit="piece")
     await make_couple(api, ben, carl)
     later = await make_recurring(
         api, anna, duplicate["id"], weeks=6, last_purchased_on=date(2026, 9, 20)
@@ -673,7 +673,7 @@ async def test_today_is_the_day_in_berlin_when_an_item_is_made_recurring(
     a new item was last bought that day, and 28 September isn't in the future."""
     clock.advance(hours=10, minutes=30)
     await login(api, anna)
-    toothpaste = await create_ingredient(api, anna, "Zahnpasta")
+    toothpaste = await create_item(api, anna, "Zahnpasta")
     item = await make_recurring(api, anna, toothpaste["id"], weeks=1)
     assert (item["last_purchased_on"], item["days_until_due"]) == ("2026-09-28", 7)
 
@@ -693,7 +693,7 @@ async def test_days_are_counted_in_the_instance_time_zone(
     clock = app.state.clock = FakeClock()
     async with client_for(app) as api:
         anna = await make_user(app, api, "anna")
-        ingredient = await create_ingredient(api, anna, "Klopapier")
+        ingredient = await create_item(api, anna, "Klopapier")
         item = await make_recurring(api, anna, ingredient["id"], weeks=1)
         assert item["due_on"] == "2026-10-04"
         clock.advance(days=6, hours=11, minutes=59)  # 3 October, 23:59 UTC

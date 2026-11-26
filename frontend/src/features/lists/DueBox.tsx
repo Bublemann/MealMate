@@ -25,9 +25,9 @@ interface DueBoxProps {
   /** The due items as the list detail carries them, longest due first (the server sorts). */
   items: readonly DueItem[];
   /** ＋: the item field's amount pop-up for it. */
-  onAdd: (item: DueItem) => void;
+  onAdd: (due: DueItem) => void;
   /** ✕: hide it on this list, for everyone who sees the list. */
-  onHide: (item: DueItem) => void;
+  onHide: (due: DueItem) => void;
   /** Offline: ＋ and ✕ are inactive, not hidden (SYNC-03). */
   disabled: boolean;
   /** While a pop-up is open the rows stay as they are, so a load of the list doesn't move them. */
@@ -84,10 +84,10 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
     if (!focusActed()) onEmpty();
   });
 
-  function act(item: DueItem, index: number, action: DueAction) {
-    acted.current = { id: item.item.id, index, action };
-    if (action === 'add') onAdd(item);
-    else onHide(item);
+  function act(due: DueItem, index: number, action: DueAction) {
+    acted.current = { id: due.item.id, index, action };
+    if (action === 'add') onAdd(due);
+    else onHide(due);
   }
 
   function buttonRef(action: DueAction, id: string) {
@@ -111,17 +111,17 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
         {t('lists.due.title')}
       </h3>
       <ul aria-labelledby={headingId} className="flex flex-col divide-y">
-        {rows.map((item, index) => {
-          const name = itemLabel(item.item.name, item.item.brand);
+        {rows.map((due, index) => {
+          const name = itemLabel(due.item.name, due.item.brand);
           return (
             <li
-              key={item.item.id}
+              key={due.item.id}
               data-testid={testIds.dueItem}
               className="flex min-h-(--tap-target) items-center gap-2 py-2 pr-2 pl-4"
             >
               <div className="flex min-w-0 flex-1 flex-col">
-                <ItemName item={item.item} />
-                <span className="text-sm text-muted-foreground">{dueLine(t, language, item)}</span>
+                <ItemName item={due.item} />
+                <span className="text-sm text-muted-foreground">{dueLine(t, language, due)}</span>
               </div>
               <Button
                 type="button"
@@ -130,8 +130,8 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
                 className="text-primary"
                 disabled={disabled}
                 aria-label={t('lists.due.add', { name })}
-                ref={buttonRef('add', item.item.id)}
-                onClick={() => act(item, index, 'add')}
+                ref={buttonRef('add', due.item.id)}
+                onClick={() => act(due, index, 'add')}
               >
                 <Plus aria-hidden="true" />
               </Button>
@@ -142,8 +142,8 @@ export function DueBox({ ref, items, onAdd, onHide, disabled, frozen, onEmpty }:
                 className="text-muted-foreground"
                 disabled={disabled}
                 aria-label={t('lists.due.hide', { name })}
-                ref={buttonRef('hide', item.item.id)}
-                onClick={() => act(item, index, 'hide')}
+                ref={buttonRef('hide', due.item.id)}
+                onClick={() => act(due, index, 'hide')}
               >
                 <X aria-hidden="true" />
               </Button>

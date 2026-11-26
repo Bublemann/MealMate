@@ -26,7 +26,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref
+from tests.catalog import category_ids, create_item, ref
 from tests.lists import (
     applied,
     by_key,
@@ -63,12 +63,12 @@ async def carl(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl")
+    return await create_item(api, anna, "Mehl")
 
 
 @pytest.fixture
 async def salt(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Salz")
+    return await create_item(api, anna, "Salz")
 
 
 @pytest.fixture
@@ -799,7 +799,7 @@ async def test_parallel_batches_lose_nothing(
     """20 requests at once, each with its own ops: all succeed, every op takes effect and the
     version rises once per request."""
     await make_couple(api, anna, ben)
-    ingredients = [await create_ingredient(api, anna, f"Zutat {index}") for index in range(20)]
+    ingredients = [await create_item(api, anna, f"Zutat {index}") for index in range(20)]
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     for ingredient in ingredients:

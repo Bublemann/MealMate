@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app.core.ratelimit import SlidingWindow
 from app.models import Item as ItemRow
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import NO_NUTRIENTS, UPC_A, create_from_off, create_ingredient, ref
+from tests.catalog import NO_NUTRIENTS, UPC_A, create_from_off, create_item, ref
 from tests.off import (
     MILK,
     OATS,
@@ -86,7 +86,7 @@ async def test_lookup_rejects_invalid_barcodes(
 async def test_a_known_barcode_goes_straight_to_its_ingredient(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    oats_ingredient = await create_ingredient(api, anna, "Haferflocken", barcode=UPC_A)
+    oats_ingredient = await create_item(api, anna, "Haferflocken", barcode=UPC_A)
 
     response = await lookup(api, anna, f"0{UPC_A}")
 
@@ -106,7 +106,7 @@ async def test_own_only_looks_at_our_ingredients_without_asking_open_food_facts(
 ) -> None:
     """The edit pop-up's scan (BAR-03): a barcode another ingredient has is named, any other one
     is only filled in, so Open Food Facts isn't asked."""
-    oats_ingredient = await create_ingredient(api, anna, "Haferflocken", barcode=UPC_A)
+    oats_ingredient = await create_item(api, anna, "Haferflocken", barcode=UPC_A)
     off = route(off_api, OATS).respond(json=oats())
 
     known = await api.get(
@@ -143,9 +143,9 @@ async def test_own_only_looks_at_our_ingredients_without_asking_open_food_facts(
 async def test_an_open_food_facts_proposal_is_not_saved(
     app: FastAPI, api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    await create_ingredient(api, anna, "Haferflocken")
-    await create_ingredient(api, anna, "Hafer")
-    await create_ingredient(api, anna, "Milch")
+    await create_item(api, anna, "Haferflocken")
+    await create_item(api, anna, "Hafer")
+    await create_item(api, anna, "Milch")
     route(off_api, OATS).respond(json=oats())
 
     response = await lookup(api, anna, OATS)
@@ -194,7 +194,7 @@ async def test_the_proposal_name_follows_the_users_language(
 async def test_a_proposal_without_basis_or_name(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    await create_ingredient(api, anna, "Milch", base_unit="ml")
+    await create_item(api, anna, "Milch", base_unit="ml")
     route(off_api, MILK).respond(
         json=product_response(
             MILK,

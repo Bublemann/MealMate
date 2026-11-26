@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from tests.accounts import START, Account, FakeClock, login, make_couple, make_user
-from tests.catalog import create_ingredient
+from tests.catalog import create_item
 from tests.lists import (
     applied,
     by_key,
@@ -42,12 +42,12 @@ async def ben(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def toilet_paper(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Klopapier", base_unit="piece")
+    return await create_item(api, anna, "Klopapier", base_unit="piece")
 
 
 @pytest.fixture
 async def soap(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Seife", base_unit="piece")
+    return await create_item(api, anna, "Seife", base_unit="piece")
 
 
 def key(ingredient: Any) -> str:

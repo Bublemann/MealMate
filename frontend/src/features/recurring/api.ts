@@ -53,7 +53,7 @@ export function itemOf(
   list: RecurringItemList | undefined,
   itemId: string,
 ): RecurringItem | undefined {
-  return list?.items.find((item) => item.item.id === itemId);
+  return list?.items.find((recurring) => recurring.item.id === itemId);
 }
 
 /**

@@ -4,7 +4,7 @@ import type { components } from '@/api/generated/schema';
 import { errorResponse, mockApi, requestsTo } from '@/test/api';
 import {
   CATEGORIES_AFTER_DELETE,
-  ingredient,
+  itemDetail,
   proposal,
   REFERENCE_ROUTES,
   summary,
@@ -140,7 +140,7 @@ describe('OffSearchDialog', () => {
   });
 
   it('fills the form with the chosen product, saved in one request with its pack size (BAR-04, D-47)', async () => {
-    const created = ingredient({ id: 'ing-vollmilch', name: 'Frische Vollmilch 3,5 %' });
+    const created = itemDetail({ id: 'ing-vollmilch', name: 'Frische Vollmilch 3,5 %' });
     const { fetchMock, user, router } = renderSearch({
       'POST /api/items': Response.json(created, { status: 201 }),
     });
@@ -186,7 +186,7 @@ describe('OffSearchDialog', () => {
   it('keeps the values per 100 g when a chosen product is counted in pieces instead (ING-02)', async () => {
     const { fetchMock, user } = renderSearch({
       'GET /api/items/off-search': page([found(OATS)]),
-      'POST /api/items': Response.json(ingredient({ id: 'ing-oats' }), { status: 201 }),
+      'POST /api/items': Response.json(itemDetail({ id: 'ing-oats' }), { status: 201 }),
     });
     const dialog = await openSearch(user, 'Haferflocken');
     const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
@@ -221,7 +221,7 @@ describe('OffSearchDialog', () => {
       'GET /api/items/off-search': page([
         found(proposal({ name: null, brand: null, category_key: null })),
       ]),
-      'POST /api/items': Response.json(ingredient({ id: 'ing-new' }), { status: 201 }),
+      'POST /api/items': Response.json(itemDetail({ id: 'ing-new' }), { status: 201 }),
     });
     const dialog = await openSearch(user, 'Hafermilch');
     const [first] = await within(dialog).findAllByTestId(testIds.offSearchResult);
@@ -251,7 +251,7 @@ describe('OffSearchDialog', () => {
     });
     const { fetchMock, user } = renderSearch({
       'GET /api/items/off-search': page([found(MILK), found(OAT_DRINK)]),
-      'POST /api/items': Response.json(ingredient({ id: 'ing-new' }), { status: 201 }),
+      'POST /api/items': Response.json(itemDetail({ id: 'ing-new' }), { status: 201 }),
     });
     await user.click(await screen.findByTestId(testIds.newItem));
     const form = await screen.findByTestId(testIds.itemForm);
@@ -318,7 +318,7 @@ describe('OffSearchDialog', () => {
 
   it('links to a product that is already in MealMate', async () => {
     const { user, router } = renderSearch({
-      'GET /api/items/ing-known': ingredient({ ...KNOWN, id: 'ing-known' }),
+      'GET /api/items/ing-known': itemDetail({ ...KNOWN, id: 'ing-known' }),
     });
     const dialog = await openSearch(user);
 

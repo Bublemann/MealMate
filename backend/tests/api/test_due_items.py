@@ -26,7 +26,7 @@ from tests.accounts import (
     make_user,
     set_privacy,
 )
-from tests.catalog import create_ingredient, summary
+from tests.catalog import create_item, summary
 from tests.lists import added, applied, by_key, create_list, detail, extra_added, op, start_shopping
 from tests.meals import create_meal
 from tests.recurring import make_recurring, store_purchases
@@ -53,7 +53,7 @@ async def carl(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def toilet_paper(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Klopapier", base_unit="piece")
+    return await create_item(api, anna, "Klopapier", base_unit="piece")
 
 
 # --- what a draft offers --------------------------------------------------------------------
@@ -99,7 +99,7 @@ async def test_most_overdue_first_with_the_last_amount_when_it_fits(
         ("Seife", date(2026, 8, 30)),
         ("Flüssigseife", date(2026, 8, 30)),
     ):
-        ingredient = await create_ingredient(api, anna, name, base_unit="piece")
+        ingredient = await create_item(api, anna, name, base_unit="piece")
         rows[name] = await make_recurring(api, anna, ingredient["id"], 4, last_purchased_on)
     rows["Klopapier"] = await make_recurring(api, anna, toilet_paper["id"], 4, FIVE_WEEKS_AGO)
     await store_purchases(app, rows["Klopapier"]["id"], last_amount=12, last_unit="piece")
@@ -122,7 +122,7 @@ async def test_an_ingredient_on_the_list_is_not_offered(
     """Whether its line comes from a meal, from a linked extra item or is hidden (LIST-07)."""
     names = ("Spülmaschinentabs", "Zahnpasta", "Duschgel")
     tabs, toothpaste, shower_gel = [
-        await create_ingredient(api, anna, name, base_unit="piece") for name in names
+        await create_item(api, anna, name, base_unit="piece") for name in names
     ]
     for ingredient in (toilet_paper, tabs, toothpaste, shower_gel):
         await make_recurring(api, anna, ingredient["id"], 4, FIVE_WEEKS_AGO)
@@ -182,7 +182,7 @@ async def test_hiding_a_due_item_hides_it_on_that_list_for_everyone(
     """✕ in the "Fällig" box: gone on this draft, for ben too, and still offered on the next
     draft. The list gets a new version; hiding it again changes nothing."""
     await make_couple(api, anna, ben)
-    soap = await create_ingredient(api, anna, "Seife", base_unit="piece")
+    soap = await create_item(api, anna, "Seife", base_unit="piece")
     for ingredient in (toilet_paper, soap):
         await make_recurring(api, anna, ingredient["id"], 4, FIVE_WEEKS_AGO)
     draft = await create_list(api, anna)
@@ -231,7 +231,7 @@ async def test_a_merge_moves_hidden_due_items_to_the_surviving_ingredient(
     """anna's "WC-Papier" is recurring and hidden on two drafts, on one of them together with
     "Klopapier". After merging it into "Klopapier", her item is "Klopapier", hidden on both
     drafts (the two hides collapse into one) and offered on a third."""
-    duplicate = await create_ingredient(api, anna, "WC-Papier", base_unit="piece")
+    duplicate = await create_item(api, anna, "WC-Papier", base_unit="piece")
     await make_recurring(api, anna, duplicate["id"], 4, FIVE_WEEKS_AGO)
     one, both, other = [await create_list(api, anna) for _ in range(3)]
     for draft in (one, both):
@@ -300,7 +300,7 @@ async def test_a_poll_after_midnight_shows_a_newly_due_item_within_a_minute(
     app.state.list_cache = ListCache(clock=clock.monotonic)
     async with client_for(app) as api:
         anna = await make_user(app, api, "anna")
-        toilet_paper = await create_ingredient(api, anna, "Klopapier", base_unit="piece")
+        toilet_paper = await create_item(api, anna, "Klopapier", base_unit="piece")
         # Bought a week ago, every week: due on 28 September, Kolkata time.
         await make_recurring(api, anna, toilet_paper["id"], 1, date(2026, 9, 21))
         draft = await create_list(api, anna)

@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.models import AdminEvent, ListExtraItem
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import category_ids, create_ingredient, ingredient_counts, set_category
+from tests.catalog import category_ids, create_item, item_counts, set_category
 from tests.lists import (
     add_extra,
     added,
@@ -53,7 +53,7 @@ async def ingredients(
         "Salami": "sausage_deli",
     }
     return {
-        name: await create_ingredient(api, anna, name, category_id=categories[key])
+        name: await create_item(api, anna, name, category_id=categories[key])
         for name, key in specs.items()
     }
 
@@ -211,9 +211,9 @@ async def test_usage_counts_ingredients_and_free_text_items_on_drafts(
     how many free-text items on drafts move to *Other*: not deleted ones, nor those on lists
     being shopped or done lists, which stay as they are."""
     cheese = categories["cheese"]
-    gouda = await create_ingredient(api, anna, "Gouda", category_id=cheese)
-    await create_ingredient(api, anna, "Feta", category_id=cheese)
-    await create_ingredient(api, anna, "Milch", category_id=categories["dairy_eggs"])
+    gouda = await create_item(api, anna, "Gouda", category_id=cheese)
+    await create_item(api, anna, "Feta", category_id=cheese)
+    await create_item(api, anna, "Milch", category_id=categories["dairy_eggs"])
     draft = await create_list(api, anna)
     await extra_added(api, anna, draft["id"], text="Käsewürfel", category_id=cheese)
     await extra_added(api, anna, draft["id"], item_id=gouda["id"])
@@ -240,9 +240,9 @@ async def test_a_delete_moves_the_ingredients_to_uncategorized(
     theirs, so who changed them last, and when, stays. The activity log records the names and
     both counts (ADM-01)."""
     cheese = categories["cheese"]
-    gouda = await create_ingredient(api, anna, "Gouda", category_id=cheese)
-    feta = await create_ingredient(api, anna, "Feta", category_id=cheese)
-    milk = await create_ingredient(api, anna, "Milch", category_id=categories["dairy_eggs"])
+    gouda = await create_item(api, anna, "Gouda", category_id=cheese)
+    feta = await create_item(api, anna, "Feta", category_id=cheese)
+    milk = await create_item(api, anna, "Milch", category_id=categories["dairy_eggs"])
     draft = await create_list(api, anna)
     await extra_added(api, anna, draft["id"], text="Käsewürfel", category_id=cheese)
     clock.advance(minutes=1)
@@ -275,8 +275,8 @@ async def test_uncategorized_counts_its_ingredients_until_each_has_a_new_categor
     """ING-03, REF-01: the category list counts the ingredients that moved to *Uncategorized*,
     so that the Ingredients tab offers it until each of them has a new category. A deleted
     category holds none."""
-    feta = await create_ingredient(api, anna, "Feta", category_id=categories["cheese"])
-    assert await ingredient_counts(api, anna) == {
+    feta = await create_item(api, anna, "Feta", category_id=categories["cheese"])
+    assert await item_counts(api, anna) == {
         **dict.fromkeys(categories, 0),
         "fruit_vegetables": 1,
         "meat_fish": 1,
@@ -286,11 +286,11 @@ async def test_uncategorized_counts_its_ingredients_until_each_has_a_new_categor
 
     await deleted(api, admin, categories["cheese"])
 
-    counts = await ingredient_counts(api, anna)
+    counts = await item_counts(api, anna)
     assert (counts["cheese"], counts["uncategorized"]) == (0, 2)
     for ingredient, left in ((feta, 1), (ingredients["Gouda"], 0)):
         await set_category(api, anna, ingredient["id"], categories["dairy_eggs"])
-        counts = await ingredient_counts(api, anna)
+        counts = await item_counts(api, anna)
         assert (counts["uncategorized"], counts["dairy_eggs"]) == (left, 2 - left)
 
 
@@ -339,7 +339,7 @@ async def test_lists_being_shopped_and_done_keep_the_deleted_category(
     *Uncategorized*, last in the order."""
     fruit, meat = categories["fruit_vegetables"], categories["meat_fish"]
     cheese, uncategorized = categories["cheese"], categories["uncategorized"]
-    feta = await create_ingredient(api, anna, "Feta", category_id=cheese)
+    feta = await create_item(api, anna, "Feta", category_id=cheese)
     draft = await create_list(api, anna, "Entwurf")
     await added(api, anna, draft["id"], lasagne["id"])
     shopping = await create_list(api, anna, "Einkauf")
@@ -585,7 +585,7 @@ async def test_ingredients_refuse_a_deleted_category_and_uncategorized(
 ) -> None:
     """ING-02: a new or changed ingredient can't be put into a deleted category, nor into
     *Uncategorized*, where nothing is put on purpose."""
-    milk = await create_ingredient(api, anna, "Milch", category_id=categories["dairy_eggs"])
+    milk = await create_item(api, anna, "Milch", category_id=categories["dairy_eggs"])
     await deleted(api, admin, categories["cheese"])
 
     for category_id in (categories["cheese"], categories["uncategorized"]):
@@ -610,7 +610,7 @@ async def test_an_uncategorized_ingredient_can_be_saved_as_it_is(
     """ING-02: an uncategorized ingredient's other fields can be changed without picking a new
     category, also when the form sends the category it has; anyone can give it a new one."""
     uncategorized, dairy = categories["uncategorized"], categories["dairy_eggs"]
-    gouda = await create_ingredient(api, anna, "Gouda", category_id=categories["cheese"])
+    gouda = await create_item(api, anna, "Gouda", category_id=categories["cheese"])
     await deleted(api, admin, categories["cheese"])
     path = f"/api/items/{gouda['id']}"
 

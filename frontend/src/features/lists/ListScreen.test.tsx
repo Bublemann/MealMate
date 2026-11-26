@@ -32,7 +32,7 @@ import {
   CATEGORIES,
   expectInPageOrder,
   found,
-  ingredient,
+  itemDetail,
   summary,
   unitOptions,
   UNITS,
@@ -1018,7 +1018,7 @@ describe('ListScreen', () => {
     });
 
     it('creates a new ingredient with the typed name, then asks for its amount (ING-04)', async () => {
-      const created = ingredient({ id: 'ing-quitten', name: 'Quitten', category_id: 'cat-other' });
+      const created = itemDetail({ id: 'ing-quitten', name: 'Quitten', category_id: 'cat-other' });
       const { fetchMock, user } = renderList({
         ...routes,
         'POST /api/items': Response.json(created, { status: 201 }),

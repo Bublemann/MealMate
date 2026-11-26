@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from app.db.session import Database
 from app.models import ListExtraItem, ListLineState, ListMeal, ListMealIngredient, Meal
 from tests.accounts import Account, error, make_couple, make_user, scalars, set_privacy
-from tests.catalog import create_ingredient, ref
+from tests.catalog import create_item, ref
 from tests.lists import added, create_list, detail, extra_added, line, lines, summaries
 from tests.meals import create_meal
 
@@ -45,7 +45,7 @@ async def admin(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl")
+    return await create_item(api, anna, "Mehl")
 
 
 async def meal_with(api: AsyncClient, user: Account, name: str, ingredient: Any) -> Any:
@@ -280,7 +280,7 @@ async def test_deleting_a_user(
 async def test_ingredients_on_lists_are_in_use(
     app: FastAPI, api: AsyncClient, anna: Account, admin: Account, flour: Any
 ) -> None:
-    salt = await create_ingredient(api, anna, "Salz")
+    salt = await create_item(api, anna, "Salz")
     meal = await meal_with(api, anna, "Brezel", salt)
     frozen_list = await create_list(api, anna)
     await added(api, anna, frozen_list["id"], meal["id"])
@@ -308,9 +308,9 @@ async def test_ingredients_on_lists_are_in_use(
 async def test_merging_ingredients(
     app: FastAPI, api: AsyncClient, anna: Account, admin: Account
 ) -> None:
-    duplicate = await create_ingredient(api, anna, "Paradeiser")
-    tomatoes = await create_ingredient(api, anna, "Tomaten")
-    other = await create_ingredient(api, anna, "Gurken")
+    duplicate = await create_item(api, anna, "Paradeiser")
+    tomatoes = await create_item(api, anna, "Tomaten")
+    other = await create_item(api, anna, "Gurken")
     old_key, new_key = f"i:{duplicate['id']}", f"i:{tomatoes['id']}"
     live_meal = await meal_with(api, anna, "Salat", duplicate)
     gone_meal = await meal_with(api, anna, "Suppe", duplicate)
@@ -397,8 +397,8 @@ async def test_merging_line_states_by_the_lines_the_lists_have(
 ) -> None:
     """A state only counts for an ingredient with a line on the list: a kept state of a line
     that is gone (LIST-07) never hides or shows the merged line."""
-    duplicate = await create_ingredient(api, anna, "Paradeiser")
-    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    duplicate = await create_item(api, anna, "Paradeiser")
+    tomatoes = await create_item(api, anna, "Tomaten")
     old_key, new_key = f"i:{duplicate['id']}", f"i:{tomatoes['id']}"
 
     async def draft(name: str, *ingredients: Any, **states: bool) -> Any:

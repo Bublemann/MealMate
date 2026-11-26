@@ -27,7 +27,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref, set_stored
+from tests.catalog import category_ids, create_item, ref, set_stored
 from tests.lists import (
     UNCHECKED,
     added,
@@ -79,12 +79,12 @@ async def categories(api: AsyncClient, anna: Account) -> dict[str, str]:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account, categories: dict[str, str]) -> Any:
-    return await create_ingredient(api, anna, "Mehl", category_id=categories["baking"])
+    return await create_item(api, anna, "Mehl", category_id=categories["baking"])
 
 
 @pytest.fixture
 async def onions(api: AsyncClient, anna: Account, categories: dict[str, str]) -> Any:
-    return await create_ingredient(
+    return await create_item(
         api,
         anna,
         "Zwiebeln",
@@ -97,7 +97,7 @@ async def onions(api: AsyncClient, anna: Account, categories: dict[str, str]) ->
 @pytest.fixture
 async def eggs(api: AsyncClient, anna: Account, categories: dict[str, str]) -> Any:
     """Counted in pieces, without a piece weight."""
-    return await create_ingredient(
+    return await create_item(
         api, anna, "Eier", category_id=categories["dairy_eggs"], base_unit="piece"
     )
 
@@ -154,7 +154,7 @@ async def test_start_shopping(
     onions: Any,
     categories: dict[str, str],
 ) -> None:
-    salt = await create_ingredient(api, anna, "Salz")
+    salt = await create_item(api, anna, "Salz")
     # A g ingredient's piece weight from before D-32 is not copied (LIST-11).
     await set_stored(app, flour["id"], piece_weight_g=1000)
     meal = await create_meal(
@@ -298,7 +298,7 @@ async def test_a_piece_ingredient_is_frozen_with_its_piece_weight(
     """LIST-11: freezing copies the base unit Stück and the piece weight, and the frozen rows
     and extra items keep calculating with them, in whole pieces (AGG-04), however the
     ingredient changes."""
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -363,7 +363,7 @@ async def test_lists_frozen_before_d32_keep_their_conversions(
     """LIST-11, AGG-03, D-08: a list being shopped keeps converting with the piece weight and
     density its rows copied before D-32, and so does the done list; an amount added now, with
     the attributes of now, sits beside them."""
-    oil = await create_ingredient(api, anna, "Öl", base_unit="ml")
+    oil = await create_item(api, anna, "Öl", base_unit="ml")
     meal = await create_meal(
         api, anna, "Pfanne", ingredients=[row(onions, 2, "piece"), row(oil, 2, "tbsp")]
     )
@@ -417,9 +417,9 @@ async def test_two_brands_of_the_same_thing_are_two_lines(
     decision 2026-09-28), sorted by name, then brand; once shopping started, the lines keep the
     brand they had (LIST-11)."""
     pasta = categories["pasta_rice_grains"]
-    barilla = await create_ingredient(api, anna, "Spaghetti", brand="Barilla", category_id=pasta)
-    de_cecco = await create_ingredient(api, anna, "Spaghetti", brand="De Cecco", category_id=pasta)
-    generic = await create_ingredient(api, anna, "Spaghetti", category_id=pasta)
+    barilla = await create_item(api, anna, "Spaghetti", brand="Barilla", category_id=pasta)
+    de_cecco = await create_item(api, anna, "Spaghetti", brand="De Cecco", category_id=pasta)
+    generic = await create_item(api, anna, "Spaghetti", category_id=pasta)
     bolognese = await create_meal(api, anna, "Bolognese", ingredients=[row(de_cecco, 500, "g")])
     aglio = await create_meal(api, anna, "Aglio e olio", ingredients=[row(barilla, 250, "g")])
     shopping_list = await create_list(api, anna, "Pasta")
@@ -576,7 +576,7 @@ async def test_checked_lines_that_need_more(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock, flour: Any, eggs: Any
 ) -> None:
     await make_couple(api, anna, ben)
-    salt = await create_ingredient(api, anna, "Salz")
+    salt = await create_item(api, anna, "Salz")
     meal = await create_meal(
         api, anna, "Kuchen", ingredients=[row(flour, 300, "g"), row(eggs, 2, "piece")]
     )

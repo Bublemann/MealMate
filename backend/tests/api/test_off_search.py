@@ -13,7 +13,7 @@ from httpx import AsyncClient
 from app.core.ratelimit import SlidingWindow
 from app.services.off_search import SearchAnswer, SearchCache
 from tests.accounts import Account, FakeClock, error, fields, make_user
-from tests.catalog import create_ingredient
+from tests.catalog import create_item
 from tests.off import (
     MILK,
     OATS,
@@ -178,7 +178,7 @@ async def test_products_are_cleaned_and_those_without_a_barcode_left_out(
 async def test_products_already_in_mealmate_are_flagged(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    known = await create_ingredient(api, anna, "Milch", brand="Weihenstephan", barcode=MILK)
+    known = await create_item(api, anna, "Milch", brand="Weihenstephan", barcode=MILK)
     search_route(off_api).respond(json=search_response(OATS_PRODUCT, MILK_PRODUCT))
 
     results = (await search(api, anna, "milch")).json()["results"]
@@ -235,7 +235,7 @@ async def test_a_known_product_is_flagged_also_from_the_cache(
 ) -> None:
     search_route(off_api).respond(json=search_response(OATS_PRODUCT))
     assert (await search(api, anna, "hafer")).json()["results"][0]["in_mealmate"] is False
-    await create_ingredient(api, anna, "Haferflocken", barcode=OATS)
+    await create_item(api, anna, "Haferflocken", barcode=OATS)
     assert (await search(api, anna, "hafer")).json()["results"][0]["in_mealmate"] is True
 
 
