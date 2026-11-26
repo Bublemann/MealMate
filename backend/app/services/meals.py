@@ -90,9 +90,9 @@ async def _nutrition_and_rows(
             estimate=nutrition.estimate,
             missing=[
                 MealNutritionMissing(
-                    ingredient_id=missing.item_id,
-                    ingredient_name=missing.item_name,
-                    ingredient_brand=items[missing.item_id].brand,
+                    item_id=missing.item_id,
+                    item_name=missing.item_name,
+                    item_brand=items[missing.item_id].brand,
                     reason=missing.reason,
                     nutrient=missing.nutrient,
                 )
@@ -103,7 +103,7 @@ async def _nutrition_and_rows(
             MealIngredientRow(
                 id=row.id,
                 position=row.position,
-                ingredient=item_summary(items[row.item_id]),
+                item=item_summary(items[row.item_id]),
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
                 unit_fits=fits(row.amount, row.unit, items[row.item_id].base_unit),
@@ -172,7 +172,7 @@ type RowKey = tuple[str, float | None, str | None]
 
 def _input_key(row: MealIngredientInput) -> RowKey:
     unit = counted_unit(row.amount, row.unit)
-    return row.ingredient_id, row.amount, None if unit is None else unit.value
+    return row.item_id, row.amount, None if unit is None else unit.value
 
 
 def _row_field(index: int, name: str, code: FieldErrorCode) -> FieldProblem:
@@ -204,11 +204,11 @@ async def _check_references(
     if cuisine_id is not None and await reference_repo.get_cuisine(session, cuisine_id) is None:
         found.append(FieldProblem(("body", "cuisine_id"), FieldErrorCode.INVALID))
     if rows:
-        known = await items_repo.by_ids(session, (row.ingredient_id for row in rows))
+        known = await items_repo.by_ids(session, (row.item_id for row in rows))
         for index, row in enumerate(rows):
-            item = known.get(row.ingredient_id)
+            item = known.get(row.item_id)
             if item is None:
-                found.append(_row_field(index, "ingredient_id", FieldErrorCode.INVALID))
+                found.append(_row_field(index, "item_id", FieldErrorCode.INVALID))
             elif not fits(row.amount, row.unit, item.base_unit) and _input_key(row) not in kept:
                 found.append(_row_field(index, "unit", FieldErrorCode.UNIT_MISMATCH))
     if found or problems:
@@ -245,7 +245,7 @@ async def _set_rows(
     for position, row_input in enumerate(rows):
         unit = counted_unit(row_input.amount, row_input.unit)
         values = {
-            "item_id": row_input.ingredient_id,
+            "item_id": row_input.item_id,
             "amount": row_input.amount,
             "unit": None if unit is None else unit.value,
             "note": row_input.note,

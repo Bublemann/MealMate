@@ -26,7 +26,7 @@ import {
   expectInPageOrder,
   found,
   UNITS,
-} from '@/test/ingredients';
+} from '@/test/items';
 import { FLOUR, ME } from '@/test/meals';
 import { chooseFromMenu, openMoreMenu } from '@/test/menu';
 import { dueItem } from '@/test/recurring';
@@ -259,7 +259,7 @@ describe('shopping view (SHOP-01)', () => {
     const flour = list.lines.find((line) => line.name === 'Mehl');
     if (!flour) throw new Error('no flour line');
     const aurora = { ...flour, brand: 'Aurora' };
-    const diamant = { ...flour, key: 'i:ing-mehl-diamant', ingredient_id: 'ing-mehl-diamant' };
+    const diamant = { ...flour, key: 'i:ing-mehl-diamant', item_id: 'ing-mehl-diamant' };
     renderList({
       [`GET ${BASE}`]: {
         ...list,
@@ -489,7 +489,7 @@ describe('shopping view (SHOP-01)', () => {
 
   it('adds a linked item with its amount while shopping online (LIST-12)', async () => {
     const { fetchMock, user } = renderList({
-      'GET /api/ingredients': [found(FLOUR, true)],
+      'GET /api/items': [found(FLOUR, true)],
       'GET /api/units': UNITS,
       [`POST ${BASE}/extra-items`]: Response.json(shoppingList(), { status: 201 }),
     });
@@ -501,7 +501,7 @@ describe('shopping view (SHOP-01)', () => {
     await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1));
     await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
       id: A_UUID_V7,
-      ingredient_id: FLOUR.id,
+      item_id: FLOUR.id,
       amount: 1,
       unit: 'g',
     });
@@ -853,7 +853,7 @@ describe('offline (SYNC-03)', () => {
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
     // Offline it searches nothing and offers only free text (SYNC-03).
     expect(screen.getByTestId(testIds.itemFreeText)).toHaveTextContent('“Feta” as an item');
-    expect(screen.queryByTestId(testIds.itemNewIngredient)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.itemNewItem)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add “Feta”' }));
     const form = await screen.findByTestId(testIds.freeTextDialog);
     const category = within(form).getByLabelText('Category');
@@ -865,7 +865,7 @@ describe('offline (SYNC-03)', () => {
     ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other', 'Cheese counter']);
     await user.selectOptions(category, 'cat-cheese-counter');
     await user.click(within(form).getByRole('button', { name: 'Add' }));
-    expect(requestsTo(fetchMock, 'GET /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'GET /api/items')).toHaveLength(0);
 
     const lines = screen.getByTestId(testIds.shoppingLines);
     expect(await within(lines).findByRole('list', { name: 'Cheese counter' })).toHaveTextContent(

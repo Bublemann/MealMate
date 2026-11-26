@@ -58,7 +58,7 @@ from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.schemas.ingredients import base_unit_name
+from app.schemas.items import base_unit_name
 from app.schemas.lists import (
     ExtraItem,
     ExtraItemCreate,
@@ -172,7 +172,7 @@ def _extra_item(
     base_unit = None if row.item_id is None else aggregation.extra_attrs(content, row).base_unit
     return ExtraItem(
         id=row.id,
-        ingredient_id=row.item_id,
+        item_id=row.item_id,
         text=row.text,
         amount=row.amount,
         unit=None if row.unit is None else Unit(row.unit),
@@ -232,7 +232,7 @@ async def list_detail(
             session,
             owner,
             shopping_list.id,
-            {line.ingredient_id for line in lines if line.ingredient_id is not None},
+            {line.item_id for line in lines if line.item_id is not None},
             today=local_date(now, zone),
         )
         if shopping_list.status == "draft" and rights.can_edit
@@ -740,11 +740,11 @@ async def remove_meal(
 
 def _create_problems(body: ExtraItemCreate) -> list[FieldProblem]:
     """Exactly one of item and text, and only the fields of that kind (LIST-06)."""
-    if body.ingredient_id is None and body.text is None:
+    if body.item_id is None and body.text is None:
         return [_field("text", FieldErrorCode.REQUIRED)]
-    if body.ingredient_id is not None and body.text is not None:
+    if body.item_id is not None and body.text is not None:
         return [_field("text", FieldErrorCode.INVALID)]
-    if body.ingredient_id is not None:
+    if body.item_id is not None:
         problems = [
             _field(name, FieldErrorCode.INVALID)
             for name in ("amount_text", "category_id")
@@ -776,7 +776,7 @@ async def _find_references(
     if item_id is not None:
         item = await items_repo.get(session, item_id)
         if item is None:
-            problems.append(_field("ingredient_id", FieldErrorCode.INVALID))
+            problems.append(_field("item_id", FieldErrorCode.INVALID))
     if category_id is not None and not await reference.can_pick(
         session, category_id, keeping=current_category_id
     ):
@@ -837,18 +837,18 @@ async def add_extra(
             return detail, False
         problems = _create_problems(body)
         found, item = await _find_references(
-            session, item_id=body.ingredient_id, category_id=body.category_id
+            session, item_id=body.item_id, category_id=body.category_id
         )
         problems += found
         if item is not None:
             problems += _unit_problems(body.amount, body.unit, item.base_unit)
         if problems:
             raise validation_error(problems)
-        linked = body.ingredient_id is not None
+        linked = body.item_id is not None
         extra = ListExtraItem(
             id=body.id or new_id(),
             list_id=shopping_list.id,
-            item_id=body.ingredient_id,
+            item_id=body.item_id,
             text=body.text,
             amount=body.amount,
             unit=_stored_unit(body.amount, body.unit),
@@ -898,9 +898,7 @@ async def update_extra(
         extra = await _extra_of(session, shopping_list.id, extra_id)
         linked = extra.item_id is not None
         other_kind = (
-            ("text", "amount_text", "category_id")
-            if linked
-            else ("ingredient_id", "amount", "unit")
+            ("text", "amount_text", "category_id") if linked else ("item_id", "amount", "unit")
         )
         problems = [_field(name, FieldErrorCode.INVALID) for name in other_kind if name in sent]
         values: dict[str, object]
@@ -912,7 +910,7 @@ async def update_extra(
             if unit is not None and amount is None:
                 problems.append(_field("amount", FieldErrorCode.REQUIRED))
             values = {
-                "item_id": body.ingredient_id or extra.item_id,
+                "item_id": body.item_id or extra.item_id,
                 "amount": amount,
                 "unit": _stored_unit(amount, unit),
             }
@@ -924,7 +922,7 @@ async def update_extra(
             }
         found, item = await _find_references(
             session,
-            item_id=body.ingredient_id if linked else None,
+            item_id=body.item_id if linked else None,
             category_id=None if linked else body.category_id,
             current_category_id=extra.category_id,
         )

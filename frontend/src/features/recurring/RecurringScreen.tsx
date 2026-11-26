@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LoadError } from '@/components/LoadError';
 import { Button } from '@/components/ui/button';
-import { IngredientName } from '@/features/ingredients/IngredientName';
-import { ingredientLabel } from '@/features/ingredients/label';
+import { ItemName } from '@/features/items/ItemName';
+import { itemLabel } from '@/features/items/label';
 import { SettingsPage } from '@/features/me/SettingsPage';
 import { SETTINGS_PANEL, SETTINGS_ROW_FOCUS } from '@/features/me/settingsPanel';
 import { useConnected } from '@/features/sync/context';
@@ -21,11 +21,11 @@ import {
 } from './api';
 import { recurringLine } from './format';
 import { RecurringDialog, type RecurringTarget } from './RecurringDialog';
-import { RecurringIngredientField } from './RecurringIngredientField';
+import { RecurringItemField } from './RecurringItemField';
 
 /**
  * Settings → Regelmäßige Artikel (UI-07, D-45, LIST-16): unread notices first (D-51), then the
- * ingredient field, then the set in the server's order, due first. A picked ingredient, or a
+ * item field, then the set in the server's order, due first. A picked item, or a
  * tapped row, opens the recurring pop-up; one that is recurring already opens for editing. The
  * page needs a connection (SYNC-09).
  */
@@ -52,10 +52,10 @@ export function RecurringScreen() {
       {notices.data && notices.data.notices.length > 0 && (
         <NoticeList notices={notices.data.notices} />
       )}
-      <RecurringIngredientField
+      <RecurringItemField
         value={query}
         onValueChange={setQuery}
-        onPick={(ingredient) => open({ ingredient, item: itemOf(items.data, ingredient.id) }, true)}
+        onPick={(item) => open({ item, recurring: itemOf(items.data, item.id) }, true)}
         disabled={!connected || !items.data}
         inputRef={fieldRef}
       />
@@ -64,7 +64,7 @@ export function RecurringScreen() {
       {items.data && items.data.items.length > 0 && (
         <ItemList
           items={items.data.items}
-          onOpen={(item) => open({ ingredient: item.ingredient, item }, false)}
+          onOpen={(recurring) => open({ item: recurring.item, recurring }, false)}
         />
       )}
       {empty && <p className="text-muted-foreground">{t('recurring.empty')}</p>}
@@ -99,17 +99,17 @@ function ItemList({
       data-testid={testIds.recurringList}
       className={SETTINGS_PANEL}
     >
-      {items.map((item) => (
-        <li key={item.id}>
+      {items.map((recurring) => (
+        <li key={recurring.id}>
           <button
             type="button"
             data-testid={testIds.recurringItem}
-            onClick={() => onOpen(item)}
+            onClick={() => onOpen(recurring)}
             className={`flex min-h-(--tap-target) w-full flex-col items-start px-4 py-3 text-left ${SETTINGS_ROW_FOCUS}`}
           >
-            <IngredientName ingredient={item.ingredient} />
+            <ItemName item={recurring.item} />
             <span className="text-sm text-muted-foreground">
-              {recurringLine(t, language, item)}
+              {recurringLine(t, language, recurring)}
             </span>
           </button>
         </li>
@@ -130,7 +130,7 @@ function NoticeList({ notices }: { notices: readonly Notice[] }) {
     <div data-testid={testIds.recurringNotices} className="flex flex-col gap-2">
       <ul aria-label={t('recurring.notices')} className="flex flex-col gap-2">
         {notices.map((notice) => {
-          const name = ingredientLabel(notice.params.name ?? '', notice.params.brand ?? null);
+          const name = itemLabel(notice.params.name ?? '', notice.params.brand ?? null);
           return (
             <li
               key={notice.id}

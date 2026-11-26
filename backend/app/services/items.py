@@ -54,16 +54,16 @@ from app.models import Item as ItemRow
 from app.repositories import items as items_repo
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction
-from app.schemas.ingredients import (
-    Ingredient,
-    IngredientBarcodeLink,
-    IngredientCreate,
-    IngredientMerge,
-    IngredientSearchResult,
-    IngredientSource,
-    IngredientSummary,
-    IngredientUpdate,
-    IngredientUsage,
+from app.schemas.items import (
+    Item,
+    ItemBarcodeLink,
+    ItemCreate,
+    ItemMerge,
+    ItemSearchResult,
+    ItemSource,
+    ItemSummary,
+    ItemUpdate,
+    ItemUsage,
     base_unit_name,
 )
 from app.schemas.nutrition import NutrientValues
@@ -89,12 +89,12 @@ SEARCH_LIMIT = 1000
 _SIMILAR_CANDIDATES = 50
 
 
-def source_name(value: str) -> IngredientSource:
+def source_name(value: str) -> ItemSource:
     return "off" if value == "off" else "manual"
 
 
-def summary(row: ItemRow) -> IngredientSummary:
-    return IngredientSummary(
+def summary(row: ItemRow) -> ItemSummary:
+    return ItemSummary(
         id=row.id,
         name=row.name,
         brand=row.brand,
@@ -105,11 +105,11 @@ def summary(row: ItemRow) -> IngredientSummary:
     )
 
 
-async def detail(session: AsyncSession, row: ItemRow) -> Ingredient:
+async def detail(session: AsyncSession, row: ItemRow) -> Item:
     """The API view of an item, with its usage and who created and changed it."""
     refs = await user_refs(session, [row.created_by, row.updated_by])
     usage = await hooks.item_references(session, row.id)
-    return Ingredient(
+    return Item(
         id=row.id,
         name=row.name,
         brand=row.brand,
@@ -126,7 +126,7 @@ async def detail(session: AsyncSession, row: ItemRow) -> Ingredient:
         off_last_modified_at=row.off_last_modified_at,
         fetched_at=row.fetched_at,
         pending_update=pending_update(row),
-        usage=IngredientUsage(meals=usage["meals"], lists=usage["lists"]),
+        usage=ItemUsage(meals=usage["meals"], lists=usage["lists"]),
         created_by=refs.get(row.created_by) if row.created_by else None,
         updated_by=refs.get(row.updated_by) if row.updated_by else None,
         created_at=row.created_at,
@@ -145,13 +145,11 @@ def canonical_barcode(text: str, loc: tuple[str, ...] = ("body", "barcode")) -> 
 async def _check_barcode_free(
     session: AsyncSession, barcode: str, *, except_id: str | None = None
 ) -> None:
-    """409 `ingredient.barcode_taken` (with the other item's id) if another item
+    """409 `item.barcode_taken` (with the other item's id) if another item
     has this barcode."""
     owner = await items_repo.barcode_owner(session, barcode, except_id=except_id)
     if owner is not None:
-        raise ApiError(
-            ErrorCode.INGREDIENT_BARCODE_TAKEN, status_code=409, params={"ingredient_id": owner}
-        )
+        raise ApiError(ErrorCode.ITEM_BARCODE_TAKEN, status_code=409, params={"item_id": owner})
 
 
 async def _check_amounts_fit(
@@ -161,14 +159,14 @@ async def _check_amounts_fit(
     *,
     accepted: bool | None,
 ) -> None:
-    """409 `ingredient.unit_mismatch`, with the counts of `hooks.amounts_that_would_not_fit`,
+    """409 `item.unit_mismatch`, with the counts of `hooks.amounts_that_would_not_fit`,
     while amounts of the item `would_not_fit` after the change and the request hasn't
     `accepted` that (D-33). Nothing is ever converted."""
     if accepted:
         return
     counts = await hooks.amounts_that_would_not_fit(session, item_id, would_not_fit)
     if counts["amounts"]:
-        raise ApiError(ErrorCode.INGREDIENT_UNIT_MISMATCH, status_code=409, params=counts)
+        raise ApiError(ErrorCode.ITEM_UNIT_MISMATCH, status_code=409, params=counts)
 
 
 def _piece_weight_problem(piece_weight_g: float | None, base_unit: str) -> FieldProblem | None:
@@ -197,7 +195,7 @@ async def _other_category_id(session: AsyncSession) -> str:
 
 async def search(
     session: AsyncSession, *, query: str | None, category_ids: Sequence[str]
-) -> list[IngredientSearchResult]:
+) -> list[ItemSearchResult]:
     """Search name and brand ignoring case, umlaut spelling and accents (ING-03): an exact
     name first, then names starting with the query, then the rest, each in dictionary order by
     name and brand. The exact names are marked (D-41). Without a query: every item (at
@@ -209,16 +207,12 @@ async def search(
             session, query=query_norm, category_ids=category_ids, limit=SEARCH_LIMIT
         )
     return [
-        IngredientSearchResult(
-            **summary(row).model_dump(), exact=same_name(row.name_norm, query_norm)
-        )
+        ItemSearchResult(**summary(row).model_dump(), exact=same_name(row.name_norm, query_norm))
         for row in rows
     ]
 
 
-async def similar(
-    session: AsyncSession, name: str, brand: str | None = None
-) -> list[IngredientSummary]:
+async def similar(session: AsyncSession, name: str, brand: str | None = None) -> list[ItemSummary]:
     """Up to five items with a name similar to `name` (the hint of ING-03); those with
     the same name and brand come first, as they are most likely the very same thing."""
     name_norm, brand_norm = normalize(name), normalize(brand or "") or None
@@ -232,7 +226,7 @@ async def similar(
     return [summary(row) for row in ranked[:SIMILAR_LIMIT]]
 
 
-async def get_item(session: AsyncSession, item_id: str) -> Ingredient:
+async def get_item(session: AsyncSession, item_id: str) -> Item:
     async with session.begin():
         row = await items_repo.get(session, item_id)
         if row is None:
@@ -241,8 +235,8 @@ async def get_item(session: AsyncSession, item_id: str) -> Ingredient:
 
 
 async def create_item(
-    session: AsyncSession, principal: Principal, body: IngredientCreate, *, now: datetime
-) -> Ingredient:
+    session: AsyncSession, principal: Principal, body: ItemCreate, *, now: datetime
+) -> Item:
     """Add an item (ING-02), by hand or from an Open Food Facts proposal (`off`, BAR-03):
     then `source` is off, it counts as fetched now, and only the fields the user changed compared
     with the proposal (`off.edited_fields`) are user-edited (BAR-04)."""
@@ -310,10 +304,10 @@ async def update_item(
     session: AsyncSession,
     principal: Principal,
     item_id: str,
-    body: IngredientUpdate,
+    body: ItemUpdate,
     *,
     now: datetime,
-) -> Ingredient:
+) -> Item:
     """Change the fields that were sent and record who changed it last (ING-01). On an
     item from Open Food Facts, the Open Food Facts fields sent become user-edited and
     their pending values go (BAR-04, BAR-06); a base unit whose values are per 100 of something
@@ -398,12 +392,12 @@ async def link_barcode(
     session: AsyncSession,
     principal: Principal,
     item_id: str,
-    body: IngredientBarcodeLink,
+    body: ItemBarcodeLink,
     *,
     now: datetime,
-) -> Ingredient:
+) -> Item:
     """Give an item without a barcode the scanned one (the scanner's "already in
-    MealMate", BAR-03). The server refuses to replace a barcode (409 `ingredient.has_barcode`):
+    MealMate", BAR-03). The server refuses to replace a barcode (409 `item.has_barcode`):
     the picker offers only items without one, but the list may be stale, and replacing
     it here would silently take the barcode from what the user scanned before. The item
     stays manual; it has no Open Food Facts data to refresh."""
@@ -413,7 +407,7 @@ async def link_barcode(
         if row is None:
             raise not_found()
         if row.barcode is not None:
-            raise ApiError(ErrorCode.INGREDIENT_HAS_BARCODE, status_code=409)
+            raise ApiError(ErrorCode.ITEM_HAS_BARCODE, status_code=409)
         await _check_barcode_free(session, barcode)
         row.barcode = barcode
         row.updated_by = principal.user_id
@@ -427,13 +421,13 @@ async def _with_pending_update(session: AsyncSession, item_id: str) -> ItemRow:
     if row is None:
         raise not_found()
     if not pending_fields(row):
-        raise ApiError(ErrorCode.INGREDIENT_NO_PENDING_UPDATE, status_code=409)
+        raise ApiError(ErrorCode.ITEM_NO_PENDING_UPDATE, status_code=409)
     return row
 
 
 async def apply_pending_update(
     session: AsyncSession, principal: Principal, item_id: str, *, now: datetime
-) -> Ingredient:
+) -> Item:
     """Take Open Food Facts' newer values for user-edited fields (BAR-06). They are Open Food
     Facts values again, so they are no longer user-edited and later refreshes update them."""
     async with session.begin():
@@ -451,7 +445,7 @@ async def apply_pending_update(
 
 async def ignore_pending_update(
     session: AsyncSession, principal: Principal, item_id: str, *, now: datetime
-) -> Ingredient:
+) -> Item:
     """Keep the user's values (BAR-06). The Open Food Facts version they came with is
     remembered, so a refresh proposes them again only after the product changes there; without
     a version, the ignored values are remembered instead (marked `IGNORED`), so a refresh
@@ -474,10 +468,10 @@ async def merge(
     session: AsyncSession,
     actor: Principal,
     item_id: str,
-    body: IngredientMerge,
+    body: ItemMerge,
     *,
     now: datetime,
-) -> Ingredient:
+) -> Item:
     """Merge a duplicate into another item (ING-05, admins): every meal and list reference
     moves to `into_id`, then the duplicate is deleted. The target keeps its own attributes and
     values and records the admin as the one who changed it last. When their base units differ,
@@ -528,14 +522,14 @@ async def merge(
 
 async def delete(session: AsyncSession, actor: Principal, item_id: str, *, now: datetime) -> None:
     """Delete an item nothing refers to (ING-05, admins); otherwise 409
-    `ingredient.in_use` with the number of references per kind."""
+    `item.in_use` with the number of references per kind."""
     async with session.begin():
         row = await items_repo.get(session, item_id)
         if row is None:
             raise not_found()
         references = await hooks.item_references(session, row.id)
         if any(references.values()):
-            raise ApiError(ErrorCode.INGREDIENT_IN_USE, status_code=409, params=references)
+            raise ApiError(ErrorCode.ITEM_IN_USE, status_code=409, params=references)
         events.record(
             session,
             actor_id=actor.user_id,

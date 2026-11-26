@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, ingredient_label, text
+from support.frontend import TEST_IDS, item_label, text
 from support.ui import choose_from_menu, floating_bar_button
 
 # One polling interval (5 s) plus the time a request and a render take.
@@ -75,21 +75,21 @@ def test_couple_shops_together(
     anna = invite_user(unique("anna"), unique("Anna"))
     ben = invite_user(unique("ben"), unique("Ben"))
     make_couple(anna, ben)
-    onions = api.create_ingredient(
+    onions = api.create_item(
         anna,
         f"Zwiebeln {tag}",
         category_key="fruit_vegetables",
         base_unit="piece",
         piece_weight_g=80,
     )
-    flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
+    flour = api.create_item(anna, f"Mehl {tag}", category_key="baking")
     tart = api.create_meal(
         anna,
         f"Zwiebelkuchen {tag}",
         servings=2,
         ingredients=[
-            {"ingredient_id": onions["id"], "amount": 1, "unit": "piece"},
-            {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
+            {"item_id": onions["id"], "amount": 1, "unit": "piece"},
+            {"item_id": flour["id"], "amount": 200, "unit": "g"},
         ],
     )
     shared = api.create_list(anna, f"Wochenende {tag}")
@@ -174,12 +174,12 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     """SHOP-06: a done list starts a new draft with the same meals, or goes back to shopping."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
-    rice = api.create_ingredient(anna, f"Reis {tag}")
+    rice = api.create_item(anna, f"Reis {tag}")
     curry = api.create_meal(
         anna,
         f"Curry {tag}",
         servings=2,
-        ingredients=[{"ingredient_id": rice["id"], "amount": 150, "unit": "g"}],
+        ingredients=[{"item_id": rice["id"], "amount": 150, "unit": "g"}],
     )
     done = api.create_list(anna, f"Einkauf {tag}")
     api.add_list_meal(anna, done["id"], curry["id"], servings=4)
@@ -239,7 +239,7 @@ def test_two_brands_are_two_lines(
     name = f"Milch {tag}"
     brands = ("Weidehof", "Alpenhof")
     milks = [
-        api.create_ingredient(anna, name, brand=brand, category_key="dairy_eggs", base_unit="ml")
+        api.create_item(anna, name, brand=brand, category_key="dairy_eggs", base_unit="ml")
         for brand in brands
     ]
     meals = [
@@ -247,14 +247,14 @@ def test_two_brands_are_two_lines(
             anna,
             f"{meal} {tag}",
             servings=2,
-            ingredients=[{"ingredient_id": milk["id"], "amount": amount, "unit": "ml"}],
+            ingredients=[{"item_id": milk["id"], "amount": amount, "unit": "ml"}],
         )
         for meal, milk, amount in (("Pfannkuchen", milks[0], 300), ("Grießbrei", milks[1], 500))
     ]
     draft = api.create_list(anna, f"Einkauf {tag}")
     for meal in meals:
         api.add_list_meal(anna, draft["id"], meal["id"])
-    labels = [ingredient_label(name, brand) for brand in brands]
+    labels = [item_label(name, brand) for brand in brands]
 
     sign_in(page.context, anna)
     page.goto(f"/lists/{draft['id']}")

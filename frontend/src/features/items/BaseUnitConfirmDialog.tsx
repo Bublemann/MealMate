@@ -16,7 +16,7 @@ import type { BaseUnit, UnitMismatch } from './api';
 interface BaseUnitConfirmDialogProps {
   /** What the base-unit change would leave not fitting; open while there is something. */
   mismatch: UnitMismatch | null;
-  /** The ingredient as it is: its name, and the base unit those amounts fit. */
+  /** The item as it is: its name, and the base unit those amounts fit. */
   name: string;
   baseUnit: BaseUnit;
   /** "Change anyway": save the change, accepting it. */
@@ -38,24 +38,18 @@ export function BaseUnitConfirmDialog({
   onClose,
 }: BaseUnitConfirmDialogProps) {
   const { t } = useTranslation();
-  const meals = mismatch?.meals
-    ? t('ingredients.unitMismatch.meals', { count: mismatch.meals })
-    : null;
-  const drafts = mismatch?.lists
-    ? t('ingredients.unitMismatch.drafts', { count: mismatch.lists })
-    : null;
+  const meals = mismatch?.meals ? t('items.unitMismatch.meals', { count: mismatch.meals }) : null;
+  const drafts = mismatch?.lists ? t('items.unitMismatch.drafts', { count: mismatch.lists }) : null;
   const places =
-    meals && drafts
-      ? t('ingredients.unitMismatch.mealsAndDrafts', { meals, drafts })
-      : meals || drafts;
+    meals && drafts ? t('items.unitMismatch.mealsAndDrafts', { meals, drafts }) : meals || drafts;
 
   return (
     <AlertDialog open={mismatch !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent data-testid={testIds.baseUnitConfirm}>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('ingredients.unitMismatch.title')}</AlertDialogTitle>
+          <AlertDialogTitle>{t('items.unitMismatch.title')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t('ingredients.unitMismatch.text', {
+            {t('items.unitMismatch.text', {
               name,
               unit: unitLabel(t, baseUnit),
               places: places ?? '',
@@ -65,7 +59,7 @@ export function BaseUnitConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm}>
-            {t('ingredients.unitMismatch.confirm')}
+            {t('items.unitMismatch.confirm')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

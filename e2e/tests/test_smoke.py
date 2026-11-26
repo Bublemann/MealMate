@@ -15,7 +15,7 @@ pytestmark = pytest.mark.usefixtures("member_page")
 SCREENS = [
     ("/lists", TEST_IDS["tabLists"], TEST_IDS["screenLists"], "nav.lists"),
     ("/meals", TEST_IDS["tabMeals"], TEST_IDS["screenMeals"], "nav.meals"),
-    ("/ingredients", TEST_IDS["tabIngredients"], TEST_IDS["screenIngredients"], "nav.ingredients"),
+    ("/ingredients", TEST_IDS["tabItems"], TEST_IDS["screenItems"], "nav.items"),
     ("/me", TEST_IDS["tabMe"], TEST_IDS["screenMe"], "nav.me"),
 ]
 

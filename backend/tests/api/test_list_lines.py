@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from tests.accounts import Account, fields, make_user
-from tests.catalog import category_ids, create_ingredient, ref, set_stored
+from tests.catalog import category_ids, create_item, ref, set_stored
 from tests.lists import (
     UNCHECKED,
     add_extra,
@@ -53,11 +53,11 @@ async def ingredients(
         "Salz": {"category_id": categories["sauces_spices_oils"]},
         "Brötchen": {"category_id": categories["bread_bakery"], "base_unit": "piece"},
     }
-    return {name: await create_ingredient(api, anna, name, **body) for name, body in specs.items()}
+    return {name: await create_item(api, anna, name, **body) for name, body in specs.items()}
 
 
 def row(ingredient: Any, amount: float | None = None, unit: str | None = None) -> dict[str, Any]:
-    return {"ingredient_id": ingredient["id"], "amount": amount, "unit": unit}
+    return {"item_id": ingredient["id"], "amount": amount, "unit": unit}
 
 
 @pytest.fixture
@@ -116,8 +116,8 @@ async def test_meals_are_scaled_merged_and_sorted(
     flour = line(body, "Mehl")
     assert flour == {
         "key": f"i:{ingredients['Mehl']['id']}",
-        "kind": "ingredient",
-        "ingredient_id": ingredients["Mehl"]["id"],
+        "kind": "item",
+        "item_id": ingredients["Mehl"]["id"],
         "name": "Mehl",
         "brand": None,
         "category_id": categories["baking"],
@@ -166,10 +166,8 @@ async def test_extra_items(
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     await added(api, anna, list_id, meal_a["id"])
-    await extra_added(
-        api, anna, list_id, ingredient_id=ingredients["Mehl"]["id"], amount=0.8, unit="kg"
-    )
-    await extra_added(api, anna, list_id, ingredient_id=ingredients["Zwiebeln"]["id"])
+    await extra_added(api, anna, list_id, item_id=ingredients["Mehl"]["id"], amount=0.8, unit="kg")
+    await extra_added(api, anna, list_id, item_id=ingredients["Zwiebeln"]["id"])
     await extra_added(api, anna, list_id, text="Geburtstagskerzen", amount_text="1 Packung")
     await extra_added(api, anna, list_id, text="Geburtstagskerzen")
     body = await extra_added(
@@ -177,9 +175,9 @@ async def test_extra_items(
     )
 
     assert [(item["name"], item["kind"]) for item in body["lines"]] == [
-        ("Zwiebeln", "ingredient"),
-        ("Salz", "ingredient"),
-        ("Mehl", "ingredient"),
+        ("Zwiebeln", "item"),
+        ("Salz", "item"),
+        ("Mehl", "item"),
         ("Grillkohle", "text"),
         ("Geburtstagskerzen", "text"),
         ("Geburtstagskerzen", "text"),
@@ -202,7 +200,7 @@ async def test_extra_items(
     assert candle_line == {
         "key": f"x:{candles['id']}",
         "kind": "text",
-        "ingredient_id": None,
+        "item_id": None,
         "name": "Geburtstagskerzen",
         "brand": None,
         "category_id": categories["other"],
@@ -236,7 +234,7 @@ async def test_amounts_that_do_not_fit_sit_beside_the_rest(
     a piece weight they still have from before D-32 converts nothing."""
     rolls = ingredients["Brötchen"]
     shopping_list = await create_list(api, anna)
-    await extra_added(api, anna, shopping_list["id"], ingredient_id=rolls["id"], amount=2)
+    await extra_added(api, anna, shopping_list["id"], item_id=rolls["id"], amount=2)
     await set_stored(app, rolls["id"], base_unit="g")
     meal = await create_meal(api, anna, "Frühstück", ingredients=[row(rolls, 500, "g")])
     body = await added(api, anna, shopping_list["id"], meal["id"])
@@ -268,7 +266,7 @@ async def test_a_piece_ingredient_in_whole_pieces(
     """AGG-03/04: a Stück ingredient's pieces, with or without the unit, merge into one total in
     Stk., rounded up; amounts in other units are refused, and an older one sits beside it, even
     with a piece weight."""
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -284,16 +282,14 @@ async def test_a_piece_ingredient_in_whole_pieces(
     # 5 eggs for 4 servings, made for 3: 3.75.
     body = await added(api, anna, shopping_list["id"], meal["id"], servings=3)
     assert lines(body)["Eier"] == ([(4, "piece")], False)
-    body = await extra_added(api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=2)
+    body = await extra_added(api, anna, shopping_list["id"], item_id=eggs["id"], amount=2)
     assert lines(body)["Eier"] == ([(6, "piece")], False)
     response = await add_extra(
-        api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=100, unit="g"
+        api, anna, shopping_list["id"], item_id=eggs["id"], amount=100, unit="g"
     )
     assert fields(response) == {("body", "unit"): "unit_mismatch"}
     await set_stored(app, eggs["id"], base_unit="g")
-    await extra_added(
-        api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=100, unit="g"
-    )
+    await extra_added(api, anna, shopping_list["id"], item_id=eggs["id"], amount=100, unit="g")
     await set_stored(app, eggs["id"], base_unit="piece")
     body = await detail(api, anna, shopping_list["id"])
     assert lines(body)["Eier"] == ([(100, "g"), (6, "piece")], False)
@@ -312,9 +308,7 @@ async def test_live_meals_follow_their_meal(
     }
     await api.patch(f"/api/meals/{meal_b['id']}", json=changes, headers=anna.headers)
     rename = {"name": "Weizenmehl"}
-    await api.patch(
-        f"/api/ingredients/{ingredients['Mehl']['id']}", json=rename, headers=anna.headers
-    )
+    await api.patch(f"/api/items/{ingredients['Mehl']['id']}", json=rename, headers=anna.headers)
 
     body = await detail(api, anna, shopping_list["id"])
 
@@ -422,11 +416,9 @@ async def test_lines_of_a_new_category(
         headers=admin.headers,
     )
     counter = response.json()["id"]
-    gouda = await create_ingredient(api, anna, "Gouda", category_id=counter)
+    gouda = await create_item(api, anna, "Gouda", category_id=counter)
     shopping_list = await create_list(api, anna)
-    await extra_added(
-        api, anna, shopping_list["id"], ingredient_id=gouda["id"], amount=200, unit="g"
-    )
+    await extra_added(api, anna, shopping_list["id"], item_id=gouda["id"], amount=200, unit="g")
     await extra_added(api, anna, shopping_list["id"], text="Feta", category_id=counter)
     await extra_added(api, anna, shopping_list["id"], text="Kerzen")
 
@@ -452,9 +444,7 @@ async def test_lines_are_deterministic(
             await added(api, anna, list_id, meal["id"])
         for text in extras:
             await extra_added(api, anna, list_id, text=text)
-        await extra_added(
-            api, anna, list_id, ingredient_id=ingredients["Öl"]["id"], amount=1, unit="l"
-        )
+        await extra_added(api, anna, list_id, item_id=ingredients["Öl"]["id"], amount=1, unit="l")
 
     def shown(body: Any) -> list[Any]:
         return [(item["name"], item["amounts"], item["has_unspecified"]) for item in body["lines"]]

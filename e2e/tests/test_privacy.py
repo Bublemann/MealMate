@@ -35,7 +35,7 @@ def test_no_request_leaves_the_origin(page: Page, base_url: str, api: Api, admin
 
     for tab, screen in [
         (TEST_IDS["tabMeals"], TEST_IDS["screenMeals"]),
-        (TEST_IDS["tabIngredients"], TEST_IDS["screenIngredients"]),
+        (TEST_IDS["tabItems"], TEST_IDS["screenItems"]),
         (TEST_IDS["tabMe"], TEST_IDS["screenMe"]),
         (TEST_IDS["tabLists"], TEST_IDS["screenLists"]),
     ]:

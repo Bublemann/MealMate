@@ -37,7 +37,7 @@ from typing import Any
 
 import httpx
 
-INGREDIENTS = 150
+ITEMS = 150
 MEALS = 20
 EXTRAS = 5
 POLLERS = 3
@@ -92,26 +92,26 @@ class Session:
         self.client.close()
 
 
-def ingredient_ids(api: Session) -> list[str]:
+def item_ids(api: Session) -> list[str]:
     """The ids of `Perf 000` … `Perf 149`, created where missing."""
     categories = [item["id"] for item in api.call("GET", "/api/categories")]
-    existing = {item["name"]: item["id"] for item in api.call("GET", "/api/ingredients")}
+    existing = {item["name"]: item["id"] for item in api.call("GET", "/api/items")}
     ids = []
-    for index in range(INGREDIENTS):
+    for index in range(ITEMS):
         name = f"Perf {index:03d}"
         if name not in existing:
             body = {"name": name, "category_id": categories[index % len(categories)]}
-            existing[name] = api.call("POST", "/api/ingredients", 201, json=body)["id"]
+            existing[name] = api.call("POST", "/api/items", 201, json=body)["id"]
         ids.append(existing[name])
     return ids
 
 
 def meal_rows(ingredients: list[str], meal: int) -> list[dict[str, Any]]:
     """Every 20th ingredient from `meal` on, plus the first two (merged into one line each)."""
-    chosen = [0, 1, *(index for index in range(2, INGREDIENTS) if index % MEALS == meal)]
+    chosen = [0, 1, *(index for index in range(2, ITEMS) if index % MEALS == meal)]
     return [
         {
-            "ingredient_id": ingredients[index],
+            "item_id": ingredients[index],
             "amount": 1 + index % 4 if index % 3 == 0 else 100 + index,
             "unit": "piece" if index % 3 == 0 else "g",
         }
@@ -121,7 +121,7 @@ def meal_rows(ingredients: list[str], meal: int) -> list[dict[str, Any]]:
 
 def build_list(api: Session, run: str, *, shopping: bool) -> tuple[str, list[str], list[str]]:
     """The list, the ids of its meals and its line keys."""
-    ingredients = ingredient_ids(api)
+    ingredients = item_ids(api)
     meals = [
         api.call(
             "POST",

@@ -73,7 +73,7 @@ async def get_security(principal: CurrentUser, session: ReadSession) -> Security
 
 @router.get("/notices")
 async def list_notices(principal: CurrentUser, session: ReadSession) -> NoticeList:
-    """The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a
+    """The own unread notices, newest first, e.g. that an admin deleted an item kept as a
     recurring item."""
     return await notices.list_unread(session, principal)
 

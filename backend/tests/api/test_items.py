@@ -21,7 +21,7 @@ from tests.catalog import (
     UPC_E,
     category_ids,
     create_from_off,
-    create_ingredient,
+    create_item,
     ref,
     set_stored,
 )
@@ -45,22 +45,22 @@ async def admin(app: FastAPI, api: AsyncClient) -> Account:
 
 
 async def post(api: AsyncClient, user: Account, **body: Any) -> Any:
-    return await api.post("/api/ingredients", json=body, headers=user.headers)
+    return await api.post("/api/items", json=body, headers=user.headers)
 
 
-async def patch(api: AsyncClient, user: Account, ingredient_id: str, **body: Any) -> Any:
-    return await api.patch(f"/api/ingredients/{ingredient_id}", json=body, headers=user.headers)
+async def patch(api: AsyncClient, user: Account, item_id: str, **body: Any) -> Any:
+    return await api.patch(f"/api/items/{item_id}", json=body, headers=user.headers)
 
 
-async def get(api: AsyncClient, user: Account, ingredient_id: str) -> Any:
-    response = await api.get(f"/api/ingredients/{ingredient_id}", headers=user.headers)
+async def get(api: AsyncClient, user: Account, item_id: str) -> Any:
+    response = await api.get(f"/api/items/{item_id}", headers=user.headers)
     assert response.status_code == 200, response.text
     return response.json()
 
 
 async def search(api: AsyncClient, user: Account, **params: str | list[str]) -> list[str]:
     """The labels found: the name, with the brand in brackets."""
-    response = await api.get("/api/ingredients", params=params, headers=user.headers)
+    response = await api.get("/api/items", params=params, headers=user.headers)
     assert response.status_code == 200, response.text
     return [
         item["name"] if item["brand"] is None else f"{item['name']} ({item['brand']})"
@@ -106,7 +106,7 @@ async def test_create_with_defaults(api: AsyncClient, anna: Account) -> None:
 
 async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
     categories = await category_ids(api, anna)
-    body = await create_ingredient(
+    body = await create_item(
         api,
         anna,
         "Milch",
@@ -126,7 +126,7 @@ async def test_create_with_everything(api: AsyncClient, anna: Account) -> None:
 
 
 async def test_empty_optional_texts_are_null(api: AsyncClient, anna: Account) -> None:
-    body = await create_ingredient(api, anna, "Eier", brand="  ")
+    body = await create_item(api, anna, "Eier", brand="  ")
     assert body["brand"] is None
     body = await create_from_off(api, anna, "Milch", EAN_13, quantity_text=" ")
     assert body["quantity_text"] is None
@@ -135,9 +135,9 @@ async def test_empty_optional_texts_are_null(api: AsyncClient, anna: Account) ->
 async def test_names_need_not_be_unique(api: AsyncClient, anna: Account, ben: Account) -> None:
     """Two brands of the same thing are two ingredients; even the very same name and brand is
     only a hint, not an error."""
-    first = await create_ingredient(api, anna, "Milch", brand="Weihenstephan")
-    second = await create_ingredient(api, ben, "MILCH", brand="Landliebe")
-    third = await create_ingredient(api, ben, "Milch", brand="Weihenstephan")
+    first = await create_item(api, anna, "Milch", brand="Weihenstephan")
+    second = await create_item(api, ben, "MILCH", brand="Landliebe")
+    third = await create_item(api, ben, "Milch", brand="Weihenstephan")
     assert len({first["id"], second["id"], third["id"]}) == 3
     assert await search(api, anna, q="milch") == [
         "MILCH (Landliebe)",
@@ -186,7 +186,7 @@ async def test_a_lone_surrogate_is_refused(api: AsyncClient, anna: Account) -> N
     """JSON may escape half a UTF-16 pair (`\\ud800`), which cannot be stored as UTF-8;
     Pydantic refuses it as no valid string."""
     response = await api.post(
-        "/api/ingredients",
+        "/api/items",
         content=json.dumps({"name": "Pasta", "brand": "Barilla\ud800"}),
         headers=anna.headers | {"Content-Type": "application/json"},
     )
@@ -226,7 +226,7 @@ async def test_numbers_must_be_finite(
 ) -> None:
     """JSON bodies may spell NaN and Infinity; such numbers are out of range."""
     response = await api.post(
-        "/api/ingredients",
+        "/api/items",
         content=body.format(value=value).encode(),
         headers=anna.headers | {"content-type": "application/json"},
     )
@@ -235,7 +235,7 @@ async def test_numbers_must_be_finite(
 
 
 async def test_limits_are_inclusive(api: AsyncClient, anna: Account) -> None:
-    body = await create_ingredient(
+    body = await create_item(
         api,
         anna,
         "Grenzfall",
@@ -250,7 +250,7 @@ async def test_limits_are_inclusive(api: AsyncClient, anna: Account) -> None:
 async def test_density_is_gone(api: AsyncClient, anna: Account) -> None:
     """D-32: no density in or out; one sent by an older app is ignored (migration 0014 dropped
     its column, D-34)."""
-    oil = await create_ingredient(api, anna, "Olivenöl", base_unit="ml", density_g_per_ml=0.92)
+    oil = await create_item(api, anna, "Olivenöl", base_unit="ml", density_g_per_ml=0.92)
     assert "density_g_per_ml" not in oil
     body = (await patch(api, anna, oil["id"], density_g_per_ml=0.9)).json()
     assert "density_g_per_ml" not in body
@@ -262,7 +262,7 @@ async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
     """A piece weight a g or ml ingredient has from before D-32 is neither shown nor touched
     (migration 0014 cleared them, D-34, but `attrs()` doesn't rely on that). A null piece weight
     is ignored; a new one is refused."""
-    apples = await create_ingredient(api, anna, "Äpfel")
+    apples = await create_item(api, anna, "Äpfel")
     await set_stored(app, apples["id"], piece_weight_g=180)
     assert (await get(api, anna, apples["id"]))["piece_weight_g"] is None
 
@@ -287,9 +287,9 @@ async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
 
 async def test_unknown_ingredient(api: AsyncClient, anna: Account) -> None:
     for response in (
-        await api.get("/api/ingredients/nope", headers=anna.headers),
+        await api.get("/api/items/nope", headers=anna.headers),
         await patch(api, anna, "nope", name="x"),
-        await api.post("/api/ingredients/nope/pending-update/apply", headers=anna.headers),
+        await api.post("/api/items/nope/pending-update/apply", headers=anna.headers),
     ):
         assert response.status_code == 404
         assert error(response) == "common.not_found"
@@ -312,7 +312,7 @@ async def test_accepted_barcodes(
     api: AsyncClient, anna: Account, barcode: str, stored: str
 ) -> None:
     """Stored in one canonical form: GTIN-13, except EAN-8 (BAR-01)."""
-    assert (await create_ingredient(api, anna, "Nudeln", barcode=barcode))["barcode"] == stored
+    assert (await create_item(api, anna, "Nudeln", barcode=barcode))["barcode"] == stored
 
 
 @pytest.mark.parametrize(
@@ -333,21 +333,21 @@ async def test_a_barcode_belongs_to_one_ingredient(
     app: FastAPI, api: AsyncClient, anna: Account, first: str, second: str
 ) -> None:
     """Also in another spelling of the same code (409 with the other ingredient's id)."""
-    owner = await create_ingredient(api, anna, "Nudeln", barcode=first)
+    owner = await create_item(api, anna, "Nudeln", barcode=first)
     response = await post(api, anna, name="Pasta", barcode=second)
     assert response.status_code == 409
-    assert error(response) == "ingredient.barcode_taken"
-    assert response.json()["params"] == {"ingredient_id": owner["id"]}
+    assert error(response) == "item.barcode_taken"
+    assert response.json()["params"] == {"item_id": owner["id"]}
     assert await scalars(app, select(Item.name)) == ["Nudeln"]
 
 
 async def test_change_or_clear_the_barcode(api: AsyncClient, anna: Account) -> None:
-    first = await create_ingredient(api, anna, "Nudeln", barcode=EAN_13)
-    second = await create_ingredient(api, anna, "Reis")
+    first = await create_item(api, anna, "Nudeln", barcode=EAN_13)
+    second = await create_item(api, anna, "Reis")
 
     taken = await patch(api, anna, second["id"], barcode=EAN_13)
     assert taken.status_code == 409
-    assert error(taken) == "ingredient.barcode_taken"
+    assert error(taken) == "item.barcode_taken"
     invalid = await patch(api, anna, second["id"], barcode="123")
     assert fields(invalid) == {("body", "barcode"): "invalid_format"}
     # The edit form sets, replaces and clears a barcode on purpose.
@@ -361,9 +361,9 @@ async def test_change_or_clear_the_barcode(api: AsyncClient, anna: Account) -> N
     assert (replaced.json()["barcode"], replaced.json()["source"]) == (EAN_13, "manual")
 
 
-async def link(api: AsyncClient, user: Account, ingredient_id: str, barcode: str) -> Any:
+async def link(api: AsyncClient, user: Account, item_id: str, barcode: str) -> Any:
     return await api.post(
-        f"/api/ingredients/{ingredient_id}/barcode", json={"barcode": barcode}, headers=user.headers
+        f"/api/items/{item_id}/barcode", json={"barcode": barcode}, headers=user.headers
     )
 
 
@@ -372,7 +372,7 @@ async def test_link_a_barcode_to_an_ingredient_without_one(
 ) -> None:
     """The scanner's "already in MealMate" (BAR-03): the ingredient gets the scanned barcode
     and stays manual."""
-    eggs = await create_ingredient(api, anna, "Eier", brand="REWE")
+    eggs = await create_item(api, anna, "Eier", brand="REWE")
     clock.advance(minutes=5)
 
     response = await link(api, ben, eggs["id"], f" {UPC_A} ")
@@ -393,19 +393,19 @@ async def test_linking_never_replaces_a_barcode(
     app: FastAPI, api: AsyncClient, anna: Account
 ) -> None:
     """Refused by the server, not only hidden in the picker, whose list may be stale: 409
-    `ingredient.has_barcode` (also for the same barcode), 409 `ingredient.barcode_taken` if
+    `item.has_barcode` (also for the same barcode), 409 `item.barcode_taken` if
     another ingredient has it."""
-    pasta = await create_ingredient(api, anna, "Nudeln", barcode=EAN_13)
-    rice = await create_ingredient(api, anna, "Reis")
+    pasta = await create_item(api, anna, "Nudeln", barcode=EAN_13)
+    rice = await create_item(api, anna, "Reis")
 
     for barcode in (EAN_13_B, EAN_13):
         has = await link(api, anna, pasta["id"], barcode)
         assert has.status_code == 409
-        assert error(has) == "ingredient.has_barcode"
+        assert error(has) == "item.has_barcode"
     taken = await link(api, anna, rice["id"], EAN_13)
     assert taken.status_code == 409
-    assert error(taken) == "ingredient.barcode_taken"
-    assert taken.json()["params"] == {"ingredient_id": pasta["id"]}
+    assert error(taken) == "item.barcode_taken"
+    assert taken.json()["params"] == {"item_id": pasta["id"]}
     invalid = await link(api, anna, rice["id"], "123")
     assert fields(invalid) == {("body", "barcode"): "invalid_format"}
     missing = await link(api, anna, "unknown", EAN_13_B)
@@ -474,7 +474,7 @@ async def test_the_pack_size_is_typed_in(
 ) -> None:
     """Any ingredient may have a pack size, typed by hand too (ING-02, D-47). Its amount, kept
     for the postponed pack rounding, is taken from a plain amount and unit, in g or ml."""
-    body = await create_ingredient(api, anna, "Gnocchi", quantity_text=text)
+    body = await create_item(api, anna, "Gnocchi", quantity_text=text)
     assert body["quantity_text"] == text
     assert (body["pack_quantity"], body["pack_unit"]) == amount
     assert (body["source"], body["user_edited_fields"]) == ("manual", [])
@@ -571,7 +571,7 @@ async def test_the_pack_size_can_be_corrected(
 
 async def test_a_typed_pack_size_can_be_changed(api: AsyncClient, anna: Account) -> None:
     """Typed by hand, it is nobody's to refresh, so nothing is marked."""
-    water = await create_ingredient(api, anna, "Wasser", quantity_text="1,5 l")
+    water = await create_item(api, anna, "Wasser", quantity_text="1,5 l")
     body = (await patch(api, anna, water["id"], quantity_text="6 x 1,5 l")).json()
     assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == (
         "6 x 1,5 l",
@@ -588,7 +588,7 @@ async def test_a_typed_pack_size_can_be_changed(api: AsyncClient, anna: Account)
 async def test_invalid_pack_sizes_on_update(
     api: AsyncClient, anna: Account, text: str, code: str
 ) -> None:
-    gnocchi = await create_ingredient(api, anna, "Gnocchi", quantity_text="500 g")
+    gnocchi = await create_item(api, anna, "Gnocchi", quantity_text="500 g")
     response = await patch(api, anna, gnocchi["id"], quantity_text=text)
     assert response.status_code == 422
     assert fields(response) == {("body", "quantity_text"): code}
@@ -665,7 +665,7 @@ async def test_the_same_barcode_keeps_it_from_open_food_facts(
 
 async def test_search_ignores_case_umlauts_and_accents(api: AsyncClient, anna: Account) -> None:
     for name in ("Äpfel", "Crème fraîche", "Birnen", "Apfelmus"):
-        await create_ingredient(api, anna, name)
+        await create_item(api, anna, name)
 
     for query in ("apfel", "Äpfel", "aepfel", "ÄPF"):
         assert "Äpfel" in await search(api, anna, q=query), query
@@ -686,7 +686,7 @@ async def test_search_order(api: AsyncClient, anna: Account) -> None:
         ("Tomaten", None),
         ("Tomaten", "Alnatura"),
     ):
-        await create_ingredient(api, anna, name, brand=brand)
+        await create_item(api, anna, name, brand=brand)
     assert await search(api, anna, q="tomaten") == [
         "Tomaten",
         "Tomaten (Alnatura)",
@@ -704,10 +704,10 @@ async def test_search_order(api: AsyncClient, anna: Account) -> None:
 
 
 async def test_search_by_brand(api: AsyncClient, anna: Account) -> None:
-    await create_ingredient(api, anna, "Milch", brand="Weihenstephan")
-    await create_ingredient(api, anna, "Butter", brand="Weihenstephan")
-    await create_ingredient(api, anna, "Milch", brand="Müller")
-    await create_ingredient(api, anna, "Weißwurst")
+    await create_item(api, anna, "Milch", brand="Weihenstephan")
+    await create_item(api, anna, "Butter", brand="Weihenstephan")
+    await create_item(api, anna, "Milch", brand="Müller")
+    await create_item(api, anna, "Weißwurst")
 
     assert await search(api, anna, q="weihenstephan") == [
         "Butter (Weihenstephan)",
@@ -731,7 +731,7 @@ def label(item: dict[str, Any]) -> str:
 
 async def exact_marks(api: AsyncClient, user: Account, q: str) -> list[tuple[str, bool]]:
     """Each label found for `q` with its exact-match mark."""
-    response = await api.get("/api/ingredients", params={"q": q}, headers=user.headers)
+    response = await api.get("/api/items", params={"q": q}, headers=user.headers)
     assert response.status_code == 200, response.text
     return [(label(item), item["exact"]) for item in response.json()]
 
@@ -739,9 +739,9 @@ async def exact_marks(api: AsyncClient, user: Account, q: str) -> list[tuple[str
 async def test_search_marks_exact_names(api: AsyncClient, anna: Account) -> None:
     """D-41: the results whose name is the query, by the rule the search sorts by (ignoring
     case, umlaut spelling and accents, ING-03), are marked; the brand doesn't count."""
-    await create_ingredient(api, anna, "Äpfel")
-    await create_ingredient(api, anna, "Apfelmus")
-    await create_ingredient(api, anna, "Crème fraîche")
+    await create_item(api, anna, "Äpfel")
+    await create_item(api, anna, "Apfelmus")
+    await create_item(api, anna, "Crème fraîche")
 
     assert await exact_marks(api, anna, "äpfel") == [("Äpfel", True), ("Apfelmus", False)]
     assert await exact_marks(api, anna, "Aepfel") == [("Äpfel", True), ("Apfelmus", False)]
@@ -755,12 +755,12 @@ async def test_search_marks_exact_names(api: AsyncClient, anna: Account) -> None
 async def test_search_marks_every_brand_of_an_exact_name(api: AsyncClient, anna: Account) -> None:
     """D-41: a single branded "Milch" is an exact match for "milch"; with several brands each is
     marked, and the list leaves the choice to the user."""
-    await create_ingredient(api, anna, "Milch", brand="REWE")
-    await create_ingredient(api, anna, "Milchreis")
+    await create_item(api, anna, "Milch", brand="REWE")
+    await create_item(api, anna, "Milchreis")
 
     assert await exact_marks(api, anna, "milch") == [("Milch (REWE)", True), ("Milchreis", False)]
 
-    await create_ingredient(api, anna, "Milch", brand="Weihenstephan")
+    await create_item(api, anna, "Milch", brand="Weihenstephan")
     assert await exact_marks(api, anna, "Milch") == [
         ("Milch (REWE)", True),
         ("Milch (Weihenstephan)", True),
@@ -794,7 +794,7 @@ async def test_list_in_dictionary_order(api: AsyncClient, anna: Account) -> None
         ("Weißkohl", None, "fruit_vegetables"),
         ("Crème fraîche", None, "dairy_eggs"),
     ):
-        await create_ingredient(api, anna, name, brand=brand, category_id=categories[category])
+        await create_item(api, anna, name, brand=brand, category_id=categories[category])
 
     assert await search(api, anna) == [
         "Alufolie",
@@ -840,7 +840,7 @@ async def test_list_of_several_categories(api: AsyncClient, anna: Account) -> No
         ("Butter", "dairy_eggs"),
         ("Alufolie", "other"),
     ):
-        await create_ingredient(api, anna, name, category_id=categories[category])
+        await create_item(api, anna, name, category_id=categories[category])
 
     both = ["Äpfel", "Butter", "Milch", "Zwiebeln"]
     assert await search(api, anna, category_id=[fruit, dairy]) == both
@@ -850,10 +850,10 @@ async def test_list_of_several_categories(api: AsyncClient, anna: Account) -> No
 
 
 async def test_renaming_moves_the_ingredient(api: AsyncClient, anna: Account) -> None:
-    await create_ingredient(api, anna, "Apfelessig")
-    apples = await create_ingredient(api, anna, "Bratäpfel")
-    await create_ingredient(api, anna, "Milch", brand="MUH")
-    milk = await create_ingredient(api, anna, "Milch", brand="Alnatura")
+    await create_item(api, anna, "Apfelessig")
+    apples = await create_item(api, anna, "Bratäpfel")
+    await create_item(api, anna, "Milch", brand="MUH")
+    milk = await create_item(api, anna, "Milch", brand="Alnatura")
 
     assert (await patch(api, anna, apples["id"], name="Äpfel")).status_code == 200
     assert (await patch(api, anna, milk["id"], brand="Müller")).status_code == 200
@@ -876,7 +876,7 @@ async def test_search_ranks_then_dictionary_order(api: AsyncClient, anna: Accoun
         ("Muskatnuss", None),
         ("Apfelmus", None),
     ):
-        await create_ingredient(api, anna, name, brand=brand)
+        await create_item(api, anna, name, brand=brand)
 
     assert await search(api, anna, q="milch") == [
         "Milch",
@@ -896,7 +896,7 @@ async def test_search_ranks_then_dictionary_order(api: AsyncClient, anna: Accoun
 
 async def test_summaries(api: AsyncClient, anna: Account) -> None:
     milk = await create_from_off(api, anna, "Milch", EAN_13, brand="Weihenstephan", base_unit="ml")
-    response = await api.get("/api/ingredients", params={"q": "milch"}, headers=anna.headers)
+    response = await api.get("/api/items", params={"q": "milch"}, headers=anna.headers)
     assert response.json() == [
         {
             "id": milk["id"],
@@ -913,7 +913,7 @@ async def test_summaries(api: AsyncClient, anna: Account) -> None:
 
 async def similar(api: AsyncClient, user: Account, name: str, **params: str) -> list[str]:
     response = await api.get(
-        "/api/ingredients/similar", params={"name": name, **params}, headers=user.headers
+        "/api/items/similar", params={"name": name, **params}, headers=user.headers
     )
     assert response.status_code == 200
     return [
@@ -924,7 +924,7 @@ async def similar(api: AsyncClient, user: Account, name: str, **params: str) -> 
 
 async def test_similar_ingredients(api: AsyncClient, anna: Account) -> None:
     for name in ("Äpfel", "Apfelmus", "Birnen", "Tomaten", "Tomate getrocknet"):
-        await create_ingredient(api, anna, name)
+        await create_item(api, anna, name)
 
     assert await similar(api, anna, "Apfel") == ["Äpfel", "Apfelmus"]
     assert await similar(api, anna, "äpfel") == ["Äpfel", "Apfelmus"]
@@ -932,14 +932,14 @@ async def test_similar_ingredients(api: AsyncClient, anna: Account) -> None:
     assert await similar(api, anna, "Birne") == ["Birnen"]
     assert await similar(api, anna, "Gurke") == []
     assert await similar(api, anna, "  ") == []
-    response = await api.get("/api/ingredients/similar", headers=anna.headers)
+    response = await api.get("/api/items/similar", headers=anna.headers)
     assert fields(response) == {("query", "name"): "required"}
 
 
 async def test_the_same_name_and_brand_come_first(api: AsyncClient, anna: Account) -> None:
     for brand in (None, "Landliebe", "Weihenstephan"):
-        await create_ingredient(api, anna, "Milch", brand=brand)
-    await create_ingredient(api, anna, "Milchreis")
+        await create_item(api, anna, "Milch", brand=brand)
+    await create_item(api, anna, "Milchreis")
 
     assert await similar(api, anna, "milch", brand="WEIHENSTEPHAN") == [
         "Milch (Weihenstephan)",
@@ -952,7 +952,7 @@ async def test_the_same_name_and_brand_come_first(api: AsyncClient, anna: Accoun
 
 async def test_at_most_five_similar_ingredients(api: AsyncClient, anna: Account) -> None:
     for i in range(7):
-        await create_ingredient(api, anna, f"Tee {i}")
+        await create_item(api, anna, f"Tee {i}")
     assert await similar(api, anna, "Tee") == [f"Tee {i}" for i in range(5)]
 
 
@@ -963,7 +963,7 @@ async def test_anyone_edits_and_is_recorded(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
     categories = await category_ids(api, anna)
-    apples = await create_ingredient(
+    apples = await create_item(
         api, anna, "Apfel", base_unit="piece", piece_weight_g=180, nutrients={"kcal": 52}
     )
     clock.advance(minutes=5)
@@ -995,8 +995,8 @@ async def test_anyone_edits_and_is_recorded(
 
 
 async def test_renaming_to_an_existing_name_is_fine(api: AsyncClient, anna: Account) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
-    await create_ingredient(api, anna, "Birnen")
+    apples = await create_item(api, anna, "Äpfel")
+    await create_item(api, anna, "Birnen")
     assert (await patch(api, anna, apples["id"], name="birnen")).json()["name"] == "birnen"
     response = await patch(api, anna, apples["id"], category_id="nope")
     assert fields(response) == {("body", "category_id"): "invalid"}
@@ -1004,7 +1004,7 @@ async def test_renaming_to_an_existing_name_is_fine(api: AsyncClient, anna: Acco
 
 async def test_the_base_unit_changes_freely(api: AsyncClient, anna: Account) -> None:
     """Nothing is converted: the values are per 100 of the new base unit from now on."""
-    oil = await create_ingredient(api, anna, "Olivenöl", barcode=EAN_13, nutrients={"fat": 92})
+    oil = await create_item(api, anna, "Olivenöl", barcode=EAN_13, nutrients={"fat": 92})
     body = (await patch(api, anna, oil["id"], base_unit="ml")).json()
     assert (body["base_unit"], body["nutrients"]["fat"]) == ("ml", 92)
 
@@ -1013,7 +1013,7 @@ async def test_the_base_unit_changes_freely(api: AsyncClient, anna: Account) -> 
 
 
 async def test_a_piece_ingredient_with_a_piece_weight(api: AsyncClient, anna: Account) -> None:
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api, anna, "Eier", base_unit="piece", piece_weight_g=60, nutrients={"kcal": 155}
     )
     assert (eggs["base_unit"], eggs["piece_weight_g"], eggs["nutrients"]["kcal"]) == (
@@ -1022,20 +1022,20 @@ async def test_a_piece_ingredient_with_a_piece_weight(api: AsyncClient, anna: Ac
         155,
     )
     assert await get(api, anna, eggs["id"]) == eggs
-    response = await api.get("/api/ingredients", params={"q": "eier"}, headers=anna.headers)
+    response = await api.get("/api/items", params={"q": "eier"}, headers=anna.headers)
     assert [(item["name"], item["base_unit"]) for item in response.json()] == [("Eier", "piece")]
 
     body = (await patch(api, anna, eggs["id"], piece_weight_g=10_000)).json()
     assert (body["base_unit"], body["piece_weight_g"]) == ("piece", 10_000)
     body = (await patch(api, anna, eggs["id"], piece_weight_g=None)).json()
     assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
-    without = await create_ingredient(api, anna, "Brötchen", base_unit="piece")
+    without = await create_item(api, anna, "Brötchen", base_unit="piece")
     assert (without["base_unit"], without["piece_weight_g"]) == ("piece", None)
 
 
 async def test_counting_an_ingredient_in_pieces(api: AsyncClient, anna: Account) -> None:
     """Nothing is converted: the values are per 100 g as before; a piece weight comes along."""
-    rolls = await create_ingredient(api, anna, "Brötchen", nutrients={"kcal": 270})
+    rolls = await create_item(api, anna, "Brötchen", nutrients={"kcal": 270})
     body = (await patch(api, anna, rolls["id"], base_unit="piece", piece_weight_g=50)).json()
     assert (body["base_unit"], body["piece_weight_g"], body["nutrients"]["kcal"]) == (
         "piece",
@@ -1048,7 +1048,7 @@ async def test_counting_an_ingredient_in_pieces(api: AsyncClient, anna: Account)
 async def test_leaving_pieces_clears_the_piece_weight(
     api: AsyncClient, anna: Account, base_unit: str
 ) -> None:
-    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    eggs = await create_item(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
     assert (await patch(api, anna, eggs["id"], name="Eier (M)")).json()["piece_weight_g"] == 60
     same = (await patch(api, anna, eggs["id"], base_unit="piece")).json()
     assert same["piece_weight_g"] == 60
@@ -1060,7 +1060,7 @@ async def test_leaving_pieces_clears_the_piece_weight(
     assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
 
     # One sent along is refused: a g or ml ingredient has none (D-32).
-    again = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    again = await create_item(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
     response = await patch(api, anna, again["id"], base_unit=base_unit, piece_weight_g=55)
     assert fields(response) == {("body", "piece_weight_g"): "invalid"}
     assert (await get(api, anna, again["id"]))["piece_weight_g"] == 60
@@ -1071,7 +1071,7 @@ async def test_leaving_pieces_clears_the_piece_weight(
 
 def amount(ingredient: Any, value: float | None = None, unit: str | None = None) -> Any:
     """A meal row of the ingredient."""
-    return {"ingredient_id": ingredient["id"], "amount": value, "unit": unit}
+    return {"item_id": ingredient["id"], "amount": value, "unit": unit}
 
 
 async def meal_amounts(api: AsyncClient, user: Account, meal_id: str) -> list[Any]:
@@ -1095,8 +1095,8 @@ async def test_a_base_unit_change_that_leaves_amounts_not_fitting_asks_first(
     """Counted are the meals with rows, and the drafts with linked extra items, whose amounts fit
     now and wouldn't fit the new base unit. Nothing is saved until the request accepts that, and
     then nothing is converted: those amounts are kept and flagged."""
-    eggs = await create_ingredient(api, anna, "Eier")
-    flour = await create_ingredient(api, anna, "Mehl")
+    eggs = await create_item(api, anna, "Eier")
+    flour = await create_item(api, anna, "Mehl")
     omelette = await create_meal(
         api, anna, "Omelett", ingredients=[amount(eggs, 120, "g"), amount(eggs, 1, "tbsp")]
     )
@@ -1106,17 +1106,17 @@ async def test_a_base_unit_change_that_leaves_amounts_not_fitting_asks_first(
     # A row without an amount fits every base unit.
     await create_meal(api, ben, "Pfannkuchen", ingredients=[amount(eggs), amount(flour, 250, "g")])
     draft = await create_list(api, anna)
-    await extra_added(api, anna, draft["id"], ingredient_id=eggs["id"], amount=500, unit="g")
-    await extra_added(api, anna, draft["id"], ingredient_id=eggs["id"])
+    await extra_added(api, anna, draft["id"], item_id=eggs["id"], amount=500, unit="g")
+    await extra_added(api, anna, draft["id"], item_id=eggs["id"])
     other_draft = await create_list(api, ben)
-    await extra_added(api, ben, other_draft["id"], ingredient_id=eggs["id"])
+    await extra_added(api, ben, other_draft["id"], item_id=eggs["id"])
     before = await get(api, anna, eggs["id"])
     clock.advance(minutes=1)
 
     response = await patch(api, ben, eggs["id"], base_unit="piece", name="Eier (M)")
 
     assert response.status_code == 409
-    assert error(response) == "ingredient.unit_mismatch"
+    assert error(response) == "item.unit_mismatch"
     assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
     assert await get(api, anna, eggs["id"]) == before
 
@@ -1137,8 +1137,8 @@ async def test_a_base_unit_change_no_amount_depends_on_asks_nothing(
 ) -> None:
     """Spoons fit g and ml alike, a row without an amount fits every base unit, and an amount
     that doesn't fit already (D-33) can't stop fitting; accepting is fine when nothing would."""
-    flour = await create_ingredient(api, anna, "Mehl")
-    rolls = await create_ingredient(api, anna, "Brötchen", base_unit="piece")
+    flour = await create_item(api, anna, "Mehl")
+    rolls = await create_item(api, anna, "Brötchen", base_unit="piece")
     meal = await create_meal(
         api, anna, "Brot", ingredients=[amount(flour, 2, "tbsp"), amount(flour), amount(rolls, 2)]
     )
@@ -1169,11 +1169,11 @@ async def test_lists_being_shopped_and_done_lists_do_not_count(
 ) -> None:
     """LIST-11, D-08: their linked extra items keep the base unit they copied when shopping
     started, so a base-unit change neither asks about them nor changes them."""
-    eggs = await create_ingredient(api, anna, "Eier")
+    eggs = await create_item(api, anna, "Eier")
     shopping, done = await create_list(api, anna, "Einkauf"), await create_list(api, anna, "Fertig")
     for shopping_list, grams in ((shopping, 500), (done, 250)):
         await extra_added(
-            api, anna, shopping_list["id"], ingredient_id=eggs["id"], amount=grams, unit="g"
+            api, anna, shopping_list["id"], item_id=eggs["id"], amount=grams, unit="g"
         )
         await start_shopping(api, anna, shopping_list["id"])
     await set_status(app, done["id"], "done")
@@ -1189,7 +1189,7 @@ async def test_lists_being_shopped_and_done_lists_do_not_count(
 
 
 async def test_invalid_updates(api: AsyncClient, anna: Account) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
+    apples = await create_item(api, anna, "Äpfel")
     response = await patch(api, anna, apples["id"], name="", nutrients={"fat": 101})
     assert fields(response) == {
         ("body", "name"): "too_short",
@@ -1200,7 +1200,7 @@ async def test_invalid_updates(api: AsyncClient, anna: Account) -> None:
 async def test_null_is_refused_for_required_fields(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
+    apples = await create_item(api, anna, "Äpfel")
     clock.advance(minutes=1)
     response = await patch(api, ben, apples["id"], name=None, category_id=None, base_unit=None)
     assert response.status_code == 422
@@ -1219,7 +1219,7 @@ async def test_null_is_refused_for_required_fields(
 async def test_an_empty_update_only_records_the_editor(
     api: AsyncClient, anna: Account, ben: Account, clock: FakeClock
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel", base_unit="piece", piece_weight_g=180)
+    apples = await create_item(api, anna, "Äpfel", base_unit="piece", piece_weight_g=180)
     clock.advance(minutes=1)
     body = (await patch(api, ben, apples["id"])).json()
     changed = {"updated_by": None, "updated_at": None}
@@ -1231,7 +1231,7 @@ async def test_an_empty_update_only_records_the_editor(
 async def test_deleted_creator(
     app: FastAPI, api: AsyncClient, anna: Account, ben: Account, admin: Account
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel", base_unit="piece")
+    apples = await create_item(api, anna, "Äpfel", base_unit="piece")
     await patch(api, ben, apples["id"], piece_weight_g=180)
     assert (
         await api.delete(f"/api/admin/users/{anna.id}", headers=admin.headers)
@@ -1245,23 +1245,21 @@ async def test_deleted_creator(
 
 
 async def test_usage(api: AsyncClient, anna: Account, ben: Account) -> None:
-    rice = await create_ingredient(api, anna, "Reis")
-    rows = [{"ingredient_id": rice["id"], "amount": 100, "unit": "g"}] * 2
+    rice = await create_item(api, anna, "Reis")
+    rows = [{"item_id": rice["id"], "amount": 100, "unit": "g"}] * 2
     await create_meal(api, anna, "Risotto", ingredients=rows)
     await create_meal(api, ben, "Reispfanne", ingredients=rows[:1])
     shopping_list = await create_list(api, anna)
-    await extra_added(api, anna, shopping_list["id"], ingredient_id=rice["id"])
+    await extra_added(api, anna, shopping_list["id"], item_id=rice["id"])
     assert (await get(api, ben, rice["id"]))["usage"] == {"meals": 2, "lists": 1}
 
 
 # --- merge and delete (ING-05, admins) ---------------------------------------------------------
 
 
-async def merge(
-    api: AsyncClient, user: Account, ingredient_id: str, into_id: str, **body: Any
-) -> Any:
+async def merge(api: AsyncClient, user: Account, item_id: str, into_id: str, **body: Any) -> Any:
     return await api.post(
-        f"/api/admin/ingredients/{ingredient_id}/merge",
+        f"/api/admin/items/{item_id}/merge",
         json={"into_id": into_id, **body},
         headers=user.headers,
     )
@@ -1286,8 +1284,8 @@ async def test_merge(
         calls.append((from_id, into_id))
 
     monkeypatch.setattr(hooks, "on_items_merged", on_items_merged)
-    duplicate = await create_ingredient(api, anna, "Paradeiser", nutrients={"kcal": 20})
-    tomatoes = await create_ingredient(api, anna, "Tomaten", piece_weight_g=100, base_unit="piece")
+    duplicate = await create_item(api, anna, "Paradeiser", nutrients={"kcal": 20})
+    tomatoes = await create_item(api, anna, "Tomaten", piece_weight_g=100, base_unit="piece")
     clock.advance(minutes=10)
 
     response = await merge(api, admin, duplicate["id"], tomatoes["id"])
@@ -1301,7 +1299,7 @@ async def test_merge(
     assert body["updated_at"] == "2026-09-27T12:10:00Z"
     assert calls == [(duplicate["id"], tomatoes["id"])]
     assert await scalars(app, select(Item.name)) == ["Tomaten"]
-    missing = await api.get(f"/api/ingredients/{duplicate['id']}", headers=anna.headers)
+    missing = await api.get(f"/api/items/{duplicate['id']}", headers=anna.headers)
     assert missing.status_code == 404
     assert await events(api, admin) == [
         ("ingredient.merge", {"from_name": "Paradeiser", "into_name": "Tomaten"})
@@ -1312,23 +1310,21 @@ async def test_merge_moves_the_barcode_to_a_target_without_one(
     api: AsyncClient, anna: Account, admin: Account
 ) -> None:
     scanned = await create_from_off(api, anna, "Nudeln", EAN_13, brand="Barilla")
-    generic = await create_ingredient(api, anna, "Spaghetti")
+    generic = await create_item(api, anna, "Spaghetti")
 
     body = (await merge(api, admin, scanned["id"], generic["id"])).json()
 
     # Only the barcode moves: the target's values and source stay.
     assert (body["barcode"], body["brand"], body["source"]) == (EAN_13, None, "manual")
-    lookup = await api.get(
-        "/api/ingredients/lookup", params={"barcode": EAN_13}, headers=anna.headers
-    )
-    assert lookup.json()["ingredient"]["id"] == generic["id"]
+    lookup = await api.get("/api/items/lookup", params={"barcode": EAN_13}, headers=anna.headers)
+    assert lookup.json()["item"]["id"] == generic["id"]
 
 
 async def test_merge_drops_the_barcode_when_the_target_has_one(
     app: FastAPI, api: AsyncClient, anna: Account, admin: Account
 ) -> None:
-    first = await create_ingredient(api, anna, "Nudeln", barcode=EAN_13)
-    second = await create_ingredient(api, anna, "Spaghetti", barcode=EAN_8)
+    first = await create_item(api, anna, "Nudeln", barcode=EAN_13)
+    second = await create_item(api, anna, "Spaghetti", barcode=EAN_8)
 
     body = (await merge(api, admin, first["id"], second["id"])).json()
 
@@ -1337,7 +1333,7 @@ async def test_merge_drops_the_barcode_when_the_target_has_one(
 
 
 async def test_invalid_merges(api: AsyncClient, anna: Account, admin: Account) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
+    apples = await create_item(api, anna, "Äpfel")
 
     itself = await merge(api, admin, apples["id"], apples["id"])
     assert fields(itself) == {("body", "into_id"): "invalid"}
@@ -1347,34 +1343,34 @@ async def test_invalid_merges(api: AsyncClient, anna: Account, admin: Account) -
     assert unknown_source.status_code == 404
     assert error(unknown_source) == "common.not_found"
     missing = await api.post(
-        f"/api/admin/ingredients/{apples['id']}/merge", json={}, headers=admin.headers
+        f"/api/admin/items/{apples['id']}/merge", json={}, headers=admin.headers
     )
     assert fields(missing) == {("body", "into_id"): "required"}
 
 
 async def test_delete(app: FastAPI, api: AsyncClient, anna: Account, admin: Account) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel", barcode=EAN_13)
+    apples = await create_item(api, anna, "Äpfel", barcode=EAN_13)
 
-    response = await api.delete(f"/api/admin/ingredients/{apples['id']}", headers=admin.headers)
+    response = await api.delete(f"/api/admin/items/{apples['id']}", headers=admin.headers)
 
     assert response.status_code == 204
     assert await scalars(app, select(Item.id)) == []
     assert await events(api, admin) == [("ingredient.delete", {"name": "Äpfel"})]
-    again = await api.delete(f"/api/admin/ingredients/{apples['id']}", headers=admin.headers)
+    again = await api.delete(f"/api/admin/items/{apples['id']}", headers=admin.headers)
     assert again.status_code == 404
 
 
 async def test_ingredients_in_use_are_not_deleted(
     app: FastAPI, api: AsyncClient, anna: Account, ben: Account, admin: Account
 ) -> None:
-    rice = await create_ingredient(api, anna, "Reis")
-    rows = [{"ingredient_id": rice["id"], "amount": 100, "unit": "g"}] * 2
+    rice = await create_item(api, anna, "Reis")
+    rows = [{"item_id": rice["id"], "amount": 100, "unit": "g"}] * 2
     await create_meal(api, anna, "Risotto", ingredients=rows)
     await create_meal(api, ben, "Reispfanne", ingredients=rows[:1])
 
-    response = await api.delete(f"/api/admin/ingredients/{rice['id']}", headers=admin.headers)
+    response = await api.delete(f"/api/admin/items/{rice['id']}", headers=admin.headers)
     assert response.status_code == 409
-    assert error(response) == "ingredient.in_use"
+    assert error(response) == "item.in_use"
     assert response.json()["params"] == {"meals": 2, "lists": 0}
     assert len(await scalars(app, select(Item.id))) == 1
     assert await scalars(app, select(AdminEvent.id)) == []
@@ -1383,29 +1379,28 @@ async def test_ingredients_in_use_are_not_deleted(
 async def test_merging_moves_meal_rows_and_list_lines(
     api: AsyncClient, anna: Account, admin: Account
 ) -> None:
-    duplicate = await create_ingredient(api, anna, "Paradeiser")
-    tomatoes = await create_ingredient(api, anna, "Tomaten", base_unit="piece")
-    salt = await create_ingredient(api, anna, "Salz")
+    duplicate = await create_item(api, anna, "Paradeiser")
+    tomatoes = await create_item(api, anna, "Tomaten", base_unit="piece")
+    salt = await create_item(api, anna, "Salz")
     meal = await create_meal(
         api,
         anna,
         "Salat",
         ingredients=[
-            {"ingredient_id": tomatoes["id"], "amount": 2, "unit": "piece"},
-            {"ingredient_id": salt["id"]},
-            {"ingredient_id": duplicate["id"], "amount": 200, "unit": "g"},
+            {"item_id": tomatoes["id"], "amount": 2, "unit": "piece"},
+            {"item_id": salt["id"]},
+            {"item_id": duplicate["id"], "amount": 200, "unit": "g"},
         ],
     )
     shopping_list = await create_list(api, anna)
-    await extra_added(api, anna, shopping_list["id"], ingredient_id=duplicate["id"])
+    await extra_added(api, anna, shopping_list["id"], item_id=duplicate["id"])
 
     response = await merge(api, admin, duplicate["id"], tomatoes["id"], accept_unit_mismatch=True)
     assert response.status_code == 200, response.text
 
     response = await api.get(f"/api/meals/{meal['id']}", headers=anna.headers)
     rows = [
-        (row["id"], row["ingredient"]["id"], row["unit_fits"])
-        for row in response.json()["ingredients"]
+        (row["id"], row["item"]["id"], row["unit_fits"]) for row in response.json()["ingredients"]
     ]
     # Nothing is converted: 200 g of the merged ingredient don't fit Tomaten (D-33).
     assert rows == [
@@ -1424,11 +1419,11 @@ async def test_a_merge_across_base_units_names_the_amounts_that_wont_fit(
     drafts) that won't fit the ingredient that stays, those that didn't fit the duplicate
     either included. Nothing is merged until the request accepts that, and then nothing is
     converted."""
-    duplicate = await create_ingredient(api, anna, "Ei", base_unit="ml")
+    duplicate = await create_item(api, anna, "Ei", base_unit="ml")
     old = await create_meal(api, anna, "Eierlikör", ingredients=[amount(duplicate, 100, "ml")])
     # Counted in grams since, so its millilitres don't fit (D-33).
     await set_stored(app, duplicate["id"], base_unit="g")
-    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    eggs = await create_item(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
     omelette = await create_meal(
         api,
         anna,
@@ -1441,12 +1436,12 @@ async def test_a_merge_across_base_units_names_the_amounts_that_wont_fit(
         ],
     )
     draft = await create_list(api, anna)
-    await extra_added(api, anna, draft["id"], ingredient_id=duplicate["id"], amount=0.5, unit="kg")
+    await extra_added(api, anna, draft["id"], item_id=duplicate["id"], amount=0.5, unit="kg")
 
     response = await merge(api, admin, duplicate["id"], eggs["id"])
 
     assert response.status_code == 409
-    assert error(response) == "ingredient.unit_mismatch"
+    assert error(response) == "item.unit_mismatch"
     assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
     assert sorted(await scalars(app, select(Item.name))) == ["Ei", "Eier"]
     assert await events(api, admin) == []
@@ -1470,10 +1465,10 @@ async def test_a_merge_with_nothing_that_wont_fit_asks_nothing(
 ) -> None:
     """Spoons fit g and ml alike and a row without an amount fits every base unit; within one
     base unit, amounts that don't fit already (D-33) only stay flagged."""
-    sugar = await create_ingredient(api, anna, "Zucker")
-    syrup = await create_ingredient(api, anna, "Zuckersirup", base_unit="ml")
-    duplicate = await create_ingredient(api, anna, "Paradeiser", base_unit="piece")
-    tomatoes = await create_ingredient(api, anna, "Tomaten")
+    sugar = await create_item(api, anna, "Zucker")
+    syrup = await create_item(api, anna, "Zuckersirup", base_unit="ml")
+    duplicate = await create_item(api, anna, "Paradeiser", base_unit="piece")
+    tomatoes = await create_item(api, anna, "Tomaten")
     tea = await create_meal(api, anna, "Tee", ingredients=[amount(sugar, 2, "tbsp"), amount(sugar)])
     salad = await create_meal(api, anna, "Salat", ingredients=[amount(duplicate, 2)])
     await set_stored(app, duplicate["id"], base_unit="g")
@@ -1492,13 +1487,31 @@ async def test_a_merge_with_nothing_that_wont_fit_asks_nothing(
 async def test_only_admins_merge_and_delete(
     app: FastAPI, api: AsyncClient, anna: Account, method: str, suffix: str, body: Any
 ) -> None:
-    apples = await create_ingredient(api, anna, "Äpfel")
-    pears = await create_ingredient(api, anna, "Birnen")
+    apples = await create_item(api, anna, "Äpfel")
+    pears = await create_item(api, anna, "Birnen")
     if body is not None:
         body = {"into_id": pears["id"]}
     response = await api.request(
-        method, f"/api/admin/ingredients/{apples['id']}{suffix}", json=body, headers=anna.headers
+        method, f"/api/admin/items/{apples['id']}{suffix}", json=body, headers=anna.headers
     )
     assert response.status_code == 403
     assert error(response) == "common.forbidden"
     assert len(await scalars(app, select(Item.id))) == 2
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/ingredients"),
+        ("POST", "/api/ingredients"),
+        ("GET", "/api/ingredients/lookup"),
+        ("POST", "/api/admin/ingredients/x/merge"),
+    ],
+)
+async def test_the_ingredients_paths_are_gone(
+    api: AsyncClient, anna: Account, method: str, path: str
+) -> None:
+    """The items endpoints replaced them; frontend and backend ship together (#171)."""
+    response = await api.request(method, path, headers=anna.headers)
+
+    assert response.status_code == 404

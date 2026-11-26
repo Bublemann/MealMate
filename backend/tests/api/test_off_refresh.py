@@ -20,11 +20,11 @@ from sqlalchemy.exc import OperationalError
 from app.core.ratelimit import SlidingWindow
 from app.db.session import Database
 from app.models import Item as ItemRow
-from app.schemas.ingredients import Ingredient
+from app.schemas.items import Item
 from app.services import off_refresh
 from app.services.off_refresh import OffRefresher, Outcome
 from tests.accounts import Account, FakeClock, error, login, make_user
-from tests.catalog import EAN_13, create_from_off, create_ingredient, set_stored
+from tests.catalog import EAN_13, create_from_off, create_item, set_stored
 from tests.off import (
     MILK,
     OATS,
@@ -88,11 +88,11 @@ def the_refresher(app: FastAPI) -> OffRefresher:
     return refresher_
 
 
-async def refresh(app: FastAPI, clock: FakeClock, ingredient_id: str, **options: Any) -> Outcome:
+async def refresh(app: FastAPI, clock: FakeClock, item_id: str, **options: Any) -> Outcome:
     return await off_refresh.refresh_item(
         database(app),
         the_refresher(app).off,
-        ingredient_id,
+        item_id,
         now=clock.now,
         max_wait=options.pop("max_wait", None),
         **options,
@@ -106,8 +106,8 @@ async def later(api: AsyncClient, clock: FakeClock, *users: Account, **delta: fl
         await login(api, user)
 
 
-async def get(api: AsyncClient, user: Account, ingredient_id: str) -> Any:
-    response = await api.get(f"/api/ingredients/{ingredient_id}", headers=user.headers)
+async def get(api: AsyncClient, user: Account, item_id: str) -> Any:
+    response = await api.get(f"/api/items/{item_id}", headers=user.headers)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -261,7 +261,7 @@ async def test_a_pack_size_a_user_changed_becomes_a_pending_update(
     ]
 
     applied = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/apply", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/apply", headers=anna.headers
     )
 
     body = applied.json()
@@ -283,7 +283,7 @@ async def test_an_ignored_pack_size_stays(
     product = await corrected_pack_size(app, api, anna, off_api, clock)
 
     ignored = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/ignore", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/ignore", headers=anna.headers
     )
 
     body = ignored.json()
@@ -325,7 +325,7 @@ async def test_pack_marks_from_before_d38_count_again(
         assert row.user_edited_fields == marks
     # Applied, the pack size is Open Food Facts' again, whichever field was marked.
     applied = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/apply", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/apply", headers=anna.headers
     )
     assert applied.json()["quantity_text"] == "1 kg"
     assert applied.json()["user_edited_fields"] == []
@@ -456,7 +456,7 @@ async def test_busy_and_skipped(
     clock: FakeClock,
 ) -> None:
     product = await saved_oats(api, anna, edited=[])
-    manual = await create_ingredient(api, anna, "Hafer", barcode=EAN_13)
+    manual = await create_item(api, anna, "Hafer", barcode=EAN_13)
     app.state.off_refresh = refresher(SlidingWindow(1, clock=clock.monotonic))
     the_refresher(app).off.rate_limit.reserve(max_wait=None)
 
@@ -569,7 +569,7 @@ async def test_apply(
     clock.advance(minutes=5)
 
     response = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/apply", headers=ben.headers
+        f"/api/items/{product['id']}/pending-update/apply", headers=ben.headers
     )
 
     assert response.status_code == 200
@@ -595,7 +595,7 @@ async def test_ignore(
     product = await pending_product(app, api, anna, off_api, clock)
 
     response = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/ignore", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/ignore", headers=anna.headers
     )
 
     assert response.status_code == 200
@@ -634,7 +634,7 @@ async def test_ignore_without_an_open_food_facts_version(
     route(off_api, OATS).respond(json=product_response(OATS, **unversioned))
     assert await refresh(app, clock, product["id"]) == Outcome.PENDING
     assert (await get(api, anna, product["id"]))["pending_update"]["off_last_modified_at"] is None
-    path = f"/api/ingredients/{product['id']}/pending-update"
+    path = f"/api/items/{product['id']}/pending-update"
 
     ignored = await api.post(f"{path}/ignore", headers=anna.headers)
 
@@ -644,9 +644,7 @@ async def test_ignore_without_an_open_food_facts_version(
     assert (await get(api, anna, product["id"]))["pending_update"] is None
     assert (await api.post(f"{path}/ignore", headers=anna.headers)).status_code == 409
     # Editing another field keeps what was ignored.
-    await api.patch(
-        f"/api/ingredients/{product['id']}", json={"name": "Flocken"}, headers=anna.headers
-    )
+    await api.patch(f"/api/items/{product['id']}", json={"name": "Flocken"}, headers=anna.headers)
     assert await refresh(app, clock, product["id"]) == Outcome.UNCHANGED
     # A new value for one field comes back, the ignored one for the other does not.
     unversioned["nutriments"] = {**unversioned["nutriments"], "energy-kcal_100g": 150}
@@ -667,11 +665,11 @@ async def test_nothing_pending(api: AsyncClient, anna: Account, action: str) -> 
     product = await saved_oats(api, anna, edited=["name"])
 
     response = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/{action}", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/{action}", headers=anna.headers
     )
     assert response.status_code == 409
-    assert error(response) == "ingredient.no_pending_update"
-    missing = await api.post(f"/api/ingredients/nope/pending-update/{action}", headers=anna.headers)
+    assert error(response) == "item.no_pending_update"
+    missing = await api.post(f"/api/items/nope/pending-update/{action}", headers=anna.headers)
     assert missing.status_code == 404
 
 
@@ -685,7 +683,7 @@ async def test_editing_a_field_settles_its_pending_value(
     product = await pending_product(app, api, anna, off_api, clock)
 
     changed = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"name": "Flocken"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"name": "Flocken"}, headers=anna.headers
     )
 
     assert changed.json()["pending_update"]["fields"] == [
@@ -693,16 +691,16 @@ async def test_editing_a_field_settles_its_pending_value(
     ]
     # Counted in pieces, the values are still per 100 g: the pending ones stay (ING-02).
     in_pieces = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
     )
     assert in_pieces.json()["pending_update"] == changed.json()["pending_update"]
     # Another basis settles every pending nutrient (they were per 100 g).
     rebased = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )
     assert rebased.json()["pending_update"] is None
     same = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )
     assert same.status_code == 200
 
@@ -742,16 +740,16 @@ async def test_scanning_refreshes_a_stale_ingredient(
     clock: FakeClock,
 ) -> None:
     product = await saved_oats(api, anna, edited=[])
-    manual = await create_ingredient(api, anna, "Hafer", barcode=EAN_13)  # never refreshed
+    manual = await create_item(api, anna, "Hafer", barcode=EAN_13)  # never refreshed
     request = route(off_api, OATS).respond(json=oats(brands="Neu"))
     await later(api, clock, anna, days=31)
 
     for barcode in (EAN_13, OATS):
         scanned = await api.get(
-            "/api/ingredients/lookup", params={"barcode": barcode}, headers=anna.headers
+            "/api/items/lookup", params={"barcode": barcode}, headers=anna.headers
         )
         assert scanned.json()["found_in"] == "db"
-    assert scanned.json()["ingredient"]["brand"] == "MealMate Test Kitchen"
+    assert scanned.json()["item"]["brand"] == "MealMate Test Kitchen"
     assert request.call_count == 1
     assert (await get(api, anna, product["id"]))["brand"] == "Neu"
     assert (await get(api, anna, manual["id"]))["fetched_at"] is None
@@ -761,7 +759,7 @@ async def test_scanning_refreshes_a_stale_ingredient(
 async def test_background_refreshes_are_not_repeated_while_running(
     app: FastAPI, api: AsyncClient, anna: Account, clock: FakeClock
 ) -> None:
-    product = Ingredient.model_validate(await saved_oats(api, anna, edited=[]))
+    product = Item.model_validate(await saved_oats(api, anna, edited=[]))
     refresher_ = the_refresher(app)
     later = clock.now + timedelta(days=31)
     background = BackgroundTasks()
@@ -797,7 +795,7 @@ async def test_background_failures_are_logged(
         for record in caplog.records
         if record.message == "background refresh from open food facts failed"
     ]
-    assert (record.__dict__["ingredient_id"], record.__dict__["error"]) == (
+    assert (record.__dict__["item_id"], record.__dict__["error"]) == (
         product["id"],
         "RuntimeError",
     )
@@ -891,7 +889,7 @@ async def test_refresh_stale_oldest_first(
     older = await saved_oats(api, anna, edited=[])
     await later(api, clock, anna, days=5)
     newer = await saved_milk(api, anna)
-    await create_ingredient(api, anna, "Hafer", barcode=EAN_13)
+    await create_item(api, anna, "Hafer", barcode=EAN_13)
     never = await saved_milk(api, anna, "2000000000039")
     async with database(app).write_sessions() as session, session.begin():
         await session.execute(
@@ -956,9 +954,9 @@ async def test_the_job_goes_on_after_an_error(
     [record] = [
         record
         for record in caplog.records
-        if record.message == "refreshing an ingredient from open food facts failed"
+        if record.message == "refreshing an item from open food facts failed"
     ]
-    assert (record.__dict__["ingredient_id"], record.__dict__["error"]) == (
+    assert (record.__dict__["item_id"], record.__dict__["error"]) == (
         failing["id"],
         "OperationalError",
     )

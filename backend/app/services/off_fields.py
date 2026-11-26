@@ -21,7 +21,7 @@ from typing import Any
 from app.domain.catalog import OFF_FIELDS, PACK_AMOUNT_FIELDS, nutrient_field, pack_amount
 from app.domain.text import normalize, sort_key
 from app.models import Item as ItemRow
-from app.schemas.ingredients import PendingUpdate, PendingUpdateField
+from app.schemas.items import PendingUpdate, PendingUpdateField
 
 _NUTRIENT_PREFIX = nutrient_field("")
 # Marks a `pending_update` entry the user ignored while its Open Food Facts version was unknown.

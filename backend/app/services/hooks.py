@@ -127,7 +127,7 @@ async def on_meal_deleted(session: AsyncSession, meal_id: str, *, now: datetime)
 
 async def item_references(session: AsyncSession, item_id: str) -> dict[str, int]:
     """References to an item, counted per kind: its usage on the detail page; any of them
-    blocks deleting it (ING-05) and is reported in the `ingredient.in_use` params.
+    blocks deleting it (ING-05) and is reported in the `item.in_use` params.
 
     - `meals`: the meals with rows (`meal_ingredients`) of this item;
     - `lists`: the lists with frozen rows (`list_meal_ingredients`) or linked extra items that

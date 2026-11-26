@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api/client';
 import type { components } from '@/api/generated/schema';
-import { INGREDIENTS_KEY } from '@/features/ingredients/api';
+import { ITEMS_KEY } from '@/features/items/api';
 import { LISTS_KEY } from '@/features/lists/keys';
 import { SYSTEM_KEY } from '@/features/me/api';
 import { CATEGORIES_KEY, type Category } from '@/features/reference/api';
@@ -204,14 +204,14 @@ export function useCategoryUsage(categoryId: string, { enabled }: { enabled: boo
         }),
       ),
     enabled,
-    // The counts change whenever someone edits an ingredient or a list.
+    // The counts change whenever someone edits an item or a list.
     staleTime: 0,
   });
 }
 
 /**
- * REF-01: deletes a category. Its ingredients move to *Uncategorized* and its free-text items on
- * drafts to *Other*, so the categories, the ingredients and the lists are loaded again. Until the
+ * REF-01: deletes a category. Its items move to *Uncategorized* and its free-text items on
+ * drafts to *Other*, so the categories, the items and the lists are loaded again. Until the
  * categories are back, the cached one is marked as deleted: lists being shopped and done lists
  * still name it (D-30), but pickers and the order no longer offer it.
  */
@@ -233,7 +233,7 @@ export function useDeleteCategory(categoryId: string) {
           existing.id === categoryId ? { ...existing, deleted: true } : existing,
         ),
       );
-      for (const queryKey of [CATEGORIES_KEY, INGREDIENTS_KEY, LISTS_KEY, EVENTS_KEY]) {
+      for (const queryKey of [CATEGORIES_KEY, ITEMS_KEY, LISTS_KEY, EVENTS_KEY]) {
         void queryClient.invalidateQueries({ queryKey });
       }
     },

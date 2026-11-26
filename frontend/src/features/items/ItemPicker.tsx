@@ -7,18 +7,18 @@ import { Label } from '@/components/ui/label';
 import { useCategories } from '@/features/reference/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
-import { toSummary, useIngredients, type IngredientSummary } from './api';
-import { IngredientCategoryUnit } from './IngredientCategoryUnit';
-import { IngredientFormDialog } from './IngredientFormDialog';
-import { IngredientName } from './IngredientName';
+import { toSummary, useItems, type ItemSummary } from './api';
+import { ItemCategoryUnit } from './ItemCategoryUnit';
+import { ItemFormDialog } from './ItemFormDialog';
+import { ItemName } from './ItemName';
 
 /** More matches than this are left out: the search narrows them down. */
 const MAX_RESULTS = 50;
 
-interface IngredientPickerProps {
-  /** Called with the chosen ingredient, also with one just created here. */
-  onSelect: (ingredient: IngredientSummary) => void;
-  /** Ingredients that can't be chosen (e.g. the one being merged). */
+interface ItemPickerProps {
+  /** Called with the chosen item, also with one just created here. */
+  onSelect: (item: ItemSummary) => void;
+  /** Items that can't be chosen (e.g. the one being merged). */
   excludeIds?: readonly string[];
   /** The search field's label (default "Search ingredient"). */
   label?: string;
@@ -27,16 +27,16 @@ interface IngredientPickerProps {
 }
 
 /**
- * Search (name and brand) and pick an ingredient, or create it inline with the full ingredient
+ * Search (name and brand) and pick an item, or create it inline with the full item
  * form, which can also fill it from Open Food Facts (ING-03). Reused by meals and lists. The
  * results are a list of buttons: Tab or the arrow keys move through them, Enter or Space picks.
  */
-export function IngredientPicker({
+export function ItemPicker({
   onSelect,
   excludeIds = [],
   label,
   allowCreate = true,
-}: IngredientPickerProps) {
+}: ItemPickerProps) {
   const { t } = useTranslation();
   const inputId = useId();
   const listRef = useRef<HTMLUListElement>(null);
@@ -45,14 +45,14 @@ export function IngredientPicker({
   const typed = query.trim();
   const debounced = useDebouncedValue(typed);
   const searching = debounced !== '';
-  const results = useIngredients(debounced, { enabled: searching });
+  const results = useItems(debounced, { enabled: searching });
   const categories = useCategories();
   // Only the answer for the text in the field: an earlier text's results, kept while the debounce
   // runs or the search loads, would vanish under the finger when the answer lands (MEAL-03).
   const answer =
     searching && debounced === typed && !results.isPlaceholderData ? results.data : undefined;
   const matches = (answer ?? [])
-    .filter((ingredient) => !excludeIds.includes(ingredient.id))
+    .filter((item) => !excludeIds.includes(item.id))
     .slice(0, MAX_RESULTS);
 
   function options(): HTMLButtonElement[] {
@@ -76,9 +76,9 @@ export function IngredientPicker({
   }
 
   return (
-    <div data-testid={testIds.ingredientPicker} className="flex flex-col gap-3">
+    <div data-testid={testIds.itemPicker} className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <Label htmlFor={inputId}>{label ?? t('ingredients.picker.label')}</Label>
+        <Label htmlFor={inputId}>{label ?? t('items.picker.label')}</Label>
         <Input
           id={inputId}
           type="search"
@@ -95,7 +95,7 @@ export function IngredientPicker({
         // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
         <ul
           ref={listRef}
-          aria-label={t('ingredients.picker.results')}
+          aria-label={t('items.picker.results')}
           onKeyDown={onListKeyDown}
           className="flex flex-col divide-y rounded-lg border"
         >
@@ -103,43 +103,40 @@ export function IngredientPicker({
             <li>
               <button
                 type="button"
-                data-testid={testIds.ingredientPickerCreate}
+                data-testid={testIds.itemPickerCreate}
                 onClick={() => setCreating(true)}
                 className="flex min-h-(--tap-target) w-full items-center gap-2 px-3 py-2 text-left font-medium text-primary outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
               >
                 <Plus aria-hidden="true" className="size-5 shrink-0" />
-                {t('ingredients.createNamed', { name: typed })}
+                {t('items.createNamed', { name: typed })}
               </button>
             </li>
           )}
-          {matches.map((ingredient) => (
-            <li key={ingredient.id}>
+          {matches.map((item) => (
+            <li key={item.id}>
               <button
                 type="button"
-                onClick={() => onSelect(ingredient)}
+                onClick={() => onSelect(item)}
                 className="flex min-h-(--tap-target) w-full flex-col items-start px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset"
               >
-                <IngredientName ingredient={ingredient} />
-                <IngredientCategoryUnit
-                  ingredient={ingredient}
-                  categories={categories.data ?? []}
-                />
+                <ItemName item={item} />
+                <ItemCategoryUnit item={item} categories={categories.data ?? []} />
               </button>
             </li>
           ))}
         </ul>
       )}
       <p aria-live="polite" className="text-sm text-muted-foreground">
-        {!typed && t('ingredients.picker.typeToSearch')}
-        {answer && matches.length === 0 && t('ingredients.picker.noResults')}
+        {!typed && t('items.picker.typeToSearch')}
+        {answer && matches.length === 0 && t('items.picker.noResults')}
       </p>
       <ErrorAlert error={results.error} />
       {allowCreate && (
-        <IngredientFormDialog
+        <ItemFormDialog
           open={creating}
           onOpenChange={setCreating}
           initialName={typed}
-          onSaved={(ingredient) => onSelect(toSummary(ingredient))}
+          onSaved={(item) => onSelect(toSummary(item))}
           onPickExisting={onSelect}
         />
       )}

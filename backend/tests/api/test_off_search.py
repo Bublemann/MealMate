@@ -13,7 +13,7 @@ from httpx import AsyncClient
 from app.core.ratelimit import SlidingWindow
 from app.services.off_search import SearchAnswer, SearchCache
 from tests.accounts import Account, FakeClock, error, fields, make_user
-from tests.catalog import create_ingredient
+from tests.catalog import create_item
 from tests.off import (
     MILK,
     OATS,
@@ -55,9 +55,7 @@ async def ben(app: FastAPI, api: AsyncClient) -> Account:
 
 
 async def search(api: AsyncClient, user: Account, q: str, **params: Any) -> httpx.Response:
-    return await api.get(
-        "/api/ingredients/off-search", params={"q": q, **params}, headers=user.headers
-    )
+    return await api.get("/api/items/off-search", params={"q": q, **params}, headers=user.headers)
 
 
 @pytest.mark.parametrize(
@@ -79,7 +77,7 @@ async def test_the_query_is_checked_first(
     loc: tuple[str, ...],
     code: str,
 ) -> None:
-    response = await api.get("/api/ingredients/off-search", params=params, headers=anna.headers)
+    response = await api.get("/api/items/off-search", params=params, headers=anna.headers)
     assert response.status_code == 422
     assert fields(response) == {loc: code}
     assert not off_api.calls
@@ -119,7 +117,7 @@ async def test_results_are_proposals_like_a_scan(
                     "off_last_modified_at": "2026-01-01T00:00:00Z",
                 },
                 "in_mealmate": False,
-                "ingredient": None,
+                "item": None,
             },
             {
                 "proposal": {
@@ -139,7 +137,7 @@ async def test_results_are_proposals_like_a_scan(
                     "off_last_modified_at": None,
                 },
                 "in_mealmate": False,
-                "ingredient": None,
+                "item": None,
             },
         ],
         "has_more": False,
@@ -180,12 +178,12 @@ async def test_products_are_cleaned_and_those_without_a_barcode_left_out(
 async def test_products_already_in_mealmate_are_flagged(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    known = await create_ingredient(api, anna, "Milch", brand="Weihenstephan", barcode=MILK)
+    known = await create_item(api, anna, "Milch", brand="Weihenstephan", barcode=MILK)
     search_route(off_api).respond(json=search_response(OATS_PRODUCT, MILK_PRODUCT))
 
     results = (await search(api, anna, "milch")).json()["results"]
 
-    assert [(item["in_mealmate"], item["ingredient"]) for item in results] == [
+    assert [(item["in_mealmate"], item["item"]) for item in results] == [
         (False, None),
         (
             True,
@@ -237,7 +235,7 @@ async def test_a_known_product_is_flagged_also_from_the_cache(
 ) -> None:
     search_route(off_api).respond(json=search_response(OATS_PRODUCT))
     assert (await search(api, anna, "hafer")).json()["results"][0]["in_mealmate"] is False
-    await create_ingredient(api, anna, "Haferflocken", barcode=OATS)
+    await create_item(api, anna, "Haferflocken", barcode=OATS)
     assert (await search(api, anna, "hafer")).json()["results"][0]["in_mealmate"] is True
 
 

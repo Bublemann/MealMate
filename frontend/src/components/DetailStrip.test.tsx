@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { Me } from '@/features/auth/storage';
 import { heldRoute, mockApi, TEST_ADMIN } from '@/test/api';
-import { APPLES, expectInPageOrder, REFERENCE_ROUTES } from '@/test/ingredients';
+import { APPLES, expectInPageOrder, REFERENCE_ROUTES } from '@/test/items';
 import { LIST_ID, LIST_ROUTES, listDetail } from '@/test/lists';
 import { meal, MEAL_ROUTES } from '@/test/meals';
 import { renderApp } from '@/test/render';
@@ -86,13 +86,13 @@ const SCREENS: DetailScreen[] = [
     path: `/ingredients/${APPLES.id}`,
     routes: {
       ...REFERENCE_ROUTES,
-      [`GET /api/ingredients/${APPLES.id}`]: APPLES,
-      'GET /api/ingredients': [],
+      [`GET /api/items/${APPLES.id}`]: APPLES,
+      'GET /api/items': [],
     },
     title: 'Äpfel',
     back: 'All ingredients',
     to: '/ingredients',
-    parent: testIds.screenIngredients,
+    parent: testIds.screenItems,
     actions: true,
   },
   {

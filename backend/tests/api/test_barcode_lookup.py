@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app.core.ratelimit import SlidingWindow
 from app.models import Item as ItemRow
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
-from tests.catalog import NO_NUTRIENTS, UPC_A, create_from_off, create_ingredient, ref
+from tests.catalog import NO_NUTRIENTS, UPC_A, create_from_off, create_item, ref
 from tests.off import (
     MILK,
     OATS,
@@ -52,16 +52,14 @@ async def ben(app: FastAPI, api: AsyncClient) -> Account:
 
 
 async def lookup(api: AsyncClient, user: Account, barcode: str) -> httpx.Response:
-    return await api.get(
-        "/api/ingredients/lookup", params={"barcode": barcode}, headers=user.headers
-    )
+    return await api.get("/api/items/lookup", params={"barcode": barcode}, headers=user.headers)
 
 
 # --- lookup (BAR-02, BAR-03) ----------------------------------------------------------------------
 
 
 async def test_lookup_needs_a_login(api: AsyncClient, off_api: respx.MockRouter) -> None:
-    response = await api.get("/api/ingredients/lookup", params={"barcode": OATS})
+    response = await api.get("/api/items/lookup", params={"barcode": OATS})
     assert response.status_code == 401
 
 
@@ -78,7 +76,7 @@ async def test_lookup_needs_a_login(api: AsyncClient, off_api: respx.MockRouter)
 async def test_lookup_rejects_invalid_barcodes(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter, params: Any, problem: str
 ) -> None:
-    response = await api.get("/api/ingredients/lookup", params=params, headers=anna.headers)
+    response = await api.get("/api/items/lookup", params=params, headers=anna.headers)
 
     assert response.status_code == 422
     assert fields(response) == {("query", "barcode"): problem}
@@ -88,7 +86,7 @@ async def test_lookup_rejects_invalid_barcodes(
 async def test_a_known_barcode_goes_straight_to_its_ingredient(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    oats_ingredient = await create_ingredient(api, anna, "Haferflocken", barcode=UPC_A)
+    oats_ingredient = await create_item(api, anna, "Haferflocken", barcode=UPC_A)
 
     response = await lookup(api, anna, f"0{UPC_A}")
 
@@ -96,7 +94,7 @@ async def test_a_known_barcode_goes_straight_to_its_ingredient(
     assert response.json() == {
         "barcode": f"0{UPC_A}",
         "found_in": "db",
-        "ingredient": oats_ingredient,
+        "item": oats_ingredient,
         "proposal": None,
         "off_unavailable": False,
     }
@@ -108,32 +106,32 @@ async def test_own_only_looks_at_our_ingredients_without_asking_open_food_facts(
 ) -> None:
     """The edit pop-up's scan (BAR-03): a barcode another ingredient has is named, any other one
     is only filled in, so Open Food Facts isn't asked."""
-    oats_ingredient = await create_ingredient(api, anna, "Haferflocken", barcode=UPC_A)
+    oats_ingredient = await create_item(api, anna, "Haferflocken", barcode=UPC_A)
     off = route(off_api, OATS).respond(json=oats())
 
     known = await api.get(
-        "/api/ingredients/lookup",
+        "/api/items/lookup",
         params={"barcode": UPC_A, "own_only": "true"},
         headers=anna.headers,
     )
     unknown = await api.get(
-        "/api/ingredients/lookup",
+        "/api/items/lookup",
         params={"barcode": OATS, "own_only": "true"},
         headers=anna.headers,
     )
     invalid = await api.get(
-        "/api/ingredients/lookup",
+        "/api/items/lookup",
         params={"barcode": "4006381333932", "own_only": "true"},
         headers=anna.headers,
     )
 
     assert known.status_code == 200
-    assert (known.json()["found_in"], known.json()["ingredient"]) == ("db", oats_ingredient)
+    assert (known.json()["found_in"], known.json()["item"]) == ("db", oats_ingredient)
     assert unknown.status_code == 200
     assert unknown.json() == {
         "barcode": OATS,
         "found_in": "none",
-        "ingredient": None,
+        "item": None,
         "proposal": None,
         "off_unavailable": False,
     }
@@ -145,9 +143,9 @@ async def test_own_only_looks_at_our_ingredients_without_asking_open_food_facts(
 async def test_an_open_food_facts_proposal_is_not_saved(
     app: FastAPI, api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    await create_ingredient(api, anna, "Haferflocken")
-    await create_ingredient(api, anna, "Hafer")
-    await create_ingredient(api, anna, "Milch")
+    await create_item(api, anna, "Haferflocken")
+    await create_item(api, anna, "Hafer")
+    await create_item(api, anna, "Milch")
     route(off_api, OATS).respond(json=oats())
 
     response = await lookup(api, anna, OATS)
@@ -157,7 +155,7 @@ async def test_an_open_food_facts_proposal_is_not_saved(
     assert body == {
         "barcode": OATS,
         "found_in": "off",
-        "ingredient": None,
+        "item": None,
         "proposal": {
             "barcode": OATS,
             "name": "Haferflocken",
@@ -196,7 +194,7 @@ async def test_the_proposal_name_follows_the_users_language(
 async def test_a_proposal_without_basis_or_name(
     api: AsyncClient, anna: Account, off_api: respx.MockRouter
 ) -> None:
-    await create_ingredient(api, anna, "Milch", base_unit="ml")
+    await create_item(api, anna, "Milch", base_unit="ml")
     route(off_api, MILK).respond(
         json=product_response(
             MILK,
@@ -282,7 +280,7 @@ async def test_nothing_found(
     assert response.json() == {
         "barcode": UNKNOWN,
         "found_in": "none",
-        "ingredient": None,
+        "item": None,
         "proposal": None,
         "off_unavailable": unavailable,
     }
@@ -431,7 +429,7 @@ async def test_save_a_proposal_in_one_request(
     # Found in our own database from now on (BAR-02); fresh, so not refreshed.
     off_api.reset()
     lookup_again = (await lookup(api, anna, OATS)).json()
-    assert (lookup_again["found_in"], lookup_again["ingredient"]["id"]) == ("db", body["id"])
+    assert (lookup_again["found_in"], lookup_again["item"]["id"]) == ("db", body["id"])
     assert not off_api.calls
 
 
@@ -456,7 +454,7 @@ async def test_save_rejects_invalid_open_food_facts_fields(
     api: AsyncClient, anna: Account, off: dict[str, Any], problem: tuple[str | int, ...]
 ) -> None:
     response = await api.post(
-        "/api/ingredients",
+        "/api/items",
         json={"name": "Haferflocken", "barcode": OATS, "off": off},
         headers=anna.headers,
     )
@@ -475,11 +473,11 @@ async def test_a_scanned_product_is_used_in_a_meal(
         "/api/meals",
         json={
             "name": "Porridge",
-            "ingredients": [{"ingredient_id": oats_ingredient["id"], "amount": 50, "unit": "g"}],
+            "ingredients": [{"item_id": oats_ingredient["id"], "amount": 50, "unit": "g"}],
         },
         headers=anna.headers,
     )
     assert meal.status_code == 201
     body = meal.json()
     assert body["nutrition"]["per_meal"]["kcal"] == pytest.approx(186)
-    assert body["ingredients"][0]["ingredient"]["barcode"] == OATS
+    assert body["ingredients"][0]["item"]["barcode"] == OATS

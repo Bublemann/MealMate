@@ -14,7 +14,7 @@ from sqlalchemy import Connection, event
 from app.db.session import Database
 from app.schemas.lists import ListsSync
 from tests.accounts import Account, FakeClock, error, make_couple, make_user
-from tests.catalog import create_ingredient
+from tests.catalog import create_item
 from tests.lists import (
     added,
     applied,
@@ -47,7 +47,7 @@ async def carl(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl")
+    return await create_item(api, anna, "Mehl")
 
 
 async def sync(api: AsyncClient, user: Account, etag: str | None = None) -> Response:
@@ -82,7 +82,7 @@ async def test_the_lists_you_can_edit_that_are_open(
     draft = await create_list(api, anna, "Entwurf")
     clock.advance(minutes=1)
     being_shopped = await create_list(api, anna, "Einkauf")
-    await extra_added(api, anna, being_shopped["id"], ingredient_id=flour["id"])
+    await extra_added(api, anna, being_shopped["id"], item_id=flour["id"])
     await start_shopping(api, anna, being_shopped["id"])
     clock.advance(minutes=1)
     bens_shared = await create_list(api, ben, "Geteilt")
@@ -95,7 +95,7 @@ async def test_the_lists_you_can_edit_that_are_open(
     carls = await create_list(api, carl, "Öffentlich")  # anna sees it, read-only
     assert (await detail(api, anna, carls["id"]))["can_edit"] is False
     done = await create_list(api, anna, "Fertig")
-    await extra_added(api, anna, done["id"], ingredient_id=flour["id"])
+    await extra_added(api, anna, done["id"], item_id=flour["id"])
     await start_shopping(api, anna, done["id"])
     await applied(api, anna, done["id"], op("list.finish", at=clock.now))
     deleted = await create_list(api, anna, "Weg")
@@ -161,7 +161,7 @@ async def test_the_etag_covers_the_lists_but_not_the_time(
     await make_couple(api, anna, ben)
     shopping_list = await create_list(api, ben)
     list_id = shopping_list["id"]
-    await extra_added(api, ben, list_id, ingredient_id=flour["id"])
+    await extra_added(api, ben, list_id, item_id=flour["id"])
     await start_shopping(api, ben, list_id)
     first = await sync(api, anna)
     etag = first.headers["etag"]
@@ -227,8 +227,8 @@ async def test_one_detail_build_per_list_and_the_cache(
     """Each list costs the queries of one detail build, whatever it holds; lists that did not
     change since they were last read come from the list cache, shared with polling."""
     await make_couple(api, anna, ben)
-    salt = await create_ingredient(api, anna, "Salz")
-    rows = [{"ingredient_id": item["id"], "amount": 10, "unit": "g"} for item in (flour, salt)]
+    salt = await create_item(api, anna, "Salz")
+    rows = [{"item_id": item["id"], "amount": 10, "unit": "g"} for item in (flour, salt)]
     meal = await create_meal(api, anna, "Brot", ingredients=rows)
     empty = await queries_of_a_sync(app, api, anna)
 

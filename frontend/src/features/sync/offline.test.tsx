@@ -5,7 +5,7 @@ import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/items';
 import {
   FEED_LISTS,
   feedPage,

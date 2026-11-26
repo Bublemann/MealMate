@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from app.schemas.ingredients import IdInput
+from app.schemas.items import IdInput
 from app.schemas.reference import CategoryNames
 
 

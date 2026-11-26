@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
 import { BEN } from '@/test/api';
-import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/items';
 import { CANDLES_EXTRA_ID, checkedBy, doneList, listDetail, shoppingList } from '@/test/lists';
 import { ME } from '@/test/meals';
 import { applyPending, extraLineKey, type PendingList } from './applyPending';

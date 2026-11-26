@@ -97,6 +97,46 @@ function hasNames(stored: StoredCategories): boolean {
   return stored.categories.every((category) => typeof category.names === 'object');
 }
 
+type Stored = Record<string, unknown>;
+
+/** `ingredient_id` as `item_id`, and a line's `kind` "ingredient" as "item"; else unchanged. */
+function renamed(entry: Stored): Stored {
+  const { ingredient_id, ...rest } = entry;
+  if (ingredient_id === undefined) return entry;
+  return {
+    ...rest,
+    item_id: ingredient_id,
+    ...(rest.kind === 'ingredient' ? { kind: 'item' } : {}),
+  };
+}
+
+/** A due item's `ingredient` as `item`; else unchanged. */
+function renamedDue(entry: Stored): Stored {
+  const { ingredient, ...rest } = entry;
+  return ingredient === undefined ? entry : { ...rest, item: ingredient };
+}
+
+/**
+ * App versions before #171 stored the lists with "ingredient" where the API now says "item": a
+ * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
+ * `ingredient`. Read that way, they show as before until the next sync replaces them. A field an
+ * even older version didn't store (`due_items`) stays missing, as it was. This can go once no
+ * device keeps a copy from before #171.
+ */
+function fromOlderApp(entry: StoredList): StoredList {
+  const detail = entry.detail as unknown as Record<string, Stored[] | undefined>;
+  const upgraded = { ...detail };
+  for (const [field, rename] of [
+    ['lines', renamed],
+    ['extra_items', renamed],
+    ['due_items', renamedDue],
+  ] as const) {
+    const entries = detail[field];
+    if (entries) upgraded[field] = entries.map(rename);
+  }
+  return { ...entry, detail: upgraded as unknown as ListDetail };
+}
+
 /** The request would go out with a session that isn't the ops' user's any more (SYNC-10). */
 class UserChangedError extends Error {
   constructor() {
@@ -338,13 +378,14 @@ export class SyncEngine {
       // waiting ops stay, tagged with them, and are never sent with this session.
       await storage.deleteListsExcept(id);
       if (this.userId !== id) return;
-      const [lists, ops, categories, lastSync] = await Promise.all([
+      const [stored, ops, categories, lastSync] = await Promise.all([
         storage.readLists(id),
         storage.readOps(id),
         storage.getMeta(userMetaKey('categories', id)),
         storage.getMeta(userMetaKey('lastSync', id)),
       ]);
       if (this.userId !== id) return;
+      const lists = stored.map(fromOlderApp);
       for (const entry of lists) this.copy.set(entry.id, entry);
       this.syncedAt = typeof lastSync === 'number' ? lastSync : null;
       this.mergeOutbox(ops);

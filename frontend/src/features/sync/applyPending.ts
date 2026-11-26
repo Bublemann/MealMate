@@ -1,4 +1,4 @@
-import { ingredientLabel } from '@/features/ingredients/label';
+import { itemLabel } from '@/features/items/label';
 import { otherCategoryId } from '@/features/lists/format';
 import { pickableCategories } from '@/features/reference/categories';
 import type { Category, ExtraItem, ListDetail, ListLine, Op, UserRef } from './types';
@@ -164,7 +164,7 @@ function addExtra(
     ...list.extra_items,
     {
       id,
-      ingredient_id: null,
+      item_id: null,
       text,
       amount: null,
       unit: null,
@@ -182,7 +182,7 @@ function addExtra(
     kind: 'text',
     name: text,
     brand: null,
-    ingredient_id: null,
+    item_id: null,
     category_id: categoryId,
     amounts: [],
     has_unspecified: false,
@@ -222,7 +222,7 @@ function insertByCategory(lines: PendingLine[], line: PendingLine): PendingLine[
   for (const [i, other] of lines.entries()) {
     if (other.category_id !== line.category_id) continue;
     lastOfCategory = i;
-    if (ingredientLabel(other.name, other.brand).localeCompare(line.name) > 0) {
+    if (itemLabel(other.name, other.brand).localeCompare(line.name) > 0) {
       index = i;
       break;
     }

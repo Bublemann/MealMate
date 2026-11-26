@@ -1,6 +1,6 @@
 import type { components } from '@/api/generated/schema';
 import { BEN, CARL, TEST_USER, userRef } from './api';
-import { CATEGORIES, summary, UNITS } from './ingredients';
+import { CATEGORIES, summary, UNITS } from './items';
 
 type Schemas = components['schemas'];
 
@@ -34,13 +34,13 @@ const EMPTY_VALUES: Schemas['NutrientValues'] = {
 export function row(
   id: string,
   position: number,
-  ingredient: Schemas['IngredientSummary'],
+  item: Schemas['ItemSummary'],
   amount: number | null,
   unit: Schemas['MealIngredientRow']['unit'],
   note: string | null = null,
   overrides: Partial<Schemas['MealIngredientRow']> = {},
 ): Schemas['MealIngredientRow'] {
-  return { id, position, ingredient, amount, unit, unit_fits: true, note, ...overrides };
+  return { id, position, item, amount, unit, unit_fits: true, note, ...overrides };
 }
 
 /** Pancakes: 200 g flour, 300 ml milk, 2 eggs, salt to taste (no amount). */
@@ -72,9 +72,9 @@ export function meal(overrides: Partial<Schemas['Meal']> = {}): Schemas['Meal'] 
       estimate: false,
       missing: [
         {
-          ingredient_id: SALT.id,
-          ingredient_name: SALT.name,
-          ingredient_brand: null,
+          item_id: SALT.id,
+          item_name: SALT.name,
+          item_brand: null,
           reason: 'no_amount',
           nutrient: null,
         },
@@ -135,7 +135,7 @@ export const MEAL_ROUTES: Record<string, unknown> = {
   'GET /api/tags': TAGS,
   'GET /api/meals/tags': TAGS,
   'GET /api/users/visible': [ME, BEN, userRef(CARL.display_name, CARL.id, true)],
-  'GET /api/ingredients/similar': [],
+  'GET /api/items/similar': [],
 };
 
 /** A meal as the meal list answers it, marked when its name is exactly the query (D-41). */

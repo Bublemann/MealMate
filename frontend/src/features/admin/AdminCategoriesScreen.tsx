@@ -66,7 +66,7 @@ const NAME_PATHS: ReadonlySet<string> = new Set(['names.de', 'names.en']);
  * REF-01 / ADM-01: the categories in the store's walking order, moved with up/down buttons. A
  * category's name opens its dialog; "New category" adds one at the end. *Uncategorized* is only
  * moved, so its name is plain text; deleted categories aren't shown (D-30). After a delete,
- * "Show" opens the Ingredients tab filtered to *Uncategorized*, where the moved ingredients wait
+ * "Show" opens the Items tab filtered to *Uncategorized*, where the moved items wait
  * for a new category (ING-03).
  */
 export function AdminCategoriesScreen() {
@@ -227,13 +227,13 @@ function CategoryOrder({ categories }: { categories: Category[] }) {
 }
 
 /**
- * "Show" (ING-03): the Ingredients tab with *Uncategorized* as its only category and no search,
- * so that every ingredient of a deleted category can get a new one.
+ * "Show" (ING-03): the Items tab with *Uncategorized* as its only category and no search,
+ * so that every item of a deleted category can get a new one.
  */
 function ShowUncategorized({ categories }: { categories: Category[] }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [, remember] = useTabMemory('ingredients');
+  const [, remember] = useTabMemory('items');
   const uncategorized = categories.find((category) => category.key === UNCATEGORIZED_KEY);
   if (!uncategorized) return null;
 
@@ -319,7 +319,7 @@ function RenameCategoryForm({ category, onDone, onDeleted }: RenameCategoryFormP
       initial={category.names}
       save={rename}
       onDone={onDone}
-      // *Other* is the default of new ingredients and free-text items: it always exists.
+      // *Other* is the default of new items and free-text items: it always exists.
       extraAction={
         category.key !== OTHER_KEY && <DeleteCategory category={category} onDeleted={onDeleted} />
       }
@@ -390,7 +390,7 @@ function NamesForm({ initial, save, onDone, extraAction }: NamesFormProps) {
 }
 
 /**
- * "Delete" and its confirmation (REF-01), which says how many ingredients move to
+ * "Delete" and its confirmation (REF-01), which says how many items move to
  * *Uncategorized* and how many free-text items on drafts to *Other*, and that lists being
  * shopped and done lists stay as they are. It stays open while the delete is sent, so an error
  * shows in it.
@@ -436,11 +436,11 @@ function DeleteCategory({
             <AlertDialogDescription>
               {usage.data
                 ? [
-                    t('admin.categories.deleteIngredients', {
-                      count: usage.data.ingredients,
+                    t('admin.categories.deleteItems', {
+                      count: usage.data.items,
                       uncategorized: nameOf(UNCATEGORIZED_KEY),
                     }),
-                    t('admin.categories.deleteItems', {
+                    t('admin.categories.deleteFreeText', {
                       count: usage.data.extra_items,
                       other: nameOf(OTHER_KEY),
                     }),

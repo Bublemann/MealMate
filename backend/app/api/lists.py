@@ -39,7 +39,7 @@ LineKey = Annotated[
     Path(
         max_length=LINE_KEY_MAX_LENGTH,
         pattern=LINE_KEY_PATTERN,
-        description="`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+        description="`i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`.",
     ),
 ]
 
@@ -180,7 +180,7 @@ async def start_shopping(
     zone: TimeZone,
 ) -> ListDetail:
     """Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'
-    ingredients are frozen, so later changes of meals and ingredients no longer affect it
+    ingredients are frozen, so later changes of meals and items no longer affect it
     (LIST-11), and lines can be checked off."""
     return await lists.start_shopping(session, media, principal, list_id, now=now, zone=zone)
 
@@ -309,7 +309,7 @@ async def add_extra_item(
     now: Now,
     zone: TimeZone,
 ) -> ListDetail:
-    """Add an extra item: linked to an ingredient or free text. With an `id` already on this
+    """Add an extra item: linked to an item or free text. With an `id` already on this
     list nothing changes and the answer is 200 (safe to retry). While shopping, the item is
     `new` on the list."""
     detail, created = await lists.add_extra(
@@ -385,10 +385,10 @@ async def unhide_list_line(
     )
 
 
-@router.post("/{list_id}/due-items/{ingredient_id}/hide")
+@router.post("/{list_id}/due-items/{item_id}/hide")
 async def hide_due_item(
     list_id: str,
-    ingredient_id: Annotated[str, Path(max_length=36)],
+    item_id: Annotated[str, Path(max_length=36)],
     principal: CurrentUser,
     session: WriteSession,
     media: Media,
@@ -396,8 +396,8 @@ async def hide_due_item(
     zone: TimeZone,
 ) -> ListDetail:
     """Hide a due recurring item ("Fällig" box) on this list for everyone who sees it (drafts;
-    409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an
+    409 `list.not_draft` otherwise). There is no undo; the item can still be added as an
     extra item."""
     return await lists.hide_due_item(
-        session, media, principal, list_id, ingredient_id, now=now, zone=zone
+        session, media, principal, list_id, item_id, now=now, zone=zone
     )

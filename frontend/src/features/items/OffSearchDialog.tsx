@@ -19,13 +19,8 @@ import { Input } from '@/components/ui/input';
 import { unitLabel } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
 import { testIds } from '@/testIds';
-import {
-  useOffSearch,
-  type IngredientSummary,
-  type OffProposal,
-  type OffSearchResult,
-} from './api';
-import { ingredientLabel } from './label';
+import { useOffSearch, type ItemSummary, type OffProposal, type OffSearchResult } from './api';
+import { itemLabel } from './label';
 import { formatNutrient } from './nutrients';
 import { OffAttribution } from './OffAttribution';
 
@@ -44,11 +39,11 @@ interface OffSearchDialogProps {
   /** Called with the chosen product's values; the dialog closes itself. */
   onChoose: (proposal: OffProposal) => void;
   /**
-   * When given, a product that is already in MealMate picks that ingredient (the picker);
+   * When given, a product that is already in MealMate picks that item (the picker);
    * otherwise it links to it.
    */
-  onPickExisting?: (ingredient: IngredientSummary) => void;
-  /** Called before following a link to an ingredient that is already in MealMate. */
+  onPickExisting?: (item: ItemSummary) => void;
+  /** Called before following a link to an item that is already in MealMate. */
   onNavigate: () => void;
 }
 
@@ -84,7 +79,7 @@ function isOffSlow(error: unknown): boolean {
  * Finds a product at Open Food Facts by name, for people who have nothing to scan yet. It
  * searches for the name it opens with at once; after that only on "Search" or Enter, never while
  * typing (BAR-08): Open Food Facts limits how often it may be asked. Choosing a result fills the
- * ingredient form like a scanned barcode.
+ * item form like a scanned barcode.
  */
 export function OffSearchDialog({
   open,
@@ -147,11 +142,11 @@ export function OffSearchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid={testIds.offSearchDialog}>
         <DialogHeader>
-          <DialogTitle>{t('ingredients.offSearch.title')}</DialogTitle>
-          <DialogDescription>{t('ingredients.offSearch.text')}</DialogDescription>
+          <DialogTitle>{t('items.offSearch.title')}</DialogTitle>
+          <DialogDescription>{t('items.offSearch.text')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} role="search" noValidate className="flex flex-col gap-3">
-          <FormField label={t('ingredients.offSearch.label')}>
+          <FormField label={t('items.offSearch.label')}>
             {(control) => (
               <Input
                 {...control}
@@ -172,21 +167,21 @@ export function OffSearchDialog({
             disabled={tooShort || search.isPending}
           >
             <Search aria-hidden="true" />
-            {t('ingredients.offSearch.submit')}
+            {t('items.offSearch.submit')}
           </Button>
         </form>
         <div aria-live="polite" className="flex flex-col gap-3">
           {search.isPending && (
-            <p className="text-muted-foreground">{t('ingredients.offSearch.searching')}</p>
+            <p className="text-muted-foreground">{t('items.offSearch.searching')}</p>
           )}
           {nothingFound && !search.isPending && (
-            <p data-testid={testIds.offSearchEmpty}>{t('ingredients.offSearch.empty')}</p>
+            <p data-testid={testIds.offSearchEmpty}>{t('items.offSearch.empty')}</p>
           )}
           {isOffSlow(search.error) ? (
             <div className="flex flex-col gap-2">
               <Alert>
                 <CircleAlert aria-hidden="true" />
-                <AlertDescription>{t('ingredients.offSearch.slow')}</AlertDescription>
+                <AlertDescription>{t('items.offSearch.slow')}</AlertDescription>
               </Alert>
               <Button variant="outline" className="self-start" onClick={retry}>
                 <RotateCcw aria-hidden="true" />
@@ -199,7 +194,7 @@ export function OffSearchDialog({
         </div>
         {shown && shown.results.length > 0 && (
           <ul
-            aria-label={t('ingredients.offSearch.results')}
+            aria-label={t('items.offSearch.results')}
             className="flex flex-col divide-y rounded-lg border"
           >
             {shown.results.map((result) => (
@@ -208,8 +203,8 @@ export function OffSearchDialog({
                   result={result}
                   onChoose={() => {
                     onOpenChange(false);
-                    if (result.in_mealmate && result.ingredient && onPickExisting) {
-                      onPickExisting(result.ingredient);
+                    if (result.in_mealmate && result.item && onPickExisting) {
+                      onPickExisting(result.item);
                     } else onChoose(result.proposal);
                   }}
                   linkExisting={!onPickExisting}
@@ -230,7 +225,7 @@ export function OffSearchDialog({
             disabled={search.isPending}
             onClick={() => run(shown.query, shown.page + 1)}
           >
-            {t('ingredients.offSearch.more')}
+            {t('items.offSearch.more')}
           </Button>
         )}
         <OffAttribution />
@@ -241,9 +236,9 @@ export function OffSearchDialog({
 
 interface ResultEntryProps {
   result: OffSearchResult;
-  /** Fills the form, or picks the ingredient that is already in MealMate. */
+  /** Fills the form, or picks the item that is already in MealMate. */
   onChoose: () => void;
-  /** An ingredient that is already in MealMate is a link to it (outside the picker). */
+  /** An item that is already in MealMate is a link to it (outside the picker). */
   linkExisting: boolean;
   onNavigate: () => void;
 }
@@ -253,32 +248,32 @@ const ENTRY_CLASS =
 
 /**
  * One product: name, brand, package size and calories, as text only (BAR-10). A product that is
- * already in MealMate picks (or opens) that ingredient instead of filling the form again.
+ * already in MealMate picks (or opens) that item instead of filling the form again.
  */
 function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntryProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const { proposal } = result;
-  const name = proposal.name ?? t('ingredients.offSearch.unnamed');
+  const name = proposal.name ?? t('items.offSearch.unnamed');
   const kcal = proposal.nutrients.kcal;
   const details = [
     proposal.quantity_text,
     kcal !== null && kcal !== undefined && proposal.nutrition_basis
-      ? t('ingredients.offSearch.kcal', {
+      ? t('items.offSearch.kcal', {
           value: formatNutrient(t, language, 'kcal', kcal),
           unit: unitLabel(t, proposal.nutrition_basis),
         })
       : null,
   ].filter(Boolean);
-  const existing = result.in_mealmate ? result.ingredient : null;
+  const existing = result.in_mealmate ? result.item : null;
 
   const content = (
     <>
-      <span className="font-medium break-words">{ingredientLabel(name, proposal.brand)}</span>
+      <span className="font-medium break-words">{itemLabel(name, proposal.brand)}</span>
       {details.length > 0 && (
         <span className="text-sm text-muted-foreground">{details.join(' · ')}</span>
       )}
-      {existing && <Badge variant="secondary">{t('ingredients.offSearch.inMealMate')}</Badge>}
+      {existing && <Badge variant="secondary">{t('items.offSearch.inMealMate')}</Badge>}
     </>
   );
 

@@ -15,11 +15,11 @@ from tests.accounts import Account
 async def create_recurring(
     api: AsyncClient,
     user: Account,
-    ingredient_id: str,
+    item_id: str,
     weeks: int = 4,
     last_purchased_on: date | None = None,
 ) -> Response:
-    body: dict[str, Any] = {"ingredient_id": ingredient_id, "interval_weeks": weeks}
+    body: dict[str, Any] = {"item_id": item_id, "interval_weeks": weeks}
     if last_purchased_on is not None:
         body["last_purchased_on"] = last_purchased_on.isoformat()
     return await api.post("/api/recurring-items", json=body, headers=user.headers)
@@ -28,12 +28,12 @@ async def create_recurring(
 async def make_recurring(
     api: AsyncClient,
     user: Account,
-    ingredient_id: str,
+    item_id: str,
     weeks: int = 4,
     last_purchased_on: date | None = None,
 ) -> Any:
     """Make an ingredient recurring in the user's set; the new item."""
-    response = await create_recurring(api, user, ingredient_id, weeks, last_purchased_on)
+    response = await create_recurring(api, user, item_id, weeks, last_purchased_on)
     assert response.status_code == 201, response.text
     return response.json()
 

@@ -4,7 +4,7 @@ Facts.
 A barcode we know goes straight to its item. Otherwise Open Food Facts is asked, outside
 any transaction, and its product becomes a *proposal* that is not saved: the app opens the
 item form prefilled with it, and the user may correct values before saving it with
-`POST /api/ingredients` (with `off`), in one request.
+`POST /api/items` (with `off`), in one request.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,7 @@ from app.domain.units import BaseUnit
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, OffClient, OffProduct
 from app.repositories import items as items_repo
 from app.repositories import users as users_repo
-from app.schemas.ingredients import BarcodeLookup, NutritionBasisName, ProductProposal
+from app.schemas.items import BarcodeLookup, NutritionBasisName, ProductProposal
 from app.schemas.nutrition import NutrientValues
 from app.services import items
 from app.services.off_refresh import DEFAULT_LANGUAGE
@@ -49,7 +49,7 @@ def _not_found(barcode: str, *, off_unavailable: bool) -> BarcodeLookup:
     return BarcodeLookup(
         barcode=barcode,
         found_in="none",
-        ingredient=None,
+        item=None,
         proposal=None,
         off_unavailable=off_unavailable,
     )
@@ -81,7 +81,7 @@ async def lookup(
             return BarcodeLookup(
                 barcode=barcode,
                 found_in="db",
-                ingredient=await items.detail(session, row),
+                item=await items.detail(session, row),
                 proposal=None,
                 off_unavailable=False,
             )
@@ -98,7 +98,7 @@ async def lookup(
     return BarcodeLookup(
         barcode=barcode,
         found_in="off",
-        ingredient=None,
+        item=None,
         proposal=proposal(response.product, barcode, language),
         off_unavailable=False,
     )

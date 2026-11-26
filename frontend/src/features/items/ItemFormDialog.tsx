@@ -33,16 +33,16 @@ import { testIds } from '@/testIds';
 import {
   toSummary,
   unitMismatch,
-  useCreateIngredient,
+  useCreateItem,
   useLinkBarcode,
-  useSimilarIngredients,
-  useUpdateIngredient,
+  useSimilarItems,
+  useUpdateItem,
   type BaseUnit,
   type EditedField,
-  type Ingredient,
-  type IngredientCreate,
-  type IngredientSummary,
-  type IngredientUpdate,
+  type Item,
+  type ItemCreate,
+  type ItemSummary,
+  type ItemUpdate,
   type NutrientValues,
   type OffProposal,
   type UnitMismatch,
@@ -56,11 +56,11 @@ import {
   PACK_SIZE_MAX_LENGTH,
   proposalValues,
   typedValues,
-  valuesFromIngredient,
+  valuesFromItem,
   valuesFromProposal,
   type FormValues,
 } from './formValues';
-import { ingredientLabel } from './label';
+import { itemLabel } from './label';
 import {
   NUTRIENT_KEYS,
   nutrientLabel,
@@ -96,42 +96,42 @@ const SHOWN_FIELDS: ReadonlySet<string> = new Set([
   ...NUTRIENT_KEYS.map((key) => `nutrients.${key}`),
 ]);
 
-interface IngredientFormDialogProps {
+interface ItemFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Edit this ingredient; without it the dialog creates a new one. */
-  ingredient?: Ingredient;
-  /** Prefills the name of a new ingredient (e.g. from a search). */
+  /** Edit this item; without it the dialog creates a new one. */
+  item?: Item;
+  /** Prefills the name of a new item (e.g. from a search). */
   initialName?: string;
   /**
    * A barcode scanned before the pop-up opened (the meal form's scan, MEAL-03): it is looked up
    * at once, as a scan with the pop-up's own scan icon is.
    */
   initialScan?: string;
-  /** Called with the saved ingredient; the dialog closes itself. */
-  onSaved?: (ingredient: Ingredient) => void;
+  /** Called with the saved item; the dialog closes itself. */
+  onSaved?: (item: Item) => void;
   /**
-   * When given, the "similar ingredient exists" hint and the Open Food Facts results that are
-   * already in MealMate offer to use that ingredient instead of linking to it (the picker).
+   * When given, the "similar item exists" hint and the Open Food Facts results that are
+   * already in MealMate offer to use that item instead of linking to it (the picker).
    */
-  onPickExisting?: (ingredient: IngredientSummary) => void;
+  onPickExisting?: (item: ItemSummary) => void;
   /** Where the focus goes when it closes (default: back to its trigger). */
   onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**
- * Creates or edits an ingredient (ING-01/02/04, NUT-02) in the compact pop-up (D-35): the form
+ * Creates or edits an item (ING-01/02/04, NUT-02) in the compact pop-up (D-35): the form
  * scrolls between the headline and its footer with "Save", which stays in the visible area
  * above the keyboard (UI-01).
  */
-export function IngredientFormDialog({
+export function ItemFormDialog({
   open,
   onOpenChange,
   onCloseAutoFocus,
   ...props
-}: IngredientFormDialogProps) {
+}: ItemFormDialogProps) {
   const { t } = useTranslation();
-  const { ingredient } = props;
+  const { item } = props;
   const nameRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -152,32 +152,30 @@ export function IngredientFormDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {ingredient
-              ? t('ingredients.form.editTitle', {
-                  name: ingredientLabel(ingredient.name, ingredient.brand),
+            {item
+              ? t('items.form.editTitle', {
+                  name: itemLabel(item.name, item.brand),
                 })
-              : t('ingredients.form.createTitle')}
+              : t('items.form.createTitle')}
           </DialogTitle>
         </DialogHeader>
         {/* Mounted only while open, so every opening starts from the current values. */}
-        {open && (
-          <IngredientForm {...props} nameRef={nameRef} onClose={() => onOpenChange(false)} />
-        )}
+        {open && <ItemForm {...props} nameRef={nameRef} onClose={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-interface IngredientFormProps {
-  /** Edit this ingredient; without it the form creates a new one. */
-  ingredient?: Ingredient;
-  /** Prefills the name of a new ingredient (e.g. from a search). */
+interface ItemFormProps {
+  /** Edit this item; without it the form creates a new one. */
+  item?: Item;
+  /** Prefills the name of a new item (e.g. from a search). */
   initialName?: string;
   /** A barcode to look up at once, as if it had just been scanned with the scan icon. */
   initialScan?: string;
-  /** Called with the saved ingredient, after `onClose`. */
-  onSaved?: (ingredient: Ingredient) => void;
-  onPickExisting?: (ingredient: IngredientSummary) => void;
+  /** Called with the saved item, after `onClose`. */
+  onSaved?: (item: Item) => void;
+  onPickExisting?: (item: ItemSummary) => void;
   /** Called after saving (or when there was nothing to save) and before leaving to a match. */
   onClose: () => void;
   /** The name field, e.g. for the dialog to put the cursor there. */
@@ -186,14 +184,14 @@ interface IngredientFormProps {
 
 /** A base-unit change the server refused because amounts would stop fitting (D-33). */
 interface Refused {
-  body: IngredientUpdate;
+  body: ItemUpdate;
   mismatch: UnitMismatch;
 }
 
 /** What the scan icon's lookup says, on the barcode's message line (BAR-02, BAR-03). */
 type ScanNoticeState =
   | { kind: 'lookingUp'; barcode: string }
-  | { kind: 'known'; ingredient: Ingredient }
+  | { kind: 'known'; item: Item }
   | { kind: 'notFound' }
   | { kind: 'slow'; barcode: string }
   | { kind: 'invalid'; barcode: string }
@@ -207,38 +205,38 @@ interface Proposed {
 }
 
 /**
- * One form for every ingredient, new or existing, typed by hand, searched or scanned (ING-04,
+ * One form for every item, new or existing, typed by hand, searched or scanned (ING-04,
  * D-35, D-36). Top to bottom: the Open Food Facts attribution while its values are shown; the
  * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
- * the barcode with the scan's notice; the similar-ingredients hint; brand; pack size (D-47);
+ * the barcode with the scan's notice; the similar-items hint; brand; pack size (D-47);
  * category; base unit (g, ml or pieces) with the piece weight for pieces only; the nutrition per
  * 100 g/ml. "Save" sits in a footer below the fields, which scroll on their own. A product chosen
  * in the search or scanned is saved in one request, with the fields the user changed named as
  * edited (BAR-04).
  *
- * The scan looks the barcode up (BAR-02/03): a barcode another ingredient has fills in nothing
+ * The scan looks the barcode up (BAR-02/03): a barcode another item has fills in nothing
  * and offers that one instead; one Open Food Facts knows fills the form like a chosen product;
  * any other one only the barcode. When editing, Open Food Facts isn't asked. The meal form's scan
- * opens the form with a barcode no ingredient has, looked up the same way (MEAL-03).
+ * opens the form with a barcode no item has, looked up the same way (MEAL-03).
  */
-function IngredientForm({
-  ingredient,
+function ItemForm({
+  item,
   initialName = '',
   initialScan,
   onSaved,
   onPickExisting,
   onClose,
   nameRef,
-}: IngredientFormProps) {
+}: ItemFormProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const categories = useCategories();
-  const create = useCreateIngredient();
-  const update = useUpdateIngredient(ingredient?.id ?? '');
-  const mutation = ingredient ? update : create;
+  const create = useCreateItem();
+  const update = useUpdateItem(item?.id ?? '');
+  const mutation = item ? update : create;
 
   const [initial] = useState<FormValues>(() =>
-    ingredient ? valuesFromIngredient(ingredient, language) : emptyValues(initialName, language),
+    item ? valuesFromItem(item, language) : emptyValues(initialName, language),
   );
   const [values, setValues] = useState(initial);
   const [proposed, setProposed] = useState<Proposed | null>(null);
@@ -247,7 +245,7 @@ function IngredientForm({
   const [searching, setSearching] = useState(false);
   const [scanning, setScanning] = useState(false);
   const lookup = useBarcodeLookup();
-  // The last scanned barcode that no ingredient has: while it is in the field, the similar hint
+  // The last scanned barcode that no item has: while it is in the field, the similar hint
   // can attach it to a match without one (BAR-03).
   const [scanned, setScanned] = useState<string | null>(null);
 
@@ -262,8 +260,7 @@ function IngredientForm({
   const defaultCategory = guessed ?? pickable.find((category) => category.key === OTHER_KEY);
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
-  const barcodeTaken =
-    isApiError(mutation.error) && mutation.error.code === 'ingredient.barcode_taken';
+  const barcodeTaken = isApiError(mutation.error) && mutation.error.code === 'item.barcode_taken';
   // A refused base-unit change asks in its own dialog instead.
   const showAlert =
     !barcodeTaken &&
@@ -271,13 +268,13 @@ function IngredientForm({
     needsErrorAlert(serverFields, SHOWN_FIELDS);
   // A proposal belongs to its barcode: a scanned or chosen product keeps it.
   const barcodeFixed = proposed !== null;
-  const fromOff = proposed !== null || ingredient?.source === 'off';
-  const edited = new Set<string>(ingredient?.source === 'off' ? ingredient.user_edited_fields : []);
+  const fromOff = proposed !== null || item?.source === 'off';
+  const edited = new Set<string>(item?.source === 'off' ? item.user_edited_fields : []);
   const barcode = values.barcode.replace(/\s+/g, '');
   // A new barcode would bring another product's values, so the server ends the updates.
-  const offBarcodeChanged = ingredient?.source === 'off' && barcode !== (ingredient.barcode ?? '');
-  const scanNotice = scanNoticeState(lookup, ingredient);
-  const attachBarcode = !ingredient && scanned !== null && barcode === scanned ? scanned : null;
+  const offBarcodeChanged = item?.source === 'off' && barcode !== (item.barcode ?? '');
+  const scanNotice = scanNoticeState(lookup, item);
+  const attachBarcode = !item && scanned !== null && barcode === scanned ? scanned : null;
 
   function set<K extends keyof FormValues>(field: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -290,7 +287,7 @@ function IngredientForm({
 
   /** A mark for an Open Food Facts field a user changed: updates from there keep it (BAR-05). */
   function editedHint(field: EditedField): string | undefined {
-    return edited.has(field) ? t('ingredients.form.userEdited') : undefined;
+    return edited.has(field) ? t('items.form.userEdited') : undefined;
   }
 
   /**
@@ -312,27 +309,27 @@ function IngredientForm({
     fill(proposal);
   }
 
-  /** Looks a scanned barcode up: our own ingredients first, then (not when editing) OFF. */
+  /** Looks a scanned barcode up: our own items first, then (not when editing) OFF. */
   function lookUp(code: string) {
     lookup.mutate(
-      { barcode: code, ownOnly: ingredient !== undefined },
+      { barcode: code, ownOnly: item !== undefined },
       {
         onSuccess: (result) => {
           if (result.found_in === 'db') {
-            // Another ingredient's barcode is only named; the ingredient's own is filled in.
-            if (ingredient && result.ingredient?.id === ingredient.id) {
+            // Another item's barcode is only named; the item's own is filled in.
+            if (item && result.item?.id === item.id) {
               set('barcode', result.barcode);
             }
             return;
           }
-          if (result.proposal && !ingredient) fill(result.proposal);
+          if (result.proposal && !item) fill(result.proposal);
           else set('barcode', result.barcode);
           setScanned(result.barcode);
         },
         onError: (error) => {
           // Open Food Facts couldn't answer: the barcode is filled in, to try again or type the
           // values.
-          if (ingredient || !isOffSlow(error)) return;
+          if (item || !isOffSlow(error)) return;
           set('barcode', code);
           setScanned(code);
         },
@@ -351,12 +348,12 @@ function IngredientForm({
     lookUpInitialScan();
   }, []);
 
-  function pickExisting(match: IngredientSummary) {
+  function pickExisting(match: ItemSummary) {
     onClose();
     onPickExisting?.(match);
   }
 
-  function saved(result: Ingredient) {
+  function saved(result: Item) {
     onClose();
     onSaved?.(result);
   }
@@ -397,8 +394,8 @@ function IngredientForm({
       barcode: barcode || null,
     };
 
-    if (!ingredient) {
-      const body: IngredientCreate = { name: texts.name, base_unit: values.baseUnit };
+    if (!item) {
+      const body: ItemCreate = { name: texts.name, base_unit: values.baseUnit };
       if (selectedCategory) body.category_id = selectedCategory;
       if (texts.brand !== null) body.brand = texts.brand;
       if (texts.quantity_text !== null) body.quantity_text = texts.quantity_text;
@@ -423,13 +420,13 @@ function IngredientForm({
 
     // Only what changed is sent, so a concurrent edit of another field isn't overwritten, and
     // only a changed Open Food Facts value is marked as edited by a user (BAR-04).
-    const body: IngredientUpdate = {};
-    if (texts.name !== ingredient.name) body.name = texts.name;
-    if (texts.brand !== ingredient.brand) body.brand = texts.brand;
-    if (texts.quantity_text !== ingredient.quantity_text) body.quantity_text = texts.quantity_text;
-    if (selectedCategory !== ingredient.category_id) body.category_id = selectedCategory;
-    if (values.baseUnit !== ingredient.base_unit) body.base_unit = values.baseUnit;
-    if (texts.barcode !== ingredient.barcode) body.barcode = texts.barcode;
+    const body: ItemUpdate = {};
+    if (texts.name !== item.name) body.name = texts.name;
+    if (texts.brand !== item.brand) body.brand = texts.brand;
+    if (texts.quantity_text !== item.quantity_text) body.quantity_text = texts.quantity_text;
+    if (selectedCategory !== item.category_id) body.category_id = selectedCategory;
+    if (values.baseUnit !== item.base_unit) body.base_unit = values.baseUnit;
+    if (texts.barcode !== item.barcode) body.barcode = texts.barcode;
     // A number field counts as changed when its text changed: a stored value with more decimals
     // than shown would otherwise be cut on every save.
     if (inPieces && values.piece_weight_g.trim() !== initial.piece_weight_g) {
@@ -441,7 +438,7 @@ function IngredientForm({
     }
     if (Object.keys(changed).length > 0) body.nutrients = changed;
     if (Object.keys(body).length === 0) {
-      saved(ingredient);
+      saved(item);
       return;
     }
     // A base-unit change that leaves amounts not fitting asks first, then is sent again (D-33).
@@ -467,14 +464,14 @@ function IngredientForm({
     <form
       onSubmit={onSubmit}
       noValidate
-      data-testid={testIds.ingredientForm}
+      data-testid={testIds.itemForm}
       className="flex min-h-0 flex-col"
     >
       {/* The fields scroll above the footer; the side padding keeps their focus rings in view. */}
       <div className="-mx-2 flex min-h-0 flex-col gap-4 overflow-y-auto px-2 py-4">
         {fromOff && <OffAttribution />}
         <FormField
-          label={t('ingredients.field.name')}
+          label={t('items.field.name')}
           hint={editedHint('name')}
           error={fieldError('name')}
         >
@@ -493,12 +490,12 @@ function IngredientForm({
                 className="flex-[1_1_12rem]"
               />
               <div className="flex gap-2">
-                {!ingredient && (
+                {!item && (
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    aria-label={t('ingredients.offSearch.open')}
+                    aria-label={t('items.offSearch.open')}
                     data-testid={testIds.offSearchButton}
                     onClick={() => setSearching(true)}
                   >
@@ -509,8 +506,8 @@ function IngredientForm({
                   type="button"
                   variant="outline"
                   size="icon"
-                  aria-label={t('ingredients.field.barcodeScan')}
-                  data-testid={testIds.ingredientFormScan}
+                  aria-label={t('items.field.barcodeScan')}
+                  data-testid={testIds.itemFormScan}
                   disabled={barcodeFixed}
                   onClick={() => setScanning(true)}
                 >
@@ -521,9 +518,9 @@ function IngredientForm({
           )}
         </FormField>
         <FormField
-          label={t('ingredients.field.barcode')}
-          hint={offBarcodeChanged ? t('ingredients.field.barcodeOffHint') : undefined}
-          error={barcodeTaken ? t('error.ingredient.barcode_taken') : fieldError('barcode')}
+          label={t('items.field.barcode')}
+          hint={offBarcodeChanged ? t('items.field.barcodeOffHint') : undefined}
+          error={barcodeTaken ? t('error.item.barcode_taken') : fieldError('barcode')}
         >
           {(control) => (
             <Input
@@ -532,7 +529,7 @@ function IngredientForm({
               inputMode="numeric"
               autoComplete="off"
               maxLength={20}
-              placeholder={t('ingredients.field.barcodePlaceholder')}
+              placeholder={t('items.field.barcodePlaceholder')}
               readOnly={barcodeFixed}
               value={values.barcode}
               onChange={(event) => {
@@ -557,13 +554,13 @@ function IngredientForm({
         </div>
         <SimilarHint
           name={values.name}
-          ingredient={ingredient}
+          item={item}
           attachBarcode={attachBarcode}
           onPickExisting={onPickExisting && pickExisting}
           onNavigate={onClose}
         />
         <FormField
-          label={t('ingredients.field.brand')}
+          label={t('items.field.brand')}
           hint={editedHint('brand')}
           error={fieldError('brand')}
         >
@@ -573,14 +570,14 @@ function IngredientForm({
               name="brand"
               autoComplete="off"
               maxLength={BRAND_MAX_LENGTH}
-              placeholder={t('ingredients.field.brandPlaceholder')}
+              placeholder={t('items.field.brandPlaceholder')}
               value={values.brand}
               onChange={(event) => set('brand', event.target.value)}
             />
           )}
         </FormField>
         <FormField
-          label={t('ingredients.field.packSize')}
+          label={t('items.field.packSize')}
           hint={editedHint('quantity_text')}
           error={fieldError('quantity_text')}
         >
@@ -590,15 +587,15 @@ function IngredientForm({
               name="quantity_text"
               autoComplete="off"
               maxLength={PACK_SIZE_MAX_LENGTH}
-              placeholder={t('ingredients.field.packSizePlaceholder')}
+              placeholder={t('items.field.packSizePlaceholder')}
               value={values.quantity_text}
               onChange={(event) => set('quantity_text', event.target.value)}
             />
           )}
         </FormField>
         <FormField
-          label={t('ingredients.field.category')}
-          error={fieldError('category_id') && t('ingredients.field.categoryGone')}
+          label={t('items.field.category')}
+          error={fieldError('category_id') && t('items.field.categoryGone')}
         >
           {(control) => (
             <NativeSelect
@@ -615,7 +612,7 @@ function IngredientForm({
         <ErrorAlert error={categories.error} />
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 text-sm leading-none font-medium">
-            {t('ingredients.field.baseUnit')}
+            {t('items.field.baseUnit')}
           </legend>
           <div className="flex flex-wrap gap-2">
             {BASE_UNITS.map((unit) => (
@@ -631,7 +628,7 @@ function IngredientForm({
                   onChange={() => set('baseUnit', unit)}
                   className="size-5 accent-primary"
                 />
-                {t(`ingredients.baseUnit.${unit}`)}
+                {t(`items.baseUnit.${unit}`)}
               </label>
             ))}
           </div>
@@ -640,10 +637,7 @@ function IngredientForm({
           )}
         </fieldset>
         {values.baseUnit === 'piece' && (
-          <FormField
-            label={t('ingredients.field.weightPerPiece')}
-            error={fieldError('piece_weight_g')}
-          >
+          <FormField label={t('items.field.weightPerPiece')} error={fieldError('piece_weight_g')}>
             {(control) => (
               <Input
                 {...control}
@@ -658,7 +652,7 @@ function IngredientForm({
         )}
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-1 font-semibold">
-            {t('ingredients.form.nutritionTitle', {
+            {t('items.form.nutritionTitle', {
               unit: unitLabel(t, nutritionUnit(values.baseUnit)),
             })}
           </legend>
@@ -691,7 +685,7 @@ function IngredientForm({
           </div>
         </fieldset>
       </div>
-      <div data-testid={testIds.ingredientFormFooter} className="flex flex-col gap-3 border-t pt-4">
+      <div data-testid={testIds.itemFormFooter} className="flex flex-col gap-3 border-t pt-4">
         {showAlert && <ErrorAlert error={mutation.error} />}
         <Button
           type="submit"
@@ -716,11 +710,11 @@ function IngredientForm({
           <BarcodeScanDialog open onOpenChange={setScanning} onBarcode={lookUp} />
         </Suspense>
       )}
-      {ingredient && (
+      {item && (
         <BaseUnitConfirmDialog
           mismatch={refused?.mismatch ?? null}
-          name={ingredientLabel(ingredient.name, ingredient.brand)}
-          baseUnit={ingredient.base_unit}
+          name={itemLabel(item.name, item.brand)}
+          baseUnit={item.base_unit}
           onConfirm={changeAnyway}
           onClose={() => setRefused(null)}
         />
@@ -732,7 +726,7 @@ function IngredientForm({
 /** The scan's notice, from the lookup's state; none when it filled the form or nothing ran. */
 function scanNoticeState(
   lookup: ReturnType<typeof useBarcodeLookup>,
-  edited: Ingredient | undefined,
+  edited: Item | undefined,
 ): ScanNoticeState | null {
   const barcode = lookup.variables?.barcode ?? '';
   if (lookup.isPending) return { kind: 'lookingUp', barcode };
@@ -744,8 +738,8 @@ function scanNoticeState(
   const result = lookup.data;
   if (!result) return null;
   if (result.found_in === 'db') {
-    const owner = result.ingredient;
-    return owner && owner.id !== edited?.id ? { kind: 'known', ingredient: owner } : null;
+    const owner = result.item;
+    return owner && owner.id !== edited?.id ? { kind: 'known', item: owner } : null;
   }
   // When editing, the barcode is only filled in.
   if (edited) return null;
@@ -757,9 +751,9 @@ interface ScanNoticeProps {
   state: ScanNoticeState;
   /** Looks the barcode up again. */
   onRetry: (barcode: string) => void;
-  /** Given in the picker: "use" takes the ingredient the barcode belongs to. */
-  onPickExisting?: (ingredient: IngredientSummary) => void;
-  /** Called before "open" leaves to the ingredient the barcode belongs to. */
+  /** Given in the picker: "use" takes the item the barcode belongs to. */
+  onPickExisting?: (item: ItemSummary) => void;
+  /** Called before "open" leaves to the item the barcode belongs to. */
   onNavigate: () => void;
 }
 
@@ -783,47 +777,47 @@ function ScanNotice({ state, onRetry, onPickExisting, onNavigate }: ScanNoticePr
       text = t('scanner.invalidBarcode', { barcode: state.barcode });
       break;
     case 'notFound':
-      text = t('ingredients.scan.notFound');
+      text = t('items.scan.notFound');
       break;
     case 'slow':
-      text = t('ingredients.scan.slow');
+      text = t('items.scan.slow');
       action = (
         <Button
           type="button"
           size="compact"
           variant="outline"
           aria-describedby={textId}
-          data-testid={testIds.ingredientScanRetry}
+          data-testid={testIds.itemScanRetry}
           onClick={() => onRetry(state.barcode)}
         >
           <RotateCcw aria-hidden="true" />
-          {t('ingredients.scan.retry')}
+          {t('items.scan.retry')}
         </Button>
       );
       break;
     case 'known': {
-      const owner = state.ingredient;
-      text = t('ingredients.scan.known', { name: ingredientLabel(owner.name, owner.brand) });
+      const owner = state.item;
+      text = t('items.scan.known', { name: itemLabel(owner.name, owner.brand) });
       action = onPickExisting ? (
         <Button
           type="button"
           size="compact"
           variant="outline"
           aria-describedby={textId}
-          data-testid={testIds.ingredientScanTake}
+          data-testid={testIds.itemScanTake}
           onClick={() => onPickExisting(toSummary(owner))}
         >
-          {t('ingredients.scan.take')}
+          {t('items.scan.take')}
         </Button>
       ) : (
         <Link
           to={`/ingredients/${owner.id}`}
           aria-describedby={textId}
-          data-testid={testIds.ingredientScanOpen}
+          data-testid={testIds.itemScanOpen}
           onClick={onNavigate}
           className={INLINE_LINK}
         >
-          {t('ingredients.scan.open')}
+          {t('items.scan.open')}
         </Link>
       );
       break;
@@ -832,7 +826,7 @@ function ScanNotice({ state, onRetry, onPickExisting, onNavigate }: ScanNoticePr
 
   return (
     <div
-      data-testid={testIds.ingredientScanNotice}
+      data-testid={testIds.itemScanNotice}
       className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
     >
       <p
@@ -854,37 +848,31 @@ function ScanNotice({ state, onRetry, onPickExisting, onNavigate }: ScanNoticePr
 
 interface SimilarHintProps {
   name: string;
-  ingredient?: Ingredient;
-  /** A scanned barcode no ingredient has, while it is in the field (BAR-03). */
+  item?: Item;
+  /** A scanned barcode no item has, while it is in the field (BAR-03). */
   attachBarcode: string | null;
-  onPickExisting?: (ingredient: IngredientSummary) => void;
+  onPickExisting?: (item: ItemSummary) => void;
   onNavigate: () => void;
 }
 
 /**
  * ING-03: "Similar ingredients already exist", with links to them (or buttons in the picker). A
- * hint only: two brands of the same thing are different ingredients. After a scan, a match
+ * hint only: two brands of the same thing are different items. After a scan, a match
  * without a barcode can get the scanned one (BAR-03): "Use Milch" in the picker gives it the
  * barcode before taking it, "Add the barcode to Milch" elsewhere before opening it. A match that
  * has a barcode is another package, so it is offered as it is (D-21).
  */
-function SimilarHint({
-  name,
-  ingredient,
-  attachBarcode,
-  onPickExisting,
-  onNavigate,
-}: SimilarHintProps) {
+function SimilarHint({ name, item, attachBarcode, onPickExisting, onNavigate }: SimilarHintProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const link = useLinkBarcode();
   const debounced = useDebouncedValue(name.trim());
   // Editing without renaming needs no hint.
-  const query = ingredient && debounced === ingredient.name ? '' : debounced;
-  const similar = useSimilarIngredients(query);
-  const matches = query ? (similar.data ?? []).filter((match) => match.id !== ingredient?.id) : [];
+  const query = item && debounced === item.name ? '' : debounced;
+  const similar = useSimilarItems(query);
+  const matches = query ? (similar.data ?? []).filter((match) => match.id !== item?.id) : [];
 
-  function attach(match: IngredientSummary, barcode: string) {
+  function attach(match: ItemSummary, barcode: string) {
     link.mutate(
       { id: match.id, barcode },
       {
@@ -906,13 +894,13 @@ function SimilarHint({
     <div aria-live="polite" className="empty:-mt-4">
       {matches.length > 0 && (
         <div
-          data-testid={testIds.ingredientSimilar}
+          data-testid={testIds.itemSimilar}
           className="flex flex-col gap-2 rounded-lg border bg-muted p-3"
         >
-          <p className="text-sm font-medium">{t('ingredients.similar.title')}</p>
+          <p className="text-sm font-medium">{t('items.similar.title')}</p>
           <ul className="flex flex-wrap gap-2">
             {matches.map((match) => {
-              const label = ingredientLabel(match.name, match.brand);
+              const label = itemLabel(match.name, match.brand);
               // A match with a barcode of its own is another package (D-21).
               const toAttach = match.barcode ? null : attachBarcode;
               return (
@@ -927,7 +915,7 @@ function SimilarHint({
                         toAttach === null ? onPickExisting(match) : attach(match, toAttach)
                       }
                     >
-                      {t('ingredients.similar.use', { name: label })}
+                      {t('items.similar.use', { name: label })}
                     </Button>
                   ) : toAttach !== null ? (
                     <Button
@@ -937,7 +925,7 @@ function SimilarHint({
                       disabled={link.isPending}
                       onClick={() => attach(match, toAttach)}
                     >
-                      {t('ingredients.similar.attach', { name: label })}
+                      {t('items.similar.attach', { name: label })}
                     </Button>
                   ) : (
                     <Link

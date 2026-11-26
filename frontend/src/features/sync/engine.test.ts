@@ -9,7 +9,8 @@ import { createAuthSession, type AuthSession } from '@/features/auth/session';
 import { detailKey, FEED_KEY } from '@/features/lists/keys';
 import i18n from '@/i18n';
 import { BEN, errorResponse, loginResponse, mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { doneList, LIST_ID, shoppingList } from '@/test/lists';
+import { doneList, LIST_ID, listDetail, shoppingList } from '@/test/lists';
+import { dueItem } from '@/test/recurring';
 import { SyncEngine } from './engine';
 import {
   DB_NAME,
@@ -429,6 +430,55 @@ describe('local copy (SYNC-02, SYNC-10)', () => {
     });
     expect(engine.copiedSummaries()).toHaveLength(1);
     answer?.();
+  });
+
+  it('reads a list the app stored before items were called so (#171)', async () => {
+    const list = listDetail({ due_items: [dueItem()] });
+    // What an app version from before stored: the same list, with "ingredient" for the item.
+    const stored = {
+      ...list,
+      lines: list.lines.map(({ kind, item_id, ...line }) => ({
+        ...line,
+        kind: kind === 'item' ? 'ingredient' : kind,
+        ingredient_id: item_id,
+      })),
+      extra_items: list.extra_items.map(({ item_id, ...extra }) => ({
+        ...extra,
+        ingredient_id: item_id,
+      })),
+      due_items: list.due_items.map(({ item, ...due }) => ({ ...due, ingredient: item })),
+    } as unknown as Schemas['ListDetail'];
+    const storage = await openSyncStorage();
+    await storage.putList({ id: LIST_ID, userId: TEST_USER.id, detail: stored, storedAt: 5 });
+    mockApi({ 'GET /api/lists/sync': () => new Promise(() => {}) });
+
+    const { engine, queryClient } = await startEngine();
+
+    await vi.waitFor(() => expect(queryClient.getQueryData(detailKey(LIST_ID))).toEqual(list));
+    expect(engine.copied(LIST_ID)).toEqual(list);
+  });
+
+  it("reads a list stored before due items existed, and today's lists as they are", async () => {
+    const today = listDetail({ due_items: [dueItem()] });
+    const beforeDue: Partial<Schemas['ListDetail']> = { ...shoppingList(), id: OTHER_LIST };
+    delete beforeDue.due_items;
+    const storage = await openSyncStorage();
+    await storage.putList({ id: LIST_ID, userId: TEST_USER.id, detail: today, storedAt: 5 });
+    await storage.putList({
+      id: OTHER_LIST,
+      userId: TEST_USER.id,
+      detail: beforeDue as Schemas['ListDetail'],
+      storedAt: 5,
+    });
+    mockApi({ 'GET /api/lists/sync': () => new Promise(() => {}) });
+
+    const { engine } = await startEngine();
+
+    await vi.waitFor(() => expect(engine.copied(LIST_ID)).toEqual(today));
+    expect(engine.copied(OTHER_LIST)).toMatchObject({
+      id: OTHER_LIST,
+      lines: shoppingList().lines,
+    });
   });
 
   it('keeps a list opened on screen in the copy', async () => {

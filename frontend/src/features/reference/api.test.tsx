@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '@/app/queryClient';
 import { mockApi, requestsTo } from '@/test/api';
-import { CATEGORIES, REFERENCE_ROUTES } from '@/test/ingredients';
+import { CATEGORIES, REFERENCE_ROUTES } from '@/test/items';
 import { CATEGORIES_KEY, useCategories, useUnits } from './api';
 
 const MINUTE = 60_000;

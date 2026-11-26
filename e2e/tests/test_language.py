@@ -16,7 +16,7 @@ def expect_language(page: Page, language: str) -> None:
     for key, tab in [
         ("nav.lists", TEST_IDS["tabLists"]),
         ("nav.meals", TEST_IDS["tabMeals"]),
-        ("nav.ingredients", TEST_IDS["tabIngredients"]),
+        ("nav.items", TEST_IDS["tabItems"]),
         ("nav.me", TEST_IDS["tabMe"]),
     ]:
         expect(page.get_by_test_id(tab)).to_have_text(strings[key])

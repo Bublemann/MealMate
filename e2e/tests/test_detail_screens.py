@@ -47,12 +47,12 @@ def test_back_link_leaves_a_list_a_meal_and_an_admin_page_after_scrolling(
 ) -> None:
     tag = unique("strip")
     anna = invite_user(unique("anna"), unique("Anna"))
-    flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
+    flour = api.create_item(anna, f"Mehl {tag}", category_key="baking")
     meal = api.create_meal(
         anna,
         f"Brot {tag}",
         servings=4,
-        ingredients=[{"ingredient_id": flour["id"], "amount": 500, "unit": "g"}],
+        ingredients=[{"item_id": flour["id"], "amount": 500, "unit": "g"}],
         instructions="\n".join(f"Schritt {step}." for step in range(1, 13)),
     )
     shopping_list = api.create_list(anna, f"Wochenende {tag}")
@@ -191,7 +191,7 @@ def test_add_fields_fit_the_screen_at_the_largest_text_size(
 
     item_field = page.get_by_test_id(TEST_IDS["extraItemInput"])
     item_field.fill(f"Geburtstagskerzen {tag}")
-    fits(page.get_by_test_id(TEST_IDS["itemNewIngredient"]))
+    fits(page.get_by_test_id(TEST_IDS["itemNewItem"]))
     item_field.press("Enter")
     free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
     expect(free_text).to_be_visible()

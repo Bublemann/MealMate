@@ -360,11 +360,11 @@ export function useRemoveListMeal(listId: string) {
   );
 }
 
-/** The list without the due item of `ingredientId`: it leaves the "Fällig" box (LIST-16). */
-function withoutDue(list: ListDetail, ingredientId: string): ListDetail {
+/** The list without the due item of `itemId`: it leaves the "Fällig" box (LIST-16). */
+function withoutDue(list: ListDetail, itemId: string): ListDetail {
   return {
     ...list,
-    due_items: list.due_items.filter((item) => item.ingredient.id !== ingredientId),
+    due_items: list.due_items.filter((due) => due.item.id !== itemId),
   };
 }
 
@@ -372,7 +372,7 @@ function withoutDue(list: ListDetail, ingredientId: string): ListDetail {
  * LIST-06: a linked or free-text extra item. Its id comes with it (made by the input, which keeps
  * it while the item is sent again), so a retry after a lost answer doesn't add it twice. While
  * shopping, a free-text item is an `extra.add` op of the outbox instead (SHOP-02, SYNC-03).
- * A linked item's ingredient leaves the "Fällig" box at once: it is on the list now (LIST-16).
+ * A linked extra item's due item leaves the "Fällig" box at once: it is on the list now (LIST-16).
  */
 export function useAddExtraItem(listId: string) {
   return useListChange(
@@ -386,9 +386,9 @@ export function useAddExtraItem(listId: string) {
       ),
     {
       optimistic:
-        ({ ingredient_id }) =>
+        ({ item_id }) =>
         (list) =>
-          ingredient_id ? withoutDue(list, ingredient_id) : list,
+          item_id ? withoutDue(list, item_id) : list,
     },
   );
 }
@@ -449,14 +449,14 @@ export function useSetLineHidden(listId: string) {
 export function useHideDueItem(listId: string) {
   return useListChange(
     listId,
-    (ingredientId: string) =>
+    (itemId: string) =>
       unwrap(
-        api.POST('/api/lists/{list_id}/due-items/{ingredient_id}/hide', {
-          params: { path: { list_id: listId, ingredient_id: ingredientId } },
+        api.POST('/api/lists/{list_id}/due-items/{item_id}/hide', {
+          params: { path: { list_id: listId, item_id: itemId } },
         }),
       ),
     {
-      optimistic: (ingredientId) => (list) => withoutDue(list, ingredientId),
+      optimistic: (itemId) => (list) => withoutDue(list, itemId),
     },
   );
 }

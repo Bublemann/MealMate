@@ -1,15 +1,10 @@
 import { useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ErrorAlert } from '@/components/ErrorAlert';
-import {
-  toSummary,
-  useIngredients,
-  type IngredientSearchResult,
-  type IngredientSummary,
-} from '@/features/ingredients/api';
-import { IngredientCategoryUnit } from '@/features/ingredients/IngredientCategoryUnit';
-import { IngredientFormDialog } from '@/features/ingredients/IngredientFormDialog';
-import { IngredientName } from '@/features/ingredients/IngredientName';
+import { toSummary, useItems, type ItemSearchResult, type ItemSummary } from '@/features/items/api';
+import { ItemCategoryUnit } from '@/features/items/ItemCategoryUnit';
+import { ItemFormDialog } from '@/features/items/ItemFormDialog';
+import { ItemName } from '@/features/items/ItemName';
 import {
   AddField,
   FieldOption,
@@ -25,50 +20,50 @@ import { testIds } from '@/testIds';
 /** More matches than this are left out: typing more narrows them down. */
 const MAX_RESULTS = 20;
 
-interface RecurringIngredientFieldProps {
+interface RecurringItemFieldProps {
   /** The typed text, kept by the page so it can empty the field once an item is added. */
   value: string;
   onValueChange: (value: string) => void;
-  /** A picked ingredient, also one just created through "Neue Zutat". */
-  onPick: (ingredient: IngredientSummary) => void;
+  /** A picked item, also one just created through "Neue Zutat". */
+  onPick: (item: ItemSummary) => void;
   disabled: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
 }
 
 /**
- * The ingredient field at the top of "Regelmäßige Artikel" (LIST-16): the item field's `AddField`
- * (D-41), a search input and a ＋, but it offers only ingredients, with "„X“ als neue Zutat"
+ * The item field at the top of "Regelmäßige Artikel" (LIST-16): the item field's `AddField`
+ * (D-41), a search input and a ＋, but it offers only items, with "„X“ als neue Zutat"
  * (ING-04) first in the list so late results never move it. There is no free text: only
- * ingredients can be recognised on later lists. ＋ or Enter (`usePlus`, which waits for the
- * results of the typed text) takes the one ingredient the server marked `exact`, whatever its
+ * items can be recognised on later lists. ＋ or Enter (`usePlus`, which waits for the
+ * results of the typed text) takes the one item the server marked `exact`, whatever its
  * brand; with several it leaves the choice to the results, and with none it opens "Neue Zutat".
  * When the search failed it does nothing; the error shows below the field.
  */
-export function RecurringIngredientField({
+export function RecurringItemField({
   value,
   onValueChange,
   onPick,
   disabled,
   inputRef,
-}: RecurringIngredientFieldProps) {
+}: RecurringItemFieldProps) {
   const { t } = useTranslation();
   const [creating, setCreating] = useState(false);
   const typed = value.trim();
   const debounced = useDebouncedValue(typed);
   const searching = debounced !== '' && !disabled;
-  const results = useIngredients(debounced, { enabled: searching });
+  const results = useItems(debounced, { enabled: searching });
   const categories = useCategories();
   // Only the answer for the text in the field: an earlier text's results would vanish under the
   // finger when the answer lands. A failed search answers null: ＋ has nothing to go by.
   const current = searching && debounced === typed && !results.isPlaceholderData;
-  const answer: IngredientSearchResult[] | null | undefined = current
+  const answer: ItemSearchResult[] | null | undefined = current
     ? (results.data ?? (results.isError ? null : undefined))
     : undefined;
   const matches = (answer ?? []).slice(0, MAX_RESULTS);
 
   const plus = usePlus(typed, answer, (found) => {
     if (found === null) return;
-    const exact = found.filter((ingredient) => ingredient.exact);
+    const exact = found.filter((item) => item.exact);
     if (exact.length === 1 && exact[0]) onPick(exact[0]);
     else if (exact.length === 0) setCreating(true);
     // Several brands of that name: the results stay for a tap.
@@ -88,21 +83,18 @@ export function RecurringIngredientField({
         panelOpen={typed !== ''}
         results={
           <ul aria-label={t('recurring.field.results')} className={RESULT_LIST_CLASS}>
-            <FieldOption testId={testIds.recurringNewIngredient} onSelect={() => setCreating(true)}>
-              {t('recurring.field.newIngredient', { name: typed })}
+            <FieldOption testId={testIds.recurringNewItem} onSelect={() => setCreating(true)}>
+              {t('recurring.field.newItem', { name: typed })}
             </FieldOption>
-            {matches.map((ingredient) => (
-              <li key={ingredient.id}>
+            {matches.map((item) => (
+              <li key={item.id}>
                 <button
                   type="button"
-                  onClick={() => onPick(ingredient)}
+                  onClick={() => onPick(item)}
                   className={cn(RESULT_BUTTON_CLASS, 'flex-col items-start gap-0')}
                 >
-                  <IngredientName ingredient={ingredient} />
-                  <IngredientCategoryUnit
-                    ingredient={ingredient}
-                    categories={categories.data ?? []}
-                  />
+                  <ItemName item={item} />
+                  <ItemCategoryUnit item={item} categories={categories.data ?? []} />
                 </button>
               </li>
             ))}
@@ -112,11 +104,11 @@ export function RecurringIngredientField({
         <ErrorAlert error={searching ? results.error : null} />
       </AddField>
       {/* Outside the field's form: its own form's submit would bubble through the portal. */}
-      <IngredientFormDialog
+      <ItemFormDialog
         open={creating}
         onOpenChange={setCreating}
         initialName={typed}
-        onSaved={(ingredient) => onPick(toSummary(ingredient))}
+        onSaved={(item) => onPick(toSummary(item))}
         onPickExisting={onPick}
       />
     </>

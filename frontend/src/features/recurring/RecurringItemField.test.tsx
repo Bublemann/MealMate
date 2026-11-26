@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
 import type { components } from '@/api/generated/schema';
-import { found, ingredient, REFERENCE_ROUTES, summary } from '@/test/ingredients';
+import { found, itemDetail, REFERENCE_ROUTES, summary } from '@/test/items';
 import { recurringItem, recurringList, stubResizeObserver } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -15,7 +15,7 @@ const ZAHNPASTA = summary('Zahnpasta', 'other', { base_unit: 'piece' });
 const ZAHNPASTA_DM = summary('Zahnpasta', 'other', { id: 'ing-zahnpasta-dm', brand: 'dm' });
 
 /** The ingredient search: what each typed text finds, an equal name exact whatever its brand. */
-function search(results: Record<string, Schemas['IngredientSummary'][]>) {
+function search(results: Record<string, Schemas['ItemSummary'][]>) {
   return (request: Request) => {
     const q = new URL(request.url).searchParams.get('q') ?? '';
     return (results[q] ?? []).map((result) => found(result, result.name.toLowerCase() === q));
@@ -25,12 +25,12 @@ function search(results: Record<string, Schemas['IngredientSummary'][]>) {
 function renderPage(routes: Record<string, unknown> = {}) {
   const fetchMock = mockApi({
     ...REFERENCE_ROUTES,
-    'GET /api/ingredients': search({
+    'GET /api/items': search({
       klo: [KLOPAPIER, KLOPAPIER_HALTER],
       klopapier: [KLOPAPIER, KLOPAPIER_HALTER],
       zahnpasta: [ZAHNPASTA, ZAHNPASTA_DM],
     }),
-    'GET /api/ingredients/similar': [],
+    'GET /api/items/similar': [],
     'POST /api/recurring-items': Response.json(recurringItem(), { status: 201 }),
     ...routes,
   });
@@ -80,7 +80,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
         'KlopapierhalterOther · pcs',
       ]),
     );
-    expect(screen.getByTestId(testIds.recurringNewIngredient)).toBe(
+    expect(screen.getByTestId(testIds.recurringNewItem)).toBe(
       within(results).getAllByRole('button')[0],
     );
     expect(screen.getByRole('button', { name: 'Add “klo”' })).toBeEnabled();
@@ -108,7 +108,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     // Untouched, the date is left to the server's today.
     expect(await postBodies(fetchMock, 'POST /api/recurring-items')).toEqual([
-      { ingredient_id: KLOPAPIER.id, interval_weeks: 4 },
+      { item_id: KLOPAPIER.id, interval_weeks: 4 },
     ]);
     expect(field()).toHaveValue('');
     expect(await screen.findByTestId(testIds.recurringItem)).toHaveTextContent(/^Klopapier/);
@@ -138,7 +138,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(await postBodies(fetchMock, 'POST /api/recurring-items')).toEqual([
-      { ingredient_id: KLOPAPIER.id, interval_weeks: 6, last_purchased_on: '2026-10-01' },
+      { item_id: KLOPAPIER.id, interval_weeks: 6, last_purchased_on: '2026-10-01' },
     ]);
     expect(await postBodies(fetchMock, `PATCH /api/recurring-items/${created.id}`)).toEqual([
       { automatic: false },
@@ -160,7 +160,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
 
   it('waits with ＋ for the results of the typed text', async () => {
     const search = heldRoute();
-    const { user } = renderPage({ 'GET /api/ingredients': search.route });
+    const { user } = renderPage({ 'GET /api/items': search.route });
 
     await user.type(await readyField(), 'klopapier');
     await user.click(screen.getByRole('button', { name: 'Add “klopapier”' }));
@@ -197,13 +197,13 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
   });
 
   it('creates “as a new ingredient” in “New ingredient”, then opens the pop-up for it', async () => {
-    const created = ingredient({ id: 'ing-duschgel', name: 'Duschgel', category_id: 'cat-other' });
+    const created = itemDetail({ id: 'ing-duschgel', name: 'Duschgel', category_id: 'cat-other' });
     const { fetchMock, user } = renderPage({
-      'POST /api/ingredients': Response.json(created, { status: 201 }),
+      'POST /api/items': Response.json(created, { status: 201 }),
     });
 
     await user.type(await readyField(), 'Duschgel');
-    await user.click(await screen.findByTestId(testIds.recurringNewIngredient));
+    await user.click(await screen.findByTestId(testIds.recurringNewItem));
     const form = await screen.findByRole('dialog', { name: 'New ingredient' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Duschgel');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
@@ -214,7 +214,7 @@ describe('the ingredient field on "Regelmäßige Artikel" (LIST-16, D-41, ING-04
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     expect(await postBodies(fetchMock, 'POST /api/recurring-items')).toEqual([
-      { ingredient_id: 'ing-duschgel', interval_weeks: 4 },
+      { item_id: 'ing-duschgel', interval_weeks: 4 },
     ]);
   });
 

@@ -1,8 +1,8 @@
 import type { Language } from '@/i18n';
-import type { BaseUnit, EditedField, Ingredient, OffProposal } from './api';
+import type { BaseUnit, EditedField, Item, OffProposal } from './api';
 import { NUTRIENT_KEYS, numberInputValue, type NutrientKey } from './nutrients';
 
-/** The longest ingredient name the server accepts; a name from Open Food Facts may be longer. */
+/** The longest item name the server accepts; a name from Open Food Facts may be longer. */
 export const NAME_MAX_LENGTH = 60;
 export const BRAND_MAX_LENGTH = 80;
 export const PACK_SIZE_MAX_LENGTH = 40;
@@ -55,18 +55,18 @@ export function emptyValues(name = '', language: Language): FormValues {
   };
 }
 
-/** The form of an existing ingredient. */
-export function valuesFromIngredient(ingredient: Ingredient, language: Language): FormValues {
+/** The form of an existing item. */
+export function valuesFromItem(item: Item, language: Language): FormValues {
   return {
-    name: ingredient.name,
-    brand: ingredient.brand ?? '',
-    quantity_text: ingredient.quantity_text ?? '',
-    categoryId: ingredient.category_id,
+    name: item.name,
+    brand: item.brand ?? '',
+    quantity_text: item.quantity_text ?? '',
+    categoryId: item.category_id,
     categoryKey: null,
-    baseUnit: ingredient.base_unit,
-    piece_weight_g: numberInputValue(ingredient.piece_weight_g, language),
-    barcode: ingredient.barcode ?? '',
-    nutrients: nutrientTexts(ingredient.nutrients, language),
+    baseUnit: item.base_unit,
+    piece_weight_g: numberInputValue(item.piece_weight_g, language),
+    barcode: item.barcode ?? '',
+    nutrients: nutrientTexts(item.nutrients, language),
   };
 }
 

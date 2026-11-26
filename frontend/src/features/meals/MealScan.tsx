@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { fieldErrorCodes } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Button } from '@/components/ui/button';
-import { toSummary, type IngredientSummary } from '@/features/ingredients/api';
-import { IngredientFormDialog } from '@/features/ingredients/IngredientFormDialog';
+import { toSummary, type ItemSummary } from '@/features/items/api';
+import { ItemFormDialog } from '@/features/items/ItemFormDialog';
 import { useBarcodeLookup } from '@/features/scanner/api';
 import { testIds } from '@/testIds';
 
@@ -17,8 +17,8 @@ const BarcodeScanDialog = lazy(() =>
 );
 
 interface MealScanProps {
-  /** Called with the barcode's ingredient: the known one, or the one saved or taken in the pop-up. */
-  onIngredient: (ingredient: IngredientSummary) => void;
+  /** Called with the barcode's item: the known one, or the one saved or taken in the pop-up. */
+  onItem: (item: ItemSummary) => void;
 }
 
 /**
@@ -27,7 +27,7 @@ interface MealScanProps {
  * other barcode opens "New ingredient", which looks it up as after a scan with its own scan icon
  * (BAR-03); its "Save", or taking an ingredient there, adds the row.
  */
-export function MealScan({ onIngredient }: MealScanProps) {
+export function MealScan({ onItem }: MealScanProps) {
   const { t } = useTranslation();
   const lookup = useBarcodeLookup();
   const [scanning, setScanning] = useState(false);
@@ -41,8 +41,8 @@ export function MealScan({ onIngredient }: MealScanProps) {
       { barcode: code, ownOnly: true },
       {
         onSuccess: (result) => {
-          if (result.found_in === 'db' && result.ingredient) {
-            onIngredient(toSummary(result.ingredient));
+          if (result.found_in === 'db' && result.item) {
+            onItem(toSummary(result.item));
           } else {
             setUnknown(result.barcode);
           }
@@ -94,14 +94,14 @@ export function MealScan({ onIngredient }: MealScanProps) {
           />
         </Suspense>
       )}
-      <IngredientFormDialog
+      <ItemFormDialog
         open={unknown !== null}
         onOpenChange={(open) => {
           if (!open) setUnknown(null);
         }}
         initialScan={unknown ?? undefined}
-        onSaved={(ingredient) => onIngredient(toSummary(ingredient))}
-        onPickExisting={onIngredient}
+        onSaved={(item) => onItem(toSummary(item))}
+        onPickExisting={onItem}
       />
     </>
   );

@@ -29,10 +29,10 @@ from app.domain.lists import (
     ListStatus,
 )
 from app.domain.units import Unit
-from app.schemas.ingredients import (
+from app.schemas.items import (
     BaseUnitName,
     IdInput,
-    IngredientSummary,
+    ItemSummary,
     blank_to_none,
     not_null,
 )
@@ -40,7 +40,7 @@ from app.schemas.meals import AmountInput, ServingsInput
 from app.schemas.users import UserRef
 
 # Plain aliases (not `type` statements) so the OpenAPI schema inlines the literals.
-LineKind = Literal["ingredient", "text"]
+LineKind = Literal["item", "text"]
 OpStatus = Literal["applied", "duplicate", "rejected"]
 # Room for the longest UUID spelling Python accepts (`urn:uuid:` and 36 characters).
 CLIENT_ID_MAX_LENGTH = 45
@@ -136,7 +136,7 @@ class LineNeedsMore(BaseModel):
 
 
 class ListLine(BaseModel):
-    """An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,
+    """An aggregated line (AGG), identified by `key`: `i:<item_id>` for an item,
     `x:<extra_id>` for a free-text item.
 
     `amounts` are the display amounts, shown joined ("500 g + 2 Stk."); `has_unspecified` means
@@ -153,7 +153,7 @@ class ListLine(BaseModel):
 
     key: str
     kind: LineKind
-    ingredient_id: str | None
+    item_id: str | None
     name: str
     brand: str | None
     category_id: str
@@ -170,17 +170,17 @@ class ListLine(BaseModel):
 
 
 class ExtraItem(BaseModel):
-    """An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`
+    """An extra item (LIST-06): linked to an item (`item_id`, optional `amount`
     and `unit`) or free text (`text`, optional `amount_text`, `category_id`).
 
-    A linked item's `base_unit` is the one its line is calculated with: its ingredient's, or
+    A linked extra item's `base_unit` is the one its line is calculated with: its item's, or
     the one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false
     for an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,
     or left by a base-unit change or a merge, and is kept as it is (D-33). Free text always
     fits."""
 
     id: str
-    ingredient_id: str | None
+    item_id: str | None
     text: str | None
     amount: float | None
     unit: Unit | None
@@ -196,9 +196,9 @@ class DueItem(BaseModel):
     """A due recurring item of the viewer's set, offered in a draft's "Fällig" box (LIST-16):
     due since `due_on`, `days_until_due` from today (0 "fällig heute", -3 "fällig seit 3
     Tagen"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,
-    only while its unit fits the ingredient's base unit (REF-02), for the amount pop-up."""
+    only while its unit fits the item's base unit (REF-02), for the amount pop-up."""
 
-    ingredient: IngredientSummary
+    item: ItemSummary
     due_on: date
     days_until_due: int
     last_purchased_on: date
@@ -213,7 +213,7 @@ class ListDetail(BaseModel):
     and `finished_at` are set once shopping started and while the list is done (LIST-10).
 
     `due_items` fill the "Fällig" box (LIST-16), only on a draft the viewer can edit, else
-    empty: the due recurring items of the viewer's set whose ingredient has no line on the list
+    empty: the due recurring items of the viewer's set whose item has no line on the list
     (a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first."""
 
     id: str
@@ -299,11 +299,11 @@ class ListMealUpdate(BaseModel):
 
 
 class ExtraItemCreate(BaseModel):
-    """Exactly one of `ingredient_id` and `text` (LIST-06).
+    """Exactly one of `item_id` and `text` (LIST-06).
 
-    - linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
+    - linked (`item_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount
       without a unit counts as pieces, a unit without an amount is refused, and the unit must
-      fit the ingredient's base unit (REF-02; `unit` `unit_mismatch` otherwise); no
+      fit the item's base unit (REF-02; `unit` `unit_mismatch` otherwise); no
       `amount_text` or `category_id`;
     - free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)
       and `category_id` (default: *Other*); no `amount` or `unit`.
@@ -312,7 +312,7 @@ class ExtraItemCreate(BaseModel):
     """
 
     id: ClientIdInput | None = None
-    ingredient_id: IdInput | None = None
+    item_id: IdInput | None = None
     amount: AmountInput | None = None
     unit: Unit | None = None
     text: ExtraTextInput | None = None
@@ -322,19 +322,19 @@ class ExtraItemCreate(BaseModel):
 
 class ExtraItemUpdate(BaseModel):
     """Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of
-    item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
-    unit or amount text, and is refused for `ingredient_id`, `text` and `category_id`. A linked
-    item whose amount doesn't fit stays as it is while its ingredient, amount and unit stay the
+    extra item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,
+    unit or amount text, and is refused for `item_id`, `text` and `category_id`. A linked
+    extra item whose amount doesn't fit stays as it is while its item, amount and unit stay the
     same; changing any of them needs a unit that fits (D-33)."""
 
-    ingredient_id: IdInput | None = None
+    item_id: IdInput | None = None
     amount: AmountInput | None = None
     unit: Unit | None = None
     text: ExtraTextInput | None = None
     amount_text: AmountTextInput | None = None
     category_id: IdInput | None = None
 
-    check_not_null = field_validator("ingredient_id", "text", "category_id")(not_null)
+    check_not_null = field_validator("item_id", "text", "category_id")(not_null)
 
 
 # --- ops (plan § 5.8, SYNC-05/06) -------------------------------------------------------------

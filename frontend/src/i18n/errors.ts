@@ -41,7 +41,7 @@ export function fieldErrorMessagesByPath(
 
 /**
  * Whether a form needs its general error alert: the error has no field problems, or one for a
- * path the form shows no input for (e.g. `ingredient_id`), which would otherwise go unseen.
+ * path the form shows no input for (e.g. `item_id`), which would otherwise go unseen.
  */
 export function needsErrorAlert(
   fieldMessages: Partial<Record<string, string>>,
