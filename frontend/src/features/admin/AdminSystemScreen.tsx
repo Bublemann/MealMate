@@ -135,8 +135,8 @@ function BackupCard({ backup }: { backup: BackupStatus | null }) {
           pending={request.isPending}
           onClick={() => request.mutate()}
           className="self-start"
+          icon={<DatabaseBackup aria-hidden="true" />}
         >
-          <DatabaseBackup aria-hidden="true" />
           {t('admin.system.backupNow')}
         </Button>
         <p role="status" className="text-sm text-muted-foreground">

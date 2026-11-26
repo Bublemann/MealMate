@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { components } from '@/api/generated/schema';
-import { errorResponse, mockApi, requestsTo } from '@/test/api';
+import { errorResponse, heldRoute, mockApi, requestsTo } from '@/test/api';
 import {
   CATEGORIES_AFTER_DELETE,
   itemDetail,
@@ -428,5 +428,33 @@ describe('OffSearchDialog', () => {
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     const form = screen.getByTestId(testIds.itemForm);
     await waitFor(() => expect(within(form).getByLabelText('Category')).toHaveValue('cat-other'));
+  });
+
+  it('shows the spinner while it searches, and in "More results" for a further page (UI-08)', async () => {
+    const first = heldRoute();
+    const more = heldRoute();
+    const { user } = renderSearch({
+      'GET /api/items/off-search': (request: Request) =>
+        new URL(request.url).searchParams.get('page') === '1' ? first.route() : more.route(),
+    });
+    const dialog = await openSearch(user);
+
+    const searching = await within(dialog).findByRole('status');
+    await waitFor(() => expect(searching).toHaveTextContent('Searching Open Food Facts…'));
+    expect(within(searching).getByTestId(testIds.spinner)).toBeVisible();
+    await first.answer(page([found(MILK)], { has_more: true }));
+    await within(dialog).findAllByTestId(testIds.offSearchResult);
+    expect(within(dialog).queryByTestId(testIds.spinner)).not.toBeInTheDocument();
+
+    const button = within(dialog).getByRole('button', { name: 'More results' });
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(await within(button).findByTestId(testIds.spinner)).toBeVisible();
+    expect(within(dialog).getAllByTestId(testIds.spinner)).toHaveLength(1);
+    expect(within(dialog).queryByText('Searching Open Food Facts…')).not.toBeInTheDocument();
+    await more.answer(page([found(OATS)], { page: 2 }));
+    await waitFor(() =>
+      expect(within(dialog).getAllByTestId(testIds.offSearchResult)).toHaveLength(2),
+    );
   });
 });

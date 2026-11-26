@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 
 interface SpinnerProps {
-  /** `small` sits inside a button or next to a line of text. */
+  /** `small` sits inside a button, as large as the button's icons. */
   size?: 'default' | 'small';
   className?: string;
 }
@@ -20,7 +20,7 @@ export function Spinner({ size = 'default', className }: SpinnerProps) {
       data-testid={testIds.spinner}
       className={cn(
         'animate-spin text-muted-foreground',
-        size === 'small' ? 'size-4 text-current' : 'size-6',
+        size === 'small' ? 'text-current' : 'size-6',
         className,
       )}
     />

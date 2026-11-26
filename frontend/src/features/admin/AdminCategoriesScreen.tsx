@@ -435,9 +435,9 @@ function DeleteCategory({
           <AlertDialogHeader>
             <AlertDialogTitle>{t('admin.categories.deleteTitle', { name })}</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              {/* A div: until the counts arrive it holds the spinner (UI-08). */}
+              {/* A div, not the usual <p>: it can hold the spinner (UI-08). */}
               <div>
-                {usage.data ? (
+                {usage.data &&
                   [
                     t('admin.categories.deleteItems', {
                       count: usage.data.items,
@@ -448,10 +448,8 @@ function DeleteCategory({
                       other: nameOf(OTHER_KEY),
                     }),
                     t('admin.categories.deleteKeeps'),
-                  ].join(' ')
-                ) : (
-                  <LoadingState />
-                )}
+                  ].join(' ')}
+                {usage.isPending && <LoadingState />}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -197,8 +197,8 @@ function ListContent({ list, categories, showMeals, onRefresh }: ListContentProp
             pending={start.isPending}
             disabled={!connected}
             onClick={() => start.mutate()}
+            icon={<ShoppingCart aria-hidden="true" />}
           >
-            <ShoppingCart aria-hidden="true" />
             {t('lists.shop.start')}
           </FloatingBarButton>
         </FloatingBar>

@@ -33,7 +33,8 @@ const buttonVariants = cva(
 
 /**
  * `pending` marks a save or another change that is running (UI-08): the button ignores further
- * presses at once and, after about 300 ms, shows the small spinner before its label.
+ * presses at once and, after about 300 ms, shows the small spinner in place of its `icon` (or of
+ * an icon button's only child), else before its label. An `asChild` button shows no spinner.
  */
 function Button({
   className,
@@ -42,12 +43,15 @@ function Button({
   asChild = false,
   pending = false,
   disabled,
+  icon,
   children,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
     pending?: boolean;
+    /** The icon before the label, which the spinner stands in for while pending. */
+    icon?: React.ReactNode;
   }) {
   const Comp = asChild ? Slot : 'button';
   const spinning = useDelayed(pending);
@@ -61,12 +65,10 @@ function Button({
       {...props}
     >
       {asChild ? (
-        // A slot takes exactly one child.
         children
       ) : (
         <>
-          {spinning && <Spinner size="small" />}
-          {/* An icon button has only room for one: the spinner stands in for its icon. */}
+          {spinning ? <Spinner size="small" /> : icon}
           {!(spinning && size === 'icon') && children}
         </>
       )}

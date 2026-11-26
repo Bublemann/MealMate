@@ -84,7 +84,7 @@ export function LoginScreen() {
         </FormField>
         <ErrorAlert error={login.error} />
         <Button type="submit" pending={login.isPending}>
-          {login.isPending ? t('auth.login.submitting') : t('auth.login.submit')}
+          {t('auth.login.submit')}
         </Button>
       </form>
       <p className="text-sm text-muted-foreground">{t('auth.login.noAccount')}</p>

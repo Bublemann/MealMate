@@ -31,8 +31,8 @@ export function SignedInGate({ children }: { children: ReactNode }) {
         pending={logout.isPending}
         onClick={() => logout.mutate()}
         className="self-start"
+        icon={<LogOut aria-hidden="true" />}
       >
-        <LogOut aria-hidden="true" />
         {t('me.logout')}
       </Button>
       <ErrorAlert error={logout.error} />

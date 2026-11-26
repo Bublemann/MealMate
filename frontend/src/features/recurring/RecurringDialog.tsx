@@ -172,7 +172,8 @@ function EditForm({
         }}
         followsInterval
         submitLabel={t('common.save')}
-        pending={update.isPending || remove.isPending}
+        pending={update.isPending}
+        busy={remove.isPending}
         error={update.error ?? remove.error}
         onSubmit={onSubmit}
         extra={
@@ -210,7 +211,10 @@ interface RecurringFormProps {
    */
   followsInterval: boolean;
   submitLabel: string;
+  /** Its own save runs: the button shows the spinner (UI-08). */
   pending: boolean;
+  /** Another change runs (the removal): the button only takes no press. */
+  busy?: boolean;
   error: unknown;
   onSubmit: (values: { weeks: number } & Omit<Values, 'weeks'>) => void;
   /** Below the main button: "Nicht mehr regelmäßig" when editing. */
@@ -222,6 +226,7 @@ function RecurringForm({
   followsInterval,
   submitLabel,
   pending,
+  busy = false,
   error,
   onSubmit,
   extra,
@@ -315,7 +320,7 @@ function RecurringForm({
       </FormField>
       {error !== null && needsErrorAlert(fields, SHOWN_FIELDS) && <ErrorAlert error={error} />}
       <div className="flex flex-col gap-2">
-        <Button type="submit" pending={pending} disabled={!connected}>
+        <Button type="submit" pending={pending} disabled={!connected || busy}>
           {submitLabel}
         </Button>
         {extra}

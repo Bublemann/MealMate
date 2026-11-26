@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testIds } from '@/testIds';
 import { Button } from './button';
@@ -56,5 +56,28 @@ describe('Button while pending (UI-08)', () => {
     });
 
     expect(screen.queryByTestId(testIds.spinner)).not.toBeInTheDocument();
+  });
+
+  it('puts the spinner in place of the icon: of an icon button, or the one given as `icon`', () => {
+    render(
+      <>
+        <Button size="icon" aria-label="Dismiss" pending>
+          <svg data-testid="dismiss-icon" />
+        </Button>
+        <Button pending icon={<svg data-testid="backup-icon" />}>
+          Back up now
+        </Button>
+      </>,
+    );
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    const dismiss = screen.getByRole('button', { name: 'Dismiss' });
+    expect(within(dismiss).getByTestId(testIds.spinner)).toBeVisible();
+    expect(screen.queryByTestId('dismiss-icon')).not.toBeInTheDocument();
+    const backup = screen.getByRole('button', { name: 'Back up now' });
+    expect(within(backup).getByTestId(testIds.spinner)).toBeVisible();
+    expect(screen.queryByTestId('backup-icon')).not.toBeInTheDocument();
   });
 });

@@ -69,10 +69,10 @@ frontend/
     │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
-    ├── components/ui/      # shadcn/ui building blocks, plus the sheet, the native checkbox and the field error
+    ├── components/ui/      # shadcn/ui building blocks, plus the sheet, the native checkbox, the field error and the spinner
     ├── components/         # shared app components (Screen, PinnedBlock, DetailStrip, FilterPanel, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
-    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
+    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent, `useDelayed`)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
     ├── sw/sw.ts            # service worker
     ├── test/               # setup, renderApp (signed in by default), mockApi (fetch router)
@@ -367,12 +367,14 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Loading** (UI-08): whatever waits for data shows `LoadingState` (`components/LoadingState.tsx`)
   in its place: the shared `Spinner` (`ui/spinner.tsx`), centred, in a `role="status"` region
   that reads "Wird geladen …" (visually hidden) or the `label` it is given, shown next to it
-  ("Suche bei Open Food Facts …"). Both appear only after `LOADING_DELAY_MS` (300 ms,
-  `lib/useDelayed.ts`), so a quick load shows nothing. Never write a loading text of your own. A
+  ("Suche bei Open Food Facts …"). Both appear only after 300 ms (`useDelayed`,
+  `lib/useDelayed.ts`), so a quick load shows nothing. Never write a loading text of your own;
+  where a spinner can't go (a native `<option>`), `LoadingState` goes next to the control. A
   button whose save or other change runs gets `pending` (`ui/button.tsx`): it is disabled and
-  `aria-busy` at once and shows the small spinner before its label after the same delay (an icon
-  button shows it instead of its icon). When one mutation serves several buttons, only the one
-  that was pressed is `pending` (compare the mutation's `variables`); the others are `disabled`.
+  `aria-busy` at once and, after the same delay, shows the small spinner in place of its `icon`
+  (or of an icon button's only child), else before its label; its label stays as it is. An
+  `asChild` button shows no spinner. When one mutation serves several buttons, only the one that
+  was pressed is `pending` (compare the mutation's `variables`); the others are `disabled`.
 - **Load errors of a screen** go through `LoadError`: no answer at all (offline, lie-fi timeout)
   shows the friendly "You're offline. This page needs a connection." (SYNC-09), anything else the
   translated error.

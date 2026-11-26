@@ -206,8 +206,8 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
           pending={remove.isPending}
           disabled={busy}
           onClick={onRemove}
+          icon={<Trash2 aria-hidden="true" />}
         >
-          <Trash2 aria-hidden="true" />
           {t('lists.item.remove')}
         </Button>
         <Button

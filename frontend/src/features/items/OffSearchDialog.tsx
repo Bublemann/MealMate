@@ -224,7 +224,8 @@ export function OffSearchDialog({
             variant="outline"
             className="self-start"
             data-testid={testIds.offSearchMore}
-            pending={search.isPending}
+            pending={search.isPending && search.variables.page > 1}
+            disabled={search.isPending}
             onClick={() => run(shown.query, shown.page + 1)}
           >
             {t('items.offSearch.more')}

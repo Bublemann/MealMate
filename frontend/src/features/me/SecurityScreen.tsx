@@ -89,6 +89,7 @@ function SecurityNotice() {
   const language = useLanguage();
   const security = useSecurityInfo();
 
+  if (security.isPending) return <LoadingState />;
   if (!security.data) return <LoadError error={security.error} />;
   const { password_reset_at: resetAt, password_reset_by: resetBy } = security.data;
   const changedAt = security.data.password_changed_at;

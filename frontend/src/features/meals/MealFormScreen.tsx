@@ -292,7 +292,7 @@ function MealFormView({ meal, addToList = '', name = '' }: MealFormViewProps) {
         {showAlert && <ErrorAlert error={mutation.error} />}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" pending={saving} disabled={values.name.trim() === ''}>
-            {saving ? t('meals.form.saving') : meal ? t('common.save') : t('meals.form.create')}
+            {meal ? t('common.save') : t('meals.form.create')}
           </Button>
           <Button variant="outline" asChild>
             <Link to={back.to}>{t('meals.form.cancel')}</Link>
