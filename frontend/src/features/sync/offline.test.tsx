@@ -4,6 +4,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
+import { COPY_STANDS_IN_AFTER_MS } from '@/features/lists/ListsScreen';
 import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
 import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/items';
 import {
@@ -18,7 +19,6 @@ import {
   SHOPPING_LINES,
 } from '@/test/lists';
 import { openMoreMenu } from '@/test/menu';
-import { COPY_STANDS_IN_AFTER_MS } from '@/features/lists/ListsScreen';
 import { dueItem } from '@/test/recurring';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
@@ -58,6 +58,11 @@ const HIDING_MY_SHOPPING: Schemas['Me'] = {
   filter_hidden: { meals: [], lists: [TEST_USER.id], list_states: ['shopping'] },
 };
 
+/** Faked timers that also move with real time, for the 3 s the Lists tab waits for its feed. */
+function fakeTimers() {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+}
+
 /** Time passes on the faked timers, by `ms`. */
 async function wait(ms: number) {
   await act(() => vi.advanceTimersByTimeAsync(ms));
@@ -66,9 +71,10 @@ async function wait(ms: number) {
 /** The feed's first page takes too long: the copy stands in once about 3 seconds pass (UI-02). */
 async function feedTakesTooLong() {
   expect(await screen.findByTestId(testIds.loadingState)).toBeInTheDocument();
-  await wait(COPY_STANDS_IN_AFTER_MS - 100);
+  // Well before the 3 s, as real time moves the faked clock too.
+  await wait(COPY_STANDS_IN_AFTER_MS / 2);
   expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
-  await wait(100);
+  await wait(COPY_STANDS_IN_AFTER_MS / 2);
 }
 
 function goOffline() {
@@ -250,6 +256,7 @@ describe('lists from the local copy (SYNC-09)', () => {
   });
 
   it('waits online for the feed instead of showing the copy, then shows all lists at once (UI-02)', async () => {
+    fakeTimers();
     await storeCopy(shoppingList());
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
@@ -259,6 +266,7 @@ describe('lists from the local copy (SYNC-09)', () => {
     // The spinner, not the copy's list being shopped without the done lists (UI-08).
     expect(await screen.findByTestId(testIds.spinner)).toBeVisible();
     expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+    await wait(COPY_STANDS_IN_AFTER_MS / 2);
     expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
     await feed.answer(feedPage(FEED_LISTS));
 
@@ -268,7 +276,7 @@ describe('lists from the local copy (SYNC-09)', () => {
   });
 
   it('shows the copy on the Lists tab, newest created first, once the feed takes 3 s, until it answers', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    fakeTimers();
     const storage = await storeCopy(
       listDetail({ name: 'Vorrat', created_at: '2026-09-20T10:00:00Z' }),
     );
@@ -302,8 +310,25 @@ describe('lists from the local copy (SYNC-09)', () => {
     );
   });
 
+  it('keeps the copy on coming back to the tab, without waiting again', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': NEVER, 'GET /api/lists/sync': NEVER });
+    const { router } = renderApp('/lists');
+    await feedTakesTooLong();
+    expect(await screen.findByTestId(testIds.listCard)).toBeVisible();
+
+    await act(() => router.navigate('/meals'));
+    await act(() => router.navigate('/lists'));
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+  });
+
   it('shows the copy whatever the saved filters say until the feed answers (UI-02)', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    fakeTimers();
     await storeCopy(shoppingList());
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
@@ -321,13 +346,14 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
   });
 
-  it('shows the copy at once when the feed fails, and says why', async () => {
+  it('says why the feed did not load while it shows the copy', async () => {
+    fakeTimers();
     await storeCopy(listDetail({ name: 'Vorrat' }));
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
     renderApp('/lists');
-    expect(await screen.findByTestId(testIds.loadingState)).toBeInTheDocument();
-    expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
+    await feedTakesTooLong();
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent('Vorrat (26/09/2026)');
 
     await feed.answer(errorResponse(503, 'common.service_unavailable'));
 
@@ -338,12 +364,14 @@ describe('lists from the local copy (SYNC-09)', () => {
   });
 
   it('says why the feed did not load instead of "No lists yet" when the copy is empty', async () => {
+    fakeTimers();
     const storage = await openSyncStorage();
     await storage.setMeta(userMetaKey('lastSync', TEST_USER.id), 1_000);
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
     renderApp('/lists');
-    expect(await screen.findByTestId(testIds.loadingState)).toBeInTheDocument();
+    await feedTakesTooLong();
+    expect(await screen.findByText('No lists yet')).toBeVisible();
 
     await feed.answer(errorResponse(503, 'common.service_unavailable'));
 
@@ -372,7 +400,7 @@ describe('lists from the local copy (SYNC-09)', () => {
         at: new Date().toISOString(),
       },
     });
-    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    fakeTimers();
     serverGone(NEVER);
 
     renderApp('/lists');
