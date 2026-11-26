@@ -75,7 +75,7 @@ def test_code_is_a_canonical_barcode(code: Any, expected: str | None) -> None:
 def test_empty_product() -> None:
     empty = product()
     assert empty.name("de") is None
-    assert (empty.brands, empty.quantity) == (None, None)
+    assert empty.brands is None
     assert empty.nutrition_basis is None
     assert empty.nutrients == dict.fromkeys(("kcal", "protein", "carbs", "sugar", "fat"))
     assert empty.category_key is None
@@ -83,7 +83,6 @@ def test_empty_product() -> None:
     assert empty.fields("de") == {
         "name": None,
         "brand": None,
-        "quantity_text": None,
     }
 
 
@@ -108,7 +107,6 @@ def test_texts_are_cleaned_and_capped() -> None:
     hostile = product(
         product_name="‮Evil\x00 " + "n" * 300,
         brands="Evil Corp " + "X" * 200,
-        quantity="1‮00 g" + " " * 100 + "x" * 100,
         extra_field={"ignored": True},
     )
     name = hostile.name("de")
@@ -116,7 +114,6 @@ def test_texts_are_cleaned_and_capped() -> None:
     assert name.startswith("Evil nnn")
     assert len(name) == 60
     assert hostile.brands == "Evil Corp " + "X" * 70
-    assert hostile.quantity == "100 g " + "x" * 34
 
 
 @pytest.mark.parametrize(
@@ -255,7 +252,6 @@ def test_fields_by_product_field() -> None:
         product_name="Rolled Oats",
         product_name_de="Haferflocken",
         brands="Test Kitchen",
-        quantity="500 g",
         product_quantity_unit="g",
         nutrition_data_per="100g",
         nutriments=ALL_NUTRIENTS | {"fat_100g": 101},
@@ -263,7 +259,6 @@ def test_fields_by_product_field() -> None:
     assert found.fields("de") == {
         "name": "Haferflocken",
         "brand": "Test Kitchen",
-        "quantity_text": "500 g",
         "nutrients.kcal": 372,
         "nutrients.protein": 13.5,
         "nutrients.carbs": 58.7,

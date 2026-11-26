@@ -92,8 +92,6 @@ function PropertiesCard({ item }: { item: Item }) {
         ]
       : []),
     { label: t('items.detail.barcode'), value: item.barcode ?? notSet },
-    // The pack size is its text alone, as in the edit pop-up (D-47).
-    { label: t('items.detail.pack'), value: item.quantity_text ?? notSet },
     {
       label: t('items.detail.source'),
       value: t(`items.detail.source.${item.source}`),
