@@ -73,7 +73,7 @@ SCREENS = [
     # The scanner over "New item", opened in the test. No camera in CI (denied or
     # missing): it shows its manual input (BAR-01).
     Screen("/items/scan", "member", (TEST_IDS["barcodeScanDialog"], TEST_IDS["barcodeInput"])),
-    # A barcode an ingredient has is typed into that scanner in the test: the pop-up names it
+    # A barcode an item has is typed into that scanner in the test: the pop-up names it
     # below the barcode field, with "open" (BAR-02). Open Food Facts isn't asked, so its few
     # lookups a minute (BAR-08) stay for test_barcodes.
     Screen(
@@ -131,7 +131,7 @@ def test_no_serious_violations(
     if path == "/items/:id":
         api = request.getfixturevalue("api")
         # From Open Food Facts, so the page also shows the pack size and the attribution (D-47).
-        ingredient = api.create_item(
+        item = api.create_item(
             account,
             unique("A11y"),
             brand=unique("Brand"),
@@ -140,8 +140,8 @@ def test_no_serious_violations(
             nutrients={"kcal": 52},
             off={"edited_fields": []},
         )
-        path = f"/items/{ingredient['id']}"
-    # The barcode typed into the scanner on "/items/scanned", and its ingredient's name.
+        path = f"/items/{item['id']}"
+    # The barcode typed into the scanner on "/items/scanned", and its item's name.
     scanned, scanned_name = "", ""
     if path == "/items/scanned":
         api = request.getfixturevalue("api")

@@ -11,7 +11,7 @@ A self-hosted web app that turns saved meals into a category-sorted shopping lis
 
 - Shopping lists built from meals, with servings, sorted by supermarket category.
 - Check items off in the store, also offline. Share lists with your partner.
-- A shared ingredient database with nutrition values and barcode scanning (Open Food Facts).
+- A shared item database (food and household items) with nutrition values and barcode scanning (Open Food Facts).
 - Meals with recipe, photo and source link, plus nutrition per serving.
 - German and English UI, installable on the iPhone Home Screen.
 

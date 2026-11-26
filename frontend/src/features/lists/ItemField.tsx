@@ -61,11 +61,11 @@ interface ItemFieldProps {
 
 /**
  * The item field at the top of Artikel (LIST-06, D-41). It searches items, under
- * "„X“ als Artikel" and "„X“ als neue Zutat". An item, or ＋ with the only item of
+ * "„X“ als Artikel" and "„X“ als neuer Artikel". An item, or ＋ with the only item of
  * that name (whatever its brand), opens the amount pop-up with the units that fit it (REF-02);
  * "„X“ als Artikel", or ＋ without an exact match, the free-text pop-up; with several brands of
- * that name ＋ does nothing and the results stay for a tap. "„X“ als neue Zutat" opens "Neue
- * Zutat" (ING-04), then the amount pop-up for it.
+ * that name ＋ does nothing and the results stay for a tap. "„X“ als neuer Artikel" opens
+ * "Neuer Artikel" (ING-04), then the amount pop-up for it.
  *
  * Offline a draft can't change (SYNC-03): the field is inactive. While shopping offline it
  * searches nothing and offers only free text, which goes into the outbox (SHOP-02).

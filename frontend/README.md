@@ -100,9 +100,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `features/items/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
   export, offline copy); lists and pickers use `ItemName` (brand muted, barcode icon), with
   `ItemCategoryUnit` ("Milchprodukte & Eier · ml") as the grey line below. Two brands of the
-  same thing are different ingredients and separate list lines.
+  same thing are different items and separate list lines.
 - **Units** (REF-02, D-32): a meal row and a linked extra item offer only the units that fit their
-  ingredient's base unit. `/api/units` names the base units each unit fits, and `useUnitChoice`
+  item's base unit. `/api/units` names the base units each unit fits, and `useUnitChoice`
   (`features/reference/units.ts`) offers those. An older amount that doesn't fit (D-33) keeps its
   unit, shown but no longer selectable, with "Einheit passt nicht zu <Artikel>" as the field's
   error. With an amount, "Keine Einheit" counts as pieces, so a meal row offers it only where
@@ -173,7 +173,7 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   of the screen for the content as the tab opens too, also on an iPhone SE's smaller screen
   (`e2e/tests/test_items.py`).
 - **Detail strip** (UI-01, D-46): every detail screen (a shopping list, a meal, the meal form, an
-  ingredient, the admin pages, the diagnostics) starts with `DetailStrip`, which `Screen` renders
+  item, the admin pages, the diagnostics) starts with `DetailStrip`, which `Screen` renders
   above the visible title when it gets `back`; the title follows below and scrolls with the page.
   Like the pinned block, the strip is frosted, stuck below the status bar while the content
   scrolls under it, and capped by the `pinned` utility (D-29). On its left, the back link
@@ -225,16 +225,16 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the set (`recurringQuery`, `GET /api/recurring-items`) and the one of the notices
   (`noticesQuery`, `GET /api/me/notices`), shared by the page "Regelmäßige Artikel", its row
   (`RecurringValue`: "1 Hinweis · 2 fällig") and the gear's count. Every change loads the set
-  again: the pop-up's, a merge or delete of an ingredient, and an ops batch after which its list
+  again: the pop-up's, a merge or delete of an item, and an ops batch after which its list
   is done (the server records the purchases then). `RecurringDialog` is the recurring pop-up, used
-  by the page and by "Regelmäßig kaufen…" in `ItemMenu`: the ingredient as its title,
+  by the page and by "Regelmäßig kaufen…" in `ItemMenu`: the item as its title,
   "Alle n Wochen", "Automatisch anpassen" and "Zuletzt gekauft" (today, left to the server unless
   changed), then "Hinzufügen", or "Speichern" and the red "Nicht mehr regelmäßig" (asks first)
-  for an ingredient that is recurring already. Editing sends only what changed; a new interval
+  for an item that is recurring already. Editing sends only what changed; a new interval
   turns "Automatisch anpassen" off (typed back, the switch is as it was, unless switched by hand),
   and the switch is then always sent. A new item adapts unless switched off, which takes a second
   request (the create has no such field). The page's `RecurringItemField` is the item
-  field's `AddField` with `usePlus` (D-41), but offers only ingredients and "„X“ als neuer Artikel"
+  field's `AddField` with `usePlus` (D-41), but offers only items and "„X“ als neuer Artikel"
   (`ItemFormDialog`, then the pop-up); ＋ goes by the server's `exact` marks. `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
   02.10. · fällig in 5 Tagen") without counting days. On a draft the viewer can edit, the item
   field shows the list detail's `due_items` in the "Fällig" box below it (`DueBox`, LIST-16):
@@ -242,7 +242,7 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   field's `AmountDialog` with the last amount (when the server gives one, i.e. it fits), and ✕
   ("Klopapier ausblenden") hides it on that list for everyone, without asking
   (`useHideDueItem`). Both take the row out at once; adding a linked item does that for its
-  ingredient. While one of the field's pop-ups is open the rows stay as they are. The focus goes
+  item. While one of the field's pop-ups is open the rows stay as they are. The focus goes
   back to the ＋ the amount pop-up was opened from; when a row leaves with the focus on its ＋
   or ✕, the same button of the row in its place (or above) takes it, and the item field once
   the box is gone. A failed ✕ says why until the due items change or the next action. The box comes with the list, so polling
@@ -262,7 +262,7 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   once, the saves one after another (`WALKING_ORDER_SCOPE`), as on the admins' Kategorien page;
   a failed save puts the order back. Each save loads the lists in the cache again. A category an
   admin added since shows "neu" until it is moved. Offline the page's controls are disabled.
-- **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
+- **⋯ menu** (D-39): a list, a meal and an item keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
   buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `ItemMenu` pass
   their items, each keeping its action's test ID, and the red `danger` item ("Löschen"), which
@@ -284,9 +284,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   "Fertig" closes the panel. The button shows how many groups are not at their default, also in
   its accessible name. A group shows the loading placeholder until its options arrive, and its
   error when they fail to load or a change fails. Items offers the categories (any of them,
-  ING-03), with _Uncategorized_ only while it holds ingredients or is ticked
-  (`filterableCategories`: the category list counts each category's ingredients, and saving,
-  merging or deleting an ingredient loads it again); Meals the user filter (MEAL-10), the
+  ING-03), with _Uncategorized_ only while it holds items or is ticked
+  (`filterableCategories`: the category list counts each category's items, and saving,
+  merging or deleting an item loads it again); Meals the user filter (MEAL-10), the
   cuisines (any of them) and the tags (all of them, MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
   (`features/savedFilters/`): `useUserFilterGroup`, one checkbox per user whose meals or lists are
   visible, "Me" first, then the partner, and `useStateFilterGroup`, "Entwurf", "Einkauf" and
@@ -320,12 +320,12 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Add fields** (LIST-03, LIST-06, D-41): a list's Gerichte and Artikel sections each start with
   `AddField` (`features/lists/AddField.tsx`): a search input with a screen-reader label and a
   placeholder, a ＋, and below them a panel with the create options for the typed text first,
-  then the results. `MealField` and `ItemField` use it, and so does the ingredient field on
+  then the results. `MealField` and `ItemField` use it, and so does the item field on
   "Regelmäßige Artikel". Results answered for an earlier text are
-  never shown (the meal search keeps no previous data, the ingredient search's placeholder data is
+  never shown (the meal search keeps no previous data, the item search's placeholder data is
   ignored), so a late answer only grows below the options. ＋ and Enter go through `usePlus`: it
   waits for the results of the text in the field, then takes the one result the server marked
-  `exact` (one's own of two meals), does nothing with several brands of one ingredient, and
+  `exact` (one's own of two meals), does nothing with several brands of one item, and
   otherwise does what the first option does. The pop-ups (`ServingsDialog` in `MealField`,
   `AmountDialog` and `FreeTextDialog` in `AddDialogs.tsx`) close on "Hinzufügen" with
   `flushSync` and give the emptied field the focus in the same tap, so iOS keeps the keyboard; the
@@ -510,7 +510,7 @@ Open Food Facts attribution (only while Open Food Facts values are shown, BAR-09
 two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) and a scan icon
 ("Barcode scannen"), each at least 44 pt and wrapping below the name at large text sizes; the
 barcode (placeholder "8, 12 oder 13 Ziffern") with a message line for scan notices; the
-similar-ingredients hint, only while there are matches; the brand (placeholder "optional, z. B.
+similar-items hint, only while there are matches; the brand (placeholder "optional, z. B.
 REWE"); the pack size "Packung" (placeholder "optional, z. B. 500 g", D-47); the category; the
 base unit as three radio options, Gramm, Milliliter and Stück; the piece weight, only for Stück;
 the nutrition values in two columns. "Speichern" sits in a footer pinned
@@ -518,7 +518,7 @@ below the scroll area, inside the visible area above the keyboard (UI-01); the �
 stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
 empty, so "„Quitten“ anlegen" opens without the keyboard covering the icons. There is no density
 field. The pack size is free text that may stay empty: a scan or a chosen search result fills it,
-and the edit pop-up corrects or clears it. On an Open Food Facts ingredient a changed pack size is
+and the edit pop-up corrects or clears it. On an Open Food Facts item a changed pack size is
 user-edited like the name, so its "In MealMate geändert" mark and the "Packung: 250 g → 500 g" line
 of the newer-values hint work as for the other fields (BAR-04, BAR-06). The server takes its
 amount from the text.
@@ -531,7 +531,7 @@ Items tab (D-37), and the barcode field has no scan button of its own. The scann
 lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
 starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up
 and the meal form, so the scanner doesn't import `ItemForm`. The meal form asks only its own
-ingredients (`own_only`, no waiting for Open Food Facts): a known barcode adds its row, any other
+items (`own_only`, no waiting for Open Food Facts): a known barcode adds its row, any other
 opens "Neuer Artikel" with it, which looks it up as its own scan icon does (MEAL-03).
 
 - **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
@@ -550,19 +550,19 @@ opens "Neuer Artikel" with it, which looks it up as its own scan icon does (MEAL
   shown with a "Try again" button. Without a camera, or when access is denied, only the manual
   input is shown; it is always there (`inputMode="numeric"`).
 - **In "Neuer Artikel":** the barcode is looked up with `GET /api/items/lookup` (25 s timeout).
-  - A barcode that belongs to an ingredient fills in nothing; the barcode's message line says
-    "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that ingredient) or, in the
+  - A barcode that belongs to an item fills in nothing; the barcode's message line says
+    "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that item) or, in the
     meal form's picker, "nehmen" (takes it into the meal).
   - An Open Food Facts proposal fills the form like a chosen search result (name, brand, pack
     size, category guess, base unit, nutrients, barcode, read-only), keeping what was typed where
-    the proposal has no value. One "Speichern" creates the ingredient in one request, with an
+    the proposal has no value. One "Speichern" creates the item in one request, with an
     `off` block naming only the values the user changed (`edited_fields`, BAR-04).
   - A barcode Open Food Facts doesn't know fills in only the barcode, with a notice. A timeout or
     `off.busy` does the same, with "Nochmal versuchen".
   - When editing, a scan only fills in the barcode, or shows "Gehört schon zu …" when another
-    ingredient has it.
-- **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has,
-  the similar-ingredients hint offers it to each match without a barcode: in the meal form's
+    item has it.
+- **Attaching a barcode:** while the barcode field holds a scanned barcode that no item has,
+  the similar-items hint offers it to each match without a barcode: in the meal form's
   picker "Milch nehmen" links it (`POST /api/items/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
   Milch hinzufügen" links it, closes the pop-up and opens Milch. A match with a barcode is offered
   as before, without attaching anything.
@@ -574,7 +574,7 @@ opens "Neuer Artikel" with it, which looks it up as its own scan icon does (MEAL
 
 ## Open Food Facts search by name
 
-People who start with no data have nothing to scan yet, so a new ingredient can also be filled
+People who start with no data have nothing to scan yet, so a new item can also be filled
 from a search by name: the magnifier next to the name in "Neuer Artikel" (also when creating from the
 picker, never when editing) opens `OffSearchDialog` with the typed name and searches at once, or
 with an empty search field when no name is typed (BAR-11). Further searches
@@ -582,7 +582,7 @@ with an empty search field when no name is typed (BAR-11). Further searches
 presses Enter, never while typing (BAR-08); the server rate-limits and caches them. A result shows
 name, brand, pack size and calories per 100 g/ml; choosing one fills the form like a scanned
 proposal (with its barcode, read-only). A product that is already in MealMate picks that
-ingredient in the picker and links to it elsewhere. "More results" loads the next page.
+item in the picker and links to it elsewhere. "More results" loads the next page.
 
 ## Tests
 
@@ -657,7 +657,7 @@ order.
 | ----------------------- | ------------------------- | ------------------------------------------------ |
 | `tabLists`              | `tab-lists`               | Tab bar link to Lists                            |
 | `tabMeals`              | `tab-meals`               | Tab bar link to Meals                            |
-| `tabItems`              | `tab-items`               | Tab bar link to Ingredients                      |
+| `tabItems`              | `tab-items`               | Tab bar link to Items                            |
 | `tabMe`                 | `tab-me`                  | Tab bar link to Settings (the gear)              |
 | `screenLists`           | `screen-lists`            | Lists screen                                     |
 | `screenMeals`           | `screen-meals`            | Meals screen                                     |
@@ -706,11 +706,11 @@ order.
 | `shareButton`           | `share-button`            | Share (or Copy) for a created link               |
 | `hintHomeScreen`        | `hint-home-screen`        | First-login hint "Add to Home Screen"            |
 | `hintTailscale`         | `hint-tailscale`          | First-login hint "Keep Tailscale on"             |
-| `screenItem`            | `screen-item`             | Ingredient detail screen                         |
+| `screenItem`            | `screen-item`             | Item detail screen                               |
 | `itemSearch`            | `item-search`             | Search field on Items                            |
 | `newItem`               | `new-item`                | "New item" tile on Items                         |
-| `itemList`              | `item-list`               | Ingredients, one A–Z list                        |
-| `itemRow`               | `item-row`                | One ingredient in the list (link)                |
+| `itemList`              | `item-list`               | Items, one A–Z list                              |
+| `itemRow`               | `item-row`                | One item in the list (link)                      |
 | `pinnedBlock`           | `pinned-block`            | A tab's pinned block, its headline first         |
 | `filterButton`          | `filter-button`           | Filter button in a tab's pinned block            |
 | `filterPanel`           | `filter-panel`            | Filter panel (slides up from the bottom)         |
@@ -719,12 +719,12 @@ order.
 | `itemFormScan`          | `item-form-scan`          | Scan icon next to the name in the form           |
 | `itemFormFooter`        | `item-form-footer`        | The form's pinned footer with "Save"             |
 | `itemScanNotice`        | `item-scan-notice`        | The scan's notice below the barcode              |
-| `itemScanOpen`          | `item-scan-open`          | "open" the ingredient a scan belongs to          |
+| `itemScanOpen`          | `item-scan-open`          | "open" the item a scan belongs to                |
 | `itemScanTake`          | `item-scan-take`          | "use" it instead, in the picker                  |
 | `itemScanRetry`         | `item-scan-retry`         | "Try again" when Open Food Facts is slow         |
-| `itemSimilar`           | `item-similar`            | "Similar ingredients exist" hint                 |
-| `editItem`              | `edit-item`               | "Edit" in the ingredient's ⋯ menu                |
-| `itemNutrition`         | `item-nutrition`          | Nutrition table of an ingredient                 |
+| `itemSimilar`           | `item-similar`            | "Similar items exist" hint                       |
+| `editItem`              | `edit-item`               | "Edit" in the item's ⋯ menu                      |
+| `itemNutrition`         | `item-nutrition`          | Nutrition table of an item                       |
 | `baseUnitConfirm`       | `base-unit-confirm`       | "Change anyway?" when amounts won't fit          |
 | `offSearchButton`       | `off-search-button`       | Magnifier next to the name in the form           |
 | `offSearchDialog`       | `off-search-dialog`       | Open Food Facts search by name                   |
@@ -733,22 +733,22 @@ order.
 | `offSearchMore`         | `off-search-more`         | "More results" (next page)                       |
 | `offSearchEmpty`        | `off-search-empty`        | "Nothing found" of the search                    |
 | `barcodeScanDialog`     | `barcode-scan-dialog`     | Scanner (scan icon, meal form's scan)            |
-| `mergeItem`             | `merge-item`              | Admin: "Merge…" in the ingredient's ⋯ menu       |
+| `mergeItem`             | `merge-item`              | Admin: "Merge…" in the item's ⋯ menu             |
 | `mergeUnitMismatch`     | `merge-unit-mismatch`     | Admin: amounts that won't fit after a merge      |
-| `deleteItem`            | `delete-item`             | Admin: "Delete" in the ingredient's ⋯ menu       |
-| `buyRegularly`          | `buy-regularly`           | "Buy regularly…" in the ingredient's ⋯ menu      |
+| `deleteItem`            | `delete-item`             | Admin: "Delete" in the item's ⋯ menu             |
+| `buyRegularly`          | `buy-regularly`           | "Buy regularly…" in the item's ⋯ menu            |
 | `recurringList`         | `recurring-list`          | The recurring items on Regelmäßige Artikel       |
 | `recurringItem`         | `recurring-item`          | One recurring item (opens its pop-up)            |
 | `recurringNotices`      | `recurring-notices`       | Unread notices at the top of the page            |
 | `dismissNotice`         | `dismiss-notice`          | ✕ that dismisses one notice                      |
 | `recurringDialog`       | `recurring-dialog`        | Recurring pop-up (new or edit)                   |
-| `recurringInput`        | `recurring-input`         | Ingredient field on Regelmäßige Artikel          |
+| `recurringInput`        | `recurring-input`         | Item field on Regelmäßige Artikel                |
 | `recurringNewItem`      | `recurring-new-item`      | "„X“ als neuer Artikel" under that field         |
 | `recurringRemove`       | `recurring-remove`        | "No longer recurring" in the recurring pop-up    |
 | `walkingOrderSwitch`    | `walking-order-switch`    | "Reihenfolge der Verwaltung übernehmen" switch   |
 | `walkingOrderList`      | `walking-order-list`      | Categories in the walking order (D-48)           |
 | `walkingOrderHandle`    | `walking-order-handle`    | Drag handle of a category (touch and mouse)      |
-| `itemPicker`            | `item-picker`             | Ingredient picker (search and pick)              |
+| `itemPicker`            | `item-picker`             | Item picker (search and pick)                    |
 | `itemPickerCreate`      | `item-picker-create`      | Picker entry "Create “…”"                        |
 | `screenAdminCategories` | `screen-admin-categories` | Admin: categories screen                         |
 | `adminCategoryList`     | `admin-category-list`     | Admin: categories in their order                 |
@@ -799,8 +799,8 @@ order.
 | `servingsDialog`        | `servings-dialog`         | Servings pop-up of a meal being added            |
 | `extraItemInput`        | `extra-item-input`        | Item field's input, top of "Items"               |
 | `itemFreeText`          | `item-free-text`          | "“X” as an item" under the item field            |
-| `itemNewItem`           | `item-new-item`           | "“X” as a new ingredient" under it               |
-| `amountDialog`          | `amount-dialog`           | Amount pop-up of an ingredient being added       |
+| `itemNewItem`           | `item-new-item`           | "“X” as a new item" under it                     |
+| `amountDialog`          | `amount-dialog`           | Amount pop-up of an item being added             |
 | `freeTextDialog`        | `free-text-dialog`        | Free-text pop-up of an item being added          |
 | `dueBox`                | `due-box`                 | "Due" box of due recurring items on a draft      |
 | `dueItem`               | `due-item`                | One due item with its ＋ and ✕                   |

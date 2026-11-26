@@ -82,7 +82,7 @@ const SCREENS: DetailScreen[] = [
     parent: testIds.screenList,
   },
   {
-    name: 'an ingredient',
+    name: 'an item',
     path: `/items/${APPLES.id}`,
     routes: {
       ...REFERENCE_ROUTES,

@@ -22,16 +22,16 @@ interface MealScanProps {
 }
 
 /**
- * The meal form's "Scan barcode" (BAR-01, MEAL-03). A barcode one of our ingredients has adds its
- * row at once (BAR-02): our own ingredients answer that without waiting for Open Food Facts. Any
+ * The meal form's "Scan barcode" (BAR-01, MEAL-03). A barcode one of our items has adds its
+ * row at once (BAR-02): our own items answer that without waiting for Open Food Facts. Any
  * other barcode opens "New item", which looks it up as after a scan with its own scan icon
- * (BAR-03); its "Save", or taking an ingredient there, adds the row.
+ * (BAR-03); its "Save", or taking an item there, adds the row.
  */
 export function MealScan({ onItem }: MealScanProps) {
   const { t } = useTranslation();
   const lookup = useBarcodeLookup();
   const [scanning, setScanning] = useState(false);
-  // The barcode no ingredient has, while "New item" is open for it.
+  // The barcode no item has, while "New item" is open for it.
   const [unknown, setUnknown] = useState<string | null>(null);
   const barcode = lookup.variables?.barcode ?? '';
   const invalid = fieldErrorCodes(lookup.error).barcode !== undefined;

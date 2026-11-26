@@ -18,7 +18,7 @@ const KEYS = Object.keys(NAMES) as (keyof typeof NAMES)[];
 
 /**
  * A few categories in their walking order, named as seeded (the real seed has 18). Their
- * ingredient counts only matter for *Uncategorized*, which the Items tab offers by its count.
+ * item counts only matter for *Uncategorized*, which the Items tab offers by its count.
  */
 export const CATEGORIES: Schemas['Category'][] = KEYS.map((key, index) => ({
   id: `cat-${key}`,

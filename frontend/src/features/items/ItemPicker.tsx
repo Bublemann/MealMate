@@ -20,7 +20,7 @@ interface ItemPickerProps {
   onSelect: (item: ItemSummary) => void;
   /** Items that can't be chosen (e.g. the one being merged). */
   excludeIds?: readonly string[];
-  /** The search field's label (default "Search ingredient"). */
+  /** The search field's label (default "Search item"). */
   label?: string;
   /** Offers "Create “…”" for the typed name (default true). */
   allowCreate?: boolean;
