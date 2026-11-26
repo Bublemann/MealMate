@@ -1,4 +1,4 @@
-"""Guessing an ingredient's category from Open Food Facts categories (BAR-03).
+"""Guessing an item's category from Open Food Facts categories (BAR-03).
 
 A product's `categories_tags` hold canonical tags such as `en:cheeses`, together with all their
 parents (`en:dairies`, `en:fermented-foods`, ...). `CATEGORY_RULES` is checked in order and the
@@ -6,7 +6,7 @@ first rule whose tag the product has wins, so specific tags come before broad on
 before dairy, frozen and canned before whatever is frozen or canned, bread and breakfast cereals
 before `en:cereals-and-potatoes`. Broad tags that span several of our categories (e.g.
 `en:plant-based-foods`) have no rule. The guess only preselects the category of a new
-ingredient; the user can change it.
+item; the user can change it.
 """
 
 from collections.abc import Iterable

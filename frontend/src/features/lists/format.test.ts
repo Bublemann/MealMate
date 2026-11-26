@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
-import { CATEGORIES } from '@/test/ingredients';
+import { CATEGORIES } from '@/test/items';
 import { LINES } from '@/test/lists';
 import {
   groupByCategory,
@@ -19,7 +19,7 @@ function amounts(
   hasUnspecified = false,
 ) {
   return {
-    kind: 'ingredient',
+    kind: 'item',
     amounts: values,
     has_unspecified: hasUnspecified,
     amount_text: null,

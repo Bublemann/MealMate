@@ -15,7 +15,7 @@ from app.schemas.admin import (
     SystemInfo,
 )
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.ingredients import Ingredient, IngredientMerge
+from app.schemas.items import Item, ItemMerge
 from app.schemas.reference import (
     Category,
     CategoryCreate,
@@ -23,7 +23,7 @@ from app.schemas.reference import (
     CategoryRename,
     CategoryUsage,
 )
-from app.services import admin, codes, ingredients, reference, system
+from app.services import admin, codes, items, reference, system
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], responses=ERROR_RESPONSES)
 
@@ -121,7 +121,7 @@ async def admin_rename_category(
 async def admin_category_usage(
     category_id: str, principal: CurrentAdmin, session: ReadSession
 ) -> CategoryUsage:
-    """How many ingredients and free-text items on drafts deleting the category would move, for
+    """How many items and free-text items on drafts deleting the category would move, for
     the confirmation. A deleted category is not found."""
     return await reference.category_usage(session, category_id)
 
@@ -132,7 +132,7 @@ async def admin_category_usage(
 async def admin_delete_category(
     category_id: str, principal: CurrentAdmin, session: WriteSession, now: Now
 ) -> None:
-    """Delete a category: its ingredients move to *Uncategorized* and its free-text items on
+    """Delete a category: its items move to *Uncategorized* and its free-text items on
     drafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and
     *Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not
     found."""
@@ -149,31 +149,31 @@ async def admin_reorder_categories(
     return await reference.reorder_categories(session, principal, body.category_ids, now=now)
 
 
-@router.post("/ingredients/{ingredient_id}/merge")
-async def admin_merge_ingredient(
-    ingredient_id: str,
-    body: IngredientMerge,
+@router.post("/items/{item_id}/merge")
+async def admin_merge_item(
+    item_id: str,
+    body: ItemMerge,
     principal: CurrentAdmin,
     session: WriteSession,
     now: Now,
-) -> Ingredient:
+) -> Item:
     """Merge a duplicate into `into_id`: its references move there and it is deleted
-    (ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the
+    (ING-05). Returns the item merged into. 409 `item.unit_mismatch` with the
     number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
     is true (D-33)."""
-    return await ingredients.merge(session, principal, ingredient_id, body, now=now)
+    return await items.merge(session, principal, item_id, body, now=now)
 
 
 @router.delete(
-    "/ingredients/{ingredient_id}",
+    "/items/{item_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-async def admin_delete_ingredient(
-    ingredient_id: str, principal: CurrentAdmin, session: WriteSession, now: Now
+async def admin_delete_item(
+    item_id: str, principal: CurrentAdmin, session: WriteSession, now: Now
 ) -> None:
-    """Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise)."""
-    await ingredients.delete(session, principal, ingredient_id, now=now)
+    """Delete an item that nothing refers to (409 `item.in_use` otherwise)."""
+    await items.delete(session, principal, item_id, now=now)
 
 
 @router.get("/system")

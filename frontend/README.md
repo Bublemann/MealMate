@@ -60,8 +60,8 @@ frontend/
     │   ├── auth/           # session (token, refresh, fork), AuthProvider, guards, login/join/reset
     │   ├── me/ couple/     # Settings tab, its rows and gear count; Profil, Privatsphäre, Sicherheit, Paar …
     │   ├── admin/          # users, invites, categories, activity log, system (lazy-loaded route chunk)
-    │   ├── ingredients/    # Ingredients tab, detail, IngredientForm, Open Food Facts search, picker
-    │   ├── scanner/        # the scanner opened from "Neue Zutat" and the meal form: camera, decoder
+    │   ├── items/          # Items tab, detail, ItemForm, Open Food Facts search, picker
+    │   ├── scanner/        # the scanner opened from "Neuer Artikel" and the meal form: camera, decoder
     │   ├── lists/          # Lists tab (feed, filters), draft/shopping/done views, polling, export text
     │   ├── recurring/      # Regelmäßige Artikel: the set, its notices, the recurring pop-up, the field
     │   ├── walkingOrder/   # Reihenfolge im Laden: the own walking order of a couple or a user
@@ -69,10 +69,10 @@ frontend/
     │   ├── savedFilters/   # the filters saved in the profile: user filter (Meals, Lists), state filter (Lists)
     │   ├── reference/      # categories, units, cuisines (long-cached) and their labels
     │   └── hints/          # first-login hints (Home Screen, Tailscale)
-    ├── components/ui/      # shadcn/ui building blocks, plus the sheet, the native checkbox and the field error
+    ├── components/ui/      # shadcn/ui building blocks, plus the sheet, the native checkbox, the field error and the spinner
     ├── components/         # shared app components (Screen, PinnedBlock, DetailStrip, FilterPanel, InitialMarker, FormField, …)
     ├── i18n/               # de.json, en.json, index.ts (setup, language switch), format.ts
-    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent)
+    ├── lib/                # small helpers (`cn`, `shareText`, `uuidv7`, `initialOf`, tab memory, user agent, `useDelayed`)
     ├── styles/             # tokens.css (design tokens), index.css (Tailwind entry)
     ├── sw/sw.ts            # service worker
     ├── test/               # setup, renderApp (signed in by default), mockApi (fetch router)
@@ -96,21 +96,21 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **No domain calculations in the frontend** (MNT-02). Amounts, conversions, aggregation,
   rounding, nutrition and permissions come from the backend; the frontend formats and displays
   (`src/i18n/format.ts`: `formatNumber`, `formatDate`, `parseAmount`).
-- **Ingredient names** are shown with their brand: `ingredientLabel(name, brand)` from
-  `features/ingredients/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
-  export, offline copy); lists and pickers use `IngredientName` (brand muted, barcode icon), with
-  `IngredientCategoryUnit` ("Milchprodukte & Eier · ml") as the grey line below. Two brands of the
-  same thing are different ingredients and separate list lines.
+- **Item names** are shown with their brand: `itemLabel(name, brand)` from
+  `features/items/label.ts` ("Milch (Weidehof)") in text (meal detail and form, list lines,
+  export, offline copy); lists and pickers use `ItemName` (brand muted, barcode icon), with
+  `ItemCategoryUnit` ("Milchprodukte & Eier · ml") as the grey line below. Two brands of the
+  same thing are different items and separate list lines.
 - **Units** (REF-02, D-32): a meal row and a linked extra item offer only the units that fit their
-  ingredient's base unit. `/api/units` names the base units each unit fits, and `useUnitChoice`
+  item's base unit. `/api/units` names the base units each unit fits, and `useUnitChoice`
   (`features/reference/units.ts`) offers those. An older amount that doesn't fit (D-33) keeps its
-  unit, shown but no longer selectable, with "Einheit passt nicht zu <Zutat>" as the field's
+  unit, shown but no longer selectable, with "Einheit passt nicht zu <Artikel>" as the field's
   error. With an amount, "Keine Einheit" counts as pieces, so a meal row offers it only where
   pieces fit, or while the row has no amount ("nach Geschmack"). The mark follows the amount and
   unit as they are typed, by the same table, so it doesn't wait for the server; the server judges what is
   stored the same way (`unit_fits`), keeps such a row while it is sent back unchanged and refuses
   a new one. A base-unit change, or a merge across base units, that would leave amounts not
-  fitting is refused with their counts (409 `ingredient.unit_mismatch`, read by `unitMismatch`):
+  fitting is refused with their counts (409 `item.unit_mismatch`, read by `unitMismatch`):
   the edit pop-up asks in `BaseUnitConfirmDialog` ("Trotzdem ändern" or "Abbrechen"), and the
   merge confirmation stays open, names the count and merges on "Trotzdem zusammenführen". Either
   sends the same request again with `accept_unit_mismatch`.
@@ -130,9 +130,9 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Tab bar and keyboard** (UI-01): the tab bar floats on a frosted surface and shows icons only
   (D-28), the fourth a gear; the tab names stay as visually hidden text (not `aria-label`s), so
   screen readers and tests still read them. A tab's name is its screen's headline, from one
-  translation per tab (`nav.*`, D-44): "Einkaufslisten", "Gerichte", "Zutaten", "Einstellungen".
+  translation per tab (`nav.*`, D-44): "Einkaufslisten", "Gerichte", "Artikel", "Einstellungen".
   Every screen shows its headline as its one level-1 heading, which labels the screen's section
-  (`Screen`): on Lists, Meals and Ingredients as the first element of the pinned block
+  (`Screen`): on Lists, Meals and Items as the first element of the pinned block
   (`<Screen variant="pinned">`), elsewhere above the content, scrolling with it (the default
   `scrolling` variant: the Settings tab and the detail screens). The Settings tab keeps the
   address `/me` and the test IDs `tabMe` and `screenMe` from when it was called "Me". The frosted
@@ -152,13 +152,13 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   Pinch-zoom (`scale` ≠ 1) doesn't count as a keyboard (A11Y-02); without the API (as in jsdom)
   nothing changes. Tests stub `visualViewport` and fire its events (`stubVisualViewport()` from
   `test/viewport.ts`).
-- **Pinned block** (UI-01, UI-03): Lists, Meals and Ingredients start with `PinnedBlock`, on the
+- **Pinned block** (UI-01, UI-03): Lists, Meals and Items start with `PinnedBlock`, on the
   same frosted surface as the tab bar, stuck below the status bar while the content scrolls under
   it. It holds the tab's headline (D-44, handed over by its `<Screen variant="pinned">`), the
   search field (its label only for screen readers), the filter button and the green, row-shaped
   "Neu…" tile, which reads "„Quitten“ anlegen" while a search text is present and opens the new
-  form with that name. A tab renders it at once and puts its state below it: `LoadingState` until
-  the first answer, then the content, `EmptyLine` ("Noch keine Zutaten") on an empty tab, or
+  form with that name. A tab renders it at once and puts its state below it: `LoadingState` (UI-08) until
+  the first answer, then the content, `EmptyLine` ("Noch keine Artikel") on an empty tab, or
   `NoMatches` ("Keine Treffer" with "Filter zurücksetzen", which clears the search and the
   filters) when they hide everything. Like the tab bar, the block must
   not crowd out the content at the largest text sizes: the `pinned` utility (`index.css`) caps its
@@ -171,45 +171,46 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   goes into its padding, so a one-line tile keeps its height). The space above the screen (the
   `main` in `Layout`) stops growing at 24 px or is the status bar's, so the block leaves a quarter
   of the screen for the content as the tab opens too, also on an iPhone SE's smaller screen
-  (`e2e/tests/test_ingredients.py`).
+  (`e2e/tests/test_items.py`).
 - **Detail strip** (UI-01, D-46): every detail screen (a shopping list, a meal, the meal form, an
-  ingredient, the admin pages, the diagnostics) starts with `DetailStrip`, which `Screen` renders
+  item, the admin pages, the diagnostics) starts with `DetailStrip`, which `Screen` renders
   above the visible title when it gets `back`; the title follows below and scrolls with the page.
   Like the pinned block, the strip is frosted, stuck below the status bar while the content
   scrolls under it, and capped by the `pinned` utility (D-29). On its left, the back link
   "‹ _parent_" (`backLink`) stays on one line and at least 44 pt; a long name is cut with "…" on
   screen and is still its accessible name in full. It leads to a fixed parent, never back in the
-  history: "Alle Listen", "Alle Gerichte", "Alle Zutaten", "Einstellungen" (the admin pages and
+  history: "Alle Listen", "Alle Gerichte", "Alle Artikel", "Einstellungen" (the admin pages and
   the diagnostics → the fourth tab), and in the meal form the meal's name when editing, or the
   display name of the list a new meal goes onto (`useListOnce`, which doesn't poll; "Einkaufsliste"
   until it is known). On its right, `action` takes the screen's one button, its ⋯ menu (D-39);
   without one the slot is empty, with nothing to see or to focus. Tests: `DetailStrip.test.tsx`.
-- **Settings tab** (UI-07, D-45): `features/me/SettingsScreen.tsx` shows the headline, then rows
-  in grouped panels, and Abmelden last. The rows come from one ordered list, `SETTINGS_ROWS` in
+- **Settings tab** (UI-07, D-45): `features/me/SettingsScreen.tsx` shows the headline, then rows in
+  grouped panels, and Abmelden last. The rows come from one ordered list, `SETTINGS_ROWS` in
   `features/me/settingsRows.ts`: each entry has its group, its label key, its address and,
   optionally, a value component (`SettingsValues.tsx`). The groups (`SETTINGS_GROUPS`) are the
-  user's own rows, **Verwaltung** for admins only (its heading, `adminEntry`), and Über MealMate.
-  A later page adds its row as one entry in its group, plus its route in `app/router.tsx`. A row
-  is a link: the label first (its accessible name starts with it, so tests find "Paar" whatever
-  the value), the value in muted text, then a chevron; at large text sizes the value wraps below
-  the label. Values load on their own and never hold the rows back: while one loads, fails or
-  can't be fetched offline, its row shows no value and stays tappable. Profil shows the display
-  name (the tab loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
-  (`waitingRequests`) or else the partner (`userLabel`), Regelmäßige Artikel "1 Hinweis" and
-  "2 fällig" (`RecurringValue`), System (admins) when the last backup ran, or "Fehlgeschlagen" in
-  words after a failed run, followed by the day of the last successful backup when the host knows
-  it ("Fehlgeschlagen · zuletzt am 26.09.2026"), and Über MealMate the version. Only their
-  addresses name the admin pages, so the tab doesn't load the admin chunk (PERF-03); the System
-  value's query (`useSystemInfo`) sits in `features/me/api.ts` for that reason, shared with the
-  System page. Abmelden is a red, centred button: with changes still waiting it asks first with
-  their count (SYNC-05).
+  user's own rows, **Verwaltung** for admins only (its heading, `adminEntry`), and Über MealMate. A
+  later page adds its row as one entry in its group, plus its route in `app/router.tsx`. A row is a
+  link: the label first (its accessible name starts with it, so tests find "Paar" whatever the
+  value), the value in muted text, then a chevron; at large text sizes the value wraps below the
+  label. Values load on their own and never hold the rows back: while one loads, fails or can't be
+  fetched offline, its row shows no value and stays tappable. Profil shows the display name (the tab
+  loads the profile again as it opens), Paar "1 Anfrage" while couple requests wait
+  (`waitingRequests`) or else the partner (`userLabel`), Regelmäßige Artikel "1 Hinweis" and "2
+  fällig" (`RecurringValue`), Übrige Gerichte "An" or "Aus" (`LeftoversValue`), System (admins) when
+  the last backup ran, or "Fehlgeschlagen" in words after a failed run, followed by the day of the
+  last successful backup when the host knows it ("Fehlgeschlagen · zuletzt am 26.09.2026"), and Über
+  MealMate the version. Only their addresses name the admin pages, so the tab doesn't load the admin
+  chunk (PERF-03); the System value's query (`useSystemInfo`) sits in `features/me/api.ts` for that
+  reason, shared with the System page. Abmelden is a red, centred button: with changes still waiting
+  it asks first with their count (SYNC-05).
 - **Settings pages** (D-45, D-46): each row opens a detail screen under `/me/…` (`/me/profile`,
-  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/walking-order`, `/me/about`), framed by `SettingsPage`: the strip
-  with "‹ Einstellungen" back to `/me` and no ⋯ menu, then its title. A page holds what its card
-  held, without the card's heading. The admin pages share the frame and stay under
-  `/me/admin/…` (`/me/admin` opens Benutzer); they have no switcher of their own, admins go back
-  and tap the next Verwaltung row. When nobody else can be picked for a couple, the Paar page
-  shows admins the way to the invites and asks everyone else to turn to an admin (D-49).
+  `/me/privacy`, `/me/couple`, `/me/security`, `/me/recurring`, `/me/leftovers`,
+  `/me/walking-order`, `/me/about`), framed by `SettingsPage`: the strip with "‹ Einstellungen" back
+  to `/me` and no ⋯ menu, then its title. A page holds what its card held, without the card's
+  heading. The admin pages share the frame and stay under `/me/admin/…` (`/me/admin` opens
+  Benutzer); they have no switcher of their own, admins go back and tap the next Verwaltung row.
+  When nobody else can be picked for a couple, the Paar page shows admins the way to the invites and
+  asks everyone else to turn to an admin (D-49).
 - **Count on the gear** (UI-07, D-51): while something waits for the user to act on, the Settings
   tab's gear carries a small red count ("9+" above nine), sized by the capped
   `--tab-bar-badge*` tokens so it doesn't grow beyond the bar. It is hidden from screen readers,
@@ -225,24 +226,24 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   the set (`recurringQuery`, `GET /api/recurring-items`) and the one of the notices
   (`noticesQuery`, `GET /api/me/notices`), shared by the page "Regelmäßige Artikel", its row
   (`RecurringValue`: "1 Hinweis · 2 fällig") and the gear's count. Every change loads the set
-  again: the pop-up's, a merge or delete of an ingredient, and an ops batch after which its list
+  again: the pop-up's, a merge or delete of an item, and an ops batch after which its list
   is done (the server records the purchases then). `RecurringDialog` is the recurring pop-up, used
-  by the page and by "Regelmäßig kaufen…" in `IngredientMenu`: the ingredient as its title,
+  by the page and by "Regelmäßig kaufen…" in `ItemMenu`: the item as its title,
   "Alle n Wochen", "Automatisch anpassen" and "Zuletzt gekauft" (today, left to the server unless
   changed), then "Hinzufügen", or "Speichern" and the red "Nicht mehr regelmäßig" (asks first)
-  for an ingredient that is recurring already. Editing sends only what changed; a new interval
+  for an item that is recurring already. Editing sends only what changed; a new interval
   turns "Automatisch anpassen" off (typed back, the switch is as it was, unless switched by hand),
   and the switch is then always sent. A new item adapts unless switched off, which takes a second
-  request (the create has no such field). The page's `RecurringIngredientField` is the item
-  field's `AddField` with `usePlus` (D-41), but offers only ingredients and "„X“ als neue Zutat"
-  (`IngredientFormDialog`, then the pop-up); ＋ goes by the server's `exact` marks. `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
+  request (the create has no such field). The page's `RecurringItemField` is the item
+  field's `AddField` with `usePlus` (D-41), but offers only items and "„X“ als neuer Artikel"
+  (`ItemFormDialog`, then the pop-up); ＋ goes by the server's `exact` marks. `format.ts` words the server's display values ("alle ~4 Wochen · zuletzt
   02.10. · fällig in 5 Tagen") without counting days. On a draft the viewer can edit, the item
   field shows the list detail's `due_items` in the "Fällig" box below it (`DueBox`, LIST-16):
   name, "fällig seit 3 Tagen · zuletzt 02.10.", ＋ ("Klopapier hinzufügen") opens the item
   field's `AmountDialog` with the last amount (when the server gives one, i.e. it fits), and ✕
   ("Klopapier ausblenden") hides it on that list for everyone, without asking
-  (`useHideDueItem`). Both take the row out at once; adding a linked item does that for its
-  ingredient. While one of the field's pop-ups is open the rows stay as they are. The focus goes
+  (`useHideDueItem`). Both take the row out at once; adding a linked extra item does that for
+  the item it links to. While one of the field's pop-ups is open the rows stay as they are. The focus goes
   back to the ＋ the amount pop-up was opened from; when a row leaves with the focus on its ＋
   or ✕, the same button of the row in its place (or above) takes it, and the item field once
   the box is gone. A failed ✕ says why until the due items change or the next action. The box comes with the list, so polling
@@ -262,9 +263,11 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   once, the saves one after another (`WALKING_ORDER_SCOPE`), as on the admins' Kategorien page;
   a failed save puts the order back. Each save loads the lists in the cache again. A category an
   admin added since shows "neu" until it is moved. Offline the page's controls are disabled.
-- **⋯ menu** (D-39): a list, a meal and an ingredient keep their actions in `MoreMenu`
+- **⋯ menu** (D-39): a list, a meal and an item keep their actions in `MoreMenu`
   (`components/MoreMenu.tsx`, on `ui/dropdown-menu.tsx` from the shadcn registry on Radix), not in
-  buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`) and `IngredientMenu` pass
+  buttons on the screen: `ListMenu`, `MealMenu` (in `MealDetailScreen`), `ItemMenu` and a leftover
+  meal's row menu (⋮, `LeftoverMenu` in `ListMeals`, LIST-17, whose `label`, `testId` and `icon`
+  replace the button's name, test ID and icon) pass
   their items, each keeping its action's test ID, and the red `danger` item ("Löschen"), which
   the menu puts last after a separator. The ⋯ button ("Weitere Aktionen", `moreActions`) is always
   enabled; items that need a connection are disabled offline, not hidden (SYNC-03), and "Als
@@ -283,10 +286,10 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   default, and a reset for all of them. Each tick applies at once; "Zurücksetzen" resets every group and keeps the search;
   "Fertig" closes the panel. The button shows how many groups are not at their default, also in
   its accessible name. A group shows the loading placeholder until its options arrive, and its
-  error when they fail to load or a change fails. Ingredients offers the categories (any of them,
-  ING-03), with _Uncategorized_ only while it holds ingredients or is ticked
-  (`filterableCategories`: the category list counts each category's ingredients, and saving,
-  merging or deleting an ingredient loads it again); Meals the user filter (MEAL-10), the
+  error when they fail to load or a change fails. Items offers the categories (any of them,
+  ING-03), with _Uncategorized_ only while it holds items or is ticked
+  (`filterableCategories`: the category list counts each category's items, and saving,
+  merging or deleting an item loads it again); Meals the user filter (MEAL-10), the
   cuisines (any of them) and the tags (all of them, MEAL-09); Lists the user filter and the state filter (UI-02). Those two are the saved filters
   (`features/savedFilters/`): `useUserFilterGroup`, one checkbox per user whose meals or lists are
   visible, "Me" first, then the partner, and `useStateFilterGroup`, "Entwurf", "Einkauf" and
@@ -320,12 +323,12 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
 - **Add fields** (LIST-03, LIST-06, D-41): a list's Gerichte and Artikel sections each start with
   `AddField` (`features/lists/AddField.tsx`): a search input with a screen-reader label and a
   placeholder, a ＋, and below them a panel with the create options for the typed text first,
-  then the results. `MealField` and `ItemField` use it, and so does the ingredient field on
+  then the results. `MealField` and `ItemField` use it, and so does the item field on
   "Regelmäßige Artikel". Results answered for an earlier text are
-  never shown (the meal search keeps no previous data, the ingredient search's placeholder data is
+  never shown (the meal search keeps no previous data, the item search's placeholder data is
   ignored), so a late answer only grows below the options. ＋ and Enter go through `usePlus`: it
   waits for the results of the text in the field, then takes the one result the server marked
-  `exact` (one's own of two meals), does nothing with several brands of one ingredient, and
+  `exact` (one's own of two meals), does nothing with several brands of one item, and
   otherwise does what the first option does. The pop-ups (`ServingsDialog` in `MealField`,
   `AmountDialog` and `FreeTextDialog` in `AddDialogs.tsx`) close on "Hinzufügen" with
   `flushSync` and give the emptied field the focus in the same tap, so iOS keeps the keyboard; the
@@ -336,13 +339,16 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   page, `next_cursor`); the next page loads when the end of the feed comes near the screen
   (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
   filter. Until its first page arrives the feed is the local copy (`showsLocalCopy`), which they
-  don't narrow. Icons with an accessible name mark a shared list, a read-only one (lock), one being
-  shopped and a done one.
+  don't narrow. Online, `ListFeed` shows the spinner instead of that copy for up to 3 s
+  (`COPY_STANDS_IN_AFTER_MS`, D-57); offline it shows the copy at once. The feed query is never
+  garbage-collected (`gcTime: Infinity`), so the copy that stood in stays on coming back.
+  Icons with an accessible name mark a shared list, a read-only one (lock), one being shopped and
+  a done one.
 - **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in
   `useTabMemory(tab)` (`lib/tabMemory.ts`), an in-memory store that the `Layout` holds. It
   survives opening a detail and coming back, and is gone when the app closes or the session ends;
   never put it in the URL or browser storage. Other screens may set it before opening a tab:
-  "Zeigen" after a category delete leaves the Ingredients tab with only _Uncategorized_ ticked
+  "Zeigen" after a category delete leaves the Items tab with only _Uncategorized_ ticked
   and no search. The user filter and the state filter are server state (`/me`).
 - **Content Security Policy:** the backend sends a strict CSP. No inline `<script>` or `style=""`
   in `index.html`, no `eval`, no third-party requests of any kind (fonts, CDNs, analytics); every
@@ -364,6 +370,17 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   `src/app/queryClient.ts`), also when the browser reports being offline, so a screen shows "can't
   reach MealMate" instead of waiting, and a change fails at once and is undone on screen. The
   shopping actions don't fail offline: they go through the outbox (see "Offline and sync").
+- **Loading** (UI-08): whatever waits for data shows `LoadingState` (`components/LoadingState.tsx`)
+  in its place: the shared `Spinner` (`ui/spinner.tsx`), centred, in a `role="status"` region
+  that reads "Wird geladen …" (visually hidden) or the `label` it is given, shown next to it
+  ("Suche bei Open Food Facts …"). Both appear only after 300 ms (`useDelayed`,
+  `lib/useDelayed.ts`), so a quick load shows nothing. Never write a loading text of your own;
+  where a spinner can't go (a native `<option>`), `LoadingState` goes next to the control. A
+  button whose save or other change runs gets `pending` (`ui/button.tsx`): it is disabled and
+  `aria-busy` at once and, after the same delay, shows the small spinner in place of its `icon`
+  (or of an icon button's only child), else before its label; its label stays as it is. An
+  `asChild` button shows no spinner. When one mutation serves several buttons, only the one that
+  was pressed is `pending` (compare the mutation's `variables`); the others are `disabled`.
 - **Load errors of a screen** go through `LoadError`: no answer at all (offline, lie-fi timeout)
   shows the friendly "You're offline. This page needs a connection." (SYNC-09), anything else the
   translated error.
@@ -453,12 +470,19 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
   categories are kept too: the category list holds every category's names, deleted ones included
   (D-30), so stored lists show every heading offline. It is loaded again with the copy once it is
   stale (`categoriesQuery`, 5 minutes), whichever screen is open; a cached list without names, left
-  by an app version before D-31, is not used. The copy seeds the query cache
-  (`initialData` of `useList` and of the list feed's first page on the Lists tab), so they show at
-  once and stay when the server can't be reached.
-- **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items and _Finish_ are always
-  queued, online or offline — stored in IndexedDB first, then shown (`applyPending()` layers the
-  user's waiting ops on the list; waiting lines are faded with "not sent yet"), then sent. The flush
+  by an app version before D-31, is not used. Lists stored by an app version before #171, which
+  said `ingredient` where the API says `item` (a line's `kind` and `ingredient_id`, an extra
+  item's `ingredient_id`, a due item's `ingredient`), are read with the new names
+  (`fromOlderApp`) until the next sync replaces them. The outbox needs nothing of the kind: its
+  ops never named an item (a line is `i:<id>`, extra items are free text). The copy seeds the
+  query cache (`initialData` of `useList` and of the list feed's first page on the Lists tab), so
+  they show at once and stay when the server can't be reached.
+- **Outbox** (SYNC-03/04, one code path): check-off, free-text extra items, _Finish_ and a ticked
+  leftover meal in a draft or while shopping (`leftover.eaten`, D-60) are always queued, online or
+  offline — stored in IndexedDB first, then shown (`applyPending()` layers the user's waiting ops on
+  the list; waiting lines are faded with "not sent yet"), then sent. A ticked leftover names its
+  source meal, so `opsForList` applies it to every list: it leaves every stored draft at once; once
+  sent, the other cached and stored lists keep it applied until they are loaded again. The flush
   sends consecutive ops of a list in batches of up to 100, in order, under
   `navigator.locks.request('mm-outbox')` across tabs, and only with a session the server confirmed
   for the ops' user (SYNC-10): the request's fetch checks right before each attempt (also the
@@ -498,37 +522,32 @@ inside the `AuthProvider`; components use the hooks in `features/sync/context.ts
 - **Tests**: `fake-indexeddb/auto` in the sync tests; component tests without it use the memory
   fallback.
 
-## "Neue Zutat"
+## "Neuer Artikel"
 
-`IngredientForm` is one compact pop-up for creating an ingredient from the Ingredients tab or the
+`ItemForm` is one compact pop-up for creating an item from the Items tab or the
 meal form's picker and for the meal form's scan; the edit pop-up uses it too (ING-04, D-35). Top to bottom: the
 Open Food Facts attribution (only while Open Food Facts values are shown, BAR-09); the name with
 two icon buttons, a magnifier ("In Open Food Facts suchen", not when editing) and a scan icon
 ("Barcode scannen"), each at least 44 pt and wrapping below the name at large text sizes; the
 barcode (placeholder "8, 12 oder 13 Ziffern") with a message line for scan notices; the
-similar-ingredients hint, only while there are matches; the brand (placeholder "optional, z. B.
-REWE"); the pack size "Packung" (placeholder "optional, z. B. 500 g", D-47); the category; the
-base unit as three radio options, Gramm, Milliliter and Stück; the piece weight, only for Stück;
-the nutrition values in two columns. "Speichern" sits in a footer pinned
-below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels. Labels
-stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
+similar-items hint, only while there are matches; the brand (placeholder "optional, z. B.
+REWE"); the category; the base unit as three radio options, Gramm, Milliliter and Stück; the
+piece weight, only for Stück; the nutrition values in two columns. "Speichern" sits in a footer
+pinned below the scroll area, inside the visible area above the keyboard (UI-01); the ✕ cancels.
+Labels stay visible above every field (A11Y-01). The cursor starts in the name only when the name is
 empty, so "„Quitten“ anlegen" opens without the keyboard covering the icons. There is no density
-field. The pack size is free text that may stay empty: a scan or a chosen search result fills it,
-and the edit pop-up corrects or clears it. On an Open Food Facts ingredient a changed pack size is
-user-edited like the name, so its "In MealMate geändert" mark and the "Packung: 250 g → 500 g" line
-of the newer-values hint work as for the other fields (BAR-04, BAR-06). The server takes its
-amount from the text.
+field.
 
 ## Barcode scanner
 
-The scan icon in "Neue Zutat" and in the edit pop-up, and "Barcode scannen" in the meal form's
-ingredient picker, open the scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
-Ingredients tab (D-37), and the barcode field has no scan button of its own. The scanner is a
+The scan icon in "Neuer Artikel" and in the edit pop-up, and "Barcode scannen" in the meal form's
+item picker, open the scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
+Items tab (D-37), and the barcode field has no scan button of its own. The scanner is a
 lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
 starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up
-and the meal form, so the scanner doesn't import `IngredientForm`. The meal form asks only its own
-ingredients (`own_only`, no waiting for Open Food Facts): a known barcode adds its row, any other
-opens "Neue Zutat" with it, which looks it up as its own scan icon does (MEAL-03).
+and the meal form, so the scanner doesn't import `ItemForm`. The meal form asks only its own
+items (`own_only`, no waiting for Open Food Facts): a known barcode adds its row, any other
+opens "Neuer Artikel" with it, which looks it up as its own scan icon does (MEAL-03).
 
 - **Decoder:** `zxing-wasm/reader` (EAN-13, EAN-8, UPC-A, UPC-E). Its wasm file is imported with
   `?url`, so it is part of the build (`dist/assets/zxing_reader-*.wasm`) and served by the app;
@@ -545,40 +564,40 @@ opens "Neue Zutat" with it, which looks it up as its own scan icon does (MEAL-03
   while in use (unplugged, taken by another app), decoding stops and "No camera available" is
   shown with a "Try again" button. Without a camera, or when access is denied, only the manual
   input is shown; it is always there (`inputMode="numeric"`).
-- **In "Neue Zutat":** the barcode is looked up with `GET /api/ingredients/lookup` (25 s timeout).
-  - A barcode that belongs to an ingredient fills in nothing; the barcode's message line says
-    "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that ingredient) or, in the
+- **In "Neuer Artikel":** the barcode is looked up with `GET /api/items/lookup` (25 s timeout).
+  - A barcode that belongs to an item fills in nothing; the barcode's message line says
+    "Gehört schon zu Milch (Weihenstephan)" with "öffnen" (goes to that item) or, in the
     meal form's picker, "nehmen" (takes it into the meal).
-  - An Open Food Facts proposal fills the form like a chosen search result (name, brand, pack
-    size, category guess, base unit, nutrients, barcode, read-only), keeping what was typed where
-    the proposal has no value. One "Speichern" creates the ingredient in one request, with an
+  - An Open Food Facts proposal fills the form like a chosen search result (name, brand,
+    category guess, base unit, nutrients, barcode, read-only), keeping what was typed where the
+    proposal has no value. One "Speichern" creates the item in one request, with an
     `off` block naming only the values the user changed (`edited_fields`, BAR-04).
   - A barcode Open Food Facts doesn't know fills in only the barcode, with a notice. A timeout or
     `off.busy` does the same, with "Nochmal versuchen".
   - When editing, a scan only fills in the barcode, or shows "Gehört schon zu …" when another
-    ingredient has it.
-- **Attaching a barcode:** while the barcode field holds a scanned barcode that no ingredient has,
-  the similar-ingredients hint offers it to each match without a barcode: in the meal form's
-  picker "Milch nehmen" links it (`POST /api/ingredients/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
+    item has it.
+- **Attaching a barcode:** while the barcode field holds a scanned barcode that no item has,
+  the similar-items hint offers it to each match without a barcode: in the meal form's
+  picker "Milch nehmen" links it (`POST /api/items/{id}/barcode`) and takes Milch; elsewhere "Barcode zu
   Milch hinzufügen" links it, closes the pop-up and opens Milch. A match with a barcode is offered
   as before, without attaching anything.
-- **Meal form:** "Barcode scannen" adds a known barcode's row at once. An unknown one opens "Neue
-  Zutat" filled as above, and its "Speichern" also adds the row.
+- **Meal form:** "Barcode scannen" adds a known barcode's row at once. An unknown one opens "Neuer
+  Artikel" filled as above, and its "Speichern" also adds the row.
 - **Tests:** `decoder.test.ts` decodes the PNGs in `features/scanner/fixtures/` with the real
   decoder (made by `node scripts/generate-barcode-fixtures.mjs`, deterministic); the camera and
   scan tests mock the decoder.
 
 ## Open Food Facts search by name
 
-People who start with no data have nothing to scan yet, so a new ingredient can also be filled
-from a search by name: the magnifier next to the name in "Neue Zutat" (also when creating from the
+People who start with no data have nothing to scan yet, so a new item can also be filled
+from a search by name: the magnifier next to the name in "Neuer Artikel" (also when creating from the
 picker, never when editing) opens `OffSearchDialog` with the typed name and searches at once, or
 with an empty search field when no name is typed (BAR-11). Further searches
-(`GET /api/ingredients/off-search?q=&page=`, 25 s timeout) run only when the user taps "Search" or
+(`GET /api/items/off-search?q=&page=`, 25 s timeout) run only when the user taps "Search" or
 presses Enter, never while typing (BAR-08); the server rate-limits and caches them. A result shows
-name, brand, pack size and calories per 100 g/ml; choosing one fills the form like a scanned
+name, brand and calories per 100 g/ml; choosing one fills the form like a scanned
 proposal (with its barcode, read-only). A product that is already in MealMate picks that
-ingredient in the picker and links to it elsewhere. "More results" loads the next page.
+item in the picker and links to it elsewhere. "More results" loads the next page.
 
 ## Tests
 
@@ -614,7 +633,7 @@ translated word for word.
 **Seeded reference data** is translated by key (I18N-04): `cuisine.<key>`, `unit.<unit>`,
 `nutrient.<key>` and `nutrientUnit.<key>`; `features/reference/labels.ts` shows an unknown key as
 it is. **Adding a nutrient** (MNT-06), frontend side: after `make openapi`, `tsc` fails until the
-key is added to `NUTRIENT_KEYS` in `features/ingredients/nutrients.ts`; then add `nutrient.<key>`
+key is added to `NUTRIENT_KEYS` in `features/items/nutrients.ts`; then add `nutrient.<key>`
 and `nutrientUnit.<key>` to both files. A new cuisine only needs its translations.
 
 **Category names** are data, not translation keys (I18N-04, D-31): they come from the API, one per
@@ -649,201 +668,209 @@ order.
 
 <!-- test-ids:start -->
 
-| Key in `testIds`         | `data-testid`              | Element                                          |
-| ------------------------ | -------------------------- | ------------------------------------------------ |
-| `tabLists`               | `tab-lists`                | Tab bar link to Lists                            |
-| `tabMeals`               | `tab-meals`                | Tab bar link to Meals                            |
-| `tabIngredients`         | `tab-ingredients`          | Tab bar link to Ingredients                      |
-| `tabMe`                  | `tab-me`                   | Tab bar link to Settings (the gear)              |
-| `screenLists`            | `screen-lists`             | Lists screen                                     |
-| `screenMeals`            | `screen-meals`             | Meals screen                                     |
-| `screenIngredients`      | `screen-ingredients`       | Ingredients screen                               |
-| `screenMe`               | `screen-me`                | Settings tab (its rows)                          |
-| `screenProfile`          | `screen-profile`           | Settings → Profil page                           |
-| `screenPrivacy`          | `screen-privacy`           | Settings → Privatsphäre page                     |
-| `screenCouple`           | `screen-couple`            | Settings → Paar page                             |
-| `screenSecurity`         | `screen-security`          | Settings → Sicherheit page                       |
-| `screenRecurring`        | `screen-recurring`         | Settings → Regelmäßige Artikel page              |
-| `screenWalkingOrder`     | `screen-walking-order`     | Settings → Reihenfolge im Laden page             |
-| `screenAbout`            | `screen-about`             | Settings → Über MealMate page                    |
-| `languageSelect`         | `language-select`          | Language select on Profil                        |
-| `appVersion`             | `app-version`              | Running version on Über MealMate (once loaded)   |
-| `sourceLink`             | `source-link`              | "Source code (AGPL-3.0)" on Über MealMate        |
-| `updatePrompt`           | `update-prompt`            | "New version available" prompt                   |
-| `detailStrip`            | `detail-strip`             | Strip at the top of a detail screen              |
-| `backLink`               | `back-link`                | "‹ parent" in a detail screen's strip            |
-| `moreActions`            | `more-actions`             | ⋯ "More actions" in a detail screen's strip      |
-| `moreMenu`               | `more-menu`                | The ⋯ pull-down menu (while open)                |
-| `screenLogin`            | `screen-login`             | Login screen                                     |
-| `loginReason`            | `login-reason`             | Why the user was logged out (on Login)           |
-| `screenJoin`             | `screen-join`              | Registration screen (invite link)                |
-| `screenReset`            | `screen-reset`             | New password screen (reset link)                 |
-| `linkInvalid`            | `link-invalid`             | "Link invalid or expired" on Join/Reset          |
-| `displayNameInput`       | `display-name-input`       | Display name field on Profil                     |
-| `mealsPublicSwitch`      | `meals-public-switch`      | "Meals public" switch on Privatsphäre            |
-| `listsPublicSwitch`      | `lists-public-switch`      | "Lists public" switch on Privatsphäre            |
-| `coupleSection`          | `couple-section`           | Content of the Paar page                         |
-| `couplePartner`          | `couple-partner`           | Partner name (and since when) on Paar            |
-| `couplePicker`           | `couple-picker`            | User picker for a couple request                 |
-| `securityNotice`         | `security-notice`          | "Password reset by …" notice on Sicherheit       |
-| `changePasswordButton`   | `change-password-button`   | Opens the change-password dialog                 |
-| `sessionList`            | `session-list`             | List of the user's sessions on Sicherheit        |
-| `logoutAllButton`        | `logout-all-button`        | "Log out on all devices" on Sicherheit           |
-| `adminEntry`             | `admin-entry`              | Verwaltung group on Settings (admins)            |
-| `logoutButton`           | `logout-button`            | Abmelden, the last row on Settings               |
-| `screenAdminUsers`       | `screen-admin-users`       | Admin: users screen                              |
-| `adminUserList`          | `admin-user-list`          | Admin: list of users                             |
-| `screenAdminInvites`     | `screen-admin-invites`     | Admin: invites screen                            |
-| `createInviteButton`     | `create-invite-button`     | Admin: "Create invite"                           |
-| `inviteList`             | `invite-list`              | Admin: list of invites                           |
-| `screenAdminEvents`      | `screen-admin-events`      | Admin: activity log screen                       |
-| `eventList`              | `event-list`               | Admin: activity log entries                      |
-| `shareLinkUrl`           | `share-link-url`           | Created invite/reset link (read-only field)      |
-| `shareButton`            | `share-button`             | Share (or Copy) for a created link               |
-| `hintHomeScreen`         | `hint-home-screen`         | First-login hint "Add to Home Screen"            |
-| `hintTailscale`          | `hint-tailscale`           | First-login hint "Keep Tailscale on"             |
-| `screenIngredient`       | `screen-ingredient`        | Ingredient detail screen                         |
-| `ingredientSearch`       | `ingredient-search`        | Search field on Ingredients                      |
-| `newIngredient`          | `new-ingredient`           | "New ingredient" tile on Ingredients             |
-| `ingredientList`         | `ingredient-list`          | Ingredients, one A–Z list                        |
-| `ingredientRow`          | `ingredient-row`           | One ingredient in the list (link)                |
-| `pinnedBlock`            | `pinned-block`             | A tab's pinned block, its headline first         |
-| `filterButton`           | `filter-button`            | Filter button in a tab's pinned block            |
-| `filterPanel`            | `filter-panel`             | Filter panel (slides up from the bottom)         |
-| `filterGroup`            | `filter-group`             | One checkbox group in the filter panel           |
-| `ingredientForm`         | `ingredient-form`          | Create/edit ingredient form                      |
-| `ingredientFormScan`     | `ingredient-form-scan`     | Scan icon next to the name in the form           |
-| `ingredientFormFooter`   | `ingredient-form-footer`   | The form's pinned footer with "Save"             |
-| `ingredientScanNotice`   | `ingredient-scan-notice`   | The scan's notice below the barcode              |
-| `ingredientScanOpen`     | `ingredient-scan-open`     | "open" the ingredient a scan belongs to          |
-| `ingredientScanTake`     | `ingredient-scan-take`     | "use" it instead, in the picker                  |
-| `ingredientScanRetry`    | `ingredient-scan-retry`    | "Try again" when Open Food Facts is slow         |
-| `ingredientSimilar`      | `ingredient-similar`       | "Similar ingredients exist" hint                 |
-| `editIngredient`         | `edit-ingredient`          | "Edit" in the ingredient's ⋯ menu                |
-| `ingredientNutrition`    | `ingredient-nutrition`     | Nutrition table of an ingredient                 |
-| `baseUnitConfirm`        | `base-unit-confirm`        | "Change anyway?" when amounts won't fit          |
-| `offSearchButton`        | `off-search-button`        | Magnifier next to the name in the form           |
-| `offSearchDialog`        | `off-search-dialog`        | Open Food Facts search by name                   |
-| `offSearchSubmit`        | `off-search-submit`        | "Search" in the Open Food Facts search           |
-| `offSearchResult`        | `off-search-result`        | One product found at Open Food Facts             |
-| `offSearchMore`          | `off-search-more`          | "More results" (next page)                       |
-| `offSearchEmpty`         | `off-search-empty`         | "Nothing found" of the search                    |
-| `barcodeScanDialog`      | `barcode-scan-dialog`      | Scanner (scan icon, meal form's scan)            |
-| `mergeIngredient`        | `merge-ingredient`         | Admin: "Merge…" in the ingredient's ⋯ menu       |
-| `mergeUnitMismatch`      | `merge-unit-mismatch`      | Admin: amounts that won't fit after a merge      |
-| `deleteIngredient`       | `delete-ingredient`        | Admin: "Delete" in the ingredient's ⋯ menu       |
-| `buyRegularly`           | `buy-regularly`            | "Buy regularly…" in the ingredient's ⋯ menu      |
-| `recurringList`          | `recurring-list`           | The recurring items on Regelmäßige Artikel       |
-| `recurringItem`          | `recurring-item`           | One recurring item (opens its pop-up)            |
-| `recurringNotices`       | `recurring-notices`        | Unread notices at the top of the page            |
-| `dismissNotice`          | `dismiss-notice`           | ✕ that dismisses one notice                      |
-| `recurringDialog`        | `recurring-dialog`         | Recurring pop-up (new or edit)                   |
-| `recurringInput`         | `recurring-input`          | Ingredient field on Regelmäßige Artikel          |
-| `recurringNewIngredient` | `recurring-new-ingredient` | "„X“ als neue Zutat" under that field            |
-| `recurringRemove`        | `recurring-remove`         | "No longer recurring" in the recurring pop-up    |
-| `walkingOrderSwitch`     | `walking-order-switch`     | "Reihenfolge der Verwaltung übernehmen" switch   |
-| `walkingOrderList`       | `walking-order-list`       | Categories in the walking order (D-48)           |
-| `walkingOrderHandle`     | `walking-order-handle`     | Drag handle of a category (touch and mouse)      |
-| `ingredientPicker`       | `ingredient-picker`        | Ingredient picker (search and pick)              |
-| `ingredientPickerCreate` | `ingredient-picker-create` | Picker entry "Create “…”"                        |
-| `screenAdminCategories`  | `screen-admin-categories`  | Admin: categories screen                         |
-| `adminCategoryList`      | `admin-category-list`      | Admin: categories in their order                 |
-| `newCategory`            | `new-category`             | Admin: "New category" below the categories       |
-| `categoryDialog`         | `category-dialog`          | Admin: a category's names (new or edit)          |
-| `screenAdminSystem`      | `screen-admin-system`      | Admin system screen                              |
-| `systemVersion`          | `system-version`           | Admin: running version (once loaded)             |
-| `backupStatus`           | `backup-status`            | Admin: last backup, or "no backup yet"           |
-| `backupNow`              | `backup-now`               | Admin: "Back up now"                             |
-| `diskStatus`             | `disk-status`              | Admin: free disk space, or "no check yet"        |
-| `mealSearch`             | `meal-search`              | Search field on Meals                            |
-| `newMeal`                | `new-meal`                 | "New meal" tile on Meals                         |
-| `mealList`               | `meal-list`                | List of meals on Meals                           |
-| `mealCard`               | `meal-card`                | One meal in the list (link)                      |
-| `screenMealForm`         | `screen-meal-form`         | Create/edit meal screen                          |
-| `mealForm`               | `meal-form`                | Create/edit meal form                            |
-| `mealIngredientRow`      | `meal-ingredient-row`      | One ingredient row in the meal form              |
-| `mealPhotoInput`         | `meal-photo-input`         | Photo file input in the meal form                |
-| `screenMeal`             | `screen-meal`              | Meal detail screen                               |
-| `mealPhoto`              | `meal-photo`               | Photo on the meal detail                         |
-| `mealBasedOn`            | `meal-based-on`            | "Based on X by Y" on the meal detail             |
-| `mealNutrition`          | `meal-nutrition`           | Nutrition table of a meal                        |
-| `mealIncomplete`         | `meal-incomplete`          | "Incomplete" marker with what is missing         |
-| `mealEstimate`           | `meal-estimate`            | "Estimate" marker of the nutrition               |
-| `mealIngredients`        | `meal-ingredients`         | Ingredient list on the meal detail               |
-| `mealInstructions`       | `meal-instructions`        | Instructions on the meal detail                  |
-| `mealSourceLink`         | `meal-source-link`         | Source link button on the meal detail            |
-| `editMeal`               | `edit-meal`                | "Edit" in the meal's ⋯ menu (owner)              |
-| `deleteMeal`             | `delete-meal`              | "Delete" in the meal's ⋯ menu (owner)            |
-| `copyMeal`               | `copy-meal`                | "Copy" in the meal's ⋯ menu                      |
-| `newList`                | `new-list`                 | "New list" tile on Lists                         |
-| `listFeed`               | `list-feed`                | The list feed on Lists                           |
-| `listCard`               | `list-card`                | One list in the feed (link)                      |
-| `screenList`             | `screen-list`              | List view screen                                 |
-| `listReadOnly`           | `list-read-only`           | Read-only note on someone else's list            |
-| `copyList`               | `copy-list`                | "Copy to my lists" in the ⋯ menu                 |
-| `listLeftOut`            | `list-left-out`            | "N meals were left out" after a copy             |
-| `renameList`             | `rename-list`              | "Rename" in the list's ⋯ menu                    |
-| `shareListSwitch`        | `share-list-switch`        | "Shared with <partner>" switch in the ⋯ menu     |
-| `exportList`             | `export-list`              | Share the list as text, in its ⋯ menu            |
-| `deleteList`             | `delete-list`              | "Delete" in the list's ⋯ menu (owner)            |
-| `listMeals`              | `list-meals`               | Meals of the list with their servings            |
-| `listMeal`               | `list-meal`                | One meal on the list                             |
-| `removeListMeal`         | `remove-list-meal`         | "Remove" button of a meal on the list            |
-| `mealField`              | `meal-field`               | Meal field's input, top of "Meals"               |
-| `mealFieldPanel`         | `meal-field-panel`         | Meal field's panel: create option, meals         |
-| `mealFieldCreate`        | `meal-field-create`        | "“X” as a new meal" under the meal field         |
-| `servingsDialog`         | `servings-dialog`          | Servings pop-up of a meal being added            |
-| `extraItemInput`         | `extra-item-input`         | Item field's input, top of "Items"               |
-| `itemFreeText`           | `item-free-text`           | "“X” as an item" under the item field            |
-| `itemNewIngredient`      | `item-new-ingredient`      | "“X” as a new ingredient" under it               |
-| `amountDialog`           | `amount-dialog`            | Amount pop-up of an ingredient being added       |
-| `freeTextDialog`         | `free-text-dialog`         | Free-text pop-up of an item being added          |
-| `dueBox`                 | `due-box`                  | "Due" box of due recurring items on a draft      |
-| `dueItem`                | `due-item`                 | One due item with its ＋ and ✕                   |
-| `listLines`              | `list-lines`               | Aggregated lines grouped by category             |
-| `listLine`               | `list-line`                | One line (opens its sources)                     |
-| `lineSources`            | `line-sources`             | Sources dialog of a line                         |
-| `hiddenLines`            | `hidden-lines`             | Collapsed "Hidden (N)" section                   |
-| `floatingBar`            | `floating-bar`             | Bar above the tab bar: start/finish shopping     |
-| `startShopping`          | `start-shopping`           | "Start shopping" in a draft's floating bar       |
-| `syncStatus`             | `sync-status`              | Sync indicator ("Saved", "Offline – …")          |
-| `offlineBanner`          | `offline-banner`           | Offline banner on a list view                    |
-| `offlineNotice`          | `offline-notice`           | "This page needs a connection" message           |
-| `loadingState`           | `loading-state`            | Placeholder while a tab's first load runs        |
-| `waitingBanner`          | `waiting-banner`           | "Waiting for more than an hour" banner           |
-| `noStorageBanner`        | `no-storage-banner`        | "Can't store anything on this device" note       |
-| `syncToast`              | `sync-toast`               | Message about changes that weren't saved         |
-| `linePending`            | `line-pending`             | "not sent yet" hint of a waiting line            |
-| `refreshList`            | `refresh-list`             | "Refresh" on the shopping view                   |
-| `shoppingMeals`          | `shopping-meals`           | Collapsed meals section while shopping           |
-| `shoppingLines`          | `shopping-lines`           | Lines still to buy, by category                  |
-| `shoppingLine`           | `shopping-line`            | One line with its check box                      |
-| `lineNew`                | `line-new`                 | "new" badge of a line                            |
-| `lineNeedsMore`          | `line-needs-more`          | "+300 g" / "changed" badges of a line            |
-| `inTheCart`              | `in-the-cart`              | Collapsed "In the cart (N)" section              |
-| `lineCheckedBy`          | `line-checked-by`          | Initial of who checked a line                    |
-| `editShoppingItem`       | `edit-shopping-item`       | Edit button of an extra item while shopping      |
-| `shoppingAnnouncement`   | `shopping-announcement`    | Live region: "Mehl is in the cart"               |
-| `finishShopping`         | `finish-shopping`          | "Finish shopping" in the floating bar            |
-| `finishDialog`           | `finish-dialog`            | Finish dialog ("N items not checked")            |
-| `listDone`               | `list-done`                | "Bought on …" note of a done list                |
-| `doneLines`              | `done-lines`               | Lines of a done list (bought or greyed)          |
-| `shopAgain`              | `shop-again`               | "Shop again" in a done list's ⋯ menu             |
-| `reopenList`             | `reopen-list`              | "Reopen" in a done list's ⋯ menu                 |
-| `scanBarcode`            | `scan-barcode`             | "Scan barcode" in the meal form                  |
-| `scannerVideo`           | `scanner-video`            | Live camera image of the scanner                 |
-| `scannerTorch`           | `scanner-torch`            | Light toggle (when the camera has one)           |
-| `scannerCameraMessage`   | `scanner-camera-message`   | "No camera / access denied" message              |
-| `scannerCameraRetry`     | `scanner-camera-retry`     | "Try again" after the camera went away           |
-| `barcodeInput`           | `barcode-input`            | Manual barcode input                             |
-| `barcodeLookup`          | `barcode-lookup`           | "Look up" for the typed barcode                  |
-| `offAttribution`         | `off-attribution`          | "Nutrition data: Open Food Facts (ODbL)"         |
-| `pendingUpdate`          | `pending-update`           | "Open Food Facts has newer values" hint          |
-| `applyPendingUpdate`     | `apply-pending-update`     | "Apply" in the newer-values hint                 |
-| `ignorePendingUpdate`    | `ignore-pending-update`    | "Ignore" in the newer-values hint                |
-| `diagnosticsLink`        | `diagnostics-link`         | Link to `/diag` on Über MealMate, admins (M1–M9) |
-| `screenDiagnostics`      | `screen-diagnostics`       | Diagnostics screen `/diag` (M1–M9)               |
-| `diagResult`             | `diag-result`              | One result line on the diagnostics screen        |
-| `diagReport`             | `diag-report`              | Plain-text report on the diagnostics screen      |
+| Key in `testIds`        | `data-testid`             | Element                                          |
+| ----------------------- | ------------------------- | ------------------------------------------------ |
+| `tabLists`              | `tab-lists`               | Tab bar link to Lists                            |
+| `tabMeals`              | `tab-meals`               | Tab bar link to Meals                            |
+| `tabItems`              | `tab-items`               | Tab bar link to Items                            |
+| `tabMe`                 | `tab-me`                  | Tab bar link to Settings (the gear)              |
+| `screenLists`           | `screen-lists`            | Lists screen                                     |
+| `screenMeals`           | `screen-meals`            | Meals screen                                     |
+| `screenItems`           | `screen-items`            | Items screen                                     |
+| `screenMe`              | `screen-me`               | Settings tab (its rows)                          |
+| `screenProfile`         | `screen-profile`          | Settings → Profil page                           |
+| `screenPrivacy`         | `screen-privacy`          | Settings → Privatsphäre page                     |
+| `screenCouple`          | `screen-couple`           | Settings → Paar page                             |
+| `screenSecurity`        | `screen-security`         | Settings → Sicherheit page                       |
+| `screenRecurring`       | `screen-recurring`        | Settings → Regelmäßige Artikel page              |
+| `screenLeftovers`       | `screen-leftovers`        | Settings → Übrige Gerichte page                  |
+| `screenWalkingOrder`    | `screen-walking-order`    | Settings → Reihenfolge im Laden page             |
+| `screenAbout`           | `screen-about`            | Settings → Über MealMate page                    |
+| `languageSelect`        | `language-select`         | Language select on Profil                        |
+| `appVersion`            | `app-version`             | Running version on Über MealMate (once loaded)   |
+| `sourceLink`            | `source-link`             | "Source code (AGPL-3.0)" on Über MealMate        |
+| `updatePrompt`          | `update-prompt`           | "New version available" prompt                   |
+| `detailStrip`           | `detail-strip`            | Strip at the top of a detail screen              |
+| `backLink`              | `back-link`               | "‹ parent" in a detail screen's strip            |
+| `moreActions`           | `more-actions`            | ⋯ "More actions" in a detail screen's strip      |
+| `moreMenu`              | `more-menu`               | The ⋯ pull-down menu (while open)                |
+| `screenLogin`           | `screen-login`            | Login screen                                     |
+| `loginReason`           | `login-reason`            | Why the user was logged out (on Login)           |
+| `screenJoin`            | `screen-join`             | Registration screen (invite link)                |
+| `screenReset`           | `screen-reset`            | New password screen (reset link)                 |
+| `linkInvalid`           | `link-invalid`            | "Link invalid or expired" on Join/Reset          |
+| `displayNameInput`      | `display-name-input`      | Display name field on Profil                     |
+| `mealsPublicSwitch`     | `meals-public-switch`     | "Meals public" switch on Privatsphäre            |
+| `listsPublicSwitch`     | `lists-public-switch`     | "Lists public" switch on Privatsphäre            |
+| `carryOverSwitch`       | `carry-over-switch`       | "Übrige Gerichte übernehmen" switch              |
+| `coupleSection`         | `couple-section`          | Content of the Paar page                         |
+| `couplePartner`         | `couple-partner`          | Partner name (and since when) on Paar            |
+| `couplePicker`          | `couple-picker`           | User picker for a couple request                 |
+| `securityNotice`        | `security-notice`         | "Password reset by …" notice on Sicherheit       |
+| `changePasswordButton`  | `change-password-button`  | Opens the change-password dialog                 |
+| `sessionList`           | `session-list`            | List of the user's sessions on Sicherheit        |
+| `logoutAllButton`       | `logout-all-button`       | "Log out on all devices" on Sicherheit           |
+| `adminEntry`            | `admin-entry`             | Verwaltung group on Settings (admins)            |
+| `logoutButton`          | `logout-button`           | Abmelden, the last row on Settings               |
+| `screenAdminUsers`      | `screen-admin-users`      | Admin: users screen                              |
+| `adminUserList`         | `admin-user-list`         | Admin: list of users                             |
+| `screenAdminInvites`    | `screen-admin-invites`    | Admin: invites screen                            |
+| `createInviteButton`    | `create-invite-button`    | Admin: "Create invite"                           |
+| `inviteList`            | `invite-list`             | Admin: list of invites                           |
+| `screenAdminEvents`     | `screen-admin-events`     | Admin: activity log screen                       |
+| `eventList`             | `event-list`              | Admin: activity log entries                      |
+| `shareLinkUrl`          | `share-link-url`          | Created invite/reset link (read-only field)      |
+| `shareButton`           | `share-button`            | Share (or Copy) for a created link               |
+| `hintHomeScreen`        | `hint-home-screen`        | First-login hint "Add to Home Screen"            |
+| `hintTailscale`         | `hint-tailscale`          | First-login hint "Keep Tailscale on"             |
+| `screenItem`            | `screen-item`             | Item detail screen                               |
+| `itemSearch`            | `item-search`             | Search field on Items                            |
+| `newItem`               | `new-item`                | "New item" tile on Items                         |
+| `itemList`              | `item-list`               | Items, one A–Z list                              |
+| `itemRow`               | `item-row`                | One item in the list (link)                      |
+| `pinnedBlock`           | `pinned-block`            | A tab's pinned block, its headline first         |
+| `filterButton`          | `filter-button`           | Filter button in a tab's pinned block            |
+| `filterPanel`           | `filter-panel`            | Filter panel (slides up from the bottom)         |
+| `filterGroup`           | `filter-group`            | One checkbox group in the filter panel           |
+| `itemForm`              | `item-form`               | Create/edit item form                            |
+| `itemFormScan`          | `item-form-scan`          | Scan icon next to the name in the form           |
+| `itemFormFooter`        | `item-form-footer`        | The form's pinned footer with "Save"             |
+| `itemUsedInMeals`       | `item-used-in-meals`      | Why the item can't become a supply (D-56)        |
+| `itemScanNotice`        | `item-scan-notice`        | The scan's notice below the barcode              |
+| `itemScanOpen`          | `item-scan-open`          | "open" the item a scan belongs to                |
+| `itemScanTake`          | `item-scan-take`          | "use" it instead, in the picker                  |
+| `itemScanRetry`         | `item-scan-retry`         | "Try again" when Open Food Facts is slow         |
+| `itemSimilar`           | `item-similar`            | "Similar items exist" hint                       |
+| `editItem`              | `edit-item`               | "Edit" in the item's ⋯ menu                      |
+| `itemNutrition`         | `item-nutrition`          | Nutrition table of an item                       |
+| `baseUnitConfirm`       | `base-unit-confirm`       | "Change anyway?" when amounts won't fit          |
+| `offSearchButton`       | `off-search-button`       | Magnifier next to the name in the form           |
+| `offSearchDialog`       | `off-search-dialog`       | Open Food Facts search by name                   |
+| `offSearchSubmit`       | `off-search-submit`       | "Search" in the Open Food Facts search           |
+| `offSearchResult`       | `off-search-result`       | One product found at Open Food Facts             |
+| `offSearchMore`         | `off-search-more`         | "More results" (next page)                       |
+| `offSearchEmpty`        | `off-search-empty`        | "Nothing found" of the search                    |
+| `barcodeScanDialog`     | `barcode-scan-dialog`     | Scanner (scan icon, meal form's scan)            |
+| `mergeItem`             | `merge-item`              | Admin: "Merge…" in the item's ⋯ menu             |
+| `mergeUnitMismatch`     | `merge-unit-mismatch`     | Admin: amounts that won't fit after a merge      |
+| `deleteItem`            | `delete-item`             | Admin: "Delete" in the item's ⋯ menu             |
+| `buyRegularly`          | `buy-regularly`           | "Buy regularly…" in the item's ⋯ menu            |
+| `recurringList`         | `recurring-list`          | The recurring items on Regelmäßige Artikel       |
+| `recurringItem`         | `recurring-item`          | One recurring item (opens its pop-up)            |
+| `recurringNotices`      | `recurring-notices`       | Unread notices at the top of the page            |
+| `dismissNotice`         | `dismiss-notice`          | ✕ that dismisses one notice                      |
+| `recurringDialog`       | `recurring-dialog`        | Recurring pop-up (new or edit)                   |
+| `recurringInput`        | `recurring-input`         | Item field on Regelmäßige Artikel                |
+| `recurringNewItem`      | `recurring-new-item`      | "„X“ als neuer Artikel" under that field         |
+| `recurringRemove`       | `recurring-remove`        | "No longer recurring" in the recurring pop-up    |
+| `walkingOrderSwitch`    | `walking-order-switch`    | "Reihenfolge der Verwaltung übernehmen" switch   |
+| `walkingOrderList`      | `walking-order-list`      | Categories in the walking order (D-48)           |
+| `walkingOrderHandle`    | `walking-order-handle`    | Drag handle of a category (touch and mouse)      |
+| `itemPicker`            | `item-picker`             | Item picker (search and pick)                    |
+| `itemPickerCreate`      | `item-picker-create`      | Picker entry "Create “…”"                        |
+| `screenAdminCategories` | `screen-admin-categories` | Admin: categories screen                         |
+| `adminCategoryList`     | `admin-category-list`     | Admin: categories in their order                 |
+| `newCategory`           | `new-category`            | Admin: "New category" below the categories       |
+| `categoryDialog`        | `category-dialog`         | Admin: a category's names (new or edit)          |
+| `screenAdminSystem`     | `screen-admin-system`     | Admin system screen                              |
+| `systemVersion`         | `system-version`          | Admin: running version (once loaded)             |
+| `backupStatus`          | `backup-status`           | Admin: last backup, or "no backup yet"           |
+| `backupNow`             | `backup-now`              | Admin: "Back up now"                             |
+| `diskStatus`            | `disk-status`             | Admin: free disk space, or "no check yet"        |
+| `mealSearch`            | `meal-search`             | Search field on Meals                            |
+| `newMeal`               | `new-meal`                | "New meal" tile on Meals                         |
+| `mealList`              | `meal-list`               | List of meals on Meals                           |
+| `mealCard`              | `meal-card`               | One meal in the list (link)                      |
+| `screenMealForm`        | `screen-meal-form`        | Create/edit meal screen                          |
+| `mealForm`              | `meal-form`               | Create/edit meal form                            |
+| `mealIngredientRow`     | `meal-ingredient-row`     | One ingredient row in the meal form              |
+| `mealPhotoInput`        | `meal-photo-input`        | Photo file input in the meal form                |
+| `screenMeal`            | `screen-meal`             | Meal detail screen                               |
+| `mealPhoto`             | `meal-photo`              | Photo on the meal detail                         |
+| `mealBasedOn`           | `meal-based-on`           | "Based on X by Y" on the meal detail             |
+| `mealNutrition`         | `meal-nutrition`          | Nutrition table of a meal                        |
+| `mealIncomplete`        | `meal-incomplete`         | "Incomplete" marker with what is missing         |
+| `mealEstimate`          | `meal-estimate`           | "Estimate" marker of the nutrition               |
+| `mealIngredients`       | `meal-ingredients`        | Ingredient list on the meal detail               |
+| `mealInstructions`      | `meal-instructions`       | Instructions on the meal detail                  |
+| `mealSourceLink`        | `meal-source-link`        | Source link button on the meal detail            |
+| `editMeal`              | `edit-meal`               | "Edit" in the meal's ⋯ menu (owner)              |
+| `deleteMeal`            | `delete-meal`             | "Delete" in the meal's ⋯ menu (owner)            |
+| `copyMeal`              | `copy-meal`               | "Copy" in the meal's ⋯ menu                      |
+| `newList`               | `new-list`                | "New list" tile on Lists                         |
+| `listFeed`              | `list-feed`               | The list feed on Lists                           |
+| `listCard`              | `list-card`               | One list in the feed (link)                      |
+| `screenList`            | `screen-list`             | List view screen                                 |
+| `listReadOnly`          | `list-read-only`          | Read-only note on someone else's list            |
+| `copyList`              | `copy-list`               | "Copy to my lists" in the ⋯ menu                 |
+| `listLeftOut`           | `list-left-out`           | "N meals were left out" after a copy             |
+| `renameList`            | `rename-list`             | "Rename" in the list's ⋯ menu                    |
+| `shareListSwitch`       | `share-list-switch`       | "Shared with <partner>" switch in the ⋯ menu     |
+| `exportList`            | `export-list`             | Share the list as text, in its ⋯ menu            |
+| `deleteList`            | `delete-list`             | "Delete" in the list's ⋯ menu (owner)            |
+| `listMeals`             | `list-meals`              | Meals of the list with their servings            |
+| `listMeal`              | `list-meal`               | One meal on the list                             |
+| `removeListMeal`        | `remove-list-meal`        | "Remove" button of a meal on the list            |
+| `leftoverMenu`          | `leftover-menu`           | ⋮ button of a leftover meal (LIST-17)            |
+| `shopLeftover`          | `shop-leftover`           | "Doch einkaufen" in a leftover's ⋮ menu          |
+| `removeLeftover`        | `remove-leftover`         | "Entfernen" in a leftover's ⋮ menu               |
+| `leftoverToast`         | `leftover-toast`          | "Chili gegessen · Rückgängig" toast              |
+| `mealField`             | `meal-field`              | Meal field's input, top of "Meals"               |
+| `mealFieldPanel`        | `meal-field-panel`        | Meal field's panel: create option, meals         |
+| `mealFieldCreate`       | `meal-field-create`       | "“X” as a new meal" under the meal field         |
+| `servingsDialog`        | `servings-dialog`         | Servings pop-up of a meal being added            |
+| `extraItemInput`        | `extra-item-input`        | Item field's input, top of "Items"               |
+| `itemFreeText`          | `item-free-text`          | "“X” as an item" under the item field            |
+| `itemNewItem`           | `item-new-item`           | "“X” as a new item" under it                     |
+| `amountDialog`          | `amount-dialog`           | Amount pop-up of an item being added             |
+| `freeTextDialog`        | `free-text-dialog`        | Free-text pop-up of an item being added          |
+| `dueBox`                | `due-box`                 | "Due" box of due recurring items on a draft      |
+| `dueItem`               | `due-item`                | One due item with its ＋ and ✕                   |
+| `listLines`             | `list-lines`              | Aggregated lines grouped by category             |
+| `listLine`              | `list-line`               | One line (opens its sources)                     |
+| `lineSources`           | `line-sources`            | Sources dialog of a line                         |
+| `hiddenLines`           | `hidden-lines`            | Collapsed "Hidden (N)" section                   |
+| `floatingBar`           | `floating-bar`            | Bar above the tab bar: start/finish shopping     |
+| `startShopping`         | `start-shopping`          | "Start shopping" in a draft's floating bar       |
+| `syncStatus`            | `sync-status`             | Sync indicator ("Saved", "Offline – …")          |
+| `offlineBanner`         | `offline-banner`          | Offline banner on a list view                    |
+| `offlineNotice`         | `offline-notice`          | "This page needs a connection" message           |
+| `loadingState`          | `loading-state`           | Spinner placeholder while something loads        |
+| `spinner`               | `spinner`                 | The spinner itself (also inside a button)        |
+| `waitingBanner`         | `waiting-banner`          | "Waiting for more than an hour" banner           |
+| `noStorageBanner`       | `no-storage-banner`       | "Can't store anything on this device" note       |
+| `syncToast`             | `sync-toast`              | Message about changes that weren't saved         |
+| `linePending`           | `line-pending`            | "not sent yet" hint of a waiting line            |
+| `refreshList`           | `refresh-list`            | "Refresh" on the shopping view                   |
+| `shoppingMeals`         | `shopping-meals`          | Collapsed meals section while shopping           |
+| `shoppingLines`         | `shopping-lines`          | Lines still to buy, by category                  |
+| `shoppingLine`          | `shopping-line`           | One line with its check box                      |
+| `lineNew`               | `line-new`                | "new" badge of a line                            |
+| `lineNeedsMore`         | `line-needs-more`         | "+300 g" / "changed" badges of a line            |
+| `inTheCart`             | `in-the-cart`             | Collapsed "In the cart (N)" section              |
+| `lineCheckedBy`         | `line-checked-by`         | Initial of who checked a line                    |
+| `editShoppingItem`      | `edit-shopping-item`      | Edit button of an extra item while shopping      |
+| `shoppingAnnouncement`  | `shopping-announcement`   | Live region: "Mehl is in the cart"               |
+| `finishShopping`        | `finish-shopping`         | "Finish shopping" in the floating bar            |
+| `finishDialog`          | `finish-dialog`           | Finish dialog ("N items not checked")            |
+| `listDone`              | `list-done`               | "Bought on …" note of a done list                |
+| `doneLines`             | `done-lines`              | Lines of a done list (bought or greyed)          |
+| `shopAgain`             | `shop-again`              | "Shop again" in a done list's ⋯ menu             |
+| `reopenList`            | `reopen-list`             | "Reopen" in a done list's ⋯ menu                 |
+| `scanBarcode`           | `scan-barcode`            | "Scan barcode" in the meal form                  |
+| `scannerVideo`          | `scanner-video`           | Live camera image of the scanner                 |
+| `scannerTorch`          | `scanner-torch`           | Light toggle (when the camera has one)           |
+| `scannerCameraMessage`  | `scanner-camera-message`  | "No camera / access denied" message              |
+| `scannerCameraRetry`    | `scanner-camera-retry`    | "Try again" after the camera went away           |
+| `barcodeInput`          | `barcode-input`           | Manual barcode input                             |
+| `barcodeLookup`         | `barcode-lookup`          | "Look up" for the typed barcode                  |
+| `offAttribution`        | `off-attribution`         | "Nutrition data: Open Food Facts (ODbL)"         |
+| `pendingUpdate`         | `pending-update`          | "Open Food Facts has newer values" hint          |
+| `applyPendingUpdate`    | `apply-pending-update`    | "Apply" in the newer-values hint                 |
+| `ignorePendingUpdate`   | `ignore-pending-update`   | "Ignore" in the newer-values hint                |
+| `diagnosticsLink`       | `diagnostics-link`        | Link to `/diag` on Über MealMate, admins (M1–M9) |
+| `screenDiagnostics`     | `screen-diagnostics`      | Diagnostics screen `/diag` (M1–M9)               |
+| `diagResult`            | `diag-result`             | One result line on the diagnostics screen        |
+| `diagReport`            | `diag-report`             | Plain-text report on the diagnostics screen      |
 
 <!-- test-ids:end -->

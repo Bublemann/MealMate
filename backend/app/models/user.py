@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, String
+from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, String, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, UTCDateTime
@@ -33,6 +33,8 @@ class User(IdMixin, TimestampMixin, Base):
     # What this user's saved filters hide (`schemas.users.FilterHidden`, plan § 6):
     # {"meals": [user ids], "lists": [user ids], "list_states": [list states]}.
     filter_hidden: Mapped[dict[str, Any]] = mapped_column(JSON, default=empty_filter_hidden)
+    # Whether new drafts bring along the leftovers of the last done list (LIST-17, D-59).
+    carry_over_leftovers: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     password_changed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     password_reset_by: Mapped[str | None] = mapped_column(

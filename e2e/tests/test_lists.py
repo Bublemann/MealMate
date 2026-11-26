@@ -63,25 +63,23 @@ def test_member_builds_a_list_from_meals_and_extra_items(
     category, hide, remove, a new meal from the list."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
-    onions = api.create_ingredient(
+    onions = api.create_item(
         anna,
         f"Zwiebeln {tag}",
         category_key="fruit_vegetables",
         base_unit="piece",
         piece_weight_g=80,
     )
-    flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
-    oil = api.create_ingredient(
-        anna, f"Öl {tag}", category_key="sauces_spices_oils", base_unit="ml"
-    )
+    flour = api.create_item(anna, f"Mehl {tag}", category_key="baking")
+    oil = api.create_item(anna, f"Öl {tag}", category_key="sauces_spices_oils", base_unit="ml")
     # Meal A for 2 servings, meal B for 4.
     tart = api.create_meal(
         anna,
         f"Zwiebelkuchen {tag}",
         servings=2,
         ingredients=[
-            {"ingredient_id": onions["id"], "amount": 1, "unit": "piece"},
-            {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
+            {"item_id": onions["id"], "amount": 1, "unit": "piece"},
+            {"item_id": flour["id"], "amount": 200, "unit": "g"},
         ],
     )
     bread = api.create_meal(
@@ -89,8 +87,8 @@ def test_member_builds_a_list_from_meals_and_extra_items(
         f"Brot {tag}",
         servings=4,
         ingredients=[
-            {"ingredient_id": flour["id"], "amount": 300, "unit": "g"},
-            {"ingredient_id": oil["id"], "amount": 2, "unit": "tbsp"},
+            {"item_id": flour["id"], "amount": 300, "unit": "g"},
+            {"item_id": oil["id"], "amount": 2, "unit": "tbsp"},
         ],
     )
 

@@ -1,10 +1,11 @@
-import { Check, CircleCheck, Pencil, ShoppingBasket } from 'lucide-react';
+import { CircleCheck, Pencil, ShoppingBasket } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FloatingBar, FloatingBarButton } from '@/components/FloatingBar';
 import { InitialMarker } from '@/components/InitialMarker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TapCheckbox } from '@/components/ui/tap-checkbox';
 import {
   Dialog,
   DialogContent,
@@ -314,29 +315,17 @@ function CheckRow({ line, editable, onCheck, box, onEdit }: CheckRowProps) {
         )}
       >
         <span className="flex h-[1lh] items-center">
-          <span className="relative flex size-(--tap-target) items-center justify-center">
-            <input
-              ref={box(line.key)}
-              type="checkbox"
-              aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
-                name: lineLabel(line),
-              })}
-              checked={line.checked}
-              disabled={!editable}
-              onChange={(event) => onCheck(line, event.target.checked)}
-              className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
-            />
-            <span
-              aria-hidden="true"
-              className={cn(
-                'flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60',
-                // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
-                line.pending && 'opacity-50 peer-checked:opacity-50',
-              )}
-            >
-              {line.checked && <Check className="size-6" strokeWidth={3} />}
-            </span>
-          </span>
+          <TapCheckbox
+            ref={box(line.key)}
+            aria-label={t(line.checked ? 'lists.shop.uncheck' : 'lists.shop.check', {
+              name: lineLabel(line),
+            })}
+            checked={line.checked}
+            disabled={!editable}
+            onChange={(event) => onCheck(line, event.target.checked)}
+            // Faded while not sent (SYNC-07); the text keeps its contrast and says so.
+            boxClassName={cn(line.pending && 'opacity-50 peer-checked:opacity-50')}
+          />
         </span>
         <span className="flex items-baseline justify-between gap-3">
           <span

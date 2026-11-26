@@ -1,4 +1,4 @@
-"""Regelmäßige Artikel: making ingredients recurring on the settings page and from the ingredient's
+"""Regelmäßige Artikel: making items recurring on the settings page and from the item's
 ⋯ menu, the row's value, editing, and the notice when an admin deletes one (LIST-16, D-42, D-51,
 UI-07); a due item in a draft's "Fällig" box, bought and no longer due (LIST-16, QA-04)."""
 
@@ -10,7 +10,7 @@ from playwright.sync_api import Locator, Page, expect
 
 from support.a11y import serious_violations
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, ingredient_label, text
+from support.frontend import TEST_IDS, item_label, text
 from support.ui import choose_from_menu, floating_bar_button, open_settings_page, settings_row
 
 
@@ -40,8 +40,8 @@ def test_recurring_items_from_the_page_and_the_menu_with_a_deletion_notice(
 ) -> None:
     tag = unique("rec")
     anna = invite_user(unique("anna"), unique("Anna"))
-    paper = api.create_ingredient(anna, f"Klopapier {tag}")
-    paste = api.create_ingredient(anna, f"Zahnpasta {tag}", brand="Elmex")
+    paper = api.create_item(anna, f"Klopapier {tag}")
+    paste = api.create_item(anna, f"Zahnpasta {tag}", brand="Elmex")
     paste_name = f"{paste['name']} (Elmex)"
     sign_in(page.context, anna)
     page.goto("/me")
@@ -55,8 +55,8 @@ def test_recurring_items_from_the_page_and_the_menu_with_a_deletion_notice(
     # From the page: search, pick, add with the defaults.
     field = screen.get_by_test_id(TEST_IDS["recurringInput"])
     field.fill(paper["name"])
-    expect(screen.get_by_test_id(TEST_IDS["recurringNewIngredient"])).to_have_text(
-        text("recurring.field.newIngredient", name=paper["name"])
+    expect(screen.get_by_test_id(TEST_IDS["recurringNewItem"])).to_have_text(
+        text("recurring.field.newItem", name=paper["name"])
     )
     screen.get_by_role("button", name=re.compile(f"^{re.escape(paper['name'])}")).click()
     dialog = recurring_dialog(page, paper["name"])
@@ -69,8 +69,8 @@ def test_recurring_items_from_the_page_and_the_menu_with_a_deletion_notice(
     )
     expect(row_of(page, paper["name"])).to_contain_text(text("recurring.due.in_other", count="28"))
 
-    # From the ingredient's ⋯ menu, last bought five weeks ago: due.
-    page.goto(f"/ingredients/{paste['id']}")
+    # From the item's ⋯ menu, last bought five weeks ago: due.
+    page.goto(f"/items/{paste['id']}")
     expect(page.get_by_role("heading", level=1, name=paste_name)).to_be_visible()
     choose_from_menu(page, "buyRegularly")
     dialog = recurring_dialog(page, paste_name)
@@ -105,7 +105,7 @@ def test_recurring_items_from_the_page_and_the_menu_with_a_deletion_notice(
     assert serious_violations(page) == []
 
     # An admin deletes the recurring Zahnpasta: Anna gets a notice, counted on the gear.
-    api.call("DELETE", f"/api/admin/ingredients/{paste['id']}", token=api.token(admin))
+    api.call("DELETE", f"/api/admin/items/{paste['id']}", token=api.token(admin))
     page.reload()
     gear = page.get_by_test_id(TEST_IDS["tabMe"])
     expect(gear).to_have_accessible_name(text("nav.meCount_one", count="1"))
@@ -136,8 +136,8 @@ def test_a_due_item_is_suggested_on_a_draft_added_bought_and_then_no_longer_due(
 ) -> None:
     tag = unique("due")
     anna = invite_user(unique("anna"), unique("Anna"))
-    paper = api.create_ingredient(anna, f"Klopapier {tag}", base_unit="piece")
-    name = ingredient_label(paper["name"])
+    paper = api.create_item(anna, f"Klopapier {tag}", base_unit="piece")
+    name = item_label(paper["name"])
     # Last bought five weeks ago, every four weeks: due for a week.
     bought = date.today() - timedelta(weeks=5)
     api.call(
@@ -145,7 +145,7 @@ def test_a_due_item_is_suggested_on_a_draft_added_bought_and_then_no_longer_due(
         "/api/recurring-items",
         token=api.token(anna),
         json={
-            "ingredient_id": paper["id"],
+            "item_id": paper["id"],
             "interval_weeks": 4,
             "last_purchased_on": bought.isoformat(),
         },

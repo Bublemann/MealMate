@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, ingredient_label, text
+from support.frontend import TEST_IDS, item_label, text
 from support.images import png
 from support.ui import choose_from_menu, open_more_menu
 
@@ -31,8 +31,8 @@ def add_row(
     page: Page, name: str, amount: str = "", unit: str | None = None, *, brand: str | None = None
 ) -> Locator:
     """Picks ingredient `name` (of `brand`) in the meal form and fills in its amount and unit."""
-    label = ingredient_label(name, brand)
-    picker = page.get_by_test_id(TEST_IDS["mealForm"]).get_by_test_id(TEST_IDS["ingredientPicker"])
+    label = item_label(name, brand)
+    picker = page.get_by_test_id(TEST_IDS["mealForm"]).get_by_test_id(TEST_IDS["itemPicker"])
     picker.get_by_label(text("meals.field.addIngredient"), exact=True).fill(name)
     picker.get_by_role("button", name=re.compile(f"^{re.escape(label)}")).click()
     row = page.get_by_role("listitem", name=text("meals.row.label", name=label), exact=True)
@@ -73,13 +73,13 @@ def close_filter_panel(page: Page) -> None:
 
 def soup(api: Api, owner: Account, tag: str) -> dict[str, Any]:
     """A public meal of `owner` with one ingredient row."""
-    lentils = api.create_ingredient(owner, f"Linsen {tag}", nutrients={"kcal": 350})
+    lentils = api.create_item(owner, f"Linsen {tag}", nutrients={"kcal": 350})
     return api.create_meal(
         owner,
         f"Linsensuppe {tag}",
         servings=4,
         instructions="Linsen kochen.",
-        ingredients=[{"ingredient_id": lentils["id"], "amount": 250, "unit": "g"}],
+        ingredients=[{"item_id": lentils["id"], "amount": 250, "unit": "g"}],
     )
 
 
@@ -89,9 +89,9 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     """Journey 4 (MEAL-01..04, NUT-03/04): rows, nutrition per meal and serving, photo."""
     page = member_page
     tag = unique("e2e")
-    flour = api.create_ingredient(member, f"Mehl {tag}", nutrients={"kcal": 364})
+    flour = api.create_item(member, f"Mehl {tag}", nutrients={"kcal": 364})
     # A brand is part of the name wherever the ingredient shows.
-    milk = api.create_ingredient(
+    milk = api.create_item(
         member,
         f"Milch {tag}",
         brand="Weidehof",
@@ -99,7 +99,7 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
         base_unit="ml",
         nutrients={"kcal": 64},
     )
-    eggs = api.create_ingredient(
+    eggs = api.create_item(
         member,
         f"Eier {tag}",
         category_key="dairy_eggs",
@@ -107,7 +107,7 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
         piece_weight_g=60,
         nutrients={"kcal": 155},
     )
-    salt = api.create_ingredient(member, f"Salz {tag}")
+    salt = api.create_item(member, f"Salz {tag}")
     name = f"Pfannkuchen {tag}"
 
     page.goto("/meals")
@@ -144,8 +144,8 @@ def test_member_creates_a_meal_with_nutrition_and_photo(
     ingredients = page.get_by_test_id(TEST_IDS["mealIngredients"])
     expect(ingredients.get_by_role("listitem")).to_have_count(4)
     expect(
-        ingredients.get_by_role("link", name=ingredient_label(milk["name"], "Weidehof"))
-    ).to_have_attribute("href", f"/ingredients/{milk['id']}")
+        ingredients.get_by_role("link", name=item_label(milk["name"], "Weidehof"))
+    ).to_have_attribute("href", f"/items/{milk['id']}")
     expect(page.get_by_test_id(TEST_IDS["mealInstructions"])).to_have_text(
         "Alles verrühren.\nIn der Pfanne backen."
     )
@@ -178,31 +178,31 @@ def test_member_counts_eggs_in_pieces(member_page: Page, api: Api, member: Accou
     name = f"Eier {tag}"
     dairy = api.category_name(member, "dairy_eggs")
 
-    page.goto("/ingredients")
-    page.get_by_test_id(TEST_IDS["newIngredient"]).click()
-    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
-    form = dialog.get_by_test_id(TEST_IDS["ingredientForm"])
-    form.get_by_label(text("ingredients.field.name"), exact=True).fill(name)
-    form.get_by_label(text("ingredients.field.category"), exact=True).select_option(label=dairy)
+    page.goto("/items")
+    page.get_by_test_id(TEST_IDS["newItem"]).click()
+    dialog = page.get_by_role("dialog", name=text("items.form.createTitle"))
+    form = dialog.get_by_test_id(TEST_IDS["itemForm"])
+    form.get_by_label(text("items.field.name"), exact=True).fill(name)
+    form.get_by_label(text("items.field.category"), exact=True).select_option(label=dairy)
     # The weight per piece shows only for Stück.
-    piece_weight = form.get_by_label(text("ingredients.field.weightPerPiece"), exact=True)
+    piece_weight = form.get_by_label(text("items.field.weightPerPiece"), exact=True)
     expect(piece_weight).to_have_count(0)
-    form.get_by_role("radio", name=text("ingredients.baseUnit.piece"), exact=True).check()
+    form.get_by_role("radio", name=text("items.baseUnit.piece"), exact=True).check()
     piece_weight.fill("60")
     for key, value in (("kcal", "155"), ("protein", "13"), ("carbs", "1"), ("sugar", "1"),
                        ("fat", "11")):  # fmt: skip
         form.get_by_label(text(f"nutrient.{key}"), exact=True).fill(value)
     form.get_by_role("button", name=text("common.save")).click()
 
-    detail = page.get_by_test_id(TEST_IDS["screenIngredient"])
+    detail = page.get_by_test_id(TEST_IDS["screenItem"])
     expect(detail.get_by_role("heading", level=1)).to_have_text(name)
-    expect(detail).to_contain_text(text("ingredients.baseUnit.piece"))
+    expect(detail).to_contain_text(text("items.baseUnit.piece"))
     expect(detail).to_contain_text("60 g")
 
-    # The grey line on the Ingredients tab names the pieces.
-    page.get_by_test_id(TEST_IDS["tabIngredients"]).click()
-    page.get_by_test_id(TEST_IDS["ingredientSearch"]).fill(tag)
-    row = page.get_by_test_id(TEST_IDS["ingredientList"]).get_by_role(
+    # The grey line on the Items tab names the pieces.
+    page.get_by_test_id(TEST_IDS["tabItems"]).click()
+    page.get_by_test_id(TEST_IDS["itemSearch"]).fill(tag)
+    row = page.get_by_test_id(TEST_IDS["itemList"]).get_by_role(
         "link", name=re.compile(f"^{re.escape(name)} ")
     )
     expect(row).to_contain_text(f"{dairy} · {text('unit.piece')}")
@@ -240,14 +240,14 @@ def test_member_creates_an_ingredient_in_the_meal_form_with_one_tap(
     it, and a tap made before the search has answered creates the ingredient at once."""
     page = member_page
     tag = unique("e2e")
-    quince = api.create_ingredient(member, f"Quitte {tag}")
+    quince = api.create_item(member, f"Quitte {tag}")
     name = f"{quince['name']} Gelee"
 
     page.goto("/meals/new")
     meal_form = page.get_by_test_id(TEST_IDS["mealForm"])
-    picker = meal_form.get_by_test_id(TEST_IDS["ingredientPicker"])
+    picker = meal_form.get_by_test_id(TEST_IDS["itemPicker"])
     field = picker.get_by_label(text("meals.field.addIngredient"), exact=True)
-    create = picker.get_by_test_id(TEST_IDS["ingredientPickerCreate"])
+    create = picker.get_by_test_id(TEST_IDS["itemPickerCreate"])
     field.fill(quince["name"])
     before = create.bounding_box()
     assert before is not None
@@ -261,8 +261,8 @@ def test_member_creates_an_ingredient_in_the_meal_form_with_one_tap(
     # The longer name's search waits for the 250 ms debounce: the tap comes before it.
     field.press_sequentially(" Gelee")
     create.click()
-    dialog = page.get_by_role("dialog", name=text("ingredients.form.createTitle"))
-    expect(dialog.get_by_label(text("ingredients.field.name"), exact=True)).to_have_value(name)
+    dialog = page.get_by_role("dialog", name=text("items.form.createTitle"))
+    expect(dialog.get_by_label(text("items.field.name"), exact=True)).to_have_value(name)
     dialog.get_by_role("button", name=text("common.save")).click()
     expect(dialog).to_be_hidden()
 

@@ -15,7 +15,7 @@ pytestmark = pytest.mark.usefixtures("member_page")
 SCREENS = [
     ("/lists", TEST_IDS["tabLists"], TEST_IDS["screenLists"], "nav.lists"),
     ("/meals", TEST_IDS["tabMeals"], TEST_IDS["screenMeals"], "nav.meals"),
-    ("/ingredients", TEST_IDS["tabIngredients"], TEST_IDS["screenIngredients"], "nav.ingredients"),
+    ("/items", TEST_IDS["tabItems"], TEST_IDS["screenItems"], "nav.items"),
     ("/me", TEST_IDS["tabMe"], TEST_IDS["screenMe"], "nav.me"),
 ]
 
@@ -59,6 +59,14 @@ def test_unknown_routes_fall_back_to_lists(page: Page, path: str) -> None:
 
     expect(page).to_have_url(re.compile(r"/lists$"))
     expect(page.get_by_test_id(TEST_IDS["screenLists"])).to_be_visible()
+
+
+def test_old_ingredient_links_open_the_items_tab(page: Page) -> None:
+    """The Items tab was the Ingredients tab: an old bookmark of it still opens it."""
+    page.goto("/ingredients")
+
+    expect(page).to_have_url(re.compile(r"/items$"))
+    expect(page.get_by_test_id(TEST_IDS["screenItems"])).to_be_visible()
 
 
 def test_about_shows_version_and_source_link(page: Page) -> None:

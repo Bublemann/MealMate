@@ -4,16 +4,19 @@ import { IDBFactory } from 'fake-indexeddb';
 import { openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '@/api/generated/schema';
+import { COPY_STANDS_IN_AFTER_MS } from '@/features/lists/ListsScreen';
 import { errorResponse, heldRoute, mockApi, requestsTo, TEST_USER } from '@/test/api';
-import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/ingredients';
+import { CATEGORIES, CATEGORIES_AFTER_DELETE } from '@/test/items';
 import {
   FEED_LISTS,
   feedPage,
   FORMER_REMINDER,
+  leftoverChili,
   line,
   LIST_ID,
   LIST_ROUTES,
   listDetail,
+  listMeal,
   shoppingList,
   SHOPPING_LINES,
 } from '@/test/lists';
@@ -56,6 +59,25 @@ const HIDING_MY_SHOPPING: Schemas['Me'] = {
   ...TEST_USER,
   filter_hidden: { meals: [], lists: [TEST_USER.id], list_states: ['shopping'] },
 };
+
+/** Faked timers that also move with real time, for the 3 s the Lists tab waits for its feed. */
+function fakeTimers() {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+}
+
+/** Time passes on the faked timers, by `ms`. */
+async function wait(ms: number) {
+  await act(() => vi.advanceTimersByTimeAsync(ms));
+}
+
+/** The feed's first page takes too long: the copy stands in once about 3 seconds pass (UI-02). */
+async function feedTakesTooLong() {
+  expect(await screen.findByTestId(testIds.loadingState)).toBeInTheDocument();
+  // Well before the 3 s, as real time moves the faked clock too.
+  await wait(COPY_STANDS_IN_AFTER_MS / 2);
+  expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
+  await wait(COPY_STANDS_IN_AFTER_MS / 2);
+}
 
 function goOffline() {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
@@ -194,7 +216,9 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Wochenende (26/09/2026)' }),
     ).toBeVisible();
-    expect(screen.getByText('Loading…')).toBeVisible();
+    const loading = screen.getByTestId(testIds.loadingState);
+    await waitFor(() => expect(loading).toHaveTextContent('Loading…'));
+    expect(within(loading).getByTestId(testIds.spinner)).toBeVisible();
     await categories.answer(CATEGORIES);
     const lines = await screen.findByTestId(testIds.listLines);
     expect(within(lines).getByRole('list', { name: 'Dairy & eggs' })).toHaveTextContent('Milch');
@@ -233,7 +257,28 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows the copy on the Lists tab, newest created first, until the feed answers', async () => {
+  it('waits online for the feed instead of showing the copy, then shows all lists at once (UI-02)', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+
+    renderApp('/lists');
+
+    // The spinner, not the copy's list being shopped without the done lists (UI-08).
+    expect(await screen.findByTestId(testIds.spinner)).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+    await wait(COPY_STANDS_IN_AFTER_MS / 2);
+    expect(screen.queryByTestId(testIds.listCard)).not.toBeInTheDocument();
+    await feed.answer(feedPage(FEED_LISTS));
+
+    const rows = await screen.findAllByTestId(testIds.listCard);
+    expect(rows).toHaveLength(FEED_LISTS.length);
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+  });
+
+  it('shows the copy on the Lists tab, newest created first, once the feed takes 3 s, until it answers', async () => {
+    fakeTimers();
     const storage = await storeCopy(
       listDetail({ name: 'Vorrat', created_at: '2026-09-20T10:00:00Z' }),
     );
@@ -246,11 +291,12 @@ describe('lists from the local copy (SYNC-09)', () => {
     ]) {
       await storage.putList({ id: detail.id, userId: TEST_USER.id, detail, storedAt: 1_000 });
     }
-    // Online, but the server is slow: the copy shows first (SYNC-09, UI-02).
+    // Online, but the server is slow: the copy stands in after about 3 seconds (SYNC-09, UI-02).
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
 
     renderApp('/lists');
+    await feedTakesTooLong();
 
     const copied = within(await screen.findByTestId(testIds.listFeed)).getAllByTestId(
       testIds.listCard,
@@ -266,11 +312,71 @@ describe('lists from the local copy (SYNC-09)', () => {
     );
   });
 
+  it('keeps the copy on coming back to the tab, without waiting again', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': NEVER, 'GET /api/lists/sync': NEVER });
+    const { router } = renderApp('/lists');
+    await feedTakesTooLong();
+    expect(await screen.findByTestId(testIds.listCard)).toBeVisible();
+
+    await act(() => router.navigate('/meals'));
+    await act(() => router.navigate('/lists'));
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+  });
+
+  it('keeps the copy on coming back to the tab after a long time away', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': NEVER, 'GET /api/lists/sync': NEVER });
+    const { router } = renderApp('/lists');
+    await feedTakesTooLong();
+    expect(await screen.findByTestId(testIds.listCard)).toBeVisible();
+
+    await act(() => router.navigate('/meals'));
+    // Longer than an unused query stays in the cache by default.
+    await wait(6 * 60_000);
+    await act(() => router.navigate('/lists'));
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+  });
+
+  it('keeps the spinner when the feed fails within the 3 s, then shows the copy', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    expect(await screen.findByTestId(testIds.loadingState)).toBeInTheDocument();
+
+    await feed.answer(errorResponse(503, 'common.service_unavailable'));
+
+    // One spinner, not the error first and then the copy.
+    await wait(COPY_STANDS_IN_AFTER_MS / 2);
+    expect(screen.getByTestId(testIds.loadingState)).toBeInTheDocument();
+    expect(
+      screen.queryByText('MealMate is unavailable right now. Please try again later.'),
+    ).not.toBeInTheDocument();
+    await wait(COPY_STANDS_IN_AFTER_MS / 2);
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+  });
+
   it('shows the copy whatever the saved filters say until the feed answers (UI-02)', async () => {
+    fakeTimers();
     await storeCopy(shoppingList());
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
     renderApp('/lists', { user: HIDING_MY_SHOPPING });
+    await feedTakesTooLong();
 
     expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
       'Wochenende (26/09/2026)',
@@ -284,10 +390,12 @@ describe('lists from the local copy (SYNC-09)', () => {
   });
 
   it('says why the feed did not load while it shows the copy', async () => {
+    fakeTimers();
     await storeCopy(listDetail({ name: 'Vorrat' }));
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
     renderApp('/lists');
+    await feedTakesTooLong();
     expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent('Vorrat (26/09/2026)');
 
     await feed.answer(errorResponse(503, 'common.service_unavailable'));
@@ -299,11 +407,13 @@ describe('lists from the local copy (SYNC-09)', () => {
   });
 
   it('says why the feed did not load instead of "No lists yet" when the copy is empty', async () => {
+    fakeTimers();
     const storage = await openSyncStorage();
     await storage.setMeta(userMetaKey('lastSync', TEST_USER.id), 1_000);
     const feed = heldRoute();
     mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
     renderApp('/lists');
+    await feedTakesTooLong();
     expect(await screen.findByText('No lists yet')).toBeVisible();
 
     await feed.answer(errorResponse(503, 'common.service_unavailable'));
@@ -333,9 +443,11 @@ describe('lists from the local copy (SYNC-09)', () => {
         at: new Date().toISOString(),
       },
     });
+    fakeTimers();
     serverGone(NEVER);
 
     renderApp('/lists');
+    await feedTakesTooLong();
 
     expect(await screen.findByText('Grillen (26/09/2026)')).toBeVisible();
     expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(1);
@@ -404,6 +516,47 @@ describe('a draft offline (SYNC-03)', () => {
     // Restoring a hidden line needs the server too.
     fireEvent.click(screen.getByText('Hidden (1)'));
     expect(screen.getByRole('button', { name: 'Restore Eier' })).toBeDisabled();
+  });
+});
+
+describe('a leftover ticked offline (LIST-17, SYNC-03)', () => {
+  it('leaves every local draft at once and stays off them over a restart', async () => {
+    const other = listDetail({
+      id: '0190c0de-0000-7000-8000-0000000000b2',
+      name: 'Nächste Woche',
+      meals: [leftoverChili({ id: 'lm-chili-2' })],
+    });
+    await storeCopy(listDetail({ meals: [leftoverChili(), listMeal()] }));
+    await (
+      await openSyncStorage()
+    ).putList({
+      id: other.id,
+      userId: TEST_USER.id,
+      detail: other,
+      storedAt: 1_000,
+    });
+    serverGone(FAIL);
+    const first = renderApp(`/lists/${LIST_ID}`);
+    const box = await screen.findByRole('checkbox', { name: 'Chili eaten' });
+    goOffline();
+    expect(await screen.findByTestId(testIds.offlineBanner)).toBeVisible();
+
+    fireEvent.click(box);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(testIds.syncStatus)).toHaveTextContent(
+        'Offline – 1 change waiting',
+      ),
+    );
+    first.unmount();
+
+    // The other draft, after the app was opened again, still without a connection.
+    renderApp(`/lists/${other.id}`);
+    expect(await screen.findByText(/^No meals yet\./)).toBeVisible();
+    expect(screen.queryByRole('listitem', { name: 'Chili' })).not.toBeInTheDocument();
   });
 });
 
@@ -527,6 +680,48 @@ describe('logging out with waiting changes (SYNC-05, SYNC-10)', () => {
 });
 
 describe('the Lists tab offline (UI-02, SYNC-03)', () => {
+  it('shows the copy at once when the app opens offline', async () => {
+    await storeCopy(shoppingList());
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    serverGone(FAIL);
+
+    renderApp('/lists');
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+  });
+
+  it('keeps the copy when the connection comes back, until the feed answers', async () => {
+    await storeCopy(shoppingList());
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const feed = heldRoute();
+    const fetchMock = mockApi({
+      ...LIST_ROUTES,
+      'GET /api/lists': feed.route,
+      'GET /api/lists/sync': NEVER,
+    });
+    renderApp('/lists');
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+
+    online.mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+    // The feed is asked for again, and the list being shopped stays meanwhile.
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET /api/lists')).toHaveLength(1));
+    expect(screen.getByTestId(testIds.listCard)).toHaveTextContent('Wochenende (26/09/2026)');
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+    await feed.answer(feedPage(FEED_LISTS));
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId(testIds.listCard)).toHaveLength(FEED_LISTS.length),
+    );
+  });
+
   it('disables the "New list" tile: creating a list needs the server', async () => {
     await storeCopy(listDetail({ name: 'Vorrat' }));
     serverGone(FAIL);

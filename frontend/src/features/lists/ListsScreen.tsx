@@ -6,6 +6,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
@@ -27,6 +28,7 @@ import { useUserFilterGroup } from '@/features/savedFilters/useUserFilterGroup';
 import { useLanguage } from '@/i18n';
 import { formatDayMonth } from '@/i18n/format';
 import { userLabel } from '@/i18n/users';
+import { useDelayed } from '@/lib/useDelayed';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import { showsLocalCopy, useCreateList, useListFeed, type ListSummary } from './api';
@@ -120,7 +122,8 @@ function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
         newTile={{
           label: t('lists.new'),
           onClick: newList,
-          disabled: !connected || create.isPending,
+          disabled: !connected,
+          pending: create.isPending,
           testId: testIds.newList,
         }}
       />
@@ -129,9 +132,39 @@ function ListsPinnedBlock({ filter }: { filter: ReactNode }) {
   );
 }
 
+/** How long the tab waits online for the feed's first page before the local copy stands in (UI-02). */
+export const COPY_STANDS_IN_AFTER_MS = 3_000;
+
 /**
- * The feed below the pinned block (UI-02). Until the server's first page arrives it is the local
- * copy (SYNC-09); offline it is only the local copy, because read-only and done lists need a
+ * The feed queries in which the local copy has stood in. Kept by the query, not the screen, so it
+ * lasts while the user leaves the tab and comes back, and goes with the query when the cache is
+ * cleared at the end of a session. Never unmarked: once the first page is there, the query never
+ * holds the copy again.
+ */
+const copyStoodIn = new WeakSet<object>();
+
+/**
+ * Whether the tab still waits for the feed's first page (UI-02): online, with only the local copy
+ * there, for about 3 seconds. Then, or at once offline, the copy stands in, and keeps standing
+ * in, also on coming back to the tab or online, until the page arrives: the list being shopped
+ * must never give way to a spinner in the shop.
+ */
+function useWaitsForFeed(feed: { dataUpdatedAt: number }, connected: boolean) {
+  const query = useQueryClient().getQueryCache().find({ queryKey: FEED_KEY, exact: true });
+  const copyOnly = showsLocalCopy(feed);
+  const stoodIn = query !== undefined && copyStoodIn.has(query);
+  const tooLong = useDelayed(copyOnly, COPY_STANDS_IN_AFTER_MS);
+  const standsIn = copyOnly && (stoodIn || tooLong || !connected);
+  // Noted in render, not in an effect, so the render that sees the copy stand in shows it at
+  // once; noting it twice (StrictMode) does no harm.
+  if (query && standsIn) copyStoodIn.add(query);
+  return copyOnly && !standsIn;
+}
+
+/**
+ * The feed below the pinned block (UI-02). Online, it waits for the server's first page, showing
+ * the spinner; the local copy (SYNC-09) stands in when that takes more than about 3 seconds.
+ * Offline it is only the local copy, because read-only and done lists need a
  * connection. The copy ignores the saved filters; the server leaves out what they hide, and a
  * list hidden by a change still being saved goes at once. A list finished here whose finish
  * hasn't been sent yet stays hidden.
@@ -142,15 +175,21 @@ function ListFeed({ filters }: { filters: FeedFilters }) {
   const feed = useListFeed();
   const connected = useConnected();
   const finishing = usePendingFinishes();
+  const waits = useWaitsForFeed(feed, connected);
   // Offline the sync notice says why nothing loads.
   const error = connected ? feed.error : null;
-  const lists = connected
-    ? feed.data?.pages.flatMap((page) => page.lists)
-    : engine.copiedSummaries();
+  // While it waits, it is online.
+  const lists = !connected
+    ? engine.copiedSummaries()
+    : waits
+      ? undefined
+      : feed.data?.pages.flatMap((page) => page.lists);
   // The local copy ignores the saved filters (UI-02).
   const filtersApply = connected && !showsLocalCopy(feed);
 
   if (!lists) {
+    // A quick failure waits too, so the copy follows the spinner without an error in between.
+    if (waits) return <LoadingState />;
     if (feed.error) return <LoadError error={feed.error} />;
     // Offline before the copy was ever complete: the server's lists need a connection.
     if (!connected && feed.data) {
@@ -212,8 +251,7 @@ interface FeedEndProps {
  * still in view.
  */
 function FeedEnd({ onReached, paused, loading }: FeedEndProps) {
-  const { t } = useTranslation();
-  const end = useRef<HTMLParagraphElement>(null);
+  const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const target = end.current;
@@ -228,11 +266,7 @@ function FeedEnd({ onReached, paused, loading }: FeedEndProps) {
     return () => observer.disconnect();
   }, [onReached, paused]);
 
-  return (
-    <p ref={end} role="status" className="text-muted-foreground">
-      {loading ? t('common.loading') : null}
-    </p>
-  );
+  return <div ref={end}>{loading && <LoadingState />}</div>;
 }
 
 /**

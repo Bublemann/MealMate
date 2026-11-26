@@ -15,6 +15,7 @@ import { RECURRING_KEY } from '@/features/recurring/api';
 import { CATEGORIES_KEY, categoriesQuery } from '@/features/reference/api';
 import type { Language } from '@/i18n';
 import { errorMessage } from '@/i18n/errors';
+import { isLeftoverEaten, withLeftoversEaten } from './applyPending';
 import { flushEntries, type FlushResult, type SendOutcome } from './flush';
 import {
   applyPendingWipes,
@@ -95,6 +96,56 @@ function isCategoriesKey(key: readonly unknown[]): boolean {
 /** App versions before D-31 stored the categories without their names, which headings need. */
 function hasNames(stored: StoredCategories): boolean {
   return stored.categories.every((category) => typeof category.names === 'object');
+}
+
+type Stored = Record<string, unknown>;
+
+/** `ingredient_id` as `item_id`, and a line's `kind` "ingredient" as "item"; else unchanged. */
+function renamed(entry: Stored): Stored {
+  const { ingredient_id, ...rest } = entry;
+  if (ingredient_id === undefined) return entry;
+  return {
+    ...rest,
+    item_id: ingredient_id,
+    ...(rest.kind === 'ingredient' ? { kind: 'item' } : {}),
+  };
+}
+
+/** A due item's `ingredient` as `item`; else unchanged. */
+function renamedDue(entry: Stored): Stored {
+  const { ingredient, ...rest } = entry;
+  return ingredient === undefined ? entry : { ...rest, item: ingredient };
+}
+
+/**
+ * App versions before #171 stored the lists with "ingredient" where the API now says "item": a
+ * line's `kind` and `ingredient_id`, an extra item's `ingredient_id` and a due item's
+ * `ingredient`. Read that way, they show as before until the next sync replaces them. A field an
+ * even older version didn't store (`due_items`) stays missing, as it was. Meals stored before
+ * #177 count as not eaten, and before #178 as no leftovers (nor before #179 as leftovers of
+ * nothing known). This can go once no device keeps a copy from before #179.
+ */
+function fromOlderApp(entry: StoredList): StoredList {
+  const detail = entry.detail as unknown as Record<string, Stored[] | undefined>;
+  const upgraded = { ...detail };
+  for (const [field, rename] of [
+    ['lines', renamed],
+    ['extra_items', renamed],
+    ['due_items', renamedDue],
+  ] as const) {
+    const entries = detail[field];
+    if (entries) upgraded[field] = entries.map(rename);
+  }
+  // Meals stored before SHOP-07 weren't eaten, those stored before LIST-17 no leftovers. A
+  // leftover stored before its source was sent can't be ticked until the next sync.
+  if (detail.meals)
+    upgraded.meals = detail.meals.map((meal) => ({
+      eaten: false,
+      leftover: false,
+      leftover_of: null,
+      ...meal,
+    }));
+  return { ...entry, detail: upgraded as unknown as ListDetail };
 }
 
 /** The request would go out with a session that isn't the ops' user's any more (SYNC-10). */
@@ -338,13 +389,14 @@ export class SyncEngine {
       // waiting ops stay, tagged with them, and are never sent with this session.
       await storage.deleteListsExcept(id);
       if (this.userId !== id) return;
-      const [lists, ops, categories, lastSync] = await Promise.all([
+      const [stored, ops, categories, lastSync] = await Promise.all([
         storage.readLists(id),
         storage.readOps(id),
         storage.getMeta(userMetaKey('categories', id)),
         storage.getMeta(userMetaKey('lastSync', id)),
       ]);
       if (this.userId !== id) return;
+      const lists = stored.map(fromOlderApp);
       for (const entry of lists) this.copy.set(entry.id, entry);
       this.syncedAt = typeof lastSync === 'number' ? lastSync : null;
       this.mergeOutbox(ops);
@@ -683,6 +735,7 @@ export class SyncEngine {
       notifyManager.schedule(() => this.removeFromOutbox(seqs));
     });
     this.keepInCopy(userId, list);
+    this.leftoversEatenElsewhere(userId, list.id, batch, results);
     void this.queryClient.invalidateQueries({ queryKey: FEED_KEY });
     // A done list's checked lines are purchases of recurring items (LIST-16): the server has
     // recorded them with this batch, so the set's dates and due items change.
@@ -703,6 +756,37 @@ export class SyncEngine {
           reason: errorMessage(t, reason),
         }),
       );
+    }
+  }
+
+  /**
+   * Leftovers the server ticked with the batch leave the other lists too (LIST-17): their cached
+   * and stored lists show that until they are loaded again (at once while on screen), so none
+   * shows a ticked leftover again once its op left the outbox, also offline after a restart. A
+   * rejected op changes nothing elsewhere.
+   */
+  private leftoversEatenElsewhere(
+    userId: string,
+    listId: string,
+    batch: readonly OutboxEntry[],
+    results: readonly OpResult[],
+  ): void {
+    const done = new Set(
+      results.filter((result) => result.status !== 'rejected').map((result) => result.op_id),
+    );
+    const ops = batch
+      .map((entry) => entry.op)
+      .filter((op) => isLeftoverEaten(op) && done.has(op.op_id));
+    if (ops.length === 0) return;
+    for (const [key, detail] of this.queryClient.getQueriesData<ListDetail>({
+      queryKey: ['lists', 'detail'],
+    })) {
+      if (!detail || detail.id === listId) continue;
+      const shown = withLeftoversEaten(detail, ops);
+      if (shown === detail) continue;
+      this.queryClient.setQueryData(key, shown);
+      this.keepInCopy(userId, shown);
+      void this.queryClient.invalidateQueries({ queryKey: key, exact: true });
     }
   }
 

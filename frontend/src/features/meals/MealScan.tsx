@@ -3,9 +3,11 @@ import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fieldErrorCodes } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
-import { toSummary, type IngredientSummary } from '@/features/ingredients/api';
-import { IngredientFormDialog } from '@/features/ingredients/IngredientFormDialog';
+import { toSummary, type ItemSummary } from '@/features/items/api';
+import { itemLabel } from '@/features/items/label';
+import { ItemFormDialog } from '@/features/items/ItemFormDialog';
 import { useBarcodeLookup } from '@/features/scanner/api';
 import { testIds } from '@/testIds';
 
@@ -17,22 +19,25 @@ const BarcodeScanDialog = lazy(() =>
 );
 
 interface MealScanProps {
-  /** Called with the barcode's ingredient: the known one, or the one saved or taken in the pop-up. */
-  onIngredient: (ingredient: IngredientSummary) => void;
+  /** Called with the barcode's item: the known one, or the one saved or taken in the pop-up. */
+  onItem: (item: ItemSummary) => void;
 }
 
 /**
- * The meal form's "Scan barcode" (BAR-01, MEAL-03). A barcode one of our ingredients has adds its
- * row at once (BAR-02): our own ingredients answer that without waiting for Open Food Facts. Any
- * other barcode opens "New ingredient", which looks it up as after a scan with its own scan icon
- * (BAR-03); its "Save", or taking an ingredient there, adds the row.
+ * The meal form's "Scan barcode" (BAR-01, MEAL-03). A barcode one of our items has adds its
+ * row at once (BAR-02): our own items answer that without waiting for Open Food Facts, unless it
+ * is a supply, which can't be an ingredient (D-56). Any other barcode opens "New item", which
+ * looks it up as after a scan with its own scan icon (BAR-03); its "Save", or taking an item
+ * there, adds the row.
  */
-export function MealScan({ onIngredient }: MealScanProps) {
+export function MealScan({ onItem }: MealScanProps) {
   const { t } = useTranslation();
   const lookup = useBarcodeLookup();
   const [scanning, setScanning] = useState(false);
-  // The barcode no ingredient has, while "New ingredient" is open for it.
+  // The barcode no item has, while "New item" is open for it.
   const [unknown, setUnknown] = useState<string | null>(null);
+  // The supply the last scan found, which is no ingredient.
+  const [supply, setSupply] = useState<string | null>(null);
   const barcode = lookup.variables?.barcode ?? '';
   const invalid = fieldErrorCodes(lookup.error).barcode !== undefined;
 
@@ -41,8 +46,10 @@ export function MealScan({ onIngredient }: MealScanProps) {
       { barcode: code, ownOnly: true },
       {
         onSuccess: (result) => {
-          if (result.found_in === 'db' && result.ingredient) {
-            onIngredient(toSummary(result.ingredient));
+          if (result.found_in === 'db' && result.item?.kind === 'supply') {
+            setSupply(itemLabel(result.item.name, result.item.brand));
+          } else if (result.found_in === 'db' && result.item) {
+            onItem(toSummary(result.item));
           } else {
             setUnknown(result.barcode);
           }
@@ -61,6 +68,7 @@ export function MealScan({ onIngredient }: MealScanProps) {
         onClick={() => {
           // A new scan replaces a lookup still running and its message.
           lookup.reset();
+          setSupply(null);
           setScanning(true);
         }}
       >
@@ -70,12 +78,21 @@ export function MealScan({ onIngredient }: MealScanProps) {
       {/* Without a message the live region stays for screen readers but takes no room. */}
       <div aria-live="polite" className="mt-3 text-sm empty:mt-0">
         {lookup.isPending && (
-          <p className="text-muted-foreground">{t('scanner.lookingUp', { barcode })}</p>
+          <LoadingState
+            label={t('scanner.lookingUp', { barcode })}
+            className="justify-start py-0"
+          />
         )}
         {invalid && (
           <p className="flex items-start gap-1.5 font-medium text-destructive">
             <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             {t('scanner.invalidBarcode', { barcode })}
+          </p>
+        )}
+        {supply !== null && (
+          <p className="flex items-start gap-1.5 font-medium text-destructive">
+            <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            {t('items.kind.notForMeals', { name: supply })}
           </p>
         )}
       </div>
@@ -94,14 +111,15 @@ export function MealScan({ onIngredient }: MealScanProps) {
           />
         </Suspense>
       )}
-      <IngredientFormDialog
+      <ItemFormDialog
         open={unknown !== null}
         onOpenChange={(open) => {
           if (!open) setUnknown(null);
         }}
         initialScan={unknown ?? undefined}
-        onSaved={(ingredient) => onIngredient(toSummary(ingredient))}
-        onPickExisting={onIngredient}
+        onSaved={(item) => onItem(toSummary(item))}
+        onPickExisting={onItem}
+        foodOnly
       />
     </>
   );

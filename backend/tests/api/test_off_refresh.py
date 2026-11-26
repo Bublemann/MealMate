@@ -19,12 +19,12 @@ from sqlalchemy.exc import OperationalError
 
 from app.core.ratelimit import SlidingWindow
 from app.db.session import Database
-from app.models import Ingredient as IngredientRow
-from app.schemas.ingredients import Ingredient
+from app.models import Item as ItemRow
+from app.schemas.items import Item
 from app.services import off_refresh
 from app.services.off_refresh import OffRefresher, Outcome
 from tests.accounts import Account, FakeClock, error, login, make_user
-from tests.catalog import EAN_13, create_from_off, create_ingredient, set_stored
+from tests.catalog import EAN_13, create_from_off, create_item
 from tests.off import (
     MILK,
     OATS,
@@ -58,7 +58,6 @@ async def saved_oats(api: AsyncClient, anna: Account, *, edited: list[str], **ch
     values: dict[str, Any] = {
         "name": "Haferflocken",
         "brand": "MealMate Test Kitchen",
-        "quantity_text": "500 g",
         "nutrients": OATS_NUTRIENTS,
     }
     values |= changes
@@ -88,11 +87,11 @@ def the_refresher(app: FastAPI) -> OffRefresher:
     return refresher_
 
 
-async def refresh(app: FastAPI, clock: FakeClock, ingredient_id: str, **options: Any) -> Outcome:
-    return await off_refresh.refresh_ingredient(
+async def refresh(app: FastAPI, clock: FakeClock, item_id: str, **options: Any) -> Outcome:
+    return await off_refresh.refresh_item(
         database(app),
         the_refresher(app).off,
-        ingredient_id,
+        item_id,
         now=clock.now,
         max_wait=options.pop("max_wait", None),
         **options,
@@ -106,8 +105,8 @@ async def later(api: AsyncClient, clock: FakeClock, *users: Account, **delta: fl
         await login(api, user)
 
 
-async def get(api: AsyncClient, user: Account, ingredient_id: str) -> Any:
-    response = await api.get(f"/api/ingredients/{ingredient_id}", headers=user.headers)
+async def get(api: AsyncClient, user: Account, item_id: str) -> Any:
+    response = await api.get(f"/api/items/{item_id}", headers=user.headers)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -150,6 +149,57 @@ async def test_fields_not_edited_update_silently(
     assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
 
 
+async def test_a_supply_takes_no_nutrients_and_keeps_its_kind(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """A supply has no nutrients, so a refresh brings none, and Open Food Facts never sets the
+    kind (D-56)."""
+    product = await saved_oats(api, anna, edited=[], kind="supply", nutrients=None)
+    newer = oats(product_name_de="Zarte Haferflocken", last_modified_t=modified(30))
+    route(off_api, OATS).respond(json=newer)
+    await later(api, clock, anna, days=40)
+
+    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+
+    body = await get(api, anna, product["id"])
+    assert (body["name"], body["kind"]) == ("Zarte Haferflocken", "supply")
+    assert set(body["nutrients"].values()) == {None}
+    assert body["pending_update"] is None
+
+
+async def test_switching_to_supply_drops_the_pending_nutrients(
+    app: FastAPI,
+    api: AsyncClient,
+    anna: Account,
+    off_api: respx.MockRouter,
+    clock: FakeClock,
+) -> None:
+    """A supply has no nutrients, so newer Open Food Facts values for them no longer apply; the
+    other pending values stay (D-56)."""
+    product = await saved_oats(api, anna, edited=["name", "nutrients.kcal"], name="Meine Flocken")
+    newer = oats(
+        nutriments={**oats()["product"]["nutriments"], "energy-kcal_100g": 158},
+        last_modified_t=modified(30),
+    )
+    route(off_api, OATS).respond(json=newer)
+    assert await refresh(app, clock, product["id"]) == Outcome.PENDING
+
+    response = await api.patch(
+        f"/api/items/{product['id']}", json={"kind": "supply"}, headers=anna.headers
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["user_edited_fields"] == ["name"]
+    assert body["pending_update"]["fields"] == [
+        {"field": "name", "current": "Meine Flocken", "proposed": "Haferflocken"}
+    ]
+
+
 async def test_user_edited_fields_become_a_pending_update(
     app: FastAPI,
     api: AsyncClient,
@@ -190,7 +240,6 @@ async def test_unknown_values_never_replace_known_ones(
     product = await saved_oats(api, anna, edited=["brand", "nutrients.fat"], brand="Hausmarke")
     unknown = oats(
         brands=None,
-        quantity=None,
         nutriments={"energy-kcal_100g": 372, "proteins_100g": "n/a", "fat_100g": None},
         last_modified_t=modified(30),
     )
@@ -199,136 +248,29 @@ async def test_unknown_values_never_replace_known_ones(
     assert await refresh(app, clock, product["id"]) == Outcome.UNCHANGED
 
     body = await get(api, anna, product["id"])
-    assert (body["brand"], body["quantity_text"]) == ("Hausmarke", "500 g")
-    assert (body["pack_quantity"], body["pack_unit"]) == (500, "g")
+    assert body["brand"] == "Hausmarke"
     assert body["nutrients"] == OATS_NUTRIENTS
     assert body["pending_update"] is None
     assert body["fetched_at"] == "2026-09-27T12:00:00Z"
 
 
-async def test_a_pack_size_nobody_changed_updates_silently(
+async def test_a_new_pack_size_is_neither_taken_nor_offered(
     app: FastAPI,
     api: AsyncClient,
     anna: Account,
     off_api: respx.MockRouter,
     clock: FakeClock,
 ) -> None:
-    """Like the other fields (BAR-06, D-47); its amount follows the text."""
-    product = await saved_oats(api, anna, edited=[])
-    twice = oats(quantity="2 x 500 g", last_modified_t=modified(30))
-    route(off_api, OATS).respond(json=twice)
-
-    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
-
-    body = await get(api, anna, product["id"])
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == (
-        "2 x 500 g",
-        None,
-        None,
-    )
-    route(off_api, OATS).respond(json=oats(quantity="1 kg", last_modified_t=modified(60)))
-    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
-    body = await get(api, anna, product["id"])
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("1 kg", 1000, "g")
-    assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
-
-
-async def corrected_pack_size(
-    app: FastAPI, api: AsyncClient, anna: Account, off_api: respx.MockRouter, clock: FakeClock
-) -> Any:
-    """Saved as "500 g", corrected from Open Food Facts' "250 g"; Open Food Facts then says
-    "450 g"."""
-    product = await saved_oats(api, anna, edited=["quantity_text"], quantity_text="500 g")
-    route(off_api, OATS).respond(json=oats(quantity="450 g", last_modified_t=modified(30)))
-    assert await refresh(app, clock, product["id"]) == Outcome.PENDING
-    return product
-
-
-async def test_a_pack_size_a_user_changed_becomes_a_pending_update(
-    app: FastAPI,
-    api: AsyncClient,
-    anna: Account,
-    off_api: respx.MockRouter,
-    clock: FakeClock,
-) -> None:
-    """ "Packung 500 g → 450 g [Apply] [Ignore]" (BAR-04, BAR-06, D-47)."""
-    product = await corrected_pack_size(app, api, anna, off_api, clock)
-
-    body = await get(api, anna, product["id"])
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("500 g", 500, "g")
-    assert body["pending_update"]["fields"] == [
-        {"field": "quantity_text", "current": "500 g", "proposed": "450 g"}
-    ]
-
-    applied = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/apply", headers=anna.headers
-    )
-
-    body = applied.json()
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("450 g", 450, "g")
-    assert (body["user_edited_fields"], body["pending_update"]) == ([], None)
-    # Open Food Facts' again: the next refresh updates it silently.
-    route(off_api, OATS).respond(json=oats(quantity="400 g", last_modified_t=modified(60)))
-    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
-    assert (await get(api, anna, product["id"]))["quantity_text"] == "400 g"
-
-
-async def test_an_ignored_pack_size_stays(
-    app: FastAPI,
-    api: AsyncClient,
-    anna: Account,
-    off_api: respx.MockRouter,
-    clock: FakeClock,
-) -> None:
-    product = await corrected_pack_size(app, api, anna, off_api, clock)
-
-    ignored = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/ignore", headers=anna.headers
-    )
-
-    body = ignored.json()
-    assert (body["quantity_text"], body["pending_update"]) == ("500 g", None)
-    assert body["user_edited_fields"] == ["quantity_text"]
-    assert await refresh(app, clock, product["id"]) == Outcome.UNCHANGED
-    assert (await get(api, anna, product["id"]))["pending_update"] is None
-
-
-@pytest.mark.parametrize(
-    "marks", [["quantity_text", "pack_quantity", "pack_unit"], ["pack_quantity"], ["pack_unit"]]
-)
-async def test_pack_marks_from_before_d38_count_again(
-    app: FastAPI,
-    api: AsyncClient,
-    anna: Account,
-    off_api: respx.MockRouter,
-    clock: FakeClock,
-    marks: list[str],
-) -> None:
-    """Before D-38 a user could change the pack size, field by field. Those marks were ignored
-    since; a user did change the values, so they count again (D-47), and nothing is
-    rewritten."""
-    product = await saved_oats(api, anna, edited=[])
-    await set_stored(app, product["id"], user_edited_fields=marks)
-    assert (await get(api, anna, product["id"]))["user_edited_fields"] == ["quantity_text"]
+    """There is no pack size (D-54): Open Food Facts giving another one changes nothing, and
+    nothing is pending."""
+    product = await saved_oats(api, anna, edited=["name"])
     route(off_api, OATS).respond(json=oats(quantity="1 kg", last_modified_t=modified(30)))
 
-    assert await refresh(app, clock, product["id"]) == Outcome.PENDING
+    assert await refresh(app, clock, product["id"]) == Outcome.UNCHANGED
 
     body = await get(api, anna, product["id"])
-    assert (body["quantity_text"], body["pack_quantity"], body["pack_unit"]) == ("500 g", 500, "g")
-    assert body["pending_update"]["fields"] == [
-        {"field": "quantity_text", "current": "500 g", "proposed": "1 kg"}
-    ]
-    async with database(app).read_sessions() as session:
-        row = await session.get(IngredientRow, product["id"])
-        assert row is not None
-        assert row.user_edited_fields == marks
-    # Applied, the pack size is Open Food Facts' again, whichever field was marked.
-    applied = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/apply", headers=anna.headers
-    )
-    assert applied.json()["quantity_text"] == "1 kg"
-    assert applied.json()["user_edited_fields"] == []
+    assert body.keys().isdisjoint({"quantity_text", "pack_quantity", "pack_unit"})
+    assert (body["user_edited_fields"], body["pending_update"]) == (["name"], None)
 
 
 async def test_only_pending_changes(
@@ -358,15 +300,13 @@ async def test_nutrients_on_another_basis_are_left_alone(
     per_ml = oats(
         product_quantity_unit="ml",
         nutriments={"energy-kcal_100g": 50},
-        quantity="0,5 l",
     )
     route(off_api, OATS).respond(json=per_ml)
 
-    assert await refresh(app, clock, product["id"]) == Outcome.UPDATED
+    assert await refresh(app, clock, product["id"]) == Outcome.UNCHANGED
 
     body = await get(api, anna, product["id"])
     assert body["nutrients"] == OATS_NUTRIENTS
-    assert (body["quantity_text"], body["pack_unit"]) == ("0,5 l", "ml")
 
 
 async def test_a_piece_ingredient_refreshes_its_values_per_100_g(
@@ -456,7 +396,7 @@ async def test_busy_and_skipped(
     clock: FakeClock,
 ) -> None:
     product = await saved_oats(api, anna, edited=[])
-    manual = await create_ingredient(api, anna, "Hafer", barcode=EAN_13)
+    manual = await create_item(api, anna, "Hafer", barcode=EAN_13)
     app.state.off_refresh = refresher(SlidingWindow(1, clock=clock.monotonic))
     the_refresher(app).off.rate_limit.reserve(max_wait=None)
 
@@ -480,7 +420,7 @@ async def test_a_product_changed_during_the_request_is_skipped(
 
     def barcode_changes(_request: httpx.Request) -> httpx.Response:
         with closing(sqlite3.connect(database(app).path)) as connection, connection:
-            connection.execute("UPDATE ingredients SET barcode = ?", (MILK,))
+            connection.execute("UPDATE items SET barcode = ?", (MILK,))
         return httpx.Response(200, json=oats(brands="Other"))
 
     route(off_api, OATS).mock(side_effect=barcode_changes)
@@ -532,7 +472,7 @@ async def test_the_name_language_is_the_creators(
 
     # A deleted creator: German.
     async with database(app).write_sessions() as session, session.begin():
-        await session.execute(update(IngredientRow).values(created_by=None))
+        await session.execute(update(ItemRow).values(created_by=None))
     await refresh(app, clock, product["id"])
     assert (await get(api, ben, product["id"]))["name"] == "Haferflocken"
 
@@ -569,7 +509,7 @@ async def test_apply(
     clock.advance(minutes=5)
 
     response = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/apply", headers=ben.headers
+        f"/api/items/{product['id']}/pending-update/apply", headers=ben.headers
     )
 
     assert response.status_code == 200
@@ -595,7 +535,7 @@ async def test_ignore(
     product = await pending_product(app, api, anna, off_api, clock)
 
     response = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/ignore", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/ignore", headers=anna.headers
     )
 
     assert response.status_code == 200
@@ -634,7 +574,7 @@ async def test_ignore_without_an_open_food_facts_version(
     route(off_api, OATS).respond(json=product_response(OATS, **unversioned))
     assert await refresh(app, clock, product["id"]) == Outcome.PENDING
     assert (await get(api, anna, product["id"]))["pending_update"]["off_last_modified_at"] is None
-    path = f"/api/ingredients/{product['id']}/pending-update"
+    path = f"/api/items/{product['id']}/pending-update"
 
     ignored = await api.post(f"{path}/ignore", headers=anna.headers)
 
@@ -644,9 +584,7 @@ async def test_ignore_without_an_open_food_facts_version(
     assert (await get(api, anna, product["id"]))["pending_update"] is None
     assert (await api.post(f"{path}/ignore", headers=anna.headers)).status_code == 409
     # Editing another field keeps what was ignored.
-    await api.patch(
-        f"/api/ingredients/{product['id']}", json={"name": "Flocken"}, headers=anna.headers
-    )
+    await api.patch(f"/api/items/{product['id']}", json={"name": "Flocken"}, headers=anna.headers)
     assert await refresh(app, clock, product["id"]) == Outcome.UNCHANGED
     # A new value for one field comes back, the ignored one for the other does not.
     unversioned["nutriments"] = {**unversioned["nutriments"], "energy-kcal_100g": 150}
@@ -667,11 +605,11 @@ async def test_nothing_pending(api: AsyncClient, anna: Account, action: str) -> 
     product = await saved_oats(api, anna, edited=["name"])
 
     response = await api.post(
-        f"/api/ingredients/{product['id']}/pending-update/{action}", headers=anna.headers
+        f"/api/items/{product['id']}/pending-update/{action}", headers=anna.headers
     )
     assert response.status_code == 409
-    assert error(response) == "ingredient.no_pending_update"
-    missing = await api.post(f"/api/ingredients/nope/pending-update/{action}", headers=anna.headers)
+    assert error(response) == "item.no_pending_update"
+    missing = await api.post(f"/api/items/nope/pending-update/{action}", headers=anna.headers)
     assert missing.status_code == 404
 
 
@@ -685,7 +623,7 @@ async def test_editing_a_field_settles_its_pending_value(
     product = await pending_product(app, api, anna, off_api, clock)
 
     changed = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"name": "Flocken"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"name": "Flocken"}, headers=anna.headers
     )
 
     assert changed.json()["pending_update"]["fields"] == [
@@ -693,16 +631,16 @@ async def test_editing_a_field_settles_its_pending_value(
     ]
     # Counted in pieces, the values are still per 100 g: the pending ones stay (ING-02).
     in_pieces = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"base_unit": "piece"}, headers=anna.headers
     )
     assert in_pieces.json()["pending_update"] == changed.json()["pending_update"]
     # Another basis settles every pending nutrient (they were per 100 g).
     rebased = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )
     assert rebased.json()["pending_update"] is None
     same = await api.patch(
-        f"/api/ingredients/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
+        f"/api/items/{product['id']}", json={"base_unit": "ml"}, headers=anna.headers
     )
     assert same.status_code == 200
 
@@ -742,16 +680,16 @@ async def test_scanning_refreshes_a_stale_ingredient(
     clock: FakeClock,
 ) -> None:
     product = await saved_oats(api, anna, edited=[])
-    manual = await create_ingredient(api, anna, "Hafer", barcode=EAN_13)  # never refreshed
+    manual = await create_item(api, anna, "Hafer", barcode=EAN_13)  # never refreshed
     request = route(off_api, OATS).respond(json=oats(brands="Neu"))
     await later(api, clock, anna, days=31)
 
     for barcode in (EAN_13, OATS):
         scanned = await api.get(
-            "/api/ingredients/lookup", params={"barcode": barcode}, headers=anna.headers
+            "/api/items/lookup", params={"barcode": barcode}, headers=anna.headers
         )
         assert scanned.json()["found_in"] == "db"
-    assert scanned.json()["ingredient"]["brand"] == "MealMate Test Kitchen"
+    assert scanned.json()["item"]["brand"] == "MealMate Test Kitchen"
     assert request.call_count == 1
     assert (await get(api, anna, product["id"]))["brand"] == "Neu"
     assert (await get(api, anna, manual["id"]))["fetched_at"] is None
@@ -761,7 +699,7 @@ async def test_scanning_refreshes_a_stale_ingredient(
 async def test_background_refreshes_are_not_repeated_while_running(
     app: FastAPI, api: AsyncClient, anna: Account, clock: FakeClock
 ) -> None:
-    product = Ingredient.model_validate(await saved_oats(api, anna, edited=[]))
+    product = Item.model_validate(await saved_oats(api, anna, edited=[]))
     refresher_ = the_refresher(app)
     later = clock.now + timedelta(days=31)
     background = BackgroundTasks()
@@ -785,7 +723,7 @@ async def test_background_failures_are_logged(
     async def broken(*_args: Any, **_kwargs: Any) -> Outcome:
         raise RuntimeError("bug")
 
-    monkeypatch.setattr(off_refresh, "refresh_ingredient", broken)
+    monkeypatch.setattr(off_refresh, "refresh_item", broken)
     product = await saved_oats(api, anna, edited=[])
     await later(api, clock, anna, days=31)
 
@@ -797,7 +735,7 @@ async def test_background_failures_are_logged(
         for record in caplog.records
         if record.message == "background refresh from open food facts failed"
     ]
-    assert (record.__dict__["ingredient_id"], record.__dict__["error"]) == (
+    assert (record.__dict__["item_id"], record.__dict__["error"]) == (
         product["id"],
         "RuntimeError",
     )
@@ -891,11 +829,11 @@ async def test_refresh_stale_oldest_first(
     older = await saved_oats(api, anna, edited=[])
     await later(api, clock, anna, days=5)
     newer = await saved_milk(api, anna)
-    await create_ingredient(api, anna, "Hafer", barcode=EAN_13)
+    await create_item(api, anna, "Hafer", barcode=EAN_13)
     never = await saved_milk(api, anna, "2000000000039")
     async with database(app).write_sessions() as session, session.begin():
         await session.execute(
-            update(IngredientRow).where(IngredientRow.id == never["id"]).values(fetched_at=None)
+            update(ItemRow).where(ItemRow.id == never["id"]).values(fetched_at=None)
         )
     route(off_api, OATS).respond(json=oats(brands="Neu"))
     route(off_api, MILK).respond(503)
@@ -933,10 +871,10 @@ async def test_the_job_goes_on_after_an_error(
     route(off_api, MILK).respond(json=product_response(MILK, brands="Neu"))
     apply_refresh = off_refresh.apply_refresh
 
-    def locked(row: IngredientRow, found: Any, **options: Any) -> Outcome:
+    def locked(row: ItemRow, found: Any, **options: Any) -> Outcome:
         if row.barcode == OATS:
             raise OperationalError(
-                "UPDATE ingredients SET brand=?",
+                "UPDATE items SET brand=?",
                 ("Geheimrezept",),
                 sqlite3.OperationalError("database is locked"),
             )
@@ -956,9 +894,9 @@ async def test_the_job_goes_on_after_an_error(
     [record] = [
         record
         for record in caplog.records
-        if record.message == "refreshing an ingredient from open food facts failed"
+        if record.message == "refreshing an item from open food facts failed"
     ]
-    assert (record.__dict__["ingredient_id"], record.__dict__["error"]) == (
+    assert (record.__dict__["item_id"], record.__dict__["error"]) == (
         failing["id"],
         "OperationalError",
     )
@@ -993,7 +931,7 @@ async def test_the_job_refreshes_at_most_max_ingredients(
         database(app),
         the_refresher(app).off,
         max_age=timedelta(days=30),
-        max_ingredients=1,
+        max_items=1,
         clock=clock,
     )
 

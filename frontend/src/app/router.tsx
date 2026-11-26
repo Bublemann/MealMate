@@ -4,20 +4,22 @@ import { LoginScreen } from '@/features/auth/LoginScreen';
 import { RequireAdmin, RequireAuth } from '@/features/auth/RequireAuth';
 import { ResetScreen } from '@/features/auth/ResetScreen';
 import { CoupleScreen } from '@/features/couple/CoupleScreen';
-import { IngredientDetailScreen } from '@/features/ingredients/IngredientDetailScreen';
-import { IngredientsScreen } from '@/features/ingredients/IngredientsScreen';
+import { ItemDetailScreen } from '@/features/items/ItemDetailScreen';
+import { ItemsScreen } from '@/features/items/ItemsScreen';
 import { ListScreen } from '@/features/lists/ListScreen';
 import { ListsScreen } from '@/features/lists/ListsScreen';
 import { MealDetailScreen } from '@/features/meals/MealDetailScreen';
 import { MealFormScreen } from '@/features/meals/MealFormScreen';
 import { MealsScreen } from '@/features/meals/MealsScreen';
 import { AboutScreen } from '@/features/me/AboutScreen';
+import { LeftoversScreen } from '@/features/me/LeftoversScreen';
 import { PrivacyScreen } from '@/features/me/PrivacyScreen';
 import { ProfileScreen } from '@/features/me/ProfileScreen';
 import { SecurityScreen } from '@/features/me/SecurityScreen';
 import { SettingsScreen } from '@/features/me/SettingsScreen';
 import { RecurringScreen } from '@/features/recurring/RecurringScreen';
 import { WalkingOrderScreen } from '@/features/walkingOrder/WalkingOrderScreen';
+import { IngredientsRedirect } from './IngredientsRedirect';
 import { Layout } from './Layout';
 
 /**
@@ -55,10 +57,11 @@ export const routes: RouteObject[] = [
           { path: 'meals/new', element: <MealFormScreen /> },
           { path: 'meals/:id', element: <MealDetailScreen /> },
           { path: 'meals/:id/edit', element: <MealFormScreen /> },
-          { path: 'ingredients', element: <IngredientsScreen /> },
-          { path: 'ingredients/:id', element: <IngredientDetailScreen /> },
-          // The former scan page; scanning is inside "New ingredient" now (BAR-01, D-37).
-          { path: 'scan', element: <Navigate to="/ingredients" replace /> },
+          { path: 'items', element: <ItemsScreen /> },
+          { path: 'items/:id', element: <ItemDetailScreen /> },
+          { path: 'ingredients/*', element: <IngredientsRedirect /> },
+          // The former scan page; scanning is inside "New item" now (BAR-01, D-37).
+          { path: 'scan', element: <Navigate to="/items" replace /> },
           // The Settings tab and the pages its rows open (D-45); see features/me/settingsRows.ts.
           { path: 'me', element: <SettingsScreen /> },
           { path: 'me/profile', element: <ProfileScreen /> },
@@ -66,6 +69,7 @@ export const routes: RouteObject[] = [
           { path: 'me/couple', element: <CoupleScreen /> },
           { path: 'me/security', element: <SecurityScreen /> },
           { path: 'me/recurring', element: <RecurringScreen /> },
+          { path: 'me/leftovers', element: <LeftoversScreen /> },
           { path: 'me/walking-order', element: <WalkingOrderScreen /> },
           { path: 'me/about', element: <AboutScreen /> },
           {

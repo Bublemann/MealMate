@@ -1,6 +1,6 @@
 import type { components } from '@/api/generated/schema';
 import { BEN, CARL } from './api';
-import { CATEGORIES } from './ingredients';
+import { CATEGORIES } from './items';
 import { EGGS, FLOUR, ME, MEAL_ROUTES, MILK, SALT } from './meals';
 
 type Schemas = components['schemas'];
@@ -24,6 +24,9 @@ export function listMeal(
     servings: 4,
     meal_servings: 2,
     detached: null,
+    eaten: false,
+    leftover: false,
+    leftover_of: null,
     ...overrides,
   };
 }
@@ -38,6 +41,25 @@ export const PRIVATE_MEAL = listMeal({
   servings: 3,
   meal_servings: 3,
 });
+
+/** The id of Chili on last week's done list, which leftovers of it name (LIST-17). */
+export const CHILI_SOURCE_ID = 'lm-chili-source';
+
+/** A leftover of Chili from the last done list (LIST-17). */
+export function leftoverChili(
+  overrides: Partial<Schemas['ListMealEntry']> = {},
+): Schemas['ListMealEntry'] {
+  return listMeal({
+    id: 'lm-chili',
+    meal_id: 'meal-chili',
+    name: 'Chili',
+    thumb_url: null,
+    servings: 2,
+    leftover: true,
+    leftover_of: CHILI_SOURCE_ID,
+    ...overrides,
+  });
+}
 
 export const DETACHED_MEAL = listMeal({
   id: 'lm-detached',
@@ -78,9 +100,9 @@ export function line(
 ): Schemas['ListLine'] {
   return {
     key: `i:${overrides.name}`,
-    kind: 'ingredient',
+    kind: 'item',
     brand: null,
-    ingredient_id: null,
+    item_id: null,
     category_id: 'cat-other',
     amounts: [],
     has_unspecified: false,
@@ -97,7 +119,7 @@ export const LINES: Schemas['ListLine'][] = [
   line({
     key: `i:${ONIONS_ID}`,
     name: 'Zwiebeln',
-    ingredient_id: ONIONS_ID,
+    item_id: ONIONS_ID,
     category_id: 'cat-fruit_vegetables',
     amounts: [{ value: 2, unit: 'piece' }],
     sources: [mealSource()],
@@ -105,7 +127,7 @@ export const LINES: Schemas['ListLine'][] = [
   line({
     key: `i:${EGGS.id}`,
     name: EGGS.name,
-    ingredient_id: EGGS.id,
+    item_id: EGGS.id,
     category_id: 'cat-dairy_eggs',
     amounts: [{ value: 4, unit: 'piece' }],
     hidden: true,
@@ -114,7 +136,7 @@ export const LINES: Schemas['ListLine'][] = [
   line({
     key: `i:${MILK.id}`,
     name: MILK.name,
-    ingredient_id: MILK.id,
+    item_id: MILK.id,
     category_id: 'cat-dairy_eggs',
     amounts: [{ value: 1.5, unit: 'l' }],
     sources: [
@@ -144,7 +166,7 @@ export const LINES: Schemas['ListLine'][] = [
   line({
     key: `i:${FLOUR.id}`,
     name: FLOUR.name,
-    ingredient_id: FLOUR.id,
+    item_id: FLOUR.id,
     amounts: [{ value: 850, unit: 'g' }],
     sources: [
       mealSource(),
@@ -164,7 +186,7 @@ export const LINES: Schemas['ListLine'][] = [
   line({
     key: `i:${SALT.id}`,
     name: SALT.name,
-    ingredient_id: SALT.id,
+    item_id: SALT.id,
     amounts: [],
     has_unspecified: true,
     sources: [mealSource()],
@@ -174,7 +196,7 @@ export const LINES: Schemas['ListLine'][] = [
 export const EXTRA_ITEMS: Schemas['ExtraItem'][] = [
   {
     id: FLOUR_EXTRA_ID,
-    ingredient_id: FLOUR.id,
+    item_id: FLOUR.id,
     text: null,
     amount: 450,
     unit: 'g',
@@ -187,7 +209,7 @@ export const EXTRA_ITEMS: Schemas['ExtraItem'][] = [
   },
   {
     id: CANDLES_EXTRA_ID,
-    ingredient_id: null,
+    item_id: null,
     text: 'Geburtstagskerzen',
     amount: null,
     unit: null,

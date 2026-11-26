@@ -39,28 +39,28 @@ def test_export_list_as_text(
     """Name and date, meals with servings, then the lines by category (removed ones left out)."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"), language=language)
-    onions = api.create_ingredient(
+    onions = api.create_item(
         anna,
         f"Zwiebeln {tag}",
         category_key="fruit_vegetables",
         base_unit="piece",
         piece_weight_g=80,
     )
-    flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
-    salt = api.create_ingredient(anna, f"Salz {tag}", category_key="sauces_spices_oils")
+    flour = api.create_item(anna, f"Mehl {tag}", category_key="baking")
+    salt = api.create_item(anna, f"Salz {tag}", category_key="sauces_spices_oils")
     tart = api.create_meal(
         anna,
         f"Zwiebelkuchen {tag}",
         servings=2,
         ingredients=[
-            {"ingredient_id": onions["id"], "amount": 1, "unit": "piece"},
-            {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
-            {"ingredient_id": salt["id"], "note": "to taste"},
+            {"item_id": onions["id"], "amount": 1, "unit": "piece"},
+            {"item_id": flour["id"], "amount": 200, "unit": "g"},
+            {"item_id": salt["id"], "note": "to taste"},
         ],
     )
     draft = api.create_list(anna, f"Export {tag}")
     api.add_list_meal(anna, draft["id"], tart["id"], servings=4)
-    api.add_extra_item(anna, draft["id"], ingredient_id=flour["id"], amount=1.1, unit="kg")
+    api.add_extra_item(anna, draft["id"], item_id=flour["id"], amount=1.1, unit="kg")
     candles = f"Kerzen {tag}"
     api.add_extra_item(anna, draft["id"], text=candles, amount_text="2 Packungen")
     pepper = f"Pfeffer {tag}"

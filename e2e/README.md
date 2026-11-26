@@ -72,8 +72,8 @@ cd e2e && uv run python perf/list_p95.py --base-url https://mealmate.<tailnet>.t
   see 200s as well as 304s.
 - It prints count, p50, p95 and max for the 200s, the 304s and the ops, and exits with 1 if a
   p95 is above `--threshold-ms` (default 300).
-- The list and the meals are deleted afterwards (`--keep` keeps them). The 150 ingredients
-  `Perf 000` … `Perf 149` stay in the ingredient wiki (users cannot delete ingredients) and are
+- The list and the meals are deleted afterwards (`--keep` keeps them). The 150 items
+  `Perf 000` … `Perf 149` stay in the item wiki (users cannot delete items) and are
   reused by the next run; an admin can delete them.
 
 ## Fake Open Food Facts

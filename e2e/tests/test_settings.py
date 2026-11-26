@@ -11,7 +11,7 @@ from support.api import Account, Api, sign_in, unique
 from support.frontend import TEST_IDS, text
 from support.ui import settings_row
 
-# The largest iPhone text size (53 px body text, simulated as in test_ingredients.py).
+# The largest iPhone text size (53 px body text, simulated as in test_items.py).
 LARGEST_TEXT = "html { font-size: 53px !important; }"
 
 

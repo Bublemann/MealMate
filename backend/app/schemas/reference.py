@@ -6,7 +6,7 @@ from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from app.domain.catalog import CATEGORY_NAME_MAX_LENGTH, CUISINE_NAME_MAX_LENGTH, check_name
 from app.domain.units import Unit, UnitKind
-from app.schemas.ingredients import BaseUnitName
+from app.schemas.items import BaseUnitName
 
 CategoryName = Annotated[
     str,
@@ -33,7 +33,7 @@ class Category(BaseModel):
     done lists still show it. It keeps its last `sort_order`, which the next category in the
     walking order took over: its lines come right after that one's.
 
-    `ingredient_count`: how many ingredients it holds, so that the Ingredients tab offers
+    `item_count`: how many items it holds, so that the Items tab offers
     *Uncategorized* in its filter only while it holds some (ING-03)."""
 
     id: str
@@ -41,7 +41,7 @@ class Category(BaseModel):
     names: CategoryNames
     sort_order: int
     deleted: bool
-    ingredient_count: int
+    item_count: int
 
 
 class CategoryCreate(BaseModel):
@@ -57,17 +57,17 @@ class CategoryRename(BaseModel):
 
 
 class CategoryUsage(BaseModel):
-    """What deleting a category would move (ADM-01): its `ingredients` to *Uncategorized*, and
+    """What deleting a category would move (ADM-01): its `items` to *Uncategorized*, and
     the free-text extra items on drafts (`extra_items`) to *Other*."""
 
-    ingredients: int
+    items: int
     extra_items: int
 
 
 class UnitInfo(BaseModel):
-    """A unit (translation `unit.<unit>`), its kind, and the base units of the ingredients it
-    fits (REF-02): an amount of an ingredient takes only the units whose `base_units` hold the
-    ingredient's base unit. An amount without a unit counts as pieces."""
+    """A unit (translation `unit.<unit>`), its kind, and the base units of the items it
+    fits (REF-02): an amount of an item takes only the units whose `base_units` hold the
+    item's base unit. An amount without a unit counts as pieces."""
 
     unit: Unit
     kind: UnitKind

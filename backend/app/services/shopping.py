@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ErrorCode
 from app.models import ListExtraItem, ListLineState, ShoppingList
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.services import aggregation, detach
 
@@ -27,18 +27,14 @@ MAX_CLOCK_BEHIND = timedelta(minutes=5)
 
 
 async def snapshot_extras(session: AsyncSession, extras: Iterable[ListExtraItem]) -> None:
-    """Give the linked extra items without one the snapshot of their ingredient's attributes
-    (LIST-11); from then on ingredient edits no longer change their amounts."""
+    """Give the linked extra items without one the snapshot of their item's attributes
+    (LIST-11); from then on item edits no longer change their amounts."""
     pending = [
-        extra
-        for extra in extras
-        if extra.ingredient_id is not None and extra.attrs_snapshot is None
+        extra for extra in extras if extra.item_id is not None and extra.attrs_snapshot is None
     ]
-    ingredients = await ingredients_repo.by_ids(
-        session, (str(extra.ingredient_id) for extra in pending)
-    )
+    items = await items_repo.by_ids(session, (str(extra.item_id) for extra in pending))
     for extra in pending:
-        extra.attrs_snapshot = aggregation.attrs_snapshot(ingredients[str(extra.ingredient_id)])
+        extra.attrs_snapshot = aggregation.attrs_snapshot(items[str(extra.item_id)])
 
 
 async def start(session: AsyncSession, shopping_list: ShoppingList, *, now: datetime) -> None:

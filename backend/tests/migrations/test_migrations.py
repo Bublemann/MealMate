@@ -40,7 +40,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0018"
+HEAD = "0024"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -65,11 +65,13 @@ LIST_TABLES = {
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
-# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table.
+# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one;
+# 0020 drops columns; 0021, 0022, 0023 and 0024 add one each.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
-HEAD_TABLES = TABLES_0016 | {"walking_order_entries"}
+TABLES_0018 = TABLES_0016 | {"walking_order_entries"}
+HEAD_TABLES = TABLES_0018 - {"ingredients"} | {"items"}
 
 
 @pytest.fixture
@@ -158,7 +160,31 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0017")
     assert tables(database_path) == TABLES_0016
     command.upgrade(config, "0018")
+    assert tables(database_path) == TABLES_0018
+    command.upgrade(config, "0019")
     assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0020")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0021")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0022")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0023")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0024")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0023")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0022")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0021")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0020")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0019")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0018")
+    assert tables(database_path) == TABLES_0018
     command.downgrade(config, "0017")
     assert tables(database_path) == TABLES_0016
     command.downgrade(config, "0016")
@@ -271,7 +297,8 @@ def seed_accounts(data_dir: Path) -> dict[str, str]:
         finally:
             await database.dispose()
 
-    return asyncio.run(run())
+    with no_carry_over_setting_yet(data_dir / "mealmate.db"):
+        return asyncio.run(run())
 
 
 def seed_demo(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1220,9 +1247,64 @@ def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
             connection.execute("DROP TABLE walking_order_entries")
 
 
+@contextmanager
+def no_eaten_meals_yet(path: Path) -> Iterator[None]:
+    """The app of today reads whether each meal on a list is eaten (SHOP-07), a column 0021
+    adds, and what a leftover comes from (LIST-17), a column 0023 adds. No meal was eaten or a
+    leftover before, so the columns stand in, false and null, while the app reads, and go again
+    before the upgrade adds them."""
+    execute(path, "ALTER TABLE list_meals ADD COLUMN eaten BOOLEAN NOT NULL DEFAULT 0")
+    execute(path, "ALTER TABLE list_meals ADD COLUMN leftover_of_id VARCHAR(36)")
+    try:
+        yield
+    finally:
+        execute(path, "ALTER TABLE list_meals DROP COLUMN leftover_of_id")
+        execute(path, "ALTER TABLE list_meals DROP COLUMN eaten")
+
+
+@contextmanager
+def no_carry_over_setting_yet(path: Path) -> Iterator[None]:
+    """The app of today reads and writes whether a user's new drafts bring leftovers (LIST-17),
+    a column 0024 adds, on for everyone. It stands in, on, while the app runs, and goes again
+    before the upgrade adds it."""
+    execute(path, "ALTER TABLE users ADD COLUMN carry_over_leftovers BOOLEAN NOT NULL DEFAULT 1")
+    try:
+        yield
+    finally:
+        execute(path, "ALTER TABLE users DROP COLUMN carry_over_leftovers")
+
+
+def rename_items(path: Path, *, back: bool = False) -> None:
+    """Rename what 0019 renames, the tables and columns only (or `back`), in the tables the
+    database has."""
+    with closing(sqlite3.connect(path)) as connection, connection:
+        old, new = ("items", "ingredients") if back else ("ingredients", "items")
+        connection.execute(f"ALTER TABLE {old} RENAME TO {new}")
+        for table, columns in RENAMED_COLUMNS.items():
+            present = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+            for before, after in columns.items():
+                before, after = (after, before) if back else (before, after)
+                if before in present:
+                    connection.execute(f"ALTER TABLE {table} RENAME COLUMN {before} TO {after}")
+
+
+@contextmanager
+def items_renamed_meanwhile(path: Path) -> Iterator[None]:
+    """The app of today reads items, which 0019 renamed from ingredients and 0022 gave a kind.
+    For an old database, the tables and columns carry the new names and every item is food while
+    the app reads, and the old names and no kind come back before the upgrade."""
+    rename_items(path)
+    execute(path, "ALTER TABLE items ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'food'")
+    try:
+        yield
+    finally:
+        execute(path, "ALTER TABLE items DROP COLUMN kind")
+        rename_items(path, back=True)
+
+
 def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
     return sorted(
-        (meal["name"], row["ingredient"]["name"], row["amount"], row["unit"])
+        (meal["name"], row["item"]["name"], row["amount"], row["unit"])
         for meal in seen.values()
         for row in meal.get("ingredients", [])
         if not row["unit_fits"]
@@ -1231,7 +1313,7 @@ def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
 
 def _nutrition_missing(seen: dict[str, dict[str, Any]], name: str) -> list[tuple[object, ...]]:
     [meal] = [meal for meal in seen.values() if meal.get("name") == name]
-    return [(item["ingredient_name"], item["reason"]) for item in meal["nutrition"]["missing"]]
+    return [(item["item_name"], item["reason"]) for item in meal["nutrition"]["missing"]]
 
 
 def test_0014_through_the_api(tmp_path: Path) -> None:
@@ -1244,7 +1326,12 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
     settings = demo_settings(data_dir)
-    with no_own_walking_orders_yet(path):
+    with (
+        no_own_walking_orders_yet(path),
+        items_renamed_meanwhile(path),
+        no_eaten_meals_yet(path),
+        no_carry_over_setting_yet(path),
+    ):
         before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
 
     upgrade_database(data_dir)
@@ -1315,9 +1402,17 @@ def inserts(path: Path) -> list[str]:
     return [line for line in dump_without(path) if line.startswith("INSERT INTO")]
 
 
+def renamed_to_items(connection: sqlite3.Connection) -> bool:
+    """Whether the database is at 0019 or later, where ingredients are items."""
+    found = connection.execute("SELECT 1 FROM sqlite_master WHERE name = 'items'").fetchall()
+    return bool(found)
+
+
 def ingredient_id(connection: sqlite3.Connection, name: str) -> str:
+    table = "items" if renamed_to_items(connection) else "ingredients"
     row_id: str = connection.execute(
-        "SELECT id FROM ingredients WHERE name = ?", (name,)
+        f"SELECT id FROM {table} WHERE name = ?",  # noqa: S608
+        (name,),
     ).fetchone()[0]
     return row_id
 
@@ -1342,7 +1437,11 @@ def recurring_item(
         "recurring_items",
         couple_id=couple_id,
         user_id=None if user is None else user_id(connection, user),
-        ingredient_id=ingredient_id(connection, name),
+        **{
+            "item_id" if renamed_to_items(connection) else "ingredient_id": ingredient_id(
+                connection, name
+            )
+        },
         interval_days=28,
         interval_manual=False,
         last_purchased_on="2026-09-27",
@@ -1704,6 +1803,561 @@ def test_a_walking_order_has_one_owner_and_each_category_once(
             walking_order_entry(connection, "cheese", **earlier)
         with pytest.raises(sqlite3.IntegrityError, match=message):
             walking_order_entry(connection, "cheese", **owner)
+
+
+# --- 0019 -----------------------------------------------------------------------------------
+
+# What 0019 renames: the table of what one buys, and per table the columns that point at it.
+RENAMED_COLUMNS = {
+    "meal_ingredients": {"ingredient_id": "item_id"},
+    "list_meal_ingredients": {
+        "ingredient_id": "item_id",
+        "ingredient_name_snapshot": "item_name_snapshot",
+        "ingredient_brand_snapshot": "item_brand_snapshot",
+    },
+    "list_extra_items": {"ingredient_id": "item_id"},
+    "list_hidden_due_items": {"ingredient_id": "item_id"},
+    "recurring_items": {"ingredient_id": "item_id"},
+}
+
+
+def demo_at_0018_with_every_reference(path: Path) -> Config:
+    """The demo at 0018 with a row in every table that points at an ingredient: meal rows,
+    frozen rows on the list being shopped and on done lists, linked extra items (with and
+    without a snapshot), a recurring item and a hidden due item."""
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0018")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        recurring_item(connection, "Kaffee", couple_id=DEMO_COUPLE_ID)
+        hidden_due_item(connection, "Kaffee", "anna")
+    return config
+
+
+def all_rows(path: Path, table: str) -> list[dict[str, object]]:
+    """The table's rows, in the order of their values (not every table has an `id`)."""
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"')]  # noqa: S608
+    return sorted(rows, key=lambda row: repr(sorted(row.items())))
+
+
+def renamed_rows(path: Path, table: str) -> list[dict[str, object]]:
+    """The table's rows at 0018, with the columns named as 0019 names them."""
+    columns = RENAMED_COLUMNS.get(table, {})
+    renamed = [
+        {columns.get(column, column): value for column, value in row.items()}
+        for row in all_rows(path, table)
+    ]
+    return sorted(renamed, key=lambda row: repr(sorted(row.items())))
+
+
+def other_rows(path: Path) -> list[str]:
+    """The rows of the tables 0019 leaves as they are, as SQL."""
+    renamed = (*RENAMED_COLUMNS, "ingredients", "items", "alembic_version")
+    skipped = tuple(f'INSERT INTO "{table}"' for table in renamed)
+    return [line for line in inserts(path) if not line.startswith(skipped)]
+
+
+def schema_names(path: Path) -> set[str]:
+    """Every table, column, constraint and index name in the database's schema."""
+    names: set[str] = set()
+    for (sql,) in query(path, "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL"):
+        names.update(re.findall(r"\w+", str(sql)))
+    return names
+
+
+def test_0019_renames_ingredients_to_items_and_keeps_every_row(tmp_path: Path) -> None:
+    """seed-demo data at 0018 → 0019: `ingredients` becomes `items`, and each column that
+    points at one is named for it. Every row stays as it was, the frozen copies on the list
+    being shopped and on done lists included, and so does every reference; the meal rows keep
+    their tables, and no other table changes."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    ingredients = rows_of(path, "ingredients")
+    referring = {table: renamed_rows(path, table) for table in RENAMED_COLUMNS}
+    counts, references, rest = row_counts(path), non_null_foreign_keys(path), other_rows(path)
+    frozen = query(
+        path,
+        "SELECT s.status, count(*) FROM list_meal_ingredients r"
+        " JOIN list_meals m ON m.id = r.list_meal_id JOIN shopping_lists s ON s.id = m.list_id"
+        " WHERE s.status != 'draft' GROUP BY s.status ORDER BY s.status",
+    )
+    assert frozen == [("done", 10), ("shopping", 15)]
+    assert all(referring.values())
+    linked = [row for row in referring["list_extra_items"] if row["item_id"] is not None]
+    assert {row["attrs_snapshot"] is None for row in linked} == {True, False}
+
+    command.upgrade(config, "0019")
+
+    assert tables(path) == HEAD_TABLES
+    assert rows_of(path, "items") == ingredients
+    assert {table: all_rows(path, table) for table in RENAMED_COLUMNS} == referring
+    counts["items"] = counts.pop("ingredients")
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == {
+        key.replace("ingredients.", "items.").replace(".ingredient_id", ".item_id"): count
+        for key, count in references.items()
+    }
+    assert other_rows(path) == rest
+    # Only the meal rows' tables, and their constraints and indexes, still say ingredient.
+    names = schema_names(path)
+    assert {name for name in names if "ingredient" in name.replace("meal_ingredients", "")} == set()
+    assert_clean(path)
+
+
+def constraint_and_index_names(path: Path, table: str) -> set[str]:
+    with closing(sqlite3.connect(path)) as connection:
+        [sql] = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()
+        indexes = connection.execute(
+            "SELECT name FROM sqlite_master"
+            " WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL",
+            (table,),
+        ).fetchall()
+    return set(re.findall(r"CONSTRAINT (\w+)", str(sql))) | {name for (name,) in indexes}
+
+
+@pytest.mark.parametrize("table", ["items", *RENAMED_COLUMNS])
+def test_the_renamed_tables_name_their_constraints_as_the_models_do(
+    tmp_path: Path, table: str
+) -> None:
+    """Autogenerate doesn't compare check constraints or every constraint name, so this does:
+    after 0019 (and the later migrations, such as 0022's kind of an item) each renamed table has
+    the constraint and index names of its model."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "head")
+    model = Base.metadata.tables[table]
+    ddl = str(CreateTable(model).compile(dialect=sqlite.dialect()))
+    expected = set(re.findall(r"CONSTRAINT (\w+)", ddl)) | {
+        str(index.name) for index in model.indexes
+    }
+    assert constraint_and_index_names(path, table) == expected
+
+
+def test_0019_keeps_the_constraints_working(tmp_path: Path) -> None:
+    """After 0019 an extra item still needs an item or a text, and an item used anywhere can't
+    be deleted (ING-05)."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "0019")
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY constraint failed"):
+            connection.execute("DELETE FROM items WHERE name = 'Zwiebeln'")
+    with closing(sqlite3.connect(path)) as connection:
+        list_id = connection.execute("SELECT id FROM shopping_lists LIMIT 1").fetchone()[0]
+        with pytest.raises(
+            sqlite3.IntegrityError,
+            match="CHECK constraint failed: ck_list_extra_items_item_or_text",
+        ):
+            insert(connection, "list_extra_items", list_id=list_id)
+
+
+def test_the_0019_downgrade_restores_the_ingredients(tmp_path: Path) -> None:
+    """Down to 0018 the database is as it was before 0019, schema and rows (QA-02), and up
+    again it is as it was at 0019."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    at_0018 = sorted(dump_without(path))
+    command.upgrade(config, "0019")
+    at_0019 = sorted(dump_without(path, "alembic_version"))
+
+    command.downgrade(config, "0018")
+
+    assert sorted(dump_without(path)) == at_0018
+    assert_clean(path)
+    command.upgrade(config, "0019")
+    assert sorted(dump_without(path, "alembic_version")) == at_0019
+
+
+# --- 0020 -----------------------------------------------------------------------------------
+
+PACK_SIZE_COLUMNS = ("quantity_text", "pack_quantity", "pack_unit")
+# The marks of the demo's hand-typed branded items, without those on the pack size.
+DEMO_MARKS = (
+    '["name", "brand", "nutrients.kcal", "nutrients.protein", "nutrients.carbs",'
+    ' "nutrients.sugar", "nutrients.fat"]'
+)
+
+
+def items_without_pack_size(path: Path) -> dict[str, dict[str, object]]:
+    """The items by name, without the pack size's columns."""
+    return {
+        str(row["name"]): {
+            column: value for column, value in row.items() if column not in PACK_SIZE_COLUMNS
+        }
+        for row in rows_of(path, "items")
+    }
+
+
+def demo_at_0019_with_pack_size_marks(path: Path) -> Config:
+    """The demo at 0019. Six branded items have a pack size and a mark on it and on its amount;
+    Butter also has newer values for its name and its pack size, Milch only a mark on its
+    amount (from before D-38) and an ignored pending pack size, and Kaffee a pending update
+    stored as JSON null."""
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0019")
+    butter_pending = {
+        "name": {"current": "Butter", "proposed": "Irische Butter"},
+        "quantity_text": {"current": "250 g", "proposed": "500 g"},
+    }
+    milk_pending = {"quantity_text": {"current": "1 l", "proposed": "1,5 l", "ignored": True}}
+    with closing(sqlite3.connect(path)) as connection, connection:
+        for name, marks, pending in (
+            ("Butter", None, json.dumps(butter_pending)),
+            ("Milch", '["pack_quantity"]', json.dumps(milk_pending)),
+            ("Kaffee", None, "null"),
+        ):
+            changed = connection.execute(
+                "UPDATE items SET user_edited_fields = coalesce(?, user_edited_fields),"
+                " pending_update = ? WHERE name = ?",
+                (marks, pending, name),
+            ).rowcount
+            assert changed == 1, name
+    return config
+
+
+def sorted_dump_without_items(path: Path) -> list[str]:
+    """The database as sorted SQL, without the items' table and rows (their indexes stay)."""
+    schema = ('CREATE TABLE "items"', "CREATE TABLE items")
+    lines = dump_without(path, "items", "alembic_version")
+    return sorted(line for line in lines if not line.startswith(schema))
+
+
+def test_0020_drops_the_pack_size_and_changes_nothing_else(tmp_path: Path) -> None:
+    """The pack size goes (D-54): its text, its amount and its unit, so their values are lost,
+    as intended, and so are the user-edited marks and pending values that name them. Nothing
+    else changes: no other value of an item (`updated_at` included: this is nobody's edit), no
+    other row, reference, constraint or index."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0019_with_pack_size_marks(path)
+    assert query(path, "SELECT count(*) FROM items WHERE quantity_text IS NOT NULL") == [(7,)]
+    items = items_without_pack_size(path)
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    names, rest = constraint_and_index_names(path, "items"), sorted_dump_without_items(path)
+
+    command.upgrade(config, "0020")
+
+    columns = {name for (name,) in query(path, "SELECT name FROM pragma_table_info('items')")}
+    assert columns.isdisjoint(PACK_SIZE_COLUMNS)
+    for name in ("Butter", "Passierte Tomaten", "Olivenöl", "Spaghetti n.5", "Spaghetti n.12"):
+        items[name]["user_edited_fields"] = DEMO_MARKS
+    items["Butter"]["pending_update"] = (
+        '{"name": {"current": "Butter", "proposed": "Irische Butter"}}'
+    )
+    items["Milch"]["user_edited_fields"] = "[]"
+    items["Milch"]["pending_update"] = "null"  # as the app stores None
+    assert items_without_pack_size(path) == items
+    assert constraint_and_index_names(path, "items") == names
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+
+
+def test_the_0020_downgrade_brings_back_empty_pack_sizes(tmp_path: Path) -> None:
+    """The pack sizes are gone for good: the downgrade adds the columns again, empty, and
+    changes nothing else; up again, the items are as they were at 0020."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0019_with_pack_size_marks(path)
+    names = constraint_and_index_names(path, "items")
+    command.upgrade(config, "0020")
+    items, rest = items_without_pack_size(path), sorted_dump_without_items(path)
+    at_0020 = rows_of(path, "items")
+
+    command.downgrade(config, "0019")
+
+    columns = query(
+        path,
+        "SELECT name, type, \"notnull\" FROM pragma_table_info('items')"
+        " WHERE name IN ('quantity_text', 'pack_quantity', 'pack_unit') ORDER BY name",
+    )
+    assert columns == [
+        ("pack_quantity", "FLOAT", 0),
+        ("pack_unit", "VARCHAR(10)", 0),
+        ("quantity_text", "VARCHAR(40)", 0),
+    ]
+    assert query(
+        path,
+        "SELECT count(*) FROM items"
+        " WHERE coalesce(quantity_text, pack_quantity, pack_unit) IS NOT NULL",
+    ) == [(0,)]
+    assert items_without_pack_size(path) == items
+    assert constraint_and_index_names(path, "items") == names
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0020")
+    assert rows_of(path, "items") == at_0020
+    assert sorted_dump_without_items(path) == rest
+
+
+# --- 0021 -----------------------------------------------------------------------------------
+
+
+def list_meals_but_eaten(path: Path) -> list[dict[str, object]]:
+    return [
+        {column: value for column, value in row.items() if column != "eaten"}
+        for row in rows_of(path, "list_meals")
+    ]
+
+
+def list_meals_shape(path: Path) -> tuple[set[tuple[object, ...]], set[str]]:
+    """The list meals' columns (name, type, NOT NULL, default, primary key) and the names of
+    their constraints and indexes."""
+    columns = query(
+        path, "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('list_meals')"
+    )
+    return set(columns), constraint_and_index_names(path, "list_meals")
+
+
+def dump_without_list_meals(path: Path) -> list[str]:
+    """The database as SQL, without the list meals' table, indexes and rows, in order."""
+    schema = (
+        'CREATE TABLE "list_meals"',
+        "CREATE TABLE list_meals",
+        "CREATE INDEX ix_list_meals_",
+        "CREATE UNIQUE INDEX uq_list_meals_",
+    )
+    return sorted(
+        line
+        for line in dump_without(path, "list_meals", "alembic_version")
+        if not line.startswith(schema)
+    )
+
+
+EATEN_COLUMN = ("eaten", "BOOLEAN", 1, "0", 0)
+
+
+def test_0021_adds_eaten_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0020 → 0021 (SHOP-07, D-55): every meal on a list, on drafts, lists
+    being shopped and done lists alike, starts not eaten; no other row, value, reference,
+    column or constraint changes (`version` and `updated_at` included: this is nobody's
+    edit)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0020")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    columns, names = list_meals_shape(path)
+    list_meals, rest = rows_of(path, "list_meals"), dump_without_list_meals(path)
+    statuses = query(
+        path,
+        "SELECT DISTINCT s.status FROM list_meals m JOIN shopping_lists s ON s.id = m.list_id"
+        " ORDER BY s.status",
+    )
+    assert statuses == [("done",), ("draft",), ("shopping",)]
+
+    command.upgrade(config, "0021")
+
+    assert list_meals_shape(path) == (columns | {EATEN_COLUMN}, names)
+    assert list_meals_but_eaten(path) == list_meals
+    assert {row["eaten"] for row in rows_of(path, "list_meals")} == {0}
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+
+
+def test_the_0021_downgrade_drops_eaten(tmp_path: Path) -> None:
+    """Eaten is only a note: down to 0020 the column goes, eaten meals included, and the
+    database is as it was at 0020 (QA-02); up again every meal starts not eaten."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0020")
+    shape, list_meals, rest = (
+        list_meals_shape(path),
+        rows_of(path, "list_meals"),
+        dump_without_list_meals(path),
+    )
+    command.upgrade(config, "0021")
+    execute(path, "UPDATE list_meals SET eaten = 1")
+
+    command.downgrade(config, "0020")
+
+    assert (list_meals_shape(path), rows_of(path, "list_meals")) == (shape, list_meals)
+    assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0021")
+    assert {row["eaten"] for row in rows_of(path, "list_meals")} == {0}
+
+
+# --- 0022 -----------------------------------------------------------------------------------
+
+
+def test_0022_makes_every_item_food_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0021 → 0022 (D-56): every item gets the kind food, with its values
+    as they were; no row and no other table changes. Down to 0021 the items are as they were,
+    and up again as they were at 0022."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0021")
+    items = rows_of(path, "items")
+    assert items
+    rest = sorted_dump_without_items(path)
+
+    command.upgrade(config, "0022")
+
+    assert rows_of(path, "items") == [item | {"kind": "food"} for item in items]
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    at_0022 = rows_of(path, "items")
+    command.downgrade(config, "0021")
+    assert rows_of(path, "items") == items
+    assert sorted_dump_without_items(path) == rest
+    assert_clean(path)
+    command.upgrade(config, "0022")
+    assert rows_of(path, "items") == at_0022
+
+
+def test_0022_an_item_is_food_or_a_supply(tmp_path: Path) -> None:
+    """After 0022 an item is food unless it says otherwise, and food or a supply only."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "0022")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("UPDATE items SET kind = 'supply' WHERE name = 'Zwiebeln'")
+        with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: ck_items_kind"):
+            connection.execute("UPDATE items SET kind = 'tool' WHERE name = 'Zwiebeln'")
+    assert query(path, "SELECT DISTINCT kind FROM items WHERE name = 'Zwiebeln'") == [("supply",)]
+
+
+LEFTOVER_COLUMN = ("leftover_of_id", "VARCHAR(36)", 0, None, 0)
+
+
+def unique_meal_index(path: Path) -> str:
+    [(sql,)] = query(
+        path, "SELECT sql FROM sqlite_master WHERE name = 'uq_list_meals_list_id_meal_id'"
+    )
+    return str(sql)
+
+
+def test_0023_adds_leftover_of_and_changes_nothing_else(tmp_path: Path) -> None:
+    """seed-demo data at 0022 → 0023 (LIST-17, D-58): no meal is a leftover, no row, value or
+    reference changes; the column comes with its index and foreign key, and the unique index on
+    a list's meals leaves leftovers out."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0022")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    columns, names = list_meals_shape(path)
+    list_meals, rest = rows_of(path, "list_meals"), dump_without_list_meals(path)
+
+    command.upgrade(config, "0023")
+
+    assert list_meals_shape(path) == (
+        columns | {LEFTOVER_COLUMN},
+        names | {"ix_list_meals_leftover_of_id", "fk_list_meals_leftover_of_id_list_meals"},
+    )
+    assert rows_of(path, "list_meals") == [row | {"leftover_of_id": None} for row in list_meals]
+    assert unique_meal_index(path).endswith("WHERE meal_id IS NOT NULL AND leftover_of_id IS NULL")
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references | {"list_meals.leftover_of_id": 0}
+    assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+
+
+def test_the_0023_downgrade_deletes_the_leftovers(tmp_path: Path) -> None:
+    """Down to 0022 the leftovers go (they add no lines, so no list changes otherwise) and the
+    database is as it was at 0022 (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0022")
+    shape, list_meals, rest = (
+        list_meals_shape(path),
+        rows_of(path, "list_meals"),
+        dump_without_list_meals(path),
+    )
+    index = unique_meal_index(path)
+    command.upgrade(config, "0023")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        source_id, meal_id = connection.execute(
+            "SELECT m.id, m.meal_id FROM list_meals m JOIN shopping_lists s ON s.id = m.list_id"
+            " WHERE s.status = 'done' AND m.meal_id IS NOT NULL ORDER BY m.id LIMIT 1"
+        ).fetchone()
+        (draft_id,) = connection.execute(
+            "SELECT s.id FROM shopping_lists s WHERE s.status = 'draft' AND EXISTS"
+            " (SELECT 1 FROM list_meals m WHERE m.list_id = s.id AND m.meal_id = ?)"
+            " ORDER BY s.id LIMIT 1",
+            (meal_id,),
+        ).fetchone()
+        # A leftover next to the same meal on a draft, which the old unique index refuses.
+        connection.execute(
+            "INSERT INTO list_meals (id, list_id, meal_id, servings, meal_servings_snapshot,"
+            " meal_name_snapshot, last_added_at, frozen_at, position, eaten, leftover_of_id,"
+            " created_at, updated_at)"
+            " SELECT ?, ?, meal_id, servings, meal_servings_snapshot, meal_name_snapshot,"
+            " last_added_at, frozen_at, 99, 0, id, created_at, updated_at"
+            " FROM list_meals WHERE id = ?",
+            (str(uuid.uuid7()), draft_id, source_id),
+        )
+
+    command.downgrade(config, "0022")
+
+    assert (list_meals_shape(path), rows_of(path, "list_meals")) == (shape, list_meals)
+    assert unique_meal_index(path) == index
+    assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+
+
+CARRY_OVER_COLUMN = ("carry_over_leftovers", "BOOLEAN", 1, "1", 0)
+
+
+def users_shape(path: Path) -> set[tuple[object, ...]]:
+    return set(
+        query(
+            path,
+            "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('users')",
+        )
+    )
+
+
+def dump_without_users(path: Path) -> list[str]:
+    """The database as SQL, without the users' table and rows, in order."""
+    schema = ('CREATE TABLE "users"', "CREATE TABLE users")
+    return sorted(
+        line
+        for line in dump_without(path, "users", "alembic_version")
+        if not line.startswith(schema)
+    )
+
+
+def test_0024_turns_the_carry_over_on_for_everyone_and_changes_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """seed-demo data at 0023 → 0024 (LIST-17, D-59): every user has the carry-over on, so new
+    drafts bring leftovers as before; no other row, value or column changes (`updated_at`
+    included: this is nobody's edit)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0023")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    shape, users, rest = users_shape(path), rows_of(path, "users"), dump_without_users(path)
+    assert users
+
+    command.upgrade(config, "0024")
+
+    assert users_shape(path) == shape | {CARRY_OVER_COLUMN}
+    assert rows_of(path, "users") == [row | {"carry_over_leftovers": 1} for row in users]
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_users(path) == rest
+    assert_clean(path)
+
+
+def test_the_0024_downgrade_drops_the_carry_over_setting(tmp_path: Path) -> None:
+    """Down to 0023 the setting goes, a switch turned off included, and the database is as it
+    was at 0023 (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0023")
+    shape, users, rest = users_shape(path), rows_of(path, "users"), dump_without_users(path)
+    command.upgrade(config, "0024")
+    execute(path, "UPDATE users SET carry_over_leftovers = 0")
+
+    command.downgrade(config, "0023")
+
+    assert (users_shape(path), rows_of(path, "users")) == (shape, users)
+    assert dump_without_users(path) == rest
+    assert_clean(path)
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
@@ -2128,11 +2782,11 @@ def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     upgrade_database(data_dir)
     seed_demo(data_dir, monkeypatch)
     references = non_null_foreign_keys(path)
-    assert references["ingredients.created_by"] == len(demo.DEMO_INGREDIENTS)
+    assert references["items.created_by"] == len(demo.DEMO_ITEMS)
     assert references["meals.cuisine_id"] == len(demo.DEMO_MEALS)
     assert references["meals.copied_from_meal_id"] == 1
     assert references["list_meals.meal_id"] > 0
-    assert references["list_extra_items.ingredient_id"] > 0
+    assert references["list_extra_items.item_id"] > 0
     assert references["recurring_items.couple_id"] == len(demo.DEMO_RECURRING)
     assert_clean(path)
 

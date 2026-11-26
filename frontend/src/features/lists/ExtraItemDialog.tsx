@@ -32,7 +32,7 @@ interface ExtraItemDialogProps {
   listId: string;
   /** The item being edited; null closes the dialog. */
   item: ExtraItem | null;
-  /** The item's name as the list shows it (the ingredient's name for a linked item). */
+  /** The item's name as the list shows it (the item's name for a linked item). */
   name: string;
   /** While shopping, free-text items change through the ops (LIST-12), keeping their category. */
   shopping?: boolean;
@@ -89,7 +89,7 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
   const categories = useCategories();
   const update = useUpdateExtraItem(listId);
   const remove = useRemoveExtraItem(listId);
-  const linked = item.ingredient_id !== null;
+  const linked = item.item_id !== null;
   const [text, setText] = useState(item.text ?? '');
   const [initialAmount] = useState(() =>
     item.amount === null ? '' : formatNumber(item.amount, language, { useGrouping: false }),
@@ -203,13 +203,18 @@ function ItemForm({ listId, item, name, shopping, onDone }: ItemFormProps) {
           type="button"
           variant="outline"
           aria-label={t('lists.item.removeLabel', { name })}
+          pending={remove.isPending}
           disabled={busy}
           onClick={onRemove}
+          icon={<Trash2 aria-hidden="true" />}
         >
-          <Trash2 aria-hidden="true" />
           {t('lists.item.remove')}
         </Button>
-        <Button type="submit" disabled={busy || (!linked && text.trim() === '')}>
+        <Button
+          type="submit"
+          pending={update.isPending}
+          disabled={busy || (!linked && text.trim() === '')}
+        >
           {t('common.save')}
         </Button>
       </DialogFooter>

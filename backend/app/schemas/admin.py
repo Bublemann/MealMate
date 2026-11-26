@@ -29,6 +29,7 @@ class AdminAction(StrEnum):
     CATEGORY_RENAME = "category.rename"
     CATEGORY_DELETE = "category.delete"
     CATEGORY_REORDER = "category.reorder"
+    # The item events keep the values they are stored with in the activity log.
     INGREDIENT_MERGE = "ingredient.merge"
     INGREDIENT_DELETE = "ingredient.delete"
     SYSTEM_BACKUP_REQUEST = "system.backup_request"

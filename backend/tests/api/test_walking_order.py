@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient, Response
 
 from tests.accounts import Account, fields, make_couple, make_user
-from tests.catalog import category_ids, create_ingredient
+from tests.catalog import category_ids, create_item
 from tests.lists import applied, create_list, detail, extra_added, op, start_shopping
 
 
@@ -39,8 +39,8 @@ async def groceries(api: AsyncClient, anna: Account) -> Any:
         ("Hackfleisch", "meat_fish"),
         ("Gouda", "cheese"),
     ):
-        ingredient = await create_ingredient(api, anna, name, category_id=ids[key])
-        await extra_added(api, anna, draft["id"], ingredient_id=ingredient["id"])
+        ingredient = await create_item(api, anna, name, category_id=ids[key])
+        await extra_added(api, anna, draft["id"], item_id=ingredient["id"])
     return draft
 
 
@@ -318,8 +318,8 @@ async def test_a_deleted_category_leaves_an_own_order_and_done_lists_keep_its_pl
     ids = await keys_to_ids(api, anna)
     own = moved_first(list(ids), "meat_fish")
     await saved(api, anna, [ids[key] for key in own], moved=ids["meat_fish"])
-    salami = await create_ingredient(api, anna, "Salami", category_id=ids["sausage_deli"])
-    await extra_added(api, anna, groceries["id"], ingredient_id=salami["id"])
+    salami = await create_item(api, anna, "Salami", category_id=ids["sausage_deli"])
+    await extra_added(api, anna, groceries["id"], item_id=salami["id"])
     await finished(api, anna, groceries["id"])
 
     await category_deleted(api, admin, ids["meat_fish"])
@@ -345,8 +345,8 @@ async def test_a_category_deleted_before_the_own_order_keeps_its_old_place(
     """D-30: a category deleted while the user followed the admins' order keeps the place it had
     there: in a later own order it comes after the category at that place."""
     ids = await keys_to_ids(api, anna)
-    salami = await create_ingredient(api, anna, "Salami", category_id=ids["sausage_deli"])
-    await extra_added(api, anna, groceries["id"], ingredient_id=salami["id"])
+    salami = await create_item(api, anna, "Salami", category_id=ids["sausage_deli"])
+    await extra_added(api, anna, groceries["id"], item_id=salami["id"])
     await finished(api, anna, groceries["id"])
     await category_deleted(api, admin, ids["meat_fish"])
     shown = [key for key in ids if key != "meat_fish"]

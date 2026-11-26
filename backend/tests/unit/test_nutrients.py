@@ -5,7 +5,7 @@ import math
 import pytest
 
 from app.domain.nutrients import NUTRIENT_KEYS, NUTRIENTS, NUTRIENTS_BY_KEY, plausible
-from app.models import Ingredient, ListMealIngredient
+from app.models import Item, ListMealIngredient
 from app.schemas.nutrition import NutrientValues
 
 
@@ -41,7 +41,7 @@ def test_plausible(key: str, value: float, expected: bool) -> None:
 
 
 def test_columns_and_schemas_come_from_the_registry() -> None:
-    columns = Ingredient.__table__.columns
+    columns = Item.__table__.columns
     assert all(columns[key].nullable for key in NUTRIENT_KEYS)
     assert not set(NUTRIENT_KEYS) & set(ListMealIngredient.__table__.columns.keys())
     assert list(NutrientValues.model_fields) == list(NUTRIENT_KEYS)
@@ -51,7 +51,7 @@ def test_columns_and_schemas_come_from_the_registry() -> None:
 
 
 def test_nutrient_accessors() -> None:
-    ingredient = Ingredient()
+    ingredient = Item()
     ingredient.set_nutrients({"kcal": 52.0, "fat": None})
     assert ingredient.nutrients()["kcal"] == 52.0
     assert ingredient.nutrients()["fat"] is None

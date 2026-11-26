@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UNITS } from '@/test/ingredients';
+import { UNITS } from '@/test/items';
 import { fittingUnits, keptUnit, unitFits } from './units';
 
 describe('fittingUnits', () => {

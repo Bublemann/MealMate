@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { isApiError } from '@/api/errors';
 import type { components } from '@/api/generated/schema';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LoadingState } from '@/components/LoadingState';
 import { Button } from '@/components/ui/button';
 import { useCodeCheck, type CodeKind } from './api';
 import { InvalidLink } from './InvalidLink';
@@ -22,11 +23,7 @@ export function CodeGate({ kind, code, children }: CodeGateProps) {
 
   if (code === null) return <InvalidLink />;
   if (check.isPending) {
-    return (
-      <p role="status" className="text-muted-foreground">
-        {t('auth.link.checking')}
-      </p>
-    );
+    return <LoadingState label={t('auth.link.checking')} />;
   }
   if (check.isError) {
     const invalid =

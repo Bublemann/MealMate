@@ -16,8 +16,8 @@ const ACTION_KEYS = {
   'category.rename': 'admin.events.action.categoryRename',
   'category.delete': 'admin.events.action.categoryDelete',
   'category.reorder': 'admin.events.action.categoryReorder',
-  'ingredient.merge': 'admin.events.action.ingredientMerge',
-  'ingredient.delete': 'admin.events.action.ingredientDelete',
+  'ingredient.merge': 'admin.events.action.itemMerge',
+  'ingredient.delete': 'admin.events.action.itemDelete',
   'system.backup_request': 'admin.events.action.systemBackupRequest',
 } as const;
 
@@ -35,7 +35,7 @@ export function describeEvent(t: TFunction, event: AdminEvent, language: Languag
     if (role === 'admin') return t('admin.events.action.userPromote', { actor, target });
     if (role === 'user') return t('admin.events.action.userDemote', { actor, target });
   }
-  // Ingredient and category events name them as they were called then (they may be gone now).
+  // Item and category events name them as they were called then (they may be gone now).
   const text = (key: string) => {
     const value = event.details[key];
     return typeof value === 'string' ? value : '';
@@ -57,8 +57,9 @@ export function describeEvent(t: TFunction, event: AdminEvent, language: Languag
     return t(ACTION_KEYS[event.action], {
       actor,
       name: category(),
-      ingredients: t('admin.events.ingredients', { count: count('ingredients') }),
-      items: t('admin.events.extraItems', { count: count('extra_items') }),
+      // The event's details keep the key `ingredients` they were stored with.
+      itemCount: t('admin.events.items', { count: count('ingredients') }),
+      freeTextCount: t('admin.events.extraItems', { count: count('extra_items') }),
     });
   }
   if (event.action === 'category.rename') {

@@ -105,14 +105,13 @@ def shopping_list(api: Api, owner: Account, tag: str, names: list[str]) -> dict[
 
     Returns {"list": ListDetail, "ingredients": [Ingredient, …]} in the order of `names`.
     """
-    ingredients = [api.create_ingredient(owner, f"{name} {tag}") for name in names]
+    ingredients = [api.create_item(owner, f"{name} {tag}") for name in names]
     meal = api.create_meal(
         owner,
         f"Eintopf {tag}",
         servings=2,
         ingredients=[
-            {"ingredient_id": ingredient["id"], "amount": 100, "unit": "g"}
-            for ingredient in ingredients
+            {"item_id": ingredient["id"], "amount": 100, "unit": "g"} for ingredient in ingredients
         ],
     )
     created = api.create_list(owner, f"Wochenende {tag}")
@@ -153,7 +152,7 @@ def test_offline_check_off_and_reconnect(
         page.get_by_role("checkbox", name=text("lists.shop.check", name=name)).click()
     # The item field searches nothing offline and offers only free text (SYNC-03, D-41).
     page.get_by_test_id(TEST_IDS["extraItemInput"]).fill(napkins)
-    expect(page.get_by_test_id(TEST_IDS["itemNewIngredient"])).to_have_count(0)
+    expect(page.get_by_test_id(TEST_IDS["itemNewItem"])).to_have_count(0)
     page.get_by_role("button", name=text("lists.addField.plus", name=napkins)).click()
     free_text = page.get_by_test_id(TEST_IDS["freeTextDialog"])
     free_text.get_by_role("button", name=text("lists.addField.add"), exact=True).click()
@@ -240,6 +239,44 @@ def test_offline_start_is_inactive_and_finishing_works(
     context.set_offline(False)
     expect(sync_status(page)).to_have_text(text("lists.sync.saved"), timeout=POLLED)
     assert api.get_list(anna, shopping["id"])["status"] == "done"
+
+
+def test_offline_leftover_tick(
+    context: BrowserContext, api: Api, invite_user: Callable[..., Account], browser_name: str
+) -> None:
+    """LIST-17, SYNC-03, D-60: a leftover ticked in a draft without signal leaves it at once, is
+    sent once the signal is back, and is then eaten on the done list and gone from every
+    draft."""
+    tag = unique("e2e")
+    anna = invite_user(unique("anna"), unique("Anna"))
+    chili = api.create_meal(anna, f"Chili {tag}", ingredients=[])
+    done = api.create_list(anna, f"Letzte Woche {tag}")
+    api.add_list_meal(anna, done["id"], chili["id"])
+    api.start_shopping(anna, done["id"])
+    api.finish_list(anna, done["id"])
+    draft = api.create_list(anna, f"Entwurf {tag}")
+    other = api.create_list(anna, f"Noch ein Entwurf {tag}")
+
+    page = open_page(context, anna, f"/lists/{draft['id']}")
+    box = page.get_by_role("checkbox", name=text("lists.meals.eaten", name=chili["name"]))
+    expect(box).to_be_enabled()
+    ready_for_offline(page, draft["id"], browser_name)
+    context.set_offline(True)
+    expect(page.get_by_test_id(TEST_IDS["offlineBanner"])).to_have_text(
+        text("sync.offline.listLeftovers")
+    )
+
+    # A click, not check(): the box leaves with its row.
+    box.click()
+    expect(page.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(0)
+    expect(page.get_by_test_id(TEST_IDS["leftoverToast"])).to_be_visible()
+    expect(sync_status(page)).to_have_text(waiting(1))
+
+    context.set_offline(False)
+    expect(sync_status(page)).to_have_text(text("lists.sync.saved"), timeout=POLLED)
+    [source] = api.get_list(anna, done["id"])["meals"]
+    assert source["eaten"] is True
+    assert api.get_list(anna, other["id"])["meals"] == []
 
 
 def leave_unanswered(route: Route) -> None:

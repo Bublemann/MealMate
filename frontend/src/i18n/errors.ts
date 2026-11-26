@@ -1,12 +1,21 @@
 import type { TFunction } from 'i18next';
-import { errorKey, fieldErrorCodes, isApiError } from '@/api/errors';
+import { errorKey, fieldErrorCodes, isApiError, type ErrorParams } from '@/api/errors';
 import i18n from '.';
 
 /** The translated message for any error; codes this app version doesn't know get the generic one. */
 export function errorMessage(t: TFunction, error: unknown): string {
   const key = errorKey(error);
   if (!i18n.exists(key)) return t('error.common.internal');
-  return t(key, isApiError(error) ? error.params : {});
+  return t(key, isApiError(error) ? textParams(error.params) : {});
+}
+
+/** The params as the translations take them: lists (meal names) are left to their own UI. */
+function textParams(params: ErrorParams): Record<string, string | number | boolean> {
+  return Object.fromEntries(
+    Object.entries(params).filter(
+      (entry): entry is [string, string | number | boolean] => !Array.isArray(entry[1]),
+    ),
+  );
 }
 
 /** Translated field errors by field name, e.g. `{username: "Already taken"}`. */
@@ -41,7 +50,7 @@ export function fieldErrorMessagesByPath(
 
 /**
  * Whether a form needs its general error alert: the error has no field problems, or one for a
- * path the form shows no input for (e.g. `ingredient_id`), which would otherwise go unseen.
+ * path the form shows no input for (e.g. `item_id`), which would otherwise go unseen.
  */
 export function needsErrorAlert(
   fieldMessages: Partial<Record<string, string>>,

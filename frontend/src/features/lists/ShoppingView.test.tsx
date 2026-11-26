@@ -26,7 +26,7 @@ import {
   expectInPageOrder,
   found,
   UNITS,
-} from '@/test/ingredients';
+} from '@/test/items';
 import { FLOUR, ME } from '@/test/meals';
 import { chooseFromMenu, openMoreMenu } from '@/test/menu';
 import { dueItem } from '@/test/recurring';
@@ -259,7 +259,7 @@ describe('shopping view (SHOP-01)', () => {
     const flour = list.lines.find((line) => line.name === 'Mehl');
     if (!flour) throw new Error('no flour line');
     const aurora = { ...flour, brand: 'Aurora' };
-    const diamant = { ...flour, key: 'i:ing-mehl-diamant', ingredient_id: 'ing-mehl-diamant' };
+    const diamant = { ...flour, key: 'i:ing-mehl-diamant', item_id: 'ing-mehl-diamant' };
     renderList({
       [`GET ${BASE}`]: {
         ...list,
@@ -489,7 +489,7 @@ describe('shopping view (SHOP-01)', () => {
 
   it('adds a linked item with its amount while shopping online (LIST-12)', async () => {
     const { fetchMock, user } = renderList({
-      'GET /api/ingredients': [found(FLOUR, true)],
+      'GET /api/items': [found(FLOUR, true)],
       'GET /api/units': UNITS,
       [`POST ${BASE}/extra-items`]: Response.json(shoppingList(), { status: 201 }),
     });
@@ -501,7 +501,7 @@ describe('shopping view (SHOP-01)', () => {
     await waitFor(() => expect(requestsTo(fetchMock, `POST ${BASE}/extra-items`)).toHaveLength(1));
     await expect(bodyOf(fetchMock, `POST ${BASE}/extra-items`)).resolves.toEqual({
       id: A_UUID_V7,
-      ingredient_id: FLOUR.id,
+      item_id: FLOUR.id,
       amount: 1,
       unit: 'g',
     });
@@ -853,7 +853,7 @@ describe('offline (SYNC-03)', () => {
     await user.type(screen.getByTestId(testIds.extraItemInput), 'Feta');
     // Offline it searches nothing and offers only free text (SYNC-03).
     expect(screen.getByTestId(testIds.itemFreeText)).toHaveTextContent('“Feta” as an item');
-    expect(screen.queryByTestId(testIds.itemNewIngredient)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.itemNewItem)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add “Feta”' }));
     const form = await screen.findByTestId(testIds.freeTextDialog);
     const category = within(form).getByLabelText('Category');
@@ -865,7 +865,7 @@ describe('offline (SYNC-03)', () => {
     ).toEqual(['Fruit & vegetables', 'Dairy & eggs', 'Cheese', 'Other', 'Cheese counter']);
     await user.selectOptions(category, 'cat-cheese-counter');
     await user.click(within(form).getByRole('button', { name: 'Add' }));
-    expect(requestsTo(fetchMock, 'GET /api/ingredients')).toHaveLength(0);
+    expect(requestsTo(fetchMock, 'GET /api/items')).toHaveLength(0);
 
     const lines = screen.getByTestId(testIds.shoppingLines);
     expect(await within(lines).findByRole('list', { name: 'Cheese counter' })).toHaveTextContent(
@@ -1233,7 +1233,8 @@ describe('done list (SHOP-05/06)', () => {
     expect(milk).not.toHaveClass('text-muted-foreground');
     expect(within(lines).queryByText('Eier')).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(FORMER_REMINDER);
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    // Only the meals have checkboxes (SHOP-07); the lines can't be checked any more.
+    expect(within(lines).queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.renameList)).not.toBeInTheDocument();
     expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /servings/ })).not.toBeInTheDocument();
@@ -1319,5 +1320,157 @@ describe('done list (SHOP-05/06)', () => {
       'Other\n- (not bought) Geburtstagskerzen: 2 Packungen\n- (not bought) Mehl: 850 g\n✓ Salz',
     );
     Reflect.deleteProperty(navigator, 'share');
+  });
+});
+
+describe('eaten meals on a done list (SHOP-07)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mealsSection() {
+    return screen.getByRole('region', { name: /^Meals/ });
+  }
+
+  it('ticks a meal eaten, strikes it through and counts it in the heading', async () => {
+    const eaten = doneList({
+      version: 10,
+      meals: [listMeal({ eaten: true }), PRIVATE_MEAL, DETACHED_MEAL],
+    });
+    const { user, fetchMock } = renderList({
+      [`GET ${BASE}`]: doneList(),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: eaten,
+    });
+    const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+    expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 0 of 3 eaten');
+    expect(box).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Private meal (3 servings) eaten' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Alter Eintopf eaten' })).toBeEnabled();
+
+    await user.click(box);
+
+    expect(box).toBeChecked();
+    expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 3 eaten');
+    expect(screen.getByRole('link', { name: 'Pfannkuchen' })).toHaveClass('line-through');
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-pancakes/eaten`)).toHaveLength(1),
+    );
+    expect(await bodyOf(fetchMock, `PUT ${BASE}/meals/lm-pancakes/eaten`)).toEqual({
+      eaten: true,
+    });
+    // Nothing else on the list became editable.
+    expect(screen.queryByRole('button', { name: /servings/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.removeListMeal)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(testIds.extraItemInput)).not.toBeInTheDocument();
+  });
+
+  it('unticks a meal marked by mistake', async () => {
+    const { fetchMock } = renderList({
+      [`GET ${BASE}`]: doneList({ meals: [listMeal({ eaten: true })] }),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: doneList({ version: 10, meals: [listMeal()] }),
+    });
+    const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+    expect(box).toBeChecked();
+    expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 1 eaten');
+
+    fireEvent.click(box);
+
+    // At once, not only once the change reached the cache.
+    expect(box).not.toBeChecked();
+    await waitFor(() =>
+      expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 0 of 1 eaten'),
+    );
+    expect(screen.getByRole('link', { name: 'Pfannkuchen' })).not.toHaveClass('line-through');
+    expect(await bodyOf(fetchMock, `PUT ${BASE}/meals/lm-pancakes/eaten`)).toEqual({
+      eaten: false,
+    });
+  });
+
+  it('lets the partner tick on a shared done list', async () => {
+    const { user, fetchMock } = renderList({
+      [`GET ${BASE}`]: doneList(SHARED_BY_BEN),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: doneList({ ...SHARED_BY_BEN, version: 10 }),
+    });
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' }));
+
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-pancakes/eaten`)).toHaveLength(1),
+    );
+  });
+
+  it('only shows what was eaten on a list I may not edit', async () => {
+    renderList({
+      [`GET ${BASE}`]: doneList({
+        owner: BEN,
+        is_owner: false,
+        can_edit: false,
+        meals: [listMeal({ eaten: true }), DETACHED_MEAL],
+      }),
+    });
+    const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+    expect(box).toBeChecked();
+    expect(box).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Alter Eintopf eaten' })).toBeDisabled();
+    expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 2 eaten');
+  });
+
+  it('needs a connection', async () => {
+    const { fetchMock } = renderList({ [`GET ${BASE}`]: doneList() });
+    const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+
+    goOffline(fetchMock);
+
+    await waitFor(() => expect(box).toBeDisabled());
+  });
+
+  it('shows the box as it was when ticking fails', async () => {
+    const { user } = renderList({
+      [`GET ${BASE}`]: doneList(),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: errorResponse(409, 'list.not_done'),
+    });
+    const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+
+    await user.click(box);
+
+    expect(await screen.findByRole('alert')).toBeVisible();
+    await waitFor(() => expect(box).not.toBeChecked());
+  });
+
+  it('shows each box as the list has it again once its change failed, also after ticking another', async () => {
+    const pancakes = heldRoute();
+    const { user } = renderList({
+      [`GET ${BASE}`]: doneList(),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: pancakes.route,
+      [`PUT ${BASE}/meals/lm-detached/eaten`]: doneList({
+        version: 10,
+        meals: [listMeal(), PRIVATE_MEAL, { ...DETACHED_MEAL, eaten: true }],
+      }),
+    });
+    const first = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+    const second = screen.getByRole('checkbox', { name: 'Alter Eintopf eaten' });
+
+    await user.click(first);
+    await user.click(second);
+    await pancakes.answer(errorResponse(409, 'list.not_done'));
+
+    await waitFor(() => expect(first).not.toBeChecked());
+    await waitFor(() =>
+      expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 3 eaten'),
+    );
+    expect(second).toBeChecked();
+    // The first tap's failure is said, although the second one went through.
+    expect(screen.getByRole('alert')).toBeVisible();
+  });
+
+  it('has no boxes on drafts and while shopping', async () => {
+    const { unmount } = renderList();
+    await screen.findByTestId(testIds.shoppingLines);
+    expect(screen.queryByRole('checkbox', { name: /eaten$/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderList({ [`GET ${BASE}`]: listDetail() });
+    expect(await screen.findByRole('heading', { name: 'Meals' })).toBeVisible();
+    expect(screen.queryByRole('checkbox', { name: /eaten$/ })).not.toBeInTheDocument();
   });
 });

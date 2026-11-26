@@ -7,6 +7,7 @@ import type { BackLink } from '@/components/DetailStrip';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormField } from '@/components/FormField';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +68,7 @@ function EditMeal({ id }: { id: string }) {
         testId={testIds.screenMealForm}
         back={meal.data ? mealBack(meal.data) : allMealsBack(t)}
       >
-        {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+        {meal.isPending && <LoadingState />}
         <LoadError error={meal.error ?? forbidden} />
       </Screen>
     );
@@ -290,8 +291,8 @@ function MealFormView({ meal, addToList = '', name = '' }: MealFormViewProps) {
         />
         {showAlert && <ErrorAlert error={mutation.error} />}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={saving || values.name.trim() === ''}>
-            {saving ? t('meals.form.saving') : meal ? t('common.save') : t('meals.form.create')}
+          <Button type="submit" pending={saving} disabled={values.name.trim() === ''}>
+            {meal ? t('common.save') : t('meals.form.create')}
           </Button>
           <Button variant="outline" asChild>
             <Link to={back.to}>{t('meals.form.cancel')}</Link>

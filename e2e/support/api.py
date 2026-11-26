@@ -1,4 +1,4 @@
-"""Test setup through the app's own API: accounts, couples, ingredients, meals, lists (plan § 9).
+"""Test setup through the app's own API: accounts, couples, items, meals, lists (plan § 9).
 
 The journeys drive the UI; everything they merely need to exist (an admin, invited users, a couple)
 is created here over HTTP, which is faster and keeps each test about one thing.
@@ -199,12 +199,12 @@ class Api:
         return [c for c in self.ordered_categories(account) if c["key"] != "uncategorized"]
 
     def filterable_categories(self, account: Account) -> list[dict[str, Any]]:
-        """The categories the Ingredients tab's filter panel offers, in walking order: those
-        pickers offer, and *Uncategorized* while it holds ingredients (ING-03)."""
+        """The categories the Items tab's filter panel offers, in walking order: those
+        pickers offer, and *Uncategorized* while it holds items (ING-03)."""
         return [
             c
             for c in self.ordered_categories(account)
-            if c["key"] != "uncategorized" or c["ingredient_count"] > 0
+            if c["key"] != "uncategorized" or c["item_count"] > 0
         ]
 
     def category_name(self, account: Account, key: str, language: str = "en") -> str:
@@ -231,7 +231,7 @@ class Api:
             json={"names": {"de": name_de, "en": name_en}},
         )
 
-    def create_ingredient(
+    def create_item(
         self,
         account: Account,
         name: str,
@@ -240,15 +240,15 @@ class Api:
         category_id: str | None = None,
         **fields: Any,
     ) -> dict[str, Any]:
-        """POST /api/ingredients in the category `category_key` (or `category_id`, for one an
+        """POST /api/items in the category `category_key` (or `category_id`, for one an
         admin added), e.g. with `brand="REWE"`, `barcode=new_barcode()` or
-        `nutrients={"kcal": 52}`; the created Ingredient."""
+        `nutrients={"kcal": 52}`; the created Item."""
         token = self.token(account)
         if category_id is None:
             categories = self.call("GET", "/api/categories", token=token)
             [category_id] = [c["id"] for c in categories if c["key"] == category_key]
         body = {"name": name, "category_id": category_id, **fields}
-        return self.call("POST", "/api/ingredients", token=token, json=body)
+        return self.call("POST", "/api/items", token=token, json=body)
 
     def update_me(self, account: Account, **fields: Any) -> dict[str, Any]:
         """PATCH /api/me, e.g. `meals_public=False`; the updated Me."""
@@ -299,7 +299,7 @@ class Api:
         )
 
     def add_extra_item(self, account: Account, list_id: str, **fields: Any) -> dict[str, Any]:
-        """POST /api/lists/{id}/extra-items, e.g. `ingredient_id=…, amount=450, unit="g"` or
+        """POST /api/lists/{id}/extra-items, e.g. `item_id=…, amount=450, unit="g"` or
         `text="Kerzen"`; the ListDetail."""
         return self.call(
             "POST", f"/api/lists/{list_id}/extra-items", token=self.token(account), json=fields

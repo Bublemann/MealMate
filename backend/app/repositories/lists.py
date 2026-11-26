@@ -9,7 +9,17 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Subquery, and_, delete, func, or_, select, union, update
+from sqlalchemy import (
+    ColumnElement,
+    Subquery,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+    union,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lists import FeedPosition, ListStatus
@@ -30,20 +40,25 @@ async def get(session: AsyncSession, list_id: str) -> ShoppingList | None:
     return await session.get(ShoppingList, list_id)
 
 
+def _editable_by(user_id: str, partner_id: str | None) -> ColumnElement[bool]:
+    """The lists the user can edit: their own and those their partner shares with them."""
+    condition = ShoppingList.owner_id == user_id
+    if partner_id is None:
+        return condition
+    return or_(
+        condition,
+        (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
+    )
+
+
 async def mine(
     session: AsyncSession, user_id: str, partner_id: str | None, statuses: Collection[ListStatus]
 ) -> Sequence[ShoppingList]:
     """The user's own lists and those their partner shares with them, most recently edited
     first."""
-    condition = ShoppingList.owner_id == user_id
-    if partner_id is not None:
-        condition = or_(
-            condition,
-            (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
-        )
     result = await session.execute(
         select(ShoppingList)
-        .where(condition, ShoppingList.status.in_(statuses))
+        .where(_editable_by(user_id, partner_id), ShoppingList.status.in_(statuses))
         .order_by(ShoppingList.updated_at.desc(), ShoppingList.id.desc())
     )
     return result.scalars().all()
@@ -111,8 +126,59 @@ async def get_meal(session: AsyncSession, list_id: str, list_meal_id: str) -> Li
 
 
 async def meal_on_list(session: AsyncSession, list_id: str, meal_id: str) -> ListMeal | None:
+    """The meal's normal list meal on the list (not a leftover of it)."""
     result = await session.execute(
-        select(ListMeal).where(ListMeal.list_id == list_id, ListMeal.meal_id == meal_id)
+        select(ListMeal).where(
+            ListMeal.list_id == list_id,
+            ListMeal.meal_id == meal_id,
+            ListMeal.leftover_of_id.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def leftover_on_list(session: AsyncSession, list_id: str, source_id: str) -> ListMeal | None:
+    """The list's leftover of the source meal, if it has one."""
+    result = await session.execute(
+        select(ListMeal)
+        .where(ListMeal.list_id == list_id, ListMeal.leftover_of_id == source_id)
+        .order_by(ListMeal.id)
+    )
+    return result.scalars().first()
+
+
+async def meals_by_ids(session: AsyncSession, list_meal_ids: Iterable[str]) -> dict[str, ListMeal]:
+    """List meals by id, on any list."""
+    ids = set(list_meal_ids)
+    if not ids:
+        return {}
+    result = await session.execute(select(ListMeal).where(ListMeal.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}
+
+
+async def lists_with_leftovers_of(session: AsyncSession, list_meal_ids: Iterable[str]) -> set[str]:
+    """The lists that have a leftover of one of the list meals."""
+    ids = set(list_meal_ids)
+    if not ids:
+        return set()
+    result = await session.execute(select(ListMeal.list_id).where(ListMeal.leftover_of_id.in_(ids)))
+    return set(result.scalars())
+
+
+async def last_finished(
+    session: AsyncSession, user_id: str, partner_id: str | None
+) -> ShoppingList | None:
+    """The done list finished last of the user's own and those their partner shares with them
+    (ties: the one created last)."""
+    result = await session.execute(
+        select(ShoppingList)
+        .where(_editable_by(user_id, partner_id), ShoppingList.status == "done")
+        .order_by(
+            ShoppingList.finished_at.desc(),
+            ShoppingList.created_at.desc(),
+            ShoppingList.id.desc(),
+        )
+        .limit(1)
     )
     return result.scalar_one_or_none()
 
@@ -251,9 +317,9 @@ async def get_state(session: AsyncSession, list_id: str, line_key: str) -> ListL
 
 
 async def get_hidden_due_item(
-    session: AsyncSession, list_id: str, ingredient_id: str
+    session: AsyncSession, list_id: str, item_id: str
 ) -> ListHiddenDueItem | None:
-    return await session.get(ListHiddenDueItem, (list_id, ingredient_id))
+    return await session.get(ListHiddenDueItem, (list_id, item_id))
 
 
 # --- ops ------------------------------------------------------------------------------------
@@ -318,40 +384,40 @@ async def transfer_shared(
         await bump(session, list_ids, now)
 
 
-# --- ingredients ------------------------------------------------------------------------------
+# --- items ------------------------------------------------------------------------------------
 
 
-def _lists_with_ingredient(ingredient_id: str) -> Subquery:
+def _lists_with_item(item_id: str) -> Subquery:
     frozen = (
         select(ListMeal.list_id)
         .join(ListMealIngredient, ListMealIngredient.list_meal_id == ListMeal.id)
-        .where(ListMealIngredient.ingredient_id == ingredient_id)
+        .where(ListMealIngredient.item_id == item_id)
     )
     extras = select(ListExtraItem.list_id).where(
-        ListExtraItem.ingredient_id == ingredient_id, ListExtraItem.deleted_at.is_(None)
+        ListExtraItem.item_id == item_id, ListExtraItem.deleted_at.is_(None)
     )
     return union(frozen, extras).subquery()
 
 
-async def count_with_ingredient(session: AsyncSession, ingredient_id: str) -> int:
+async def count_with_item(session: AsyncSession, item_id: str) -> int:
     """How many lists have frozen rows or (not deleted) linked extra items of the
-    ingredient."""
-    lists = _lists_with_ingredient(ingredient_id)
+    item."""
+    lists = _lists_with_item(item_id)
     result = await session.execute(select(func.count()).select_from(lists))
     return result.scalar_one()
 
 
 async def draft_amounts_of(
-    session: AsyncSession, ingredient_id: str
+    session: AsyncSession, item_id: str
 ) -> list[tuple[str, float | None, str | None]]:
-    """The list id, amount and unit of every extra item linked to the ingredient on a draft
+    """The list id, amount and unit of every extra item linked to the item on a draft
     that is not deleted. Only these follow its base unit; those on lists being shopped and done
     lists keep the one they copied (LIST-11)."""
     result = await session.execute(
         select(ListExtraItem.list_id, ListExtraItem.amount, ListExtraItem.unit)
         .join(ShoppingList, ShoppingList.id == ListExtraItem.list_id)
         .where(
-            ListExtraItem.ingredient_id == ingredient_id,
+            ListExtraItem.item_id == item_id,
             ListExtraItem.deleted_at.is_(None),
             ShoppingList.status == "draft",
         )
@@ -359,56 +425,54 @@ async def draft_amounts_of(
     return [(list_id, amount, unit) for list_id, amount, unit in result]
 
 
-async def delete_deleted_extras_of(session: AsyncSession, ingredient_id: str) -> None:
-    """Drop the tombstones of deleted extra items linked to the ingredient, so it can be
+async def delete_deleted_extras_of(session: AsyncSession, item_id: str) -> None:
+    """Drop the tombstones of deleted extra items linked to the item, so it can be
     deleted (they no longer count as references)."""
     await session.execute(
         delete(ListExtraItem).where(
-            ListExtraItem.ingredient_id == ingredient_id, ListExtraItem.deleted_at.is_not(None)
+            ListExtraItem.item_id == item_id, ListExtraItem.deleted_at.is_not(None)
         )
     )
 
 
-async def lists_with_parts_of(session: AsyncSession, ingredient_id: str) -> set[str]:
-    """The lists the ingredient has a line on: frozen rows, live meals with rows of it, and
+async def lists_with_parts_of(session: AsyncSession, item_id: str) -> set[str]:
+    """The lists the item has a line on: frozen rows, live meals with rows of it, and
     linked extra items that are not deleted."""
     statement = union(
         select(ListMeal.list_id)
         .join(ListMealIngredient, ListMealIngredient.list_meal_id == ListMeal.id)
-        .where(ListMealIngredient.ingredient_id == ingredient_id),
+        .where(ListMealIngredient.item_id == item_id),
         select(ListMeal.list_id)
         .join(MealIngredient, MealIngredient.meal_id == ListMeal.meal_id)
-        .where(MealIngredient.ingredient_id == ingredient_id, ListMeal.frozen_at.is_(None)),
+        .where(MealIngredient.item_id == item_id, ListMeal.frozen_at.is_(None)),
         select(ListExtraItem.list_id).where(
-            ListExtraItem.ingredient_id == ingredient_id, ListExtraItem.deleted_at.is_(None)
+            ListExtraItem.item_id == item_id, ListExtraItem.deleted_at.is_(None)
         ),
     )
     result = await session.execute(statement)
     return set(result.scalars())
 
 
-async def repoint_ingredient(session: AsyncSession, from_id: str, into_id: str) -> None:
-    """Frozen rows and extra items of one ingredient now refer to another (merge, ING-05);
+async def repoint_item(session: AsyncSession, from_id: str, into_id: str) -> None:
+    """Frozen rows and extra items of one item now refer to another (merge, ING-05);
     the snapshots stay as they were."""
     await session.execute(
         update(ListMealIngredient)
-        .where(ListMealIngredient.ingredient_id == from_id)
-        .values(ingredient_id=into_id)
+        .where(ListMealIngredient.item_id == from_id)
+        .values(item_id=into_id)
     )
     await session.execute(
-        update(ListExtraItem)
-        .where(ListExtraItem.ingredient_id == from_id)
-        .values(ingredient_id=into_id)
+        update(ListExtraItem).where(ListExtraItem.item_id == from_id).values(item_id=into_id)
     )
 
 
 async def move_hidden_due_items(session: AsyncSession, from_id: str, into_id: str) -> set[str]:
-    """Due items hidden as one ingredient are hidden as another (merge, ING-05); on a list
+    """Due items hidden as one item are hidden as another (merge, ING-05); on a list
     that hid both, one stays. The ids of the lists whose hides moved."""
     moved = set(
         (
             await session.scalars(
-                select(ListHiddenDueItem.list_id).where(ListHiddenDueItem.ingredient_id == from_id)
+                select(ListHiddenDueItem.list_id).where(ListHiddenDueItem.item_id == from_id)
             )
         ).all()
     )
@@ -416,18 +480,18 @@ async def move_hidden_due_items(session: AsyncSession, from_id: str, into_id: st
         return moved
     into = (
         select(ListHiddenDueItem.list_id)
-        .where(ListHiddenDueItem.ingredient_id == into_id)
+        .where(ListHiddenDueItem.item_id == into_id)
         .scalar_subquery()
     )
     await session.execute(
         delete(ListHiddenDueItem).where(
-            ListHiddenDueItem.ingredient_id == from_id, ListHiddenDueItem.list_id.in_(into)
+            ListHiddenDueItem.item_id == from_id, ListHiddenDueItem.list_id.in_(into)
         )
     )
     await session.execute(
         update(ListHiddenDueItem)
-        .where(ListHiddenDueItem.ingredient_id == from_id)
-        .values(ingredient_id=into_id)
+        .where(ListHiddenDueItem.item_id == from_id)
+        .values(item_id=into_id)
     )
     return moved
 

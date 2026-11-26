@@ -6,7 +6,7 @@ from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.owners import OwnerKey
-from app.models import Ingredient, ListHiddenDueItem, RecurringItem
+from app.models import Item, ListHiddenDueItem, RecurringItem
 
 
 def _owned_by(key: OwnerKey) -> ColumnElement[bool]:
@@ -15,36 +15,36 @@ def _owned_by(key: OwnerKey) -> ColumnElement[bool]:
     return RecurringItem.user_id == key.user_id
 
 
-async def get(session: AsyncSession, item_id: str) -> RecurringItem | None:
-    return await session.get(RecurringItem, item_id)
+async def get(session: AsyncSession, recurring_id: str) -> RecurringItem | None:
+    return await session.get(RecurringItem, recurring_id)
 
 
 async def of_owner(
     session: AsyncSession, key: OwnerKey, *, not_hidden_on: str | None = None
-) -> Sequence[tuple[RecurringItem, Ingredient]]:
-    """The owner's set with each item's ingredient, in dictionary order by name and brand;
+) -> Sequence[tuple[RecurringItem, Item]]:
+    """The owner's set with each recurring item's item, in dictionary order by name and brand;
     without the items hidden on the list `not_hidden_on` (LIST-16), if given."""
     query = (
-        select(RecurringItem, Ingredient)
-        .join(Ingredient, Ingredient.id == RecurringItem.ingredient_id)
+        select(RecurringItem, Item)
+        .join(Item, Item.id == RecurringItem.item_id)
         .where(_owned_by(key))
-        .order_by(Ingredient.name_sort, func.coalesce(Ingredient.brand_sort, ""), Ingredient.id)
+        .order_by(Item.name_sort, func.coalesce(Item.brand_sort, ""), Item.id)
     )
     if not_hidden_on is not None:
         query = query.where(
             ~exists().where(
                 ListHiddenDueItem.list_id == not_hidden_on,
-                ListHiddenDueItem.ingredient_id == RecurringItem.ingredient_id,
+                ListHiddenDueItem.item_id == RecurringItem.item_id,
             )
         )
     result = await session.execute(query)
     return result.all()
 
 
-async def in_set(session: AsyncSession, key: OwnerKey, ingredient_id: str) -> RecurringItem | None:
-    """The owner's item of that ingredient, if the set has one."""
+async def in_set(session: AsyncSession, key: OwnerKey, item_id: str) -> RecurringItem | None:
+    """The owner's recurring item of that item, if the set has one."""
     result = await session.execute(
-        select(RecurringItem).where(_owned_by(key), RecurringItem.ingredient_id == ingredient_id)
+        select(RecurringItem).where(_owned_by(key), RecurringItem.item_id == item_id)
     )
     return result.scalar_one_or_none()
 
@@ -69,11 +69,11 @@ async def of_couple(session: AsyncSession, couple_id: str) -> Sequence[Recurring
     return result.scalars().all()
 
 
-async def with_ingredient(session: AsyncSession, ingredient_id: str) -> Sequence[RecurringItem]:
-    """Every set's item of that ingredient, oldest first."""
+async def with_item(session: AsyncSession, item_id: str) -> Sequence[RecurringItem]:
+    """Every set's recurring item of that item, oldest first."""
     result = await session.execute(
         select(RecurringItem)
-        .where(RecurringItem.ingredient_id == ingredient_id)
+        .where(RecurringItem.item_id == item_id)
         .order_by(RecurringItem.created_at, RecurringItem.id)
     )
     return result.scalars().all()

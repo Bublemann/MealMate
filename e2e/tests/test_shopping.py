@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from playwright.sync_api import BrowserContext, Locator, Page, expect
 
 from support.api import Account, Api, sign_in, unique
-from support.frontend import TEST_IDS, ingredient_label, text
+from support.frontend import TEST_IDS, item_label, text
 from support.ui import choose_from_menu, floating_bar_button
 
 # One polling interval (5 s) plus the time a request and a render take.
@@ -75,21 +75,21 @@ def test_couple_shops_together(
     anna = invite_user(unique("anna"), unique("Anna"))
     ben = invite_user(unique("ben"), unique("Ben"))
     make_couple(anna, ben)
-    onions = api.create_ingredient(
+    onions = api.create_item(
         anna,
         f"Zwiebeln {tag}",
         category_key="fruit_vegetables",
         base_unit="piece",
         piece_weight_g=80,
     )
-    flour = api.create_ingredient(anna, f"Mehl {tag}", category_key="baking")
+    flour = api.create_item(anna, f"Mehl {tag}", category_key="baking")
     tart = api.create_meal(
         anna,
         f"Zwiebelkuchen {tag}",
         servings=2,
         ingredients=[
-            {"ingredient_id": onions["id"], "amount": 1, "unit": "piece"},
-            {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
+            {"item_id": onions["id"], "amount": 1, "unit": "piece"},
+            {"item_id": flour["id"], "amount": 200, "unit": "g"},
         ],
     )
     shared = api.create_list(anna, f"Wochenende {tag}")
@@ -171,15 +171,16 @@ def test_couple_shops_together(
 
 
 def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., Account]) -> None:
-    """SHOP-06: a done list starts a new draft with the same meals, or goes back to shopping."""
+    """SHOP-06: a done list starts a new draft with the same meals, or goes back to shopping;
+    its meals are ticked eaten first (SHOP-07)."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
-    rice = api.create_ingredient(anna, f"Reis {tag}")
+    rice = api.create_item(anna, f"Reis {tag}")
     curry = api.create_meal(
         anna,
         f"Curry {tag}",
         servings=2,
-        ingredients=[{"ingredient_id": rice["id"], "amount": 150, "unit": "g"}],
+        ingredients=[{"item_id": rice["id"], "amount": 150, "unit": "g"}],
     )
     done = api.create_list(anna, f"Einkauf {tag}")
     api.add_list_meal(anna, done["id"], curry["id"], servings=4)
@@ -195,6 +196,20 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     expect(page).to_have_url(re.compile(f"/lists/{done['id']}$"))
     bought = page.get_by_test_id(TEST_IDS["doneLines"]).get_by_role("listitem")
     expect(bought.filter(has_text=rice["name"])).to_contain_text(f"({text('lists.done.bought')})")
+
+    # The curry was eaten: ticked, it is struck through and counted, also after a reload (SHOP-07).
+    eaten = page.get_by_role("checkbox", name=text("lists.meals.eaten", name=curry["name"]))
+    with page.expect_response(
+        lambda response: response.request.method == "PUT" and response.url.endswith("/eaten")
+    ) as saved:
+        eaten.check()
+    assert saved.value.ok
+    count = text("lists.meals.eatenCount", eaten="1", count="1")
+    heading = page.get_by_role("heading", name=f"{text('lists.meals.title')} {count}")
+    expect(heading).to_be_visible()
+    page.reload()
+    expect(eaten).to_be_checked()
+    expect(heading).to_be_visible()
 
     # The done note stands alone; no bar on a done list (D-39).
     expect(page.get_by_test_id(TEST_IDS["listDone"]).get_by_role("button")).to_have_count(0)
@@ -229,17 +244,69 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
     expect(row_icon(row, "lists.card.done")).to_have_count(0)
 
 
+def test_leftovers_come_along_into_a_new_draft(
+    page: Page, api: Api, invite_user: Callable[..., Account]
+) -> None:
+    """LIST-17: a new draft brings the uneaten meals of the last done list as leftovers, without
+    their lines; ticking one there marks it eaten on the done list."""
+    tag = unique("e2e")
+    anna = invite_user(unique("anna"), unique("Anna"))
+    beans = api.create_item(anna, f"Bohnen {tag}")
+    chili = api.create_meal(
+        anna, f"Chili {tag}", ingredients=[{"item_id": beans["id"], "amount": 400, "unit": "g"}]
+    )
+    done = api.create_list(anna, f"Letzte Woche {tag}")
+    api.add_list_meal(anna, done["id"], chili["id"])
+    api.start_shopping(anna, done["id"])
+    api.finish_list(anna, done["id"])
+
+    sign_in(page.context, anna)
+    page.goto("/lists")
+    page.get_by_test_id(TEST_IDS["newList"]).click()
+    expect(page).to_have_url(re.compile(r"/lists/[0-9a-f-]{36}$"))
+    draft_url = page.url
+
+    # The chili is a leftover: badge and hint, and its beans are not on the list.
+    row = page.get_by_test_id(TEST_IDS["listMeal"]).filter(has_text=chili["name"])
+    expect(row).to_contain_text(text("lists.meals.leftover"))
+    expect(row).to_contain_text(text("lists.meals.leftoverHint"))
+    expect(page.get_by_text(beans["name"])).to_have_count(0)
+
+    # Ticked, it leaves the draft, and the toast offers to undo it.
+    # Through the outbox, like a check-off (D-60).
+    with page.expect_response(
+        lambda response: response.request.method == "POST" and response.url.endswith("/ops")
+    ) as saved:
+        # A click, not check(): the box leaves with its row, so it can't be seen ticked.
+        row.get_by_role("checkbox", name=text("lists.meals.eaten", name=chili["name"])).click()
+    assert saved.value.ok
+    expect(row).to_have_count(0)
+    toast = page.get_by_test_id(TEST_IDS["leftoverToast"])
+    expect(toast).to_contain_text(text("lists.meals.eaten", name=chili["name"]))
+    expect(toast.get_by_role("button", name=text("lists.meals.undo"))).to_be_visible()
+
+    # On the done list it is ticked eaten.
+    page.goto(f"/lists/{done['id']}")
+    expect(
+        page.get_by_role("checkbox", name=text("lists.meals.eaten", name=chili["name"]))
+    ).to_be_checked()
+    count = text("lists.meals.eatenCount", eaten="1", count="1")
+    expect(page.get_by_role("heading", name=f"{text('lists.meals.title')} {count}")).to_be_visible()
+    page.goto(draft_url)
+    expect(page.get_by_test_id(TEST_IDS["listMeal"])).to_have_count(0)
+
+
 def test_two_brands_are_two_lines(
     page: Page, api: Api, invite_user: Callable[..., Account]
 ) -> None:
-    """Two brands of the same thing are different ingredients: separate lines, named with their
+    """Two brands of the same thing are different items: separate lines, named with their
     brand, on the draft and while shopping (owner decision 2026-09-28)."""
     tag = unique("e2e")
     anna = invite_user(unique("anna"), unique("Anna"))
     name = f"Milch {tag}"
     brands = ("Weidehof", "Alpenhof")
     milks = [
-        api.create_ingredient(anna, name, brand=brand, category_key="dairy_eggs", base_unit="ml")
+        api.create_item(anna, name, brand=brand, category_key="dairy_eggs", base_unit="ml")
         for brand in brands
     ]
     meals = [
@@ -247,14 +314,14 @@ def test_two_brands_are_two_lines(
             anna,
             f"{meal} {tag}",
             servings=2,
-            ingredients=[{"ingredient_id": milk["id"], "amount": amount, "unit": "ml"}],
+            ingredients=[{"item_id": milk["id"], "amount": amount, "unit": "ml"}],
         )
         for meal, milk, amount in (("Pfannkuchen", milks[0], 300), ("Grießbrei", milks[1], 500))
     ]
     draft = api.create_list(anna, f"Einkauf {tag}")
     for meal in meals:
         api.add_list_meal(anna, draft["id"], meal["id"])
-    labels = [ingredient_label(name, brand) for brand in brands]
+    labels = [item_label(name, brand) for brand in brands]
 
     sign_in(page.context, anna)
     page.goto(f"/lists/{draft['id']}")

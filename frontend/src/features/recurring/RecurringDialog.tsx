@@ -9,8 +9,8 @@ import { FieldError } from '@/components/ui/field-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import type { IngredientSummary } from '@/features/ingredients/api';
-import { ingredientLabel } from '@/features/ingredients/label';
+import type { ItemSummary } from '@/features/items/api';
+import { itemLabel } from '@/features/items/label';
 import { useConnected } from '@/features/sync/context';
 import { fieldErrorMessages, needsErrorAlert } from '@/i18n/errors';
 import { testIds } from '@/testIds';
@@ -26,15 +26,15 @@ import {
 const DEFAULT_WEEKS = 4;
 /** The fields whose server errors show next to an input; others go to the alert. */
 const SHOWN_FIELDS: ReadonlySet<string> = new Set([
-  'ingredient_id',
+  'item_id',
   'interval_weeks',
   'last_purchased_on',
 ]);
 
 export interface RecurringTarget {
-  ingredient: Pick<IngredientSummary, 'id' | 'name' | 'brand'>;
-  /** The ingredient's item when it is recurring already: the pop-up edits it. */
-  item?: RecurringItem;
+  item: Pick<ItemSummary, 'id' | 'name' | 'brand'>;
+  /** The item's recurring item when it is recurring already: the pop-up edits it. */
+  recurring?: RecurringItem;
 }
 
 interface RecurringDialogProps {
@@ -49,9 +49,9 @@ interface RecurringDialogProps {
 
 /**
  * The recurring pop-up (LIST-16, D-42), one for the page "Regelmäßige Artikel" and the
- * ingredient's ⋯ menu: the ingredient as its title, "Alle n Wochen", "Automatisch anpassen" and
+ * item's ⋯ menu: the item as its title, "Alle n Wochen", "Automatisch anpassen" and
  * "Zuletzt gekauft", then "Hinzufügen", or "Speichern" and the red "Nicht mehr regelmäßig" when
- * the ingredient is recurring already. Its fields start afresh each time it opens.
+ * the item is recurring already. Its fields start afresh each time it opens.
  */
 export function RecurringDialog({
   target,
@@ -59,7 +59,7 @@ export function RecurringDialog({
   onDone,
   onCloseAutoFocus,
 }: RecurringDialogProps) {
-  const name = target ? ingredientLabel(target.ingredient.name, target.ingredient.brand) : '';
+  const name = target ? itemLabel(target.item.name, target.item.brand) : '';
 
   function done() {
     onDone?.();
@@ -77,10 +77,10 @@ export function RecurringDialog({
           <DialogTitle>{name}</DialogTitle>
         </DialogHeader>
         {target &&
-          (target.item ? (
-            <EditForm item={target.item} name={name} onDone={done} />
+          (target.recurring ? (
+            <EditForm recurring={target.recurring} name={name} onDone={done} />
           ) : (
-            <CreateForm ingredientId={target.ingredient.id} onDone={done} />
+            <CreateForm itemId={target.item.id} onDone={done} />
           ))}
       </DialogContent>
     </Dialog>
@@ -107,7 +107,7 @@ interface Values {
   lastBought: string;
 }
 
-function CreateForm({ ingredientId, onDone }: { ingredientId: string; onDone: () => void }) {
+function CreateForm({ itemId, onDone }: { itemId: string; onDone: () => void }) {
   const { t } = useTranslation();
   const create = useCreateRecurringItem();
   const [initialDate] = useState(today);
@@ -123,7 +123,7 @@ function CreateForm({ ingredientId, onDone }: { ingredientId: string; onDone: ()
       onSubmit={({ weeks, automatic, lastBought }) =>
         create.mutate(
           {
-            ingredient_id: ingredientId,
+            item_id: itemId,
             interval_weeks: weeks,
             automatic,
             // Untouched, the server takes its own today, in the instance's time zone.
@@ -137,27 +137,27 @@ function CreateForm({ ingredientId, onDone }: { ingredientId: string; onDone: ()
 }
 
 function EditForm({
-  item,
+  recurring,
   name,
   onDone,
 }: {
-  item: RecurringItem;
+  recurring: RecurringItem;
   name: string;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
-  const update = useUpdateRecurringItem(item.id);
-  const remove = useDeleteRecurringItem(item.id);
+  const update = useUpdateRecurringItem(recurring.id);
+  const remove = useDeleteRecurringItem(recurring.id);
   const connected = useConnected();
   const [confirming, setConfirming] = useState(false);
 
   function onSubmit({ weeks, automatic, lastBought }: { weeks: number } & Omit<Values, 'weeks'>) {
     const body: RecurringItemUpdate = {};
-    const weeksChanged = weeks !== item.interval_weeks;
+    const weeksChanged = weeks !== recurring.interval_weeks;
     if (weeksChanged) body.interval_weeks = weeks;
     // With a new interval the switch is always sent: on, the interval adapts again.
-    if (weeksChanged || automatic !== item.interval.automatic) body.automatic = automatic;
-    if (lastBought !== item.last_purchased_on) body.last_purchased_on = lastBought;
+    if (weeksChanged || automatic !== recurring.interval.automatic) body.automatic = automatic;
+    if (lastBought !== recurring.last_purchased_on) body.last_purchased_on = lastBought;
     if (Object.keys(body).length === 0) onDone();
     else update.mutate(body, { onSuccess: onDone });
   }
@@ -166,13 +166,14 @@ function EditForm({
     <>
       <RecurringForm
         initial={{
-          weeks: String(item.interval_weeks),
-          automatic: item.interval.automatic,
-          lastBought: item.last_purchased_on,
+          weeks: String(recurring.interval_weeks),
+          automatic: recurring.interval.automatic,
+          lastBought: recurring.last_purchased_on,
         }}
         followsInterval
         submitLabel={t('common.save')}
-        pending={update.isPending || remove.isPending}
+        pending={update.isPending}
+        busy={remove.isPending}
         error={update.error ?? remove.error}
         onSubmit={onSubmit}
         extra={
@@ -181,7 +182,8 @@ function EditForm({
             variant="ghost"
             data-testid={testIds.recurringRemove}
             className="text-destructive hover:text-destructive"
-            disabled={!connected || update.isPending || remove.isPending}
+            pending={remove.isPending}
+            disabled={!connected || update.isPending}
             onClick={() => setConfirming(true)}
           >
             {t('recurring.dialog.remove')}
@@ -209,7 +211,10 @@ interface RecurringFormProps {
    */
   followsInterval: boolean;
   submitLabel: string;
+  /** Its own save runs: the button shows the spinner (UI-08). */
   pending: boolean;
+  /** Another change runs (the removal): the button only takes no press. */
+  busy?: boolean;
   error: unknown;
   onSubmit: (values: { weeks: number } & Omit<Values, 'weeks'>) => void;
   /** Below the main button: "Nicht mehr regelmäßig" when editing. */
@@ -221,6 +226,7 @@ function RecurringForm({
   followsInterval,
   submitLabel,
   pending,
+  busy = false,
   error,
   onSubmit,
   extra,
@@ -250,7 +256,7 @@ function RecurringForm({
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      {fields.ingredient_id && <FieldError>{fields.ingredient_id}</FieldError>}
+      {fields.item_id && <FieldError>{fields.item_id}</FieldError>}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span id={everyId} className="text-sm font-medium">
@@ -314,7 +320,7 @@ function RecurringForm({
       </FormField>
       {error !== null && needsErrorAlert(fields, SHOWN_FIELDS) && <ErrorAlert error={error} />}
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pending || !connected}>
+        <Button type="submit" pending={pending} disabled={!connected || busy}>
           {submitLabel}
         </Button>
         {extra}

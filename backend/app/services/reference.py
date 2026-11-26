@@ -19,11 +19,11 @@ from app.domain.text import normalize
 from app.domain.units import FITTING_UNITS, UNIT_KIND, Unit
 from app.models import Category as CategoryRow
 from app.models import Cuisine as CuisineRow
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import reference as reference_repo
 from app.schemas.admin import AdminAction, AdminEventDetail
-from app.schemas.ingredients import base_unit_name
+from app.schemas.items import base_unit_name
 from app.schemas.reference import (
     Category,
     CategoryNames,
@@ -43,20 +43,20 @@ def _names(row: CategoryRow) -> CategoryNames:
     return CategoryNames(de=row.name_de, en=row.name_en)
 
 
-def category(row: CategoryRow, ingredient_count: int) -> Category:
+def category(row: CategoryRow, item_count: int) -> Category:
     return Category(
         id=row.id,
         key=row.key,
         names=_names(row),
         sort_order=row.sort_order,
         deleted=row.deleted_at is not None,
-        ingredient_count=ingredient_count,
+        item_count=item_count,
     )
 
 
 async def _listed_categories(session: AsyncSession) -> list[Category]:
-    """Every category, deleted ones included (D-30), in order, with its number of ingredients."""
-    counts = await ingredients_repo.counts_by_category(session)
+    """Every category, deleted ones included (D-30), in order, with its number of items."""
+    counts = await items_repo.counts_by_category(session)
     return [
         category(row, counts.get(row.id, 0))
         for row in await reference_repo.categories_in_order(session)
@@ -81,7 +81,7 @@ async def list_categories(session: AsyncSession) -> list[Category]:
 
 
 async def can_pick(session: AsyncSession, category_id: str, *, keeping: str | None = None) -> bool:
-    """Whether an ingredient or a free-text item may be put into this category (ING-02,
+    """Whether an item or a free-text extra item may be put into this category (ING-02,
     LIST-06): not a deleted one (D-30), nor *Uncategorized*, where nothing is put on purpose.
     Keeping the category it has (`keeping`) is always fine, so it can be saved as it is."""
     if category_id == keeping:
@@ -239,7 +239,7 @@ async def create_category(
             details=_name_details(names),
         )
         await session.flush()
-        return category(row, ingredient_count=0)
+        return category(row, item_count=0)
 
 
 async def rename_category(
@@ -274,8 +274,8 @@ async def rename_category(
                 details={**_name_details(old, "old_"), **_name_details(names)},
             )
         await session.flush()
-        count = await ingredients_repo.count_in_category(session, row.id)
-        return category(row, ingredient_count=count)
+        count = await items_repo.count_in_category(session, row.id)
+        return category(row, item_count=count)
 
 
 async def category_usage(session: AsyncSession, category_id: str) -> CategoryUsage:
@@ -283,7 +283,7 @@ async def category_usage(session: AsyncSession, category_id: str) -> CategoryUsa
     async with session.begin():
         row = _get_not_deleted(await reference_repo.categories_in_order(session), category_id)
         return CategoryUsage(
-            ingredients=await ingredients_repo.count_in_category(session, row.id),
+            items=await items_repo.count_in_category(session, row.id),
             extra_items=len(await lists_repo.draft_extras_in_category(session, row.id)),
         )
 
@@ -294,7 +294,7 @@ async def delete_category(
     """Admins delete a category (REF-01, plan § 6); *Other* and *Uncategorized* always exist
     (409 `category.not_deletable`). In one transaction:
 
-    1. its ingredients move to *Uncategorized*, which isn't an edit of theirs;
+    1. its items move to *Uncategorized*, which isn't an edit of theirs;
     2. its free-text items on drafts that aren't deleted move to *Other*;
     3. nothing on lists being shopped or done lists changes: they keep showing it (D-30);
     4. it is marked deleted, and the others close the gap in the walking order, the admins' one
@@ -307,9 +307,7 @@ async def delete_category(
         if row.key in (OTHER_CATEGORY, UNCATEGORIZED_CATEGORY):
             raise ApiError(ErrorCode.CATEGORY_NOT_DELETABLE, status_code=409)
         by_key = {each.key: each.id for each in _not_deleted(rows) if each.key is not None}
-        moved = await ingredients_repo.move_category(
-            session, row.id, by_key[UNCATEGORIZED_CATEGORY]
-        )
+        moved = await items_repo.move_category(session, row.id, by_key[UNCATEGORIZED_CATEGORY])
         extras = await lists_repo.draft_extras_in_category(session, row.id)
         for extra in extras:
             extra.category_id = by_key[OTHER_CATEGORY]

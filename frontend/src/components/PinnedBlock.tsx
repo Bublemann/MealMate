@@ -16,11 +16,13 @@ interface SearchFieldProps {
 }
 
 interface NewTileProps {
-  /** "Neue Zutat", or "„Quitten“ anlegen" while a search text is present. */
+  /** "Neuer Artikel", or "„Quitten“ anlegen" while a search text is present. */
   label: string;
   onClick: () => void;
   /** E.g. "Neue Liste" offline: creating it needs the server (UI-02). */
   disabled?: boolean;
+  /** Creating runs ("Neue Liste"): the tile ignores presses, its spinner replaces the ＋ (UI-08). */
+  pending?: boolean;
   testId: TestId;
 }
 
@@ -33,7 +35,7 @@ interface PinnedBlockProps {
 }
 
 /**
- * The top of the Lists, Meals and Ingredients tabs (UI-01): the tab's headline (D-44), search,
+ * The top of the Lists, Meals and Items tabs (UI-01): the tab's headline (D-44), search,
  * filter and the green "Neu…" tile, on a frosted surface that stays below the status bar while
  * the content scrolls under it. The tab renders it at once, whether it is still loading, empty or
  * filled (UI-03), and shows its state below it. At the largest text sizes it stops growing before
@@ -105,15 +107,16 @@ function SearchField({ label, placeholder, value, onChange, testId }: SearchFiel
  * closer than the button text's usual 1.5, with the difference in the padding, so a one-line tile
  * keeps its height and a long name takes less of the screen (UI-01).
  */
-function NewTile({ label, onClick, disabled = false, testId }: NewTileProps) {
+function NewTile({ label, onClick, disabled = false, pending = false, testId }: NewTileProps) {
   return (
     <Button
       data-testid={testId}
       onClick={onClick}
       disabled={disabled}
-      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em]"
+      pending={pending}
+      icon={<Plus aria-hidden="true" />}
+      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em] [&_svg:not([class*='size-'])]:size-[1.25em]"
     >
-      <Plus aria-hidden="true" className="size-[1.25em]" />
       <span className="min-w-0 leading-[1.25] wrap-anywhere">{label}</span>
     </Button>
   );

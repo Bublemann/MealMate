@@ -1,5 +1,5 @@
 import type { components } from '@/api/generated/schema';
-import { CATEGORIES_WITH_UNCATEGORIZED } from './ingredients';
+import { CATEGORIES_WITH_UNCATEGORIZED } from './items';
 
 type Schemas = components['schemas'];
 type Category = Pick<Schemas['Category'], 'id' | 'key' | 'names'>;

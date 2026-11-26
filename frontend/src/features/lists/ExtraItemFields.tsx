@@ -1,9 +1,10 @@
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FormField } from '@/components/FormField';
+import { LoadingState } from '@/components/LoadingState';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import type { BaseUnit } from '@/features/ingredients/api';
+import type { BaseUnit } from '@/features/items/api';
 import { useCategories, type Unit } from '@/features/reference/api';
 import { CategoryOptions } from '@/features/reference/CategoryOptions';
 import { unitLabel } from '@/features/reference/labels';
@@ -22,7 +23,7 @@ interface AmountFieldsProps {
    * Null when it isn't known (a copy kept offline by an older app version): every unit then.
    */
   baseUnit: BaseUnit | null;
-  /** The ingredient's name, for the mark of a unit that doesn't fit. */
+  /** The item's name, for the mark of a unit that doesn't fit. */
   name: string;
   onAmountChange: (amount: string) => void;
   onUnitChange: (unit: Unit) => void;
@@ -31,7 +32,7 @@ interface AmountFieldsProps {
 }
 
 /**
- * Optional amount and unit of an extra item linked to an ingredient (LIST-06). An older amount
+ * Optional amount and unit of an extra item linked to an item (LIST-06). An older amount
  * whose unit doesn't fit is marked, and stays as it is until the user picks one that fits.
  */
 export function AmountFields({
@@ -143,9 +144,8 @@ export function FreeTextFields({
               value={categoryId}
               onChange={(event) => onCategoryChange(event.target.value)}
             >
-              {!categories.data && (
-                <NativeSelectOption value="">{t('common.loading')}</NativeSelectOption>
-              )}
+              {/* An option can't hold the spinner: it shows below until they arrive (UI-08). */}
+              {!categories.data && <NativeSelectOption value="" />}
               {categories.data && (
                 <CategoryOptions categories={categories.data} selected={categoryId} />
               )}
@@ -153,6 +153,7 @@ export function FreeTextFields({
           )}
         </FormField>
       )}
+      {!withoutCategory && categories.isPending && <LoadingState className="justify-start py-0" />}
     </div>
   );
 }

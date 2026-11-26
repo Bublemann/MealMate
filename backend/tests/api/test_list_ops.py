@@ -26,7 +26,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import category_ids, create_ingredient, ref
+from tests.catalog import category_ids, create_item, ref
 from tests.lists import (
     applied,
     by_key,
@@ -63,12 +63,12 @@ async def carl(app: FastAPI, api: AsyncClient) -> Account:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl")
+    return await create_item(api, anna, "Mehl")
 
 
 @pytest.fixture
 async def salt(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Salz")
+    return await create_item(api, anna, "Salz")
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ async def shopping(api: AsyncClient, anna: Account, flour: Any, salt: Any) -> An
     """anna's list being shopped: flour (500 g) and salt."""
     shopping_list = await create_list(api, anna, "Einkauf")
     for ingredient, amount in ((flour, 500), (salt, None)):
-        body = {"ingredient_id": ingredient["id"]}
+        body = {"item_id": ingredient["id"]}
         if amount is not None:
             body |= {"amount": amount, "unit": "g"}
         await extra_added(api, anna, shopping_list["id"], **body)
@@ -205,7 +205,7 @@ async def test_check_and_uncheck(
     await make_couple(api, anna, ben)
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
-    await extra_added(api, anna, list_id, ingredient_id=flour["id"], amount=500, unit="g")
+    await extra_added(api, anna, list_id, item_id=flour["id"], amount=500, unit="g")
     before = await start_shopping(api, anna, list_id)
     at = START - timedelta(minutes=3)
 
@@ -363,8 +363,8 @@ async def test_checks_on_done_lists_and_drafts(
     await make_couple(api, anna, ben)
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
-    await extra_added(api, anna, list_id, ingredient_id=flour["id"])
-    await extra_added(api, anna, list_id, ingredient_id=salt["id"])
+    await extra_added(api, anna, list_id, item_id=flour["id"])
+    await extra_added(api, anna, list_id, item_id=salt["id"])
     response = await send_ops(api, anna, list_id, check(key(flour)), op("list.finish"))
     assert results(response) == [("rejected", "list.not_shopping")] * 2
     await start_shopping(api, anna, list_id)
@@ -436,7 +436,7 @@ async def test_ops_take_effect_once(
     assert results(await send_ops(api, anna, mine["id"], again)) == [DUPLICATE]
     # Op ids come from the clients: another user's op with the same id is another op.
     other = await create_list(api, ben)
-    await extra_added(api, ben, other["id"], ingredient_id=salt["id"])
+    await extra_added(api, ben, other["id"], item_id=salt["id"])
     await start_shopping(api, ben, other["id"])
     body = await applied(api, ben, other["id"], again)
     assert state(body, key(salt)) == (True, "2026-09-27T12:00:00Z", "Ben")
@@ -522,7 +522,7 @@ async def test_add_free_text_items(
     items = {item["text"]: item for item in body["extra_items"]}
     assert items["Kerzen"] == {
         "id": ids[0],
-        "ingredient_id": None,
+        "item_id": None,
         "text": "Kerzen",
         "amount": None,
         "unit": None,
@@ -611,7 +611,7 @@ async def test_update_and_delete_free_text_items(
         op("extra.add", extra_id=candles, text="Kerzen", amount_text="1 Packung"),
         op("extra.add", extra_id=napkins, text="Servietten"),
     )
-    [linked] = [item for item in shopping["extra_items"] if item["ingredient_id"] == flour["id"]]
+    [linked] = [item for item in shopping["extra_items"] if item["item_id"] == flour["id"]]
     version = (await detail(api, anna, list_id))["version"]
 
     body = await applied(
@@ -799,11 +799,11 @@ async def test_parallel_batches_lose_nothing(
     """20 requests at once, each with its own ops: all succeed, every op takes effect and the
     version rises once per request."""
     await make_couple(api, anna, ben)
-    ingredients = [await create_ingredient(api, anna, f"Zutat {index}") for index in range(20)]
+    ingredients = [await create_item(api, anna, f"Zutat {index}") for index in range(20)]
     shopping_list = await create_list(api, anna)
     list_id = shopping_list["id"]
     for ingredient in ingredients:
-        await extra_added(api, anna, list_id, ingredient_id=ingredient["id"], amount=1, unit="kg")
+        await extra_added(api, anna, list_id, item_id=ingredient["id"], amount=1, unit="kg")
     before = await start_shopping(api, anna, list_id)
 
     def batch(index: int) -> list[Any]:

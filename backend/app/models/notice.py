@@ -10,7 +10,7 @@ from app.db.base import Base, IdMixin, UTCDateTime, utcnow
 class Notice(IdMixin, Base):
     """A notice for one user, unread until they dismiss it (D-51): its kind and parameters,
     never text, which the frontend words (I18N-03). The first kind says that an admin deleted
-    an ingredient the user kept as recurring, with its name and brand copied (ING-05)."""
+    an item the user kept as recurring, with its name and brand copied (ING-05)."""
 
     __tablename__ = "notices"
 

@@ -1,0 +1,135 @@
+"""Queries on `items`."""
+
+from collections.abc import Iterable, Sequence
+from datetime import datetime
+
+from sqlalchemy import ColumnElement, func, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domain.text import fold_umlauts
+from app.models import Item
+from app.repositories.search import contains, folded
+
+
+async def get(session: AsyncSession, item_id: str) -> Item | None:
+    return await session.get(Item, item_id)
+
+
+async def by_barcode(session: AsyncSession, barcode: str) -> Item | None:
+    result = await session.execute(select(Item).where(Item.barcode == barcode))
+    return result.scalar_one_or_none()
+
+
+async def by_barcodes(session: AsyncSession, barcodes: Iterable[str]) -> dict[str, Item]:
+    """The items with these barcodes, by barcode."""
+    codes = set(barcodes)
+    if not codes:
+        return {}
+    result = await session.execute(select(Item).where(Item.barcode.in_(codes)))
+    return {str(row.barcode): row for row in result.scalars()}
+
+
+async def barcode_owner(
+    session: AsyncSession, barcode: str, *, except_id: str | None = None
+) -> str | None:
+    """The id of the item with this barcode (other than `except_id`), if any."""
+    query = select(Item.id).where(Item.barcode == barcode)
+    if except_id is not None:
+        query = query.where(Item.id != except_id)
+    return (await session.execute(query)).scalar_one_or_none()
+
+
+def _label_norm() -> ColumnElement[str]:
+    """`name brand` normalised, so that "milch weihen" finds "Milch (Weihenstephan)"."""
+    return Item.name_norm + " " + func.coalesce(Item.brand_norm, "")
+
+
+async def search(
+    session: AsyncSession,
+    *,
+    query: str,
+    category_ids: Sequence[str],
+    kind: str | None = None,
+    limit: int,
+) -> Sequence[Item]:
+    """With a normalised `query`: the items whose normalised name or brand, or both
+    together ("name brand"), contain it (also with umlaut spellings folded, so "apfel" finds
+    "Äpfel"); an exact name first, then names starting with it, each in dictionary order by
+    name and brand. Without one: all of them in that order. With `category_ids`, only those in
+    any of the categories, with `kind` only those of that kind."""
+    statement = select(Item)
+    if kind is not None:
+        statement = statement.where(Item.kind == kind)
+    if category_ids:
+        statement = statement.where(Item.category_id.in_(category_ids))
+    order = (Item.name_sort, func.coalesce(Item.brand_sort, ""), Item.id)
+    if query:
+        # The label holds the name and the brand, so it matches either or both.
+        matches, _ = contains(_label_norm(), query)
+        _, prefix = contains(Item.name_norm, query)
+        exact = or_(Item.name_norm == query, folded(Item.name_norm) == fold_umlauts(query))
+        statement = statement.where(matches).order_by(exact.is_(False), prefix.is_(False), *order)
+    else:
+        statement = statement.order_by(*order)
+    result = await session.execute(statement.limit(limit))
+    return result.scalars().all()
+
+
+async def names(session: AsyncSession) -> list[tuple[str, str]]:
+    """`(id, name_norm)` of every item."""
+    result = await session.execute(select(Item.id, Item.name_norm))
+    return [(row[0], row[1]) for row in result]
+
+
+async def count_in_category(session: AsyncSession, category_id: str) -> int:
+    result = await session.execute(
+        select(func.count()).select_from(Item).where(Item.category_id == category_id)
+    )
+    return result.scalar_one()
+
+
+async def counts_by_category(session: AsyncSession) -> dict[str, int]:
+    """The number of items in each category that holds any, by category id."""
+    result = await session.execute(
+        select(Item.category_id, func.count()).group_by(Item.category_id)
+    )
+    return {category_id: count for category_id, count in result}
+
+
+async def move_category(session: AsyncSession, from_id: str, into_id: str) -> int:
+    """Move every item of a category into another, as no one's edit: who changed it
+    last, and when, stay (plan § 6). Returns how many moved."""
+    moved = await session.scalars(
+        update(Item)
+        .where(Item.category_id == from_id)
+        .values(category_id=into_id, updated_at=Item.updated_at)
+        .returning(Item.id)
+        .execution_options(synchronize_session="fetch")
+    )
+    return len(moved.all())
+
+
+async def by_ids(session: AsyncSession, item_ids: Iterable[str]) -> dict[str, Item]:
+    ids = set(item_ids)
+    if not ids:
+        return {}
+    result = await session.execute(select(Item).where(Item.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}
+
+
+async def stale_from_off(
+    session: AsyncSession, fetched_before: datetime, *, limit: int | None = None
+) -> list[str]:
+    """The ids of the items from Open Food Facts fetched before `fetched_before` (or
+    never), the longest ago first; at most `limit` (None: all)."""
+    result = await session.execute(
+        select(Item.id)
+        .where(
+            Item.source == "off",
+            Item.barcode.is_not(None),
+            or_(Item.fetched_at.is_(None), Item.fetched_at < fetched_before),
+        )
+        .order_by(Item.fetched_at.asc().nulls_first(), Item.id)
+        .limit(limit)
+    )
+    return list(result.scalars())

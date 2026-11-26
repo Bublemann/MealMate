@@ -5,9 +5,9 @@ import { FormField } from '@/components/FormField';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import type { IngredientSummary } from '@/features/ingredients/api';
-import { IngredientPicker } from '@/features/ingredients/IngredientPicker';
-import { ingredientLabel } from '@/features/ingredients/label';
+import type { ItemSummary } from '@/features/items/api';
+import { ItemPicker } from '@/features/items/ItemPicker';
+import { itemLabel } from '@/features/items/label';
 import type { Unit } from '@/features/reference/api';
 import { unitLabel } from '@/features/reference/labels';
 import { useUnitChoice } from '@/features/reference/units';
@@ -37,7 +37,7 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
     onChange(rows.map((current, i) => (i === index ? row : current)));
   }
 
-  function onPick(ingredient: IngredientSummary) {
+  function onPick(ingredient: ItemSummary) {
     onChange([...rows, newRow(ingredient)]);
     setPickerKey((key) => key + 1);
   }
@@ -66,7 +66,7 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
         </ol>
       )}
       {/* Enter in the search field picks nothing and must not save the whole meal. Dialogs
-          opened from the picker and the scan (the ingredient form, the Open Food Facts search,
+          opened from the picker and the scan (the item form, the Open Food Facts search,
           the scanner) are portals: their key events bubble through here in React, but their
           Enter must still submit. */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
@@ -82,12 +82,13 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
           }
         }}
       >
-        <IngredientPicker
+        <ItemPicker
           key={pickerKey}
           label={t('meals.field.addIngredient')}
           onSelect={onPick}
+          kind="food"
         />
-        <MealScan onIngredient={onPick} />
+        <MealScan onItem={onPick} />
       </div>
     </fieldset>
   );
@@ -115,13 +116,9 @@ function IngredientRow({
   onRemove,
 }: IngredientRowProps) {
   const { t } = useTranslation();
-  const name = ingredientLabel(row.ingredient.name, row.ingredient.brand);
-  const rowError = fieldError(`${path}.ingredient_id`) ?? fieldError(path);
-  const unitChoice = useUnitChoice(
-    row.ingredient.base_unit,
-    row.unit,
-    row.amountText.trim() !== '',
-  );
+  const name = itemLabel(row.item.name, row.item.brand);
+  const rowError = fieldError(`${path}.item_id`) ?? fieldError(path);
+  const unitChoice = useUnitChoice(row.item.base_unit, row.unit, row.amountText.trim() !== '');
 
   return (
     <li

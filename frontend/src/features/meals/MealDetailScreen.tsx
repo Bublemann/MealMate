@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { ExternalLink } from '@/components/ExternalLink';
 import { LoadError } from '@/components/LoadError';
+import { LoadingState } from '@/components/LoadingState';
 import { MoreMenu, MoreMenuItem } from '@/components/MoreMenu';
 import { useMoreMenuFocus } from '@/components/useMoreMenuFocus';
 import { Screen } from '@/components/Screen';
@@ -13,7 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ingredientLabel } from '@/features/ingredients/label';
+import { itemLabel } from '@/features/items/label';
 import { cuisineName, unitLabel } from '@/features/reference/labels';
 import { useConnected } from '@/features/sync/context';
 import { useLanguage } from '@/i18n';
@@ -66,7 +67,7 @@ function MealDetail({ id }: { id: string }) {
           </AlertDescription>
         </Alert>
       )}
-      {meal.isPending && <p className="text-muted-foreground">{t('common.loading')}</p>}
+      {meal.isPending && <LoadingState />}
       <LoadError error={meal.error} />
       {meal.data && <MealContent key={meal.data.id} meal={meal.data} />}
     </Screen>
@@ -299,10 +300,10 @@ function IngredientsCard({ meal }: { meal: Meal }) {
                 </span>
                 <span className="min-w-0 flex-1 break-words">
                   <Link
-                    to={`/ingredients/${row.ingredient.id}`}
+                    to={`/items/${row.item.id}`}
                     className="inline-flex min-h-(--tap-target) items-center font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    {ingredientLabel(row.ingredient.name, row.ingredient.brand)}
+                    {itemLabel(row.item.name, row.item.brand)}
                   </Link>
                   {row.note && <span className="text-muted-foreground"> · {row.note}</span>}
                 </span>

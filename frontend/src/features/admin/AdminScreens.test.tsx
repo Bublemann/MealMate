@@ -9,7 +9,7 @@ import {
   TEST_ADMIN,
   userRef,
 } from '@/test/api';
-import { CATEGORIES } from '@/test/ingredients';
+import { CATEGORIES } from '@/test/items';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 import type { AdminEvent, AdminUser, Invite } from './api';
@@ -438,7 +438,7 @@ describe('AdminEventsScreen', () => {
       'Admin deactivated Carl (deactivated)',
       'Deleted user created an invite',
       'Admin created a password reset link for Deleted user',
-      'Admin merged the ingredient Apfel into Äpfel',
+      'Admin merged the item Apfel into Äpfel',
       'Admin changed the order of the categories',
       'Admin started a backup',
       'Action by Admin',
@@ -488,7 +488,7 @@ describe('AdminEventsScreen', () => {
 
     await screen.findByTestId(testIds.eventList);
     expect(descriptions()).toEqual([
-      'Admin deleted the category Cheese counter (moved: 3 ingredients, 1 free-text item)',
+      'Admin deleted the category Cheese counter (moved: 3 items, 1 free-text item)',
       'Admin renamed the category Cheese to Cheese counter',
       'Admin renamed the category Drinks to Beverages',
       'Admin added the category Bakehouse',
@@ -498,7 +498,7 @@ describe('AdminEventsScreen', () => {
     await i18n.changeLanguage('de');
     await waitFor(() =>
       expect(descriptions()).toEqual([
-        'Admin hat die Kategorie Käsetheke gelöscht (verschoben: 3 Zutaten, 1 Freitext-Artikel)',
+        'Admin hat die Kategorie Käsetheke gelöscht (verschoben: 3 Artikel, 1 Freitext-Artikel)',
         'Admin hat die Kategorie Käse in Käsetheke umbenannt',
         // The German name stayed.
         'Admin hat den Namen der Kategorie Getränke in einer anderen Sprache geändert',

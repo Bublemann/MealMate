@@ -154,7 +154,8 @@ export function CuisineField({ value, onChange, error }: CuisineFieldProps) {
           <Button
             type="button"
             variant="outline"
-            disabled={create.isPending || name.trim() === ''}
+            pending={create.isPending}
+            disabled={name.trim() === ''}
             onClick={add}
             className={newError ? 'mb-7' : undefined}
           >

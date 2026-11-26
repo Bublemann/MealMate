@@ -27,6 +27,7 @@ export const TEST_USER: Schemas['Me'] = {
   meals_public: true,
   lists_public: true,
   filter_hidden: { meals: [], lists: [], list_states: [] },
+  carry_over_leftovers: true,
   created_at: '2026-09-01T10:00:00Z',
 };
 

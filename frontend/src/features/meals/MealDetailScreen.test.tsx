@@ -51,7 +51,7 @@ describe('MealDetailScreen', () => {
     ]);
     expect(within(rows[0] as HTMLElement).getByRole('link', { name: 'Mehl' })).toHaveAttribute(
       'href',
-      `/ingredients/${FLOUR.id}`,
+      `/items/${FLOUR.id}`,
     );
 
     const instructions = screen.getByTestId(testIds.mealInstructions);
@@ -93,37 +93,37 @@ describe('MealDetailScreen', () => {
           estimate: true,
           missing: [
             {
-              ingredient_id: EGGS.id,
-              ingredient_name: 'Eier',
-              ingredient_brand: null,
+              item_id: EGGS.id,
+              item_name: 'Eier',
+              item_brand: null,
               reason: 'unknown_value',
               nutrient: 'sugar',
             },
             {
-              ingredient_id: EGGS.id,
-              ingredient_name: 'Eier',
-              ingredient_brand: null,
+              item_id: EGGS.id,
+              item_name: 'Eier',
+              item_brand: null,
               reason: 'unknown_value',
               nutrient: 'fat',
             },
             {
-              ingredient_id: 'ing-x',
-              ingredient_name: 'Rübe',
-              ingredient_brand: null,
+              item_id: 'ing-x',
+              item_name: 'Rübe',
+              item_brand: null,
               reason: 'unit_mismatch',
               nutrient: null,
             },
             {
-              ingredient_id: 'ing-y',
-              ingredient_name: 'Zimt',
-              ingredient_brand: null,
+              item_id: 'ing-y',
+              item_name: 'Zimt',
+              item_brand: null,
               reason: 'unknown_value',
               nutrient: null,
             },
             {
-              ingredient_id: 'ing-z',
-              ingredient_name: 'Brötchen',
-              ingredient_brand: null,
+              item_id: 'ing-z',
+              item_name: 'Brötchen',
+              item_brand: null,
               reason: 'no_piece_weight',
               nutrient: null,
             },

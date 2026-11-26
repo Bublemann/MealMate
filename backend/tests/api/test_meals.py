@@ -24,7 +24,7 @@ from tests.accounts import (
     scalars,
     set_privacy,
 )
-from tests.catalog import EAN_13, create_ingredient, ref, set_stored
+from tests.catalog import EAN_13, create_item, ref, set_stored
 from tests.meals import create_meal, get_meal, list_meals, upload
 
 NO_VALUES = {"kcal": None, "protein": None, "carbs": None, "sugar": None, "fat": None}
@@ -70,12 +70,12 @@ async def cuisines(api: AsyncClient, anna: Account) -> dict[str, str]:
 
 @pytest.fixture
 async def flour(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Mehl", nutrients=values(364, 10, 76, 0.7, 1))
+    return await create_item(api, anna, "Mehl", nutrients=values(364, 10, 76, 0.7, 1))
 
 
 @pytest.fixture
 async def salt(api: AsyncClient, anna: Account) -> Any:
-    return await create_ingredient(api, anna, "Salz")
+    return await create_item(api, anna, "Salz")
 
 
 def summary(ingredient: Any) -> dict[str, Any]:
@@ -87,6 +87,7 @@ def summary(ingredient: Any) -> dict[str, Any]:
         "brand": ingredient["brand"],
         "barcode": ingredient["barcode"],
         "source": ingredient["source"],
+        "kind": ingredient["kind"],
     }
 
 
@@ -127,7 +128,7 @@ async def test_create_with_only_a_name(api: AsyncClient, anna: Account) -> None:
 async def test_create_with_everything(
     api: AsyncClient, anna: Account, cuisines: dict[str, str], flour: Any, salt: Any
 ) -> None:
-    eggs = await create_ingredient(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
+    eggs = await create_item(api, anna, "Eier", base_unit="piece", piece_weight_g=60)
 
     meal = await create_meal(
         api,
@@ -139,10 +140,10 @@ async def test_create_with_everything(
         cuisine_id=cuisines["german"],
         tags=["Süß", "  schnell ", "SUESS", "Frühstück"],
         ingredients=[
-            {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
-            {"ingredient_id": eggs["id"], "amount": 2},
-            {"ingredient_id": salt["id"], "note": " nach Geschmack "},
-            {"ingredient_id": flour["id"], "amount": 1, "unit": "tbsp", "note": " "},
+            {"item_id": flour["id"], "amount": 200, "unit": "g"},
+            {"item_id": eggs["id"], "amount": 2},
+            {"item_id": salt["id"], "note": " nach Geschmack "},
+            {"item_id": flour["id"], "amount": 1, "unit": "tbsp", "note": " "},
         ],
     )
 
@@ -153,7 +154,7 @@ async def test_create_with_everything(
     # Deduplicated ignoring case and umlaut spelling (the first spelling wins), by name.
     assert [tag["name"] for tag in meal["tags"]] == ["Frühstück", "schnell", "Süß"]
     rows = [
-        (row["position"], row["ingredient"], row["amount"], row["unit"], row["note"])
+        (row["position"], row["item"], row["amount"], row["unit"], row["note"])
         for row in meal["ingredients"]
     ]
     assert rows == [
@@ -201,8 +202,8 @@ async def test_tags_are_shared_and_keep_their_first_spelling(
         ({"name": "M", "tags": ["ok", " "]}, {("body", "tags", 1): "too_short"}),
         ({"name": "M", "cuisine_id": ""}, {("body", "cuisine_id"): "too_short"}),
         ({"name": "M", "ingredients": [{}]},
-         {("body", "ingredients", 0, "ingredient_id"): "required"}),
-        ({"name": "M", "ingredients": [{"ingredient_id": "i"}] * 101},
+         {("body", "ingredients", 0, "item_id"): "required"}),
+        ({"name": "M", "ingredients": [{"item_id": "i"}] * 101},
          {("body", "ingredients"): "too_long"}),
     ],
 )  # fmt: skip
@@ -260,13 +261,13 @@ async def test_valid_source_links(
 
 async def test_row_validation(api: AsyncClient, anna: Account, flour: Any, salt: Any) -> None:
     rows: list[dict[str, Any]] = [
-        {"ingredient_id": flour["id"], "unit": "g"},
-        {"ingredient_id": "missing", "amount": 1},
-        {"ingredient_id": salt["id"], "amount": 0},
-        {"ingredient_id": salt["id"], "amount": 100_001},
-        {"ingredient_id": salt["id"], "amount": 1, "unit": "cup"},
-        {"ingredient_id": salt["id"], "note": "x" * 81},
-        {"ingredient_id": salt["id"], "note": "a\nb"},
+        {"item_id": flour["id"], "unit": "g"},
+        {"item_id": "missing", "amount": 1},
+        {"item_id": salt["id"], "amount": 0},
+        {"item_id": salt["id"], "amount": 100_001},
+        {"item_id": salt["id"], "amount": 1, "unit": "cup"},
+        {"item_id": salt["id"], "note": "x" * 81},
+        {"item_id": salt["id"], "note": "a\nb"},
     ]
     for index, row in enumerate(rows):
         response = await api.post(
@@ -280,7 +281,7 @@ async def test_row_validation(api: AsyncClient, anna: Account, flour: Any, salt:
     )
     assert fields(response) == {
         ("body", "ingredients", 0, "amount"): "required",
-        ("body", "ingredients", 1, "ingredient_id"): "invalid",
+        ("body", "ingredients", 1, "item_id"): "invalid",
     }
     samples = {
         2: "out_of_range",
@@ -305,13 +306,13 @@ async def test_unknown_references_are_reported_together(
         json={
             "name": "M",
             "cuisine_id": "nope",
-            "ingredients": [{"ingredient_id": salt["id"], "unit": "g"}, {"ingredient_id": "x"}],
+            "ingredients": [{"item_id": salt["id"], "unit": "g"}, {"item_id": "x"}],
         },
         headers=anna.headers,
     )
     assert fields(response) == {
         ("body", "cuisine_id"): "invalid",
-        ("body", "ingredients", 1, "ingredient_id"): "invalid",
+        ("body", "ingredients", 1, "item_id"): "invalid",
         ("body", "ingredients", 0, "amount"): "required",
     }
     assert await scalars(app, select(Meal.id)) == []
@@ -339,14 +340,14 @@ NOT_FITTING = {
 
 
 def unit_row(ingredient: Any, unit: str | None, amount: float = 2) -> dict[str, Any]:
-    return {"ingredient_id": ingredient["id"], "amount": amount, "unit": unit}
+    return {"item_id": ingredient["id"], "amount": amount, "unit": unit}
 
 
 @pytest.mark.parametrize("base_unit", ["g", "ml", "piece"])
 async def test_units_that_fit_are_taken(api: AsyncClient, anna: Account, base_unit: str) -> None:
-    ingredient = await create_ingredient(api, anna, "Zutat", base_unit=base_unit)
+    ingredient = await create_item(api, anna, "Zutat", base_unit=base_unit)
     rows = [unit_row(ingredient, unit) for unit in FITTING[base_unit]]
-    rows.append({"ingredient_id": ingredient["id"], "note": "nach Geschmack"})
+    rows.append({"item_id": ingredient["id"], "note": "nach Geschmack"})
 
     meal = await create_meal(api, anna, "M", ingredients=rows)
 
@@ -358,7 +359,7 @@ async def test_units_that_do_not_fit_are_refused(
     api: AsyncClient, anna: Account, salt: Any, base_unit: str
 ) -> None:
     """A new amount that doesn't fit is refused on its row's unit, on create and update."""
-    ingredient = await create_ingredient(api, anna, "Zutat", base_unit=base_unit)
+    ingredient = await create_item(api, anna, "Zutat", base_unit=base_unit)
     rows = [unit_row(salt, "g"), *(unit_row(ingredient, unit) for unit in NOT_FITTING[base_unit])]
     expected = {
         ("body", "ingredients", index, "unit"): "unit_mismatch" for index in range(1, len(rows))
@@ -382,7 +383,7 @@ async def test_rows_that_do_not_fit_are_kept_as_they_are(
     """MEAL-02, D-33: an older row that doesn't fit stays, flagged, while it is sent back as it
     is (same ingredient, amount and unit), wherever it moved; changing it needs a fitting
     unit. Its nutrition is unknown and named in the marker (NUT-05)."""
-    onions = await create_ingredient(
+    onions = await create_item(
         api, anna, "Zwiebeln", base_unit="piece", piece_weight_g=150, nutrients={"kcal": 40}
     )
     meal = await create_meal(
@@ -404,7 +405,7 @@ async def test_rows_that_do_not_fit_are_kept_as_they_are(
     old = (await get_meal(api, anna, meal["id"])).json()
     assert [row["unit_fits"] for row in old["ingredients"]] == [False, False, True]
     assert old["nutrition"]["per_meal"]["kcal"] == pytest.approx(728)
-    assert [(item["ingredient_name"], item["reason"]) for item in old["nutrition"]["missing"]] == [
+    assert [(item["item_name"], item["reason"]) for item in old["nutrition"]["missing"]] == [
         ("Zwiebeln", "unit_mismatch"),
         ("Zwiebeln", "unit_mismatch"),
     ]
@@ -438,10 +439,10 @@ async def test_rows_that_do_not_fit_are_kept_as_they_are(
 async def test_nutrition_per_meal_and_per_serving(
     api: AsyncClient, anna: Account, flour: Any, salt: Any
 ) -> None:
-    milk = await create_ingredient(
+    milk = await create_item(
         api, anna, "Milch", base_unit="ml", nutrients=values(64, 3.4, 4.8, 4.8, 3.5)
     )
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -455,10 +456,10 @@ async def test_nutrition_per_meal_and_per_serving(
         "Pfannkuchen",
         servings=2,
         ingredients=[
-            {"ingredient_id": flour["id"], "amount": 200, "unit": "g"},
-            {"ingredient_id": milk["id"], "amount": 300, "unit": "ml"},
-            {"ingredient_id": eggs["id"], "amount": 2, "unit": "piece"},
-            {"ingredient_id": salt["id"], "note": "nach Geschmack"},
+            {"item_id": flour["id"], "amount": 200, "unit": "g"},
+            {"item_id": milk["id"], "amount": 300, "unit": "ml"},
+            {"item_id": eggs["id"], "amount": 2, "unit": "piece"},
+            {"item_id": salt["id"], "note": "nach Geschmack"},
         ],
     )
 
@@ -469,9 +470,9 @@ async def test_nutrition_per_meal_and_per_serving(
     assert nutrition["estimate"] is False
     assert nutrition["missing"] == [
         {
-            "ingredient_id": salt["id"],
-            "ingredient_name": "Salz",
-            "ingredient_brand": None,
+            "item_id": salt["id"],
+            "item_name": "Salz",
+            "item_brand": None,
             "reason": "no_amount",
             "nutrient": None,
         }
@@ -479,11 +480,11 @@ async def test_nutrition_per_meal_and_per_serving(
 
 
 async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
-    butter = await create_ingredient(api, anna, "Butter", nutrients=values(741, 0.6, 0.6, 0.6, 82))
-    bread = await create_ingredient(
+    butter = await create_item(api, anna, "Butter", nutrients=values(741, 0.6, 0.6, 0.6, 82))
+    bread = await create_item(
         api, anna, "Brot", base_unit="piece", nutrients=values(245, 8.5, 45, 3, 1.6)
     )
-    pasta = await create_ingredient(
+    pasta = await create_item(
         api, anna, "Nudeln", brand="Barilla", barcode=EAN_13, nutrients=values(355, 12, 70, 3, 2)
     )
 
@@ -492,9 +493,9 @@ async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
         anna,
         "Brotzeit",
         ingredients=[
-            {"ingredient_id": butter["id"], "amount": 1, "unit": "tbsp"},
-            {"ingredient_id": bread["id"], "amount": 2, "unit": "piece"},
-            {"ingredient_id": pasta["id"], "amount": 100, "unit": "g"},
+            {"item_id": butter["id"], "amount": 1, "unit": "tbsp"},
+            {"item_id": bread["id"], "amount": 2, "unit": "piece"},
+            {"item_id": pasta["id"], "amount": 100, "unit": "g"},
         ],
     )
 
@@ -506,17 +507,17 @@ async def test_nutrition_markers(api: AsyncClient, anna: Account) -> None:
     )
     assert nutrition["estimate"] is True
     assert nutrition["incomplete"] is True
-    assert [(item["ingredient_name"], item["reason"]) for item in nutrition["missing"]] == [
+    assert [(item["item_name"], item["reason"]) for item in nutrition["missing"]] == [
         ("Brot", "no_piece_weight")
     ]
-    assert meal["ingredients"][2]["ingredient"]["brand"] == "Barilla"
+    assert meal["ingredients"][2]["item"]["brand"] == "Barilla"
 
 
 async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) -> None:
     """NUT-05: pieces of a Stück ingredient, and an amount without a unit, count with the piece
     weight against the values per 100 g. Without a piece weight they are unknown and named as
     such."""
-    eggs = await create_ingredient(
+    eggs = await create_item(
         api,
         anna,
         "Eier",
@@ -524,7 +525,7 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
         piece_weight_g=60,
         nutrients=values(155, 13, 1.1, 1.1, 11),
     )
-    rolls = await create_ingredient(
+    rolls = await create_item(
         api, anna, "Brötchen", base_unit="piece", nutrients=values(270, 9, 50, 3, 3)
     )
     meal = await create_meal(
@@ -533,9 +534,9 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
         "Frühstück",
         servings=2,
         ingredients=[
-            {"ingredient_id": eggs["id"], "amount": 2, "unit": "piece"},
-            {"ingredient_id": eggs["id"], "amount": 1},
-            {"ingredient_id": rolls["id"], "amount": 4, "unit": "piece"},
+            {"item_id": eggs["id"], "amount": 2, "unit": "piece"},
+            {"item_id": eggs["id"], "amount": 1},
+            {"item_id": rolls["id"], "amount": 4, "unit": "piece"},
         ],
     )
 
@@ -544,7 +545,7 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
     assert nutrition["per_meal"] == pytest.approx(values(279, 23.4, 1.98, 1.98, 19.8))
     assert nutrition["per_serving"] == pytest.approx(values(139.5, 11.7, 0.99, 0.99, 9.9))
     assert (nutrition["incomplete"], nutrition["estimate"]) == (True, False)
-    assert [(item["ingredient_name"], item["reason"]) for item in nutrition["missing"]] == [
+    assert [(item["item_name"], item["reason"]) for item in nutrition["missing"]] == [
         ("Brötchen", "no_piece_weight"),
     ]
     assert [(row["amount"], row["unit"]) for row in meal["ingredients"]] == [
@@ -554,7 +555,7 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
     ]
 
     response = await api.patch(
-        f"/api/ingredients/{rolls['id']}", json={"piece_weight_g": 60}, headers=anna.headers
+        f"/api/items/{rolls['id']}", json={"piece_weight_g": 60}, headers=anna.headers
     )
     assert response.status_code == 200
     nutrition = (await get_meal(api, anna, meal["id"])).json()["nutrition"]
@@ -564,9 +565,9 @@ async def test_nutrition_of_a_piece_ingredient(api: AsyncClient, anna: Account) 
 
 
 async def test_unknown_values_are_listed_per_nutrient(api: AsyncClient, anna: Account) -> None:
-    cream = await create_ingredient(api, anna, "Sahne", base_unit="ml", nutrients={"kcal": 300})
+    cream = await create_item(api, anna, "Sahne", base_unit="ml", nutrients={"kcal": 300})
     meal = await create_meal(
-        api, anna, "Soße", ingredients=[{"ingredient_id": cream["id"], "amount": 0.5, "unit": "l"}]
+        api, anna, "Soße", ingredients=[{"item_id": cream["id"], "amount": 0.5, "unit": "l"}]
     )
     nutrition = meal["nutrition"]
     assert nutrition["per_meal"] == {**NO_VALUES, "kcal": 1500}
@@ -582,12 +583,12 @@ async def test_nutrition_follows_ingredient_edits(
     api: AsyncClient, anna: Account, ben: Account, flour: Any
 ) -> None:
     meal = await create_meal(
-        api, anna, "Brot", ingredients=[{"ingredient_id": flour["id"], "amount": 500, "unit": "g"}]
+        api, anna, "Brot", ingredients=[{"item_id": flour["id"], "amount": 500, "unit": "g"}]
     )
     assert meal["nutrition"]["per_meal"]["kcal"] == pytest.approx(1820)
 
     response = await api.patch(
-        f"/api/ingredients/{flour['id']}", json={"nutrients": {"kcal": 350}}, headers=ben.headers
+        f"/api/items/{flour['id']}", json={"nutrients": {"kcal": 350}}, headers=ben.headers
     )
     assert response.status_code == 200
     assert (await get_meal(api, anna, meal["id"])).json()["nutrition"]["per_meal"][
@@ -610,7 +611,7 @@ async def test_update_changes_only_what_was_sent(
         servings=4,
         cuisine_id=cuisines["french"],
         tags=["Warm"],
-        ingredients=[{"ingredient_id": salt["id"]}],
+        ingredients=[{"item_id": salt["id"]}],
     )
     clock.advance(minutes=5)
 
@@ -654,9 +655,9 @@ async def test_update_replaces_tags_and_rows(
         "Brot",
         tags=["Backen", "Klassiker"],
         ingredients=[
-            {"ingredient_id": flour["id"], "amount": 500, "unit": "g"},
-            {"ingredient_id": salt["id"], "amount": 10, "unit": "g"},
-            {"ingredient_id": salt["id"], "note": "zum Bestreuen"},
+            {"item_id": flour["id"], "amount": 500, "unit": "g"},
+            {"item_id": salt["id"], "amount": 10, "unit": "g"},
+            {"item_id": salt["id"], "note": "zum Bestreuen"},
         ],
     )
     first, second, _ = (row["id"] for row in meal["ingredients"])
@@ -667,8 +668,8 @@ async def test_update_replaces_tags_and_rows(
         meal["id"],
         tags=["backen", "Sauerteig"],
         ingredients=[
-            {"ingredient_id": flour["id"], "amount": 500, "unit": "g"},
-            {"ingredient_id": flour["id"], "amount": 50, "unit": "g", "note": "Roggen"},
+            {"item_id": flour["id"], "amount": 500, "unit": "g"},
+            {"item_id": flour["id"], "amount": 50, "unit": "g", "note": "Roggen"},
         ],
     )
 
@@ -685,7 +686,7 @@ async def test_update_replaces_tags_and_rows(
         api,
         anna,
         meal["id"],
-        ingredients=[*body_rows(body), {"ingredient_id": salt["id"], "amount": 1, "unit": "tsp"}],
+        ingredients=[*body_rows(body), {"item_id": salt["id"], "amount": 1, "unit": "tsp"}],
     )
     assert [row["id"] for row in grown.json()["ingredients"]][:2] == [first, second]
     assert len(grown.json()["ingredients"]) == 3
@@ -701,7 +702,7 @@ async def test_update_replaces_tags_and_rows(
 def body_rows(meal: Any) -> list[dict[str, Any]]:
     return [
         {
-            "ingredient_id": row["ingredient"]["id"],
+            "item_id": row["item"]["id"],
             "amount": row["amount"],
             "unit": row["unit"],
             "note": row["note"],
@@ -720,7 +721,7 @@ async def test_update_validation(
         anna,
         meal["id"],
         cuisine_id="nope",
-        ingredients=[{"ingredient_id": salt["id"], "unit": "g"}],
+        ingredients=[{"item_id": salt["id"], "unit": "g"}],
     )
 
     assert fields(response) == {
@@ -840,7 +841,7 @@ async def test_delete(
 
     monkeypatch.setattr(hooks, "on_meal_deleted", on_meal_deleted)
     meal = await create_meal(
-        api, anna, "Curry", tags=["Scharf"], ingredients=[{"ingredient_id": salt["id"]}]
+        api, anna, "Curry", tags=["Scharf"], ingredients=[{"item_id": salt["id"]}]
     )
     copy = (await api.post(f"/api/meals/{meal['id']}/copy", headers=carl.headers)).json()
 
@@ -899,8 +900,8 @@ async def test_copy(
         cuisine_id=cuisines["german"],
         tags=["Backen"],
         ingredients=[
-            {"ingredient_id": flour["id"], "amount": 500, "unit": "g"},
-            {"ingredient_id": salt["id"], "note": "eine Prise"},
+            {"item_id": flour["id"], "amount": 500, "unit": "g"},
+            {"item_id": salt["id"], "note": "eine Prise"},
         ],
     )
     clock.advance(minutes=1)
@@ -1221,8 +1222,8 @@ async def test_list_and_detail_take_a_fixed_number_of_queries(
     salt: Any,
 ) -> None:
     rows = [
-        {"ingredient_id": flour["id"], "amount": 100, "unit": "g"},
-        {"ingredient_id": salt["id"], "amount": 1, "unit": "tsp"},
+        {"item_id": flour["id"], "amount": 100, "unit": "g"},
+        {"item_id": salt["id"], "amount": 1, "unit": "tsp"},
     ]
     body = {"cuisine_id": cuisines["german"], "tags": ["A", "B"]}
     few = await add_meals(api, anna, 2, rows[:1], **body)

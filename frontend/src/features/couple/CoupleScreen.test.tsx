@@ -4,6 +4,7 @@ import {
   BEN,
   CARL,
   errorResponse,
+  heldRoute,
   mockApi,
   NO_COUPLE,
   requestsTo,
@@ -61,13 +62,10 @@ describe('CoupleScreen', () => {
       to_user: userRef('Anna', TEST_USER.id),
       created_at: '2026-09-26T10:00:00Z',
     };
+    const accept = heldRoute();
     mockApi({
       'GET /api/couple': { ...NO_COUPLE, incoming: [incoming] },
-      'POST /api/couple/requests/r2/accept': {
-        ...NO_COUPLE,
-        partner: BEN,
-        since: '2026-09-26T11:00:00Z',
-      },
+      'POST /api/couple/requests/r2/accept': accept.route,
     });
     const { user } = renderApp('/me/couple');
 
@@ -75,8 +73,18 @@ describe('CoupleScreen', () => {
     expect(
       await within(section).findByText('Ben would like to be a couple with you.'),
     ).toBeVisible();
-    expect(within(section).getByRole('button', { name: 'Decline request from Ben' })).toBeVisible();
-    await user.click(within(section).getByRole('button', { name: 'Accept request from Ben' }));
+    const decline = within(section).getByRole('button', { name: 'Decline request from Ben' });
+    expect(decline).toBeVisible();
+    const button = within(section).getByRole('button', { name: 'Accept request from Ben' });
+    await user.click(button);
+
+    // Only the pressed button spins; both take no press meanwhile (UI-08).
+    expect(await within(button).findByTestId(testIds.spinner)).toBeVisible();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(decline).toBeDisabled();
+    expect(within(decline).queryByTestId(testIds.spinner)).not.toBeInTheDocument();
+    expect(decline).not.toHaveAttribute('aria-busy');
+    await accept.answer({ ...NO_COUPLE, partner: BEN, since: '2026-09-26T11:00:00Z' });
 
     expect(await within(section).findByTestId(testIds.couplePartner)).toHaveTextContent(
       "You're a couple with Ben since 26/09/2026.",

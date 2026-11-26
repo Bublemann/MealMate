@@ -247,7 +247,7 @@
         "type": "object"
       },
       "BarcodeLookup": {
-        "description": "The result of a barcode lookup (BAR-02, BAR-03), our own ingredients first:\n\n- `found_in` db: the `ingredient` with this barcode (go straight to it, or pick it);\n- `found_in` off: Open Food Facts' `proposal`; nothing is saved until the user saves the\n  prefilled ingredient form (`POST /api/ingredients` with `off`);\n- `found_in` none: unknown to Open Food Facts, or `off_unavailable` when it could not be\n  asked (slow or unreachable); the user enters the values.\n\n`barcode` is the canonical form (EAN-13, or EAN-8) to save the ingredient with.",
+        "description": "The result of a barcode lookup (BAR-02, BAR-03), our own items first:\n\n- `found_in` db: the `item` with this barcode (go straight to it, or pick it);\n- `found_in` off: Open Food Facts' `proposal`; nothing is saved until the user saves the\n  prefilled item form (`POST /api/items` with `off`);\n- `found_in` none: unknown to Open Food Facts, or `off_unavailable` when it could not be\n  asked (slow or unreachable); the user enters the values.\n\n`barcode` is the canonical form (EAN-13, or EAN-8) to save the item with.",
         "properties": {
           "barcode": {
             "title": "Barcode",
@@ -262,10 +262,10 @@
             "title": "Found In",
             "type": "string"
           },
-          "ingredient": {
+          "item": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Ingredient"
+                "$ref": "#/components/schemas/Item"
               },
               {
                 "type": "null"
@@ -290,7 +290,7 @@
         "required": [
           "barcode",
           "found_in",
-          "ingredient",
+          "item",
           "proposal",
           "off_unavailable"
         ],
@@ -313,7 +313,7 @@
         "type": "object"
       },
       "Category": {
-        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other* and `uncategorized` for\n*Uncategorized*; the categories admins add have none.\n\nA `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and\ndone lists still show it. It keeps its last `sort_order`, which the next category in the\nwalking order took over: its lines come right after that one's.\n\n`ingredient_count`: how many ingredients it holds, so that the Ingredients tab offers\n*Uncategorized* in its filter only while it holds some (ING-03).",
+        "description": "Shown by its name in the UI language (`names`), in `sort_order` (the shop's walking\norder). `key` names a seeded category, e.g. `other` for *Other* and `uncategorized` for\n*Uncategorized*; the categories admins add have none.\n\nA `deleted` category (D-30) can no longer be picked or ordered, but lists being shopped and\ndone lists still show it. It keeps its last `sort_order`, which the next category in the\nwalking order took over: its lines come right after that one's.\n\n`item_count`: how many items it holds, so that the Items tab offers\n*Uncategorized* in its filter only while it holds some (ING-03).",
         "properties": {
           "deleted": {
             "title": "Deleted",
@@ -323,8 +323,8 @@
             "title": "Id",
             "type": "string"
           },
-          "ingredient_count": {
-            "title": "Ingredient Count",
+          "item_count": {
+            "title": "Item Count",
             "type": "integer"
           },
           "key": {
@@ -352,7 +352,7 @@
           "names",
           "sort_order",
           "deleted",
-          "ingredient_count"
+          "item_count"
         ],
         "title": "Category",
         "type": "object"
@@ -426,19 +426,19 @@
         "type": "object"
       },
       "CategoryUsage": {
-        "description": "What deleting a category would move (ADM-01): its `ingredients` to *Uncategorized*, and\nthe free-text extra items on drafts (`extra_items`) to *Other*.",
+        "description": "What deleting a category would move (ADM-01): its `items` to *Uncategorized*, and\nthe free-text extra items on drafts (`extra_items`) to *Other*.",
         "properties": {
           "extra_items": {
             "title": "Extra Items",
             "type": "integer"
           },
-          "ingredients": {
-            "title": "Ingredients",
+          "items": {
+            "title": "Items",
             "type": "integer"
           }
         },
         "required": [
-          "ingredients",
+          "items",
           "extra_items"
         ],
         "title": "CategoryUsage",
@@ -763,7 +763,7 @@
         "type": "object"
       },
       "DueItem": {
-        "description": "A due recurring item of the viewer's set, offered in a draft's \"Fällig\" box (LIST-16):\ndue since `due_on`, `days_until_due` from today (0 \"fällig heute\", -3 \"fällig seit 3\nTagen\"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,\nonly while its unit fits the ingredient's base unit (REF-02), for the amount pop-up.",
+        "description": "A due recurring item of the viewer's set, offered in a draft's \"Fällig\" box (LIST-16):\ndue since `due_on`, `days_until_due` from today (0 \"fällig heute\", -3 \"fällig seit 3\nTagen\"), last bought on `last_purchased_on`. `last_amount` is the last purchase's amount,\nonly while its unit fits the item's base unit (REF-02), for the amount pop-up.",
         "properties": {
           "days_until_due": {
             "title": "Days Until Due",
@@ -774,8 +774,8 @@
             "title": "Due On",
             "type": "string"
           },
-          "ingredient": {
-            "$ref": "#/components/schemas/IngredientSummary"
+          "item": {
+            "$ref": "#/components/schemas/ItemSummary"
           },
           "last_amount": {
             "anyOf": [
@@ -794,7 +794,7 @@
           }
         },
         "required": [
-          "ingredient",
+          "item",
           "due_on",
           "days_until_due",
           "last_purchased_on",
@@ -833,17 +833,21 @@
           "admin.public_url_missing",
           "category.not_deletable",
           "category.not_renamable",
-          "ingredient.in_use",
-          "ingredient.barcode_taken",
-          "ingredient.has_barcode",
-          "ingredient.no_pending_update",
-          "ingredient.unit_mismatch",
+          "item.in_use",
+          "item.barcode_taken",
+          "item.has_barcode",
+          "item.no_pending_update",
+          "item.unit_mismatch",
+          "item.used_in_meals",
           "off.busy",
           "off.unavailable",
           "list.not_draft",
           "list.done",
           "list.not_done",
           "list.not_shopping",
+          "list_meal.leftover",
+          "list_meal.not_leftover",
+          "list_meal.unavailable",
           "extra.id_taken",
           "media.too_large",
           "media.unsupported_type",
@@ -879,6 +883,12 @@
                 },
                 {
                   "type": "boolean"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 }
               ]
             },
@@ -1030,7 +1040,7 @@
         "type": "object"
       },
       "ExtraItem": {
-        "description": "An extra item (LIST-06): linked to an ingredient (`ingredient_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).\n\nA linked item's `base_unit` is the one its line is calculated with: its ingredient's, or\nthe one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false\nfor an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,\nor left by a base-unit change or a merge, and is kept as it is (D-33). Free text always\nfits.",
+        "description": "An extra item (LIST-06): linked to an item (`item_id`, optional `amount`\nand `unit`) or free text (`text`, optional `amount_text`, `category_id`).\n\nA linked extra item's `base_unit` is the one its line is calculated with: its item's, or\nthe one it copied when shopping started (LIST-11); null for free text. `unit_fits` is false\nfor an amount whose unit doesn't fit that base unit (REF-02): it was added before that rule,\nor left by a base-unit change or a merge, and is kept as it is (D-33). Free text always\nfits.",
         "properties": {
           "added_by": {
             "anyOf": [
@@ -1100,7 +1110,7 @@
             "title": "Id",
             "type": "string"
           },
-          "ingredient_id": {
+          "item_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -1109,7 +1119,7 @@
                 "type": "null"
               }
             ],
-            "title": "Ingredient Id"
+            "title": "Item Id"
           },
           "text": {
             "anyOf": [
@@ -1139,7 +1149,7 @@
         },
         "required": [
           "id",
-          "ingredient_id",
+          "item_id",
           "text",
           "amount",
           "unit",
@@ -1154,7 +1164,7 @@
         "type": "object"
       },
       "ExtraItemCreate": {
-        "description": "Exactly one of `ingredient_id` and `text` (LIST-06).\n\n- linked (`ingredient_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount\n  without a unit counts as pieces, a unit without an amount is refused, and the unit must\n  fit the ingredient's base unit (REF-02; `unit` `unit_mismatch` otherwise); no\n  `amount_text` or `category_id`;\n- free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)\n  and `category_id` (default: *Other*); no `amount` or `unit`.\n\n`id` may be any UUID chosen by the client; sending the same id again changes nothing.",
+        "description": "Exactly one of `item_id` and `text` (LIST-06).\n\n- linked (`item_id`): optional `amount` (0 < x ≤ 100000) and `unit`; an amount\n  without a unit counts as pieces, a unit without an amount is refused, and the unit must\n  fit the item's base unit (REF-02; `unit` `unit_mismatch` otherwise); no\n  `amount_text` or `category_id`;\n- free text (`text`, 1 to 80 characters): optional `amount_text` (at most 30 characters)\n  and `category_id` (default: *Other*); no `amount` or `unit`.\n\n`id` may be any UUID chosen by the client; sending the same id again changes nothing.",
         "properties": {
           "amount": {
             "anyOf": [
@@ -1206,7 +1216,7 @@
             ],
             "title": "Id"
           },
-          "ingredient_id": {
+          "item_id": {
             "anyOf": [
               {
                 "maxLength": 36,
@@ -1217,7 +1227,7 @@
                 "type": "null"
               }
             ],
-            "title": "Ingredient Id"
+            "title": "Item Id"
           },
           "text": {
             "anyOf": [
@@ -1247,7 +1257,7 @@
         "type": "object"
       },
       "ExtraItemUpdate": {
-        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nitem cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `ingredient_id`, `text` and `category_id`. A linked\nitem whose amount doesn't fit stays as it is while its ingredient, amount and unit stay the\nsame; changing any of them needs a unit that fits (D-33).",
+        "description": "Only the fields that are sent change, with the rules of `ExtraItemCreate`; the kind of\nextra item cannot change (422 `invalid` for the other kind's fields). Null clears the amount,\nunit or amount text, and is refused for `item_id`, `text` and `category_id`. A linked\nextra item whose amount doesn't fit stays as it is while its item, amount and unit stay the\nsame; changing any of them needs a unit that fits (D-33).",
         "properties": {
           "amount": {
             "anyOf": [
@@ -1287,7 +1297,7 @@
             ],
             "title": "Category Id"
           },
-          "ingredient_id": {
+          "item_id": {
             "anyOf": [
               {
                 "maxLength": 36,
@@ -1298,7 +1308,7 @@
                 "type": "null"
               }
             ],
-            "title": "Ingredient Id"
+            "title": "Item Id"
           },
           "text": {
             "anyOf": [
@@ -1432,7 +1442,8 @@
           "taken",
           "too_common",
           "same_as_username",
-          "unit_mismatch"
+          "unit_mismatch",
+          "supply"
         ],
         "title": "FieldErrorCode",
         "type": "string"
@@ -1492,684 +1503,6 @@
           "status"
         ],
         "title": "HealthStatus",
-        "type": "object"
-      },
-      "Ingredient": {
-        "description": "An ingredient counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` ingredient's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06). `quantity_text` is the pack size, typed in or from Open Food\nFacts (information only); `pack_quantity` and `pack_unit` its amount in g or ml, taken from\nthe text when it is a plain amount and unit (\"500 g\", \"1,5 l\"), else null (D-47); one saved\nbefore D-47 keeps Open Food Facts' amount until its text changes.\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
-        "properties": {
-          "barcode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Barcode"
-          },
-          "base_unit": {
-            "enum": [
-              "g",
-              "ml",
-              "piece"
-            ],
-            "title": "Base Unit",
-            "type": "string"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "category_id": {
-            "title": "Category Id",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "created_by": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "fetched_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fetched At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "nutrients": {
-            "$ref": "#/components/schemas/NutrientValues"
-          },
-          "off_last_modified_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Off Last Modified At"
-          },
-          "pack_quantity": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pack Quantity"
-          },
-          "pack_unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Unit"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "pending_update": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PendingUpdate"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "piece_weight_g": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Piece Weight G"
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
-          },
-          "source": {
-            "enum": [
-              "manual",
-              "off"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "updated_by": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "usage": {
-            "$ref": "#/components/schemas/IngredientUsage"
-          },
-          "user_edited_fields": {
-            "items": {
-              "enum": [
-                "name",
-                "brand",
-                "quantity_text",
-                "nutrients.kcal",
-                "nutrients.protein",
-                "nutrients.carbs",
-                "nutrients.sugar",
-                "nutrients.fat"
-              ],
-              "type": "string"
-            },
-            "title": "User Edited Fields",
-            "type": "array"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "brand",
-          "barcode",
-          "category_id",
-          "base_unit",
-          "piece_weight_g",
-          "nutrients",
-          "quantity_text",
-          "pack_quantity",
-          "pack_unit",
-          "source",
-          "user_edited_fields",
-          "off_last_modified_at",
-          "fetched_at",
-          "pending_update",
-          "usage",
-          "created_by",
-          "updated_by",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "Ingredient",
-        "type": "object"
-      },
-      "IngredientBarcodeLink": {
-        "description": "Give an ingredient without a barcode the scanned one (the scanner's \"already in\nMealMate\"). Unlike an update, this never replaces a barcode: 409 `ingredient.has_barcode`\nif the ingredient has one, 409 `ingredient.barcode_taken` if another ingredient has it.",
-        "properties": {
-          "barcode": {
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Barcode",
-            "type": "string"
-          }
-        },
-        "required": [
-          "barcode"
-        ],
-        "title": "IngredientBarcodeLink",
-        "type": "object"
-      },
-      "IngredientCreate": {
-        "description": "A new ingredient (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g. `piece_weight_g`:\n0 < x ≤ 10000, only for base unit `piece` (422 `invalid` otherwise, D-32). `nutrients` per\n100 g, or per 100 ml for base unit ml. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\ningredient has is 409 `ingredient.barcode_taken`.\n\n`quantity_text` is the pack size (\"500 g\", \"6 x 1,5 l\"), at most 40 characters, for any\ningredient; its amount is taken from it (D-47). With `off`, the ingredient is from Open Food\nFacts (`source` off, refreshed later) and needs its `barcode` (422 `required` without).\nNames need not be unique: the \"similar ingredient exists\" hint\n(`GET /api/ingredients/similar`) is only a hint.",
-        "properties": {
-          "barcode": {
-            "anyOf": [
-              {
-                "maxLength": 32,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Barcode"
-          },
-          "base_unit": {
-            "default": "g",
-            "enum": [
-              "g",
-              "ml",
-              "piece"
-            ],
-            "title": "Base Unit",
-            "type": "string"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "category_id": {
-            "anyOf": [
-              {
-                "maxLength": 36,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category Id"
-          },
-          "name": {
-            "maxLength": 60,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "nutrients": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NutrientValues"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "off": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/IngredientOffOrigin"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "piece_weight_g": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 10000.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Piece Weight G"
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "maxLength": 40,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "IngredientCreate",
-        "type": "object"
-      },
-      "IngredientMerge": {
-        "description": "Merge the ingredient into `into_id` (ING-05). A merge across base units that would leave\namounts of the ingredient not fitting the base unit of `into_id` is refused (409\n`ingredient.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it\nisn't).",
-        "properties": {
-          "accept_unit_mismatch": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Accept Unit Mismatch"
-          },
-          "into_id": {
-            "maxLength": 36,
-            "minLength": 1,
-            "title": "Into Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "into_id"
-        ],
-        "title": "IngredientMerge",
-        "type": "object"
-      },
-      "IngredientOffOrigin": {
-        "description": "The ingredient's values come from an Open Food Facts proposal (a barcode lookup or the\nname search), possibly corrected: `off_last_modified_at` is the proposal's, and\n`edited_fields` the fields the user changed compared with it. Only those are marked\nuser-edited; the others are refreshed from Open Food Facts (BAR-04, BAR-05).",
-        "properties": {
-          "edited_fields": {
-            "items": {
-              "enum": [
-                "name",
-                "brand",
-                "quantity_text",
-                "nutrients.kcal",
-                "nutrients.protein",
-                "nutrients.carbs",
-                "nutrients.sugar",
-                "nutrients.fat"
-              ],
-              "type": "string"
-            },
-            "maxItems": 8,
-            "title": "Edited Fields",
-            "type": "array"
-          },
-          "off_last_modified_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Off Last Modified At"
-          }
-        },
-        "title": "IngredientOffOrigin",
-        "type": "object"
-      },
-      "IngredientSearchResult": {
-        "description": "A result of the ingredient search. `exact`: its name is the query, ignoring case, umlaut\nspelling and accents (ING-03), whatever its brand; these come first. The list's item field\ntakes such a result for \"+\" when it is the only one (D-41). False without a query.",
-        "properties": {
-          "barcode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Barcode"
-          },
-          "base_unit": {
-            "enum": [
-              "g",
-              "ml",
-              "piece"
-            ],
-            "title": "Base Unit",
-            "type": "string"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "category_id": {
-            "title": "Category Id",
-            "type": "string"
-          },
-          "exact": {
-            "title": "Exact",
-            "type": "boolean"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "source": {
-            "enum": [
-              "manual",
-              "off"
-            ],
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "brand",
-          "barcode",
-          "source",
-          "category_id",
-          "base_unit",
-          "exact"
-        ],
-        "title": "IngredientSearchResult",
-        "type": "object"
-      },
-      "IngredientSummary": {
-        "description": "A search result, list entry or meal row's ingredient. It is shown as `name` with the\n`brand` in brackets when there is one (\"Milch (Weihenstephan)\"); `barcode` is set for\nscanned ingredients.",
-        "properties": {
-          "barcode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Barcode"
-          },
-          "base_unit": {
-            "enum": [
-              "g",
-              "ml",
-              "piece"
-            ],
-            "title": "Base Unit",
-            "type": "string"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "category_id": {
-            "title": "Category Id",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "source": {
-            "enum": [
-              "manual",
-              "off"
-            ],
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "brand",
-          "barcode",
-          "source",
-          "category_id",
-          "base_unit"
-        ],
-        "title": "IngredientSummary",
-        "type": "object"
-      },
-      "IngredientUpdate": {
-        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an ingredient from Open Food Facts, every Open Food Facts field sent (`name`, `brand`, the\npack size `quantity_text` and the nutrients) becomes user-edited (BAR-04, D-47); the pack\nsize's amount follows its text. A new barcode must be free (409\n`ingredient.barcode_taken`); clearing or changing the barcode of an ingredient from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an ingredient that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `ingredient.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.",
-        "properties": {
-          "accept_unit_mismatch": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Accept Unit Mismatch"
-          },
-          "barcode": {
-            "anyOf": [
-              {
-                "maxLength": 32,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Barcode"
-          },
-          "base_unit": {
-            "anyOf": [
-              {
-                "enum": [
-                  "g",
-                  "ml",
-                  "piece"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base Unit"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "category_id": {
-            "anyOf": [
-              {
-                "maxLength": 36,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category Id"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 60,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "nutrients": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NutrientValues"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "piece_weight_g": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "maximum": 10000.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Piece Weight G"
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "maxLength": 40,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
-          }
-        },
-        "title": "IngredientUpdate",
-        "type": "object"
-      },
-      "IngredientUsage": {
-        "description": "How many meals use the ingredient, and how many lists keep it in frozen rows or extra\nitems (the references that block deleting it, ING-05).",
-        "properties": {
-          "lists": {
-            "title": "Lists",
-            "type": "integer"
-          },
-          "meals": {
-            "title": "Meals",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "meals",
-          "lists"
-        ],
-        "title": "IngredientUsage",
         "type": "object"
       },
       "Invite": {
@@ -2279,6 +1612,680 @@
         "title": "InviteCreated",
         "type": "object"
       },
+      "Item": {
+        "description": "An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n`kind` food or supply (D-56): a supply's nutrients and piece weight are always null, and it\nis never an ingredient in a meal.\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06).\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml",
+              "piece"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "food",
+              "supply"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nutrients": {
+            "$ref": "#/components/schemas/NutrientValues"
+          },
+          "off_last_modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off Last Modified At"
+          },
+          "pending_update": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "piece_weight_g": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piece Weight G"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ItemUsage"
+          },
+          "user_edited_fields": {
+            "items": {
+              "enum": [
+                "name",
+                "brand",
+                "nutrients.kcal",
+                "nutrients.protein",
+                "nutrients.carbs",
+                "nutrients.sugar",
+                "nutrients.fat"
+              ],
+              "type": "string"
+            },
+            "title": "User Edited Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "barcode",
+          "kind",
+          "category_id",
+          "base_unit",
+          "piece_weight_g",
+          "nutrients",
+          "source",
+          "user_edited_fields",
+          "off_last_modified_at",
+          "fetched_at",
+          "pending_update",
+          "usage",
+          "created_by",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Item",
+        "type": "object"
+      },
+      "ItemBarcodeLink": {
+        "description": "Give an item without a barcode the scanned one (the scanner's \"already in\nMealMate\"). Unlike an update, this never replaces a barcode: 409 `item.has_barcode`\nif the item has one, 409 `item.barcode_taken` if another item has it.",
+        "properties": {
+          "barcode": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Barcode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "barcode"
+        ],
+        "title": "ItemBarcodeLink",
+        "type": "object"
+      },
+      "ItemCreate": {
+        "description": "A new item (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out\nor null; D-56). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`\notherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes\nneither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).\nOpen Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\nitem has is 409 `item.barcode_taken`.\n\nWith `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its\n`barcode` (422 `required` without). Names need not be unique: the \"similar item exists\"\nhint (`GET /api/items/similar`) is only a hint.",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "default": "g",
+            "enum": [
+              "g",
+              "ml",
+              "piece"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "food",
+                  "supply"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "nutrients": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "off": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemOffOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "piece_weight_g": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piece Weight G"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ItemCreate",
+        "type": "object"
+      },
+      "ItemMerge": {
+        "description": "Merge the item into `into_id` (ING-05). A merge across base units that would leave\namounts of the item not fitting the base unit of `into_id` is refused (409\n`item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it\nisn't). A merge into a supply is refused while meals use the item (409\n`item.used_in_meals`, D-56).",
+        "properties": {
+          "accept_unit_mismatch": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accept Unit Mismatch"
+          },
+          "into_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Into Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "into_id"
+        ],
+        "title": "ItemMerge",
+        "type": "object"
+      },
+      "ItemOffOrigin": {
+        "description": "The item's values come from an Open Food Facts proposal (a barcode lookup or the\nname search), possibly corrected: `off_last_modified_at` is the proposal's, and\n`edited_fields` the fields the user changed compared with it. Only those are marked\nuser-edited; the others are refreshed from Open Food Facts (BAR-04, BAR-05).",
+        "properties": {
+          "edited_fields": {
+            "items": {
+              "enum": [
+                "name",
+                "brand",
+                "nutrients.kcal",
+                "nutrients.protein",
+                "nutrients.carbs",
+                "nutrients.sugar",
+                "nutrients.fat"
+              ],
+              "type": "string"
+            },
+            "maxItems": 7,
+            "title": "Edited Fields",
+            "type": "array"
+          },
+          "off_last_modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Off Last Modified At"
+          }
+        },
+        "title": "ItemOffOrigin",
+        "type": "object"
+      },
+      "ItemSearchResult": {
+        "description": "A result of the item search. `exact`: its name is the query, ignoring case, umlaut\nspelling and accents (ING-03), whatever its brand; these come first. The list's item field\ntakes such a result for \"+\" when it is the only one (D-41). False without a query.",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml",
+              "piece"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "exact": {
+            "title": "Exact",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "food",
+              "supply"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "barcode",
+          "source",
+          "kind",
+          "category_id",
+          "base_unit",
+          "exact"
+        ],
+        "title": "ItemSearchResult",
+        "type": "object"
+      },
+      "ItemSummary": {
+        "description": "A search result, list entry or meal row's item. It is shown as `name` with the\n`brand` in brackets when there is one (\"Milch (Weihenstephan)\"); `barcode` is set for\nscanned items. A `kind` supply is never an ingredient in a meal (D-56).",
+        "properties": {
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "enum": [
+              "g",
+              "ml",
+              "piece"
+            ],
+            "title": "Base Unit",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "food",
+              "supply"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "off"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "barcode",
+          "source",
+          "kind",
+          "category_id",
+          "base_unit"
+        ],
+        "title": "ItemSummary",
+        "type": "object"
+      },
+      "ItemUpdate": {
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and the\nnutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`item.barcode_taken`); clearing or changing the barcode of an item from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an item that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `item.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.\n\n`kind` (D-56): an item that is (or becomes) a supply takes neither a piece weight nor a\nnutrient value (422 `invalid`). Switching to supply clears both, and is refused while any\nmeal uses the item (409 `item.used_in_meals`).",
+        "properties": {
+          "accept_unit_mismatch": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accept Unit Mismatch"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "base_unit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "g",
+                  "ml",
+                  "piece"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Unit"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "food",
+                  "supply"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "nutrients": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NutrientValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "piece_weight_g": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piece Weight G"
+          }
+        },
+        "title": "ItemUpdate",
+        "type": "object"
+      },
+      "ItemUsage": {
+        "description": "How many meals use the item, and how many lists keep it in frozen rows or extra\nitems (the references that block deleting it, ING-05).",
+        "properties": {
+          "lists": {
+            "title": "Lists",
+            "type": "integer"
+          },
+          "meals": {
+            "title": "Meals",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "meals",
+          "lists"
+        ],
+        "title": "ItemUsage",
+        "type": "object"
+      },
       "JoinRequest": {
         "description": "Registration with an invite code (ACC-05).",
         "properties": {
@@ -2323,6 +2330,58 @@
           "language"
         ],
         "title": "JoinRequest",
+        "type": "object"
+      },
+      "LeftoverEatenOp": {
+        "description": "Ticking a leftover, which also works offline in a draft (SYNC-03, D-60): sets `eaten`\non its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The\nflag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't\ncount. Rejected with `common.not_found` when the list has no leftover of that meal (any\nmore), and `common.forbidden` without edit rights on the source's list.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "op_id": {
+            "maxLength": 45,
+            "title": "Op Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LeftoverEatenPayload"
+          },
+          "type": {
+            "const": "leftover.eaten",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "at",
+          "type",
+          "payload"
+        ],
+        "title": "LeftoverEatenOp",
+        "type": "object"
+      },
+      "LeftoverEatenPayload": {
+        "description": "Mark the source meal of a leftover on this list eaten, or clear that (LIST-17):\n`leftover_of` as in `ListMealEntry.leftover_of`.",
+        "properties": {
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
+          },
+          "leftover_of": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Leftover Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "leftover_of",
+          "eaten"
+        ],
+        "title": "LeftoverEatenPayload",
         "type": "object"
       },
       "LineCheckOp": {
@@ -2572,7 +2631,7 @@
         "type": "object"
       },
       "ListDetail": {
-        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`\nand `finished_at` are set once shopping started and while the list is done (LIST-10).\n\n`due_items` fill the \"Fällig\" box (LIST-16), only on a draft the viewer can edit, else\nempty: the due recurring items of the viewer's set whose ingredient has no line on the list\n(a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.",
+        "description": "A list as its viewer sees it. `is_owner` and `can_edit` say what the viewer may do:\neditors change the name, meals, servings, extra items and hidden lines; only the owner\ndeletes the list and changes `shared_with_partner` (CPL-02/03). The display name is\n`<name or the translated default> (<created_at as a date>)` (LIST-02). `shopping_started_at`\nand `finished_at` are set once shopping started and while the list is done (LIST-10).\n\n`due_items` fill the \"Fällig\" box (LIST-16), only on a draft the viewer can edit, else\nempty: the due recurring items of the viewer's set whose item has no line on the list\n(a hidden line counts, LIST-07) and that weren't hidden on it, the most overdue first.",
         "properties": {
           "can_edit": {
             "title": "Can Edit",
@@ -2768,7 +2827,7 @@
         "type": "object"
       },
       "ListLine": {
-        "description": "An aggregated line (AGG), identified by `key`: `i:<ingredient_id>` for an ingredient,\n`x:<extra_id>` for a free-text item.\n\n`amounts` are the display amounts, shown joined (\"500 g + 2 Stk.\"); `has_unspecified` means\na part without an amount (\"+ some\", or \"some\" alone). A free-text line has no amounts and\nshows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and\nbelong in the collapsed \"Removed\" section. `category_id` groups the lines; they come\nsorted by category order and name (AGG-05).\n\nCheck state (shopping and done lists; always unchecked in a draft): `checked` with the\ntime of the tap (`checked_at`) and who checked it (`checked_by`, SHOP-01). A checked line\nthat needs more since is reported unchecked, with `needs_more` saying why (LIST-12). `new`:\nthe line appeared after shopping started (LIST-12).",
+        "description": "An aggregated line (AGG), identified by `key`: `i:<item_id>` for an item,\n`x:<extra_id>` for a free-text item.\n\n`amounts` are the display amounts, shown joined (\"500 g + 2 Stk.\"); `has_unspecified` means\na part without an amount (\"+ some\", or \"some\" alone). A free-text line has no amounts and\nshows its `amount_text` as it is. `hidden` lines were removed for this list (LIST-07) and\nbelong in the collapsed \"Removed\" section. `category_id` groups the lines; they come\nsorted by category order and name (AGG-05).\n\nCheck state (shopping and done lists; always unchecked in a draft): `checked` with the\ntime of the tap (`checked_at`) and who checked it (`checked_by`, SHOP-01). A checked line\nthat needs more since is reported unchecked, with `needs_more` saying why (LIST-12). `new`:\nthe line appeared after shopping started (LIST-12).",
         "properties": {
           "amount_text": {
             "anyOf": [
@@ -2837,7 +2896,7 @@
             "title": "Hidden",
             "type": "boolean"
           },
-          "ingredient_id": {
+          "item_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -2846,7 +2905,7 @@
                 "type": "null"
               }
             ],
-            "title": "Ingredient Id"
+            "title": "Item Id"
           },
           "key": {
             "title": "Key",
@@ -2854,7 +2913,7 @@
           },
           "kind": {
             "enum": [
-              "ingredient",
+              "item",
               "text"
             ],
             "title": "Kind",
@@ -2889,7 +2948,7 @@
         "required": [
           "key",
           "kind",
-          "ingredient_id",
+          "item_id",
           "name",
           "brand",
           "category_id",
@@ -2936,8 +2995,22 @@
         "title": "ListMealAdd",
         "type": "object"
       },
+      "ListMealEaten": {
+        "description": "Mark a meal on a done list eaten, or clear that (SHOP-07); for a leftover, on any list,\nits source meal (LIST-17).",
+        "properties": {
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eaten"
+        ],
+        "title": "ListMealEaten",
+        "type": "object"
+      },
       "ListMealEntry": {
-        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.",
+        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.\nA `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,\nits servings are what was bought and can't change, and `eaten` is its source meal's; on a\ndraft or while shopping it is shown only while that is not eaten. `leftover_of` is the id of\nthat source meal (on the done list it came from), the same for every leftover of it; null\nfor a meal that is not a leftover.",
         "properties": {
           "detached": {
             "anyOf": [
@@ -2954,9 +3027,28 @@
             ],
             "title": "Detached"
           },
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "leftover": {
+            "title": "Leftover",
+            "type": "boolean"
+          },
+          "leftover_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftover Of"
           },
           "meal_id": {
             "anyOf": [
@@ -3023,7 +3115,10 @@
           "thumb_url",
           "servings",
           "meal_servings",
-          "detached"
+          "detached",
+          "eaten",
+          "leftover",
+          "leftover_of"
         ],
         "title": "ListMealEntry",
         "type": "object"
@@ -3231,6 +3326,10 @@
       },
       "Me": {
         "properties": {
+          "carry_over_leftovers": {
+            "title": "Carry Over Leftovers",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -3285,14 +3384,26 @@
           "meals_public",
           "lists_public",
           "filter_hidden",
+          "carry_over_leftovers",
           "created_at"
         ],
         "title": "Me",
         "type": "object"
       },
       "MeUpdate": {
-        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01).",
+        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01, LIST-17). Left out or\nnull, a field stays as it is.",
         "properties": {
+          "carry_over_leftovers": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carry Over Leftovers"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -3581,7 +3692,7 @@
         "type": "object"
       },
       "MealIngredientInput": {
-        "description": "`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an\namount is refused (`ingredients.<i>.amount` `required`). The unit must fit the ingredient's\nbase unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already\nhas the very same row (ingredient, amount and unit), which is kept as it is (MEAL-02). An\nempty note is stored as null.",
+        "description": "`amount`: 0 < x ≤ 100000. An amount without a unit counts as pieces; a unit without an\namount is refused (`ingredients.<i>.amount` `required`). The unit must fit the item's\nbase unit (REF-02; `ingredients.<i>.unit` `unit_mismatch` otherwise), unless the meal already\nhas the very same row (item, amount and unit), which is kept as it is (MEAL-02). An\nempty note is stored as null.",
         "properties": {
           "amount": {
             "anyOf": [
@@ -3596,10 +3707,10 @@
             ],
             "title": "Amount"
           },
-          "ingredient_id": {
+          "item_id": {
             "maxLength": 36,
             "minLength": 1,
-            "title": "Ingredient Id",
+            "title": "Item Id",
             "type": "string"
           },
           "note": {
@@ -3626,13 +3737,13 @@
           }
         },
         "required": [
-          "ingredient_id"
+          "item_id"
         ],
         "title": "MealIngredientInput",
         "type": "object"
       },
       "MealIngredientRow": {
-        "description": "An ingredient row; `amount` and `unit` are both null for e.g. \"salt, to taste\".\n`unit_fits` is false for an amount whose unit doesn't fit the ingredient's base unit\n(REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is\nkept as it is (MEAL-02, D-33).",
+        "description": "An ingredient row; `amount` and `unit` are both null for e.g. \"salt, to taste\".\n`unit_fits` is false for an amount whose unit doesn't fit the item's base unit\n(REF-02): it was entered before that rule, or left by a base-unit change or a merge, and is\nkept as it is (MEAL-02, D-33).",
         "properties": {
           "amount": {
             "anyOf": [
@@ -3649,8 +3760,8 @@
             "title": "Id",
             "type": "string"
           },
-          "ingredient": {
-            "$ref": "#/components/schemas/IngredientSummary"
+          "item": {
+            "$ref": "#/components/schemas/ItemSummary"
           },
           "note": {
             "anyOf": [
@@ -3685,7 +3796,7 @@
         "required": [
           "id",
           "position",
-          "ingredient",
+          "item",
           "amount",
           "unit",
           "unit_fits",
@@ -3695,7 +3806,7 @@
         "type": "object"
       },
       "MealNutrition": {
-        "description": "Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing\ncontributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of\na g ingredient were counted as 1 g/ml (NUT-05). The totals are not\nbounded by the per-100 maximums of `NutrientValues`.",
+        "description": "Totals over the rows that could be counted (NUT-03); a nutrient is null only if nothing\ncontributed to it. `incomplete` if anything is `missing` (NUT-04); `estimate` if spoons of\na g item were counted as 1 g/ml (NUT-05). The totals are not\nbounded by the per-100 maximums of `NutrientValues`.",
         "properties": {
           "estimate": {
             "title": "Estimate",
@@ -3730,9 +3841,9 @@
         "type": "object"
       },
       "MealNutritionMissing": {
-        "description": "Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the\ningredient's base unit, pieces of a `piece` ingredient without a piece weight, or an unknown\nvalue for `nutrient` (NUT-04).",
+        "description": "Why a row does not (fully) count: no amount, an amount whose unit doesn't fit the\nitem's base unit, pieces of a `piece` item without a piece weight, or an unknown\nvalue for `nutrient` (NUT-04).",
         "properties": {
-          "ingredient_brand": {
+          "item_brand": {
             "anyOf": [
               {
                 "type": "string"
@@ -3741,14 +3852,14 @@
                 "type": "null"
               }
             ],
-            "title": "Ingredient Brand"
+            "title": "Item Brand"
           },
-          "ingredient_id": {
-            "title": "Ingredient Id",
+          "item_id": {
+            "title": "Item Id",
             "type": "string"
           },
-          "ingredient_name": {
-            "title": "Ingredient Name",
+          "item_name": {
+            "title": "Item Name",
             "type": "string"
           },
           "nutrient": {
@@ -3774,9 +3885,9 @@
           }
         },
         "required": [
-          "ingredient_id",
-          "ingredient_name",
-          "ingredient_brand",
+          "item_id",
+          "item_name",
+          "item_brand",
           "reason",
           "nutrient"
         ],
@@ -4207,16 +4318,16 @@
         "type": "object"
       },
       "OffSearchResult": {
-        "description": "A product found by the Open Food Facts name search, as a `proposal` like the barcode\nlookup's. `in_mealmate`: an ingredient already has its barcode (`ingredient`), which can\nbe picked instead of creating another one.",
+        "description": "A product found by the Open Food Facts name search, as a `proposal` like the barcode\nlookup's. `in_mealmate`: an item already has its barcode (`item`), which can\nbe picked instead of creating another one.",
         "properties": {
           "in_mealmate": {
             "title": "In Mealmate",
             "type": "boolean"
           },
-          "ingredient": {
+          "item": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/IngredientSummary"
+                "$ref": "#/components/schemas/ItemSummary"
               },
               {
                 "type": "null"
@@ -4230,7 +4341,7 @@
         "required": [
           "proposal",
           "in_mealmate",
-          "ingredient"
+          "item"
         ],
         "title": "OffSearchResult",
         "type": "object"
@@ -4242,6 +4353,7 @@
             "extra.add": "#/components/schemas/ExtraAddOp",
             "extra.delete": "#/components/schemas/ExtraDeleteOp",
             "extra.update": "#/components/schemas/ExtraUpdateOp",
+            "leftover.eaten": "#/components/schemas/LeftoverEatenOp",
             "line.check": "#/components/schemas/LineCheckOp",
             "list.finish": "#/components/schemas/ListFinishOp"
           },
@@ -4262,6 +4374,9 @@
           },
           {
             "$ref": "#/components/schemas/ListFinishOp"
+          },
+          {
+            "$ref": "#/components/schemas/LeftoverEatenOp"
           }
         ],
         "title": "Op"
@@ -4392,7 +4507,7 @@
         "type": "object"
       },
       "PendingUpdateField": {
-        "description": "A user-edited field for which Open Food Facts now has another value: `current` is the\ningredient's value, `proposed` the new one (a text, a number or null).",
+        "description": "A user-edited field for which Open Food Facts now has another value: `current` is the\nitem's value, `proposed` the new one (a text, a number or null).",
         "properties": {
           "current": {
             "anyOf": [
@@ -4412,7 +4527,6 @@
             "enum": [
               "name",
               "brand",
-              "quantity_text",
               "nutrients.kcal",
               "nutrients.protein",
               "nutrients.carbs",
@@ -4446,7 +4560,7 @@
         "type": "object"
       },
       "ProductProposal": {
-        "description": "A product from Open Food Facts, validated and cleaned (BAR-10) but not saved: the values\nto prefill the ingredient form with.\n\n`name` is in the user's language if Open Food Facts has it, cut at a word boundary to the\n60 characters of an ingredient name. `nutrition_basis` is null when Open Food Facts gives no\nvalues per 100 g or 100 ml; the nutrients are then all unknown. `category_key` is a guessed\ncategory (`/api/categories` key), or null. Values that are not plausible are dropped\n(null). `barcode` is the canonical form to save the ingredient with.",
+        "description": "A product from Open Food Facts, validated and cleaned (BAR-10) but not saved: the values\nto prefill the item form with.\n\n`name` is in the user's language if Open Food Facts has it, cut at a word boundary to the\n60 characters of an item name. `nutrition_basis` is null when Open Food Facts gives no\nvalues per 100 g or 100 ml; the nutrients are then all unknown. `category_key` is a guessed\ncategory (`/api/categories` key), or null. Values that are not plausible are dropped\n(null). `barcode` is the canonical form to save the item with.",
         "properties": {
           "barcode": {
             "title": "Barcode",
@@ -4514,24 +4628,12 @@
               }
             ],
             "title": "Off Last Modified At"
-          },
-          "quantity_text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Text"
           }
         },
         "required": [
           "barcode",
           "name",
           "brand",
-          "quantity_text",
           "nutrition_basis",
           "nutrients",
           "category_key",
@@ -4569,7 +4671,7 @@
         "type": "object"
       },
       "RecurringItem": {
-        "description": "An item of the caller's set. It is due from `due_on` on: the last purchase plus the\ninterval, in calendar days of the instance's time zone. `days_until_due` counts from today\n(0 \"fällig heute\", 1 \"fällig morgen\", -3 \"fällig seit 3 Tagen\"). `interval_weeks` is the\nset interval for the edit pop-up. `last_amount` is the last purchase's amount, only while\nits unit fits the ingredient's base unit (REF-02).",
+        "description": "An item of the caller's set. It is due from `due_on` on: the last purchase plus the\ninterval, in calendar days of the instance's time zone. `days_until_due` counts from today\n(0 \"fällig heute\", 1 \"fällig morgen\", -3 \"fällig seit 3 Tagen\"). `interval_weeks` is the\nset interval for the edit pop-up. `last_amount` is the last purchase's amount, only while\nits unit fits the item's base unit (REF-02).",
         "properties": {
           "days_until_due": {
             "title": "Days Until Due",
@@ -4588,15 +4690,15 @@
             "title": "Id",
             "type": "string"
           },
-          "ingredient": {
-            "$ref": "#/components/schemas/IngredientSummary"
-          },
           "interval": {
             "$ref": "#/components/schemas/RecurringInterval"
           },
           "interval_weeks": {
             "title": "Interval Weeks",
             "type": "integer"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemSummary"
           },
           "last_amount": {
             "anyOf": [
@@ -4616,7 +4718,7 @@
         },
         "required": [
           "id",
-          "ingredient",
+          "item",
           "interval",
           "interval_weeks",
           "last_purchased_on",
@@ -4629,19 +4731,19 @@
         "type": "object"
       },
       "RecurringItemCreate": {
-        "description": "Make an ingredient recurring: every `interval_weeks` (1 to 52), last bought on\n`last_purchased_on` (today if left out; not in the future, at most 730 days back:\n422 `out_of_range`). An ingredient already in the set is 422 `taken`, an unknown one\n`invalid`. The interval adapts automatically from the second purchase on.",
+        "description": "Make an item recurring: every `interval_weeks` (1 to 52), last bought on\n`last_purchased_on` (today if left out; not in the future, at most 730 days back:\n422 `out_of_range`). An item already in the set is 422 `taken`, an unknown one\n`invalid`. The interval adapts automatically from the second purchase on.",
         "properties": {
-          "ingredient_id": {
-            "maxLength": 36,
-            "minLength": 1,
-            "title": "Ingredient Id",
-            "type": "string"
-          },
           "interval_weeks": {
             "maximum": 52.0,
             "minimum": 1.0,
             "title": "Interval Weeks",
             "type": "integer"
+          },
+          "item_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
           },
           "last_purchased_on": {
             "anyOf": [
@@ -4657,14 +4759,14 @@
           }
         },
         "required": [
-          "ingredient_id",
+          "item_id",
           "interval_weeks"
         ],
         "title": "RecurringItemCreate",
         "type": "object"
       },
       "RecurringItemList": {
-        "description": "The caller's set (their couple's while in one, else their own), sorted by due date and\nthen by the ingredient's name, and how many items are due.",
+        "description": "The caller's set (their couple's while in one, else their own), sorted by due date and\nthen by the item's name, and how many recurring items are due.",
         "properties": {
           "due_count": {
             "title": "Due Count",
@@ -4941,7 +5043,7 @@
         "type": "string"
       },
       "UnitInfo": {
-        "description": "A unit (translation `unit.<unit>`), its kind, and the base units of the ingredients it\nfits (REF-02): an amount of an ingredient takes only the units whose `base_units` hold the\ningredient's base unit. An amount without a unit counts as pieces.",
+        "description": "A unit (translation `unit.<unit>`), its kind, and the base units of the items it\nfits (REF-02): an amount of an item takes only the units whose `base_units` hold the\nitem's base unit. An amount without a unit counts as pieces.",
         "properties": {
           "base_units": {
             "items": {
@@ -5266,7 +5368,7 @@
     },
     "/api/admin/categories/{category_id}": {
       "delete": {
-        "description": "Delete a category: its ingredients move to *Uncategorized* and its free-text items on\ndrafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and\n*Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not\nfound.",
+        "description": "Delete a category: its items move to *Uncategorized* and its free-text items on\ndrafts to *Other*, while lists being shopped and done lists keep showing it. *Other* and\n*Uncategorized* can't be deleted (409 `category.not_deletable`); a deleted category is not\nfound.",
         "operationId": "admin_delete_category",
         "parameters": [
           {
@@ -5363,7 +5465,7 @@
     },
     "/api/admin/categories/{category_id}/usage": {
       "get": {
-        "description": "How many ingredients and free-text items on drafts deleting the category would move, for\nthe confirmation. A deleted category is not found.",
+        "description": "How many items and free-text items on drafts deleting the category would move, for\nthe confirmation. A deleted category is not found.",
         "operationId": "admin_category_usage",
         "parameters": [
           {
@@ -5445,105 +5547,6 @@
           }
         ],
         "summary": "Admin List Events",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/api/admin/ingredients/{ingredient_id}": {
-      "delete": {
-        "description": "Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise).",
-        "operationId": "admin_delete_ingredient",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ingredient_id",
-            "required": true,
-            "schema": {
-              "title": "Ingredient Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Admin Delete Ingredient",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/api/admin/ingredients/{ingredient_id}/merge": {
-      "post": {
-        "description": "Merge a duplicate into `into_id`: its references move there and it is deleted\n(ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the\nnumber of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`\nis true (D-33).",
-        "operationId": "admin_merge_ingredient",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ingredient_id",
-            "required": true,
-            "schema": {
-              "title": "Ingredient Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IngredientMerge"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Error envelope; `code` names the error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Admin Merge Ingredient",
         "tags": [
           "admin"
         ]
@@ -5671,6 +5674,105 @@
           }
         ],
         "summary": "Admin Revoke Invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/items/{item_id}": {
+      "delete": {
+        "description": "Delete an item that nothing refers to (409 `item.in_use` otherwise).",
+        "operationId": "admin_delete_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Delete Item",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/items/{item_id}/merge": {
+      "post": {
+        "description": "Merge a duplicate into `into_id`: its references move there and it is deleted\n(ING-05). Returns the item merged into. 409 `item.unit_mismatch` with the\nnumber of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`\nis true (D-33).",
+        "operationId": "admin_merge_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemMerge"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Merge Item",
         "tags": [
           "admin"
         ]
@@ -6765,10 +6867,10 @@
         ]
       }
     },
-    "/api/ingredients": {
+    "/api/items": {
       "get": {
-        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all\ningredients in that order (at most 1000). `category_id`\nis repeatable: an ingredient matches if it is in any of the given categories.",
-        "operationId": "list_ingredients",
+        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all\nitems in that order (at most 1000). `category_id`\nis repeatable: an item matches if it is in any of the given categories. With `kind`, only\nfood or only supplies (the meal form's search asks for food, D-56).",
+        "operationId": "list_items",
         "parameters": [
           {
             "in": "query",
@@ -6807,6 +6909,26 @@
               ],
               "title": "Category Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "food",
+                    "supply"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
           }
         ],
         "responses": {
@@ -6815,9 +6937,9 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/IngredientSearchResult"
+                    "$ref": "#/components/schemas/ItemSearchResult"
                   },
-                  "title": "Response List Ingredients",
+                  "title": "Response List Items",
                   "type": "array"
                 }
               }
@@ -6840,19 +6962,19 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "List Ingredients",
+        "summary": "List Items",
         "tags": [
-          "ingredients"
+          "items"
         ]
       },
       "post": {
-        "description": "Add an ingredient, by hand or from an Open Food Facts proposal (`off`) in one request;\n409 `ingredient.barcode_taken` if another ingredient has the barcode.",
-        "operationId": "create_ingredient",
+        "description": "Add an item, by hand or from an Open Food Facts proposal (`off`) in one request;\n409 `item.barcode_taken` if another item has the barcode.",
+        "operationId": "create_item",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/IngredientCreate"
+                "$ref": "#/components/schemas/ItemCreate"
               }
             }
           },
@@ -6863,7 +6985,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
+                  "$ref": "#/components/schemas/Item"
                 }
               }
             },
@@ -6885,15 +7007,15 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Create Ingredient",
+        "summary": "Create Item",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/lookup": {
+    "/api/items/lookup": {
       "get": {
-        "description": "Look a scanned or typed barcode up: our own ingredients first, then Open Food Facts (a\nproposal, not saved). With `own_only`, only our own ingredients: `none` then means that\nno ingredient has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a\nbarcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open\nFood Facts. A stale ingredient from Open Food Facts is refreshed after the response.",
+        "description": "Look a scanned or typed barcode up: our own items first, then Open Food Facts (a\nproposal, not saved). With `own_only`, only our own items: `none` then means that\nno item has the barcode, and Open Food Facts isn't asked. 422 `invalid_format` for a\nbarcode with a wrong check digit, 503 `off.busy` while too many lookups wait for Open\nFood Facts. A stale item from Open Food Facts is refreshed after the response.",
         "operationId": "lookup_barcode",
         "parameters": [
           {
@@ -6946,11 +7068,11 @@
         ],
         "summary": "Lookup Barcode",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/off-search": {
+    "/api/items/off-search": {
       "get": {
         "description": "Search Open Food Facts by name, for an explicit user action only (a button or Enter,\nnever while typing; BAR-08): one page of up to 20 products sold in Germany, as proposals\nlike the barcode lookup's, those already in MealMate flagged. `q` is trimmed and must be 2\nto 80 characters long. Answers are cached for 24 hours; 503 `off.busy` while too many\nsearches wait for Open Food Facts, 503 `off.unavailable` when it is slow or unreachable.",
         "operationId": "search_open_food_facts",
@@ -7008,14 +7130,14 @@
         ],
         "summary": "Search Open Food Facts",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/similar": {
+    "/api/items/similar": {
       "get": {
-        "description": "Up to five ingredients with a similar name, for the \"similar ingredient exists\" hint\n(only a hint: names need not be unique); those with the same name and `brand` first.",
-        "operationId": "list_similar_ingredients",
+        "description": "Up to five items with a similar name, for the \"similar item exists\" hint\n(only a hint: names need not be unique); those with the same name and `brand` first.",
+        "operationId": "list_similar_items",
         "parameters": [
           {
             "in": "query",
@@ -7051,9 +7173,9 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/IngredientSummary"
+                    "$ref": "#/components/schemas/ItemSummary"
                   },
-                  "title": "Response List Similar Ingredients",
+                  "title": "Response List Similar Items",
                   "type": "array"
                 }
               }
@@ -7076,23 +7198,23 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "List Similar Ingredients",
+        "summary": "List Similar Items",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/{ingredient_id}": {
+    "/api/items/{item_id}": {
       "get": {
-        "description": "An ingredient with its values, barcode, Open Food Facts data and usage; a stale one from\nOpen Food Facts is refreshed after the response.",
-        "operationId": "get_ingredient",
+        "description": "An item with its values, barcode, Open Food Facts data and usage; a stale one from\nOpen Food Facts is refreshed after the response.",
+        "operationId": "get_item",
         "parameters": [
           {
             "in": "path",
-            "name": "ingredient_id",
+            "name": "item_id",
             "required": true,
             "schema": {
-              "title": "Ingredient Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -7102,7 +7224,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
+                  "$ref": "#/components/schemas/Item"
                 }
               }
             },
@@ -7124,21 +7246,21 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Get Ingredient",
+        "summary": "Get Item",
         "tags": [
-          "ingredients"
+          "items"
         ]
       },
       "patch": {
-        "description": "Change an ingredient (anyone may); Open Food Facts fields sent become user-edited.\nClearing or changing the barcode of one from Open Food Facts makes it manual. 409\n`ingredient.unit_mismatch` with the number of meals and drafts affected when a base-unit\nchange would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33).",
-        "operationId": "update_ingredient",
+        "description": "Change an item (anyone may); Open Food Facts fields sent become user-edited.\nClearing or changing the barcode of one from Open Food Facts makes it manual. 409\n`item.unit_mismatch` with the number of meals and drafts affected when a base-unit\nchange would leave amounts not fitting, unless `accept_unit_mismatch` is true (D-33).",
+        "operationId": "update_item",
         "parameters": [
           {
             "in": "path",
-            "name": "ingredient_id",
+            "name": "item_id",
             "required": true,
             "schema": {
-              "title": "Ingredient Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -7147,7 +7269,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/IngredientUpdate"
+                "$ref": "#/components/schemas/ItemUpdate"
               }
             }
           },
@@ -7158,7 +7280,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
+                  "$ref": "#/components/schemas/Item"
                 }
               }
             },
@@ -7180,23 +7302,23 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Update Ingredient",
+        "summary": "Update Item",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/{ingredient_id}/barcode": {
+    "/api/items/{item_id}/barcode": {
       "post": {
-        "description": "Give an ingredient without a barcode a scanned one (the scanner's \"already in\nMealMate\"); it never replaces one: 409 `ingredient.has_barcode` if it has a barcode, 409\n`ingredient.barcode_taken` if another ingredient has this one. The edit form changes a\nbarcode with PATCH instead.",
+        "description": "Give an item without a barcode a scanned one (the scanner's \"already in\nMealMate\"); it never replaces one: 409 `item.has_barcode` if it has a barcode, 409\n`item.barcode_taken` if another item has this one. The edit form changes a\nbarcode with PATCH instead.",
         "operationId": "link_barcode",
         "parameters": [
           {
             "in": "path",
-            "name": "ingredient_id",
+            "name": "item_id",
             "required": true,
             "schema": {
-              "title": "Ingredient Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -7205,7 +7327,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/IngredientBarcodeLink"
+                "$ref": "#/components/schemas/ItemBarcodeLink"
               }
             }
           },
@@ -7216,7 +7338,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
+                  "$ref": "#/components/schemas/Item"
                 }
               }
             },
@@ -7240,21 +7362,21 @@
         ],
         "summary": "Link Barcode",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/{ingredient_id}/pending-update/apply": {
+    "/api/items/{item_id}/pending-update/apply": {
       "post": {
-        "description": "Take the newer Open Food Facts values (BAR-06); those fields are no longer\nuser-edited. 409 `ingredient.no_pending_update` if there are none.",
+        "description": "Take the newer Open Food Facts values (BAR-06); those fields are no longer\nuser-edited. 409 `item.no_pending_update` if there are none.",
         "operationId": "apply_pending_update",
         "parameters": [
           {
             "in": "path",
-            "name": "ingredient_id",
+            "name": "item_id",
             "required": true,
             "schema": {
-              "title": "Ingredient Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -7264,7 +7386,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
+                  "$ref": "#/components/schemas/Item"
                 }
               }
             },
@@ -7288,21 +7410,21 @@
         ],
         "summary": "Apply Pending Update",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
-    "/api/ingredients/{ingredient_id}/pending-update/ignore": {
+    "/api/items/{item_id}/pending-update/ignore": {
       "post": {
-        "description": "Keep the user's values (BAR-06); the same Open Food Facts version is not proposed\nagain. 409 `ingredient.no_pending_update` if there is nothing to ignore.",
+        "description": "Keep the user's values (BAR-06); the same Open Food Facts version is not proposed\nagain. 409 `item.no_pending_update` if there is nothing to ignore.",
         "operationId": "ignore_pending_update",
         "parameters": [
           {
             "in": "path",
-            "name": "ingredient_id",
+            "name": "item_id",
             "required": true,
             "schema": {
-              "title": "Ingredient Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -7312,7 +7434,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ingredient"
+                  "$ref": "#/components/schemas/Item"
                 }
               }
             },
@@ -7336,7 +7458,7 @@
         ],
         "summary": "Ignore Pending Update",
         "tags": [
-          "ingredients"
+          "items"
         ]
       }
     },
@@ -7711,9 +7833,9 @@
         ]
       }
     },
-    "/api/lists/{list_id}/due-items/{ingredient_id}/hide": {
+    "/api/lists/{list_id}/due-items/{item_id}/hide": {
       "post": {
-        "description": "Hide a due recurring item (\"Fällig\" box) on this list for everyone who sees it (drafts;\n409 `list.not_draft` otherwise). There is no undo; the ingredient can still be added as an\nextra item.",
+        "description": "Hide a due recurring item (\"Fällig\" box) on this list for everyone who sees it (drafts;\n409 `list.not_draft` otherwise). There is no undo; the item can still be added as an\nextra item.",
         "operationId": "hide_due_item",
         "parameters": [
           {
@@ -7727,11 +7849,11 @@
           },
           {
             "in": "path",
-            "name": "ingredient_id",
+            "name": "item_id",
             "required": true,
             "schema": {
               "maxLength": 36,
-              "title": "Ingredient Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -7771,7 +7893,7 @@
     },
     "/api/lists/{list_id}/extra-items": {
       "post": {
-        "description": "Add an extra item: linked to an ingredient or free text. With an `id` already on this\nlist nothing changes and the answer is 200 (safe to retry). While shopping, the item is\n`new` on the list.",
+        "description": "Add an extra item: linked to an item or free text. With an `id` already on this\nlist nothing changes and the answer is 200 (safe to retry). While shopping, the item is\n`new` on the list.",
         "operationId": "add_extra_item",
         "parameters": [
           {
@@ -7974,12 +8096,12 @@
             }
           },
           {
-            "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+            "description": "`i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`.",
             "in": "path",
             "name": "line_key",
             "required": true,
             "schema": {
-              "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+              "description": "`i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`.",
               "maxLength": 80,
               "pattern": "^(i|x):[0-9a-f-]{36}$",
               "title": "Line Key",
@@ -8035,12 +8157,12 @@
             }
           },
           {
-            "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+            "description": "`i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`.",
             "in": "path",
             "name": "line_key",
             "required": true,
             "schema": {
-              "description": "`i:<ingredient_id>` or `x:<extra_id>`, as in `ListLine.key`.",
+              "description": "`i:<item_id>` or `x:<extra_id>`, as in `ListLine.key`.",
               "maxLength": 80,
               "pattern": "^(i|x):[0-9a-f-]{36}$",
               "title": "Line Key",
@@ -8261,6 +8383,130 @@
         ]
       }
     },
+    "/api/lists/{list_id}/meals/{list_meal_id}/eaten": {
+      "put": {
+        "description": "Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change\na done list takes. 409 `list.not_done` in a draft or while shopping. A leftover is marked on\nany list, and that marks the meal it comes from, on every list showing it (LIST-17).",
+        "operationId": "set_list_meal_eaten",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListMealEaten"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set List Meal Eaten",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/meals/{list_meal_id}/shop": {
+      "post": {
+        "description": "\"Doch einkaufen\": a leftover becomes a normal meal of the list, whose ingredients go on\nit (LIST-17); in a draft or while shopping. 409 `list_meal.not_leftover` for a normal meal,\n`list_meal.unavailable` if its meal was deleted or can't be seen any more.",
+        "operationId": "shop_leftover_meal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Shop Leftover Meal",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/api/lists/{list_id}/ops": {
       "post": {
         "description": "Apply the actions of shopping mode in order, in one transaction (plan § 5.8): check\noff, add, rename and delete free-text items, finish. Each op is applied once, however often\nit is sent (SYNC-05); the result of each and the list afterwards come back. The list must\nbe one you may edit (404, 403 otherwise).\n\n`X-MealMate-User` guards against a phone sending one user's queued ops with another user's\nsession (SYNC-10): a mismatch is refused before anything else (409 `auth.user_mismatch`).",
@@ -8436,7 +8682,7 @@
     },
     "/api/lists/{list_id}/start-shopping": {
       "post": {
-        "description": "Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'\ningredients are frozen, so later changes of meals and ingredients no longer affect it\n(LIST-11), and lines can be checked off.",
+        "description": "Start shopping a draft you may edit (409 `list.not_draft` otherwise): its meals'\ningredients are frozen, so later changes of meals and items no longer affect it\n(LIST-11), and lines can be checked off.",
         "operationId": "start_shopping",
         "parameters": [
           {
@@ -8566,7 +8812,7 @@
     },
     "/api/me/notices": {
       "get": {
-        "description": "The own unread notices, newest first, e.g. that an admin deleted an ingredient kept as a\nrecurring item.",
+        "description": "The own unread notices, newest first, e.g. that an admin deleted an item kept as a\nrecurring item.",
         "operationId": "list_notices",
         "responses": {
           "200": {
@@ -9443,7 +9689,7 @@
         ]
       },
       "post": {
-        "description": "Make an ingredient recurring in the caller's set.",
+        "description": "Make an item recurring in the caller's set.",
         "operationId": "create_recurring_item",
         "requestBody": {
           "content": {

@@ -11,7 +11,7 @@ import {
   REFERENCE_ROUTES,
   summary,
   UNCATEGORIZED,
-} from '@/test/ingredients';
+} from '@/test/items';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
 
@@ -384,7 +384,7 @@ describe('AdminCategoriesScreen', () => {
     const { fetchMock, user } = renderCategories({
       'GET /api/categories': () =>
         deleted ? CATEGORIES_AFTER_DELETE : CATEGORIES_WITH_UNCATEGORIZED,
-      'GET /api/admin/categories/cat-cheese/usage': { ingredients: 3, extra_items: 1 },
+      'GET /api/admin/categories/cat-cheese/usage': { items: 3, extra_items: 1 },
       'DELETE /api/admin/categories/cat-cheese': () => {
         deleted = true;
         return new Response(null, { status: 204 });
@@ -398,7 +398,7 @@ describe('AdminCategoriesScreen', () => {
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete Cheese?' });
     await waitFor(() =>
       expect(confirm).toHaveAccessibleDescription(
-        '3 ingredients move to “Uncategorized”. 1 free-text item on drafts moves to “Other”. ' +
+        '3 items move to “Uncategorized”. 1 free-text item on drafts moves to “Other”. ' +
           "Lists being shopped and done lists stay as they are. This can't be undone.",
       ),
     );
@@ -416,27 +416,27 @@ describe('AdminCategoriesScreen', () => {
     );
   });
 
-  it('offers “Show” after a delete: the Ingredients tab with only Uncategorized ticked and no search (REF-01, ING-03)', async () => {
+  it('offers “Show” after a delete: the Items tab with only Uncategorized ticked and no search (REF-01, ING-03)', async () => {
     let deleted = false;
     const fetchMock = mockApi({
       'GET /api/me': TEST_ADMIN,
       ...REFERENCE_ROUTES,
       'GET /api/categories': () =>
         deleted ? CATEGORIES_AFTER_DELETE : CATEGORIES_WITH_UNCATEGORIZED,
-      'GET /api/ingredients': (request: Request) =>
+      'GET /api/items': (request: Request) =>
         new URL(request.url).searchParams.getAll('category_id').includes('cat-uncategorized')
           ? [summary('Gouda', 'other', { category_id: 'cat-uncategorized' })]
           : [summary('Milch', 'dairy_eggs')],
-      'GET /api/admin/categories/cat-cheese/usage': { ingredients: 1, extra_items: 0 },
+      'GET /api/admin/categories/cat-cheese/usage': { items: 1, extra_items: 0 },
       'DELETE /api/admin/categories/cat-cheese': () => {
         deleted = true;
         return new Response(null, { status: 204 });
       },
     });
-    // The Ingredients tab remembers a search and a category from before.
-    const { router, user } = renderApp('/ingredients', { user: TEST_ADMIN });
-    await screen.findByTestId(testIds.ingredientList);
-    await user.type(screen.getByLabelText('Search ingredients'), 'Milch');
+    // The Items tab remembers a search and a category from before.
+    const { router, user } = renderApp('/items', { user: TEST_ADMIN });
+    await screen.findByTestId(testIds.itemList);
+    await user.type(screen.getByLabelText('Search items'), 'Milch');
     let panel = await openPanel(user);
     await user.click(within(panel).getByRole('checkbox', { name: 'Dairy & eggs' }));
     await user.click(within(panel).getByRole('button', { name: 'Done' }));
@@ -456,12 +456,12 @@ describe('AdminCategoriesScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show' }));
 
-    expect(await screen.findByTestId(testIds.screenIngredients)).toBeVisible();
-    expect(router.state.location.pathname).toBe('/ingredients');
-    expect(screen.getByLabelText('Search ingredients')).toHaveValue('');
+    expect(await screen.findByTestId(testIds.screenItems)).toBeVisible();
+    expect(router.state.location.pathname).toBe('/items');
+    expect(screen.getByLabelText('Search items')).toHaveValue('');
     expect(await screen.findByRole('link', { name: /^Gouda/ })).toBeVisible();
     expect(screen.getByTestId(testIds.filterButton)).toHaveAccessibleName('Filters, 1 active');
-    const asked = requestsTo(fetchMock, 'GET /api/ingredients').at(-1)!;
+    const asked = requestsTo(fetchMock, 'GET /api/items').at(-1)!;
     expect(new URL(asked.url).searchParams.getAll('category_id')).toEqual(['cat-uncategorized']);
     expect(new URL(asked.url).searchParams.get('q')).toBeNull();
     panel = await openPanel(user);
@@ -471,7 +471,7 @@ describe('AdminCategoriesScreen', () => {
 
   it('keeps the confirmation open and says why when deleting fails', async () => {
     const { user } = renderCategories({
-      'GET /api/admin/categories/cat-cheese/usage': { ingredients: 0, extra_items: 0 },
+      'GET /api/admin/categories/cat-cheese/usage': { items: 0, extra_items: 0 },
       'DELETE /api/admin/categories/cat-cheese': errorResponse(409, 'category.not_deletable'),
     });
     await screen.findByTestId(testIds.adminCategoryList);

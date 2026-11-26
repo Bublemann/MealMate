@@ -37,8 +37,8 @@ SEEDED_CATEGORIES: tuple[SeededCategory, ...] = (
     SeededCategory("uncategorized", "Ohne Kategorie", "Uncategorized"),
 )
 CATEGORY_KEYS: tuple[str, ...] = tuple(category.key for category in SEEDED_CATEGORIES)
-# Both always exist (REF-01). *Other* is the default category of new ingredients and free-text
-# items; *Uncategorized* takes the ingredients of a deleted category and is never picked by hand.
+# Both always exist (REF-01). *Other* is the default category of new items and free-text
+# items; *Uncategorized* takes the items of a deleted category and is never picked by hand.
 OTHER_CATEGORY = "other"
 UNCATEGORIZED_CATEGORY = "uncategorized"
 

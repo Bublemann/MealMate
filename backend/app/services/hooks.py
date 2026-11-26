@@ -1,15 +1,15 @@
 """Lifecycle hooks between aggregates (plan § 6, deletion and lifecycle rules).
 
-The account, ingredient and meal rules call these hooks at the right point of their write
-transaction: meals (M4) fill in the ingredient references, shopping lists (M5a) detach meals
+The account, item and meal rules call these hooks at the right point of their write
+transaction: meals (M4) fill in the item references, shopping lists (M5a) detach meals
 that go away or become invisible (LIST-15), move shared lists on user deletion (ADM-03) and
-follow ingredient merges. Recurring items (LIST-16, D-42) follow couples as they form and end
-and ingredients as they are merged, and an ingredient's deletion leaves notices (D-51). Own
+follow item merges. Recurring items (LIST-16, D-42) follow couples as they form and end
+and items as they are merged, and an item's deletion leaves notices (D-51). Own
 walking orders (D-48) follow couples as they form and end. Each
 hook runs inside the caller's transaction and must not commit; `now` is the time of the
 triggering request.
 
-This module must not import `services.recurring`, which imports `services.ingredients`, which
+This module must not import `services.recurring`, which imports `services.items`, which
 imports this module.
 """
 
@@ -18,12 +18,12 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.lists import ingredient_key
+from app.domain.lists import item_key
 from app.domain.owners import OwnerKey
 from app.domain.recurring import preferred_stays
 from app.models import Couple, ListLineState, RecurringItem
 from app.repositories import couples as couples_repo
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import recurring as recurring_repo
@@ -33,17 +33,21 @@ from app.services import access, detach, notices, walking_order
 
 async def on_couple_accepted(session: AsyncSession, couple: Couple, *, now: datetime) -> None:
     """Runs when a couple forms (CPL-01), once both are members: their two sets of recurring
-    items become the couple's one set (D-42). For an ingredient both keep, the item bought more
+    items become the couple's one set (D-42). For an item both keep, the item bought more
     recently stays with all its values, on a tie the requester's; the other goes. Their own
     walking orders become the couple's one (D-48)."""
     stays: dict[str, RecurringItem] = {}
-    for item in await recurring_repo.of_users(session, (couple.requester_id, couple.addressee_id)):
-        if (other := stays.get(item.ingredient_id)) is not None:
-            of_requester = item.user_id == couple.requester_id
-            item = await _one_stays(session, *((item, other) if of_requester else (other, item)))
-        stays[item.ingredient_id] = item
-    for item in stays.values():
-        item.couple_id, item.user_id, item.updated_at = couple.id, None, now
+    for recurring in await recurring_repo.of_users(
+        session, (couple.requester_id, couple.addressee_id)
+    ):
+        if (other := stays.get(recurring.item_id)) is not None:
+            of_requester = recurring.user_id == couple.requester_id
+            recurring = await _one_stays(
+                session, *((recurring, other) if of_requester else (other, recurring))
+            )
+        stays[recurring.item_id] = recurring
+    for recurring in stays.values():
+        recurring.couple_id, recurring.user_id, recurring.updated_at = couple.id, None, now
     await walking_order.on_couple_accepted(
         session, couple.requester_id, couple.addressee_id, couple_id=couple.id, now=now
     )
@@ -66,9 +70,11 @@ async def on_couple_ended(
                 session, meal_owner, list_owner_ids=(list_owner,)
             )
             await detach.detach(session, list_meals, "unavailable", now=now)
-    for item in await recurring_repo.of_couple(session, couple_id):
-        session.add_all(_copy_for(item, user_id, now=now) for user_id in (user_a_id, user_b_id))
-        await session.delete(item)
+    for recurring in await recurring_repo.of_couple(session, couple_id):
+        session.add_all(
+            _copy_for(recurring, user_id, now=now) for user_id in (user_a_id, user_b_id)
+        )
+        await session.delete(recurring)
     await walking_order.on_couple_ended(
         session, (user_a_id, user_b_id), couple_id=couple_id, now=now
     )
@@ -119,28 +125,28 @@ async def on_meal_deleted(session: AsyncSession, meal_id: str, *, now: datetime)
     )
 
 
-async def ingredient_references(session: AsyncSession, ingredient_id: str) -> dict[str, int]:
-    """References to an ingredient, counted per kind: its usage on the detail page; any of them
-    blocks deleting it (ING-05) and is reported in the `ingredient.in_use` params.
+async def item_references(session: AsyncSession, item_id: str) -> dict[str, int]:
+    """References to an item, counted per kind: its usage on the detail page; any of them
+    blocks deleting it (ING-05) and is reported in the `item.in_use` params.
 
-    - `meals`: the meals with rows (`meal_ingredients`) of this ingredient;
+    - `meals`: the meals with rows (`meal_ingredients`) of this item;
     - `lists`: the lists with frozen rows (`list_meal_ingredients`) or linked extra items that
-      are not deleted (`list_extra_items`) of this ingredient.
+      are not deleted (`list_extra_items`) of this item.
 
     Recurring items (LIST-16) are no references: they never block the deletion.
     """
     return {
-        "meals": await meals_repo.count_with_ingredient(session, ingredient_id),
-        "lists": await lists_repo.count_with_ingredient(session, ingredient_id),
+        "meals": await meals_repo.count_with_item(session, item_id),
+        "lists": await lists_repo.count_with_item(session, item_id),
     }
 
 
 async def amounts_that_would_not_fit(
     session: AsyncSession,
-    ingredient_id: str,
+    item_id: str,
     would_not_fit: Callable[[float | None, str | None], bool],
 ) -> dict[str, int]:
-    """The ingredient's amounts that `would_not_fit(amount, unit)` after a base-unit change
+    """The item's amounts that `would_not_fit(amount, unit)` after a base-unit change
     (ING-02) or a merge (ING-05), counted (D-33):
 
     - `meals`: the meals with such rows;
@@ -152,52 +158,52 @@ async def amounts_that_would_not_fit(
     def owners(amounts: list[tuple[str, float | None, str | None]]) -> list[str]:
         return [owner for owner, amount, unit in amounts if would_not_fit(amount, unit)]
 
-    meals = owners(await meals_repo.amounts_of(session, ingredient_id))
-    lists = owners(await lists_repo.draft_amounts_of(session, ingredient_id))
+    meals = owners(await meals_repo.amounts_of(session, item_id))
+    lists = owners(await lists_repo.draft_amounts_of(session, item_id))
     return {"meals": len(set(meals)), "lists": len(set(lists)), "amounts": len(meals) + len(lists)}
 
 
-async def before_ingredient_deleted(
-    session: AsyncSession, ingredient_id: str, *, now: datetime
-) -> None:
-    """Runs when an admin deletes an ingredient nothing refers to (ING-05), before its row is
+async def before_item_deleted(session: AsyncSession, item_id: str, *, now: datetime) -> None:
+    """Runs when an admin deletes an item nothing refers to (ING-05), before its row is
     deleted: the tombstones of deleted extra items linked to it go with it. Its recurring
     items and the due items hidden as it on lists are no references (LIST-16) and go by
     `ON DELETE CASCADE`; each user who had a recurring item gets a notice with the
-    ingredient's name and brand (D-51)."""
-    await lists_repo.delete_deleted_extras_of(session, ingredient_id)
-    items = await recurring_repo.with_ingredient(session, ingredient_id)
-    if not items:
+    item's name and brand (D-51)."""
+    await lists_repo.delete_deleted_extras_of(session, item_id)
+    recurring_items = await recurring_repo.with_item(session, item_id)
+    if not recurring_items:
         return
-    ingredient = await ingredients_repo.get(session, ingredient_id)
-    if ingredient is None:  # pragma: no cover -- the caller has just loaded it
-        raise RuntimeError("the deleted ingredient is missing")
-    users = {item.user_id for item in items if item.user_id is not None}
-    couples = {item.couple_id for item in items if item.couple_id is not None}
+    item = await items_repo.get(session, item_id)
+    if item is None:  # pragma: no cover -- the caller has just loaded it
+        raise RuntimeError("the deleted item is missing")
+    users = {recurring.user_id for recurring in recurring_items if recurring.user_id is not None}
+    couples = {
+        recurring.couple_id for recurring in recurring_items if recurring.couple_id is not None
+    }
     if couples:
         users.update(await couples_repo.member_ids(session, couples))
     notices.notify(
         session,
         sorted(users),
         "recurring_item.ingredient_deleted",
-        {"name": ingredient.name, "brand": ingredient.brand},
+        {"name": item.name, "brand": item.brand},
         now=now,
     )
 
 
-async def on_ingredients_merged(
+async def on_items_merged(
     session: AsyncSession, from_id: str, into_id: str, *, now: datetime
 ) -> None:
-    """Runs when an admin merges ingredient `from_id` into `into_id` (ING-05), after its
+    """Runs when an admin merges item `from_id` into `into_id` (ING-05), after its
     barcode moved (if the target has none) and before `from_id` is deleted.
 
     Meal rows (`meal_ingredients`), frozen list rows and extra items are repointed, keeping
-    their positions and snapshots; a meal may then have two rows of the same ingredient, which
+    their positions and snapshots; a meal may then have two rows of the same item, which
     is allowed. Line states move from `i:<from_id>` to `i:<into_id>`, per list by the lines
     the list has before the merge (a line without a stored state is neither hidden nor
     checked):
 
-    - both ingredients have a line: the states merge, hidden only if both were, checked only
+    - both items have a line: the states merge, hidden only if both were, checked only
       if both were (otherwise the check-off details go too), the rest from `into_id`;
     - only one has a line: its state wins, a state of the other (kept for a line that may come
       back, LIST-07) goes;
@@ -205,14 +211,14 @@ async def on_ingredients_merged(
 
     Due items hidden on a list (LIST-16) move too; on a list that hid both, one stays. Every
     list whose lines or hidden due items change gets a new version. Recurring items move as
-    well, without a notice: in a set that has both ingredients, the one bought more recently
+    well, without a notice: in a set that has both items, the one bought more recently
     stays, on a tie the one of `into_id` (D-42).
     """
     from_lists = await lists_repo.lists_with_parts_of(session, from_id)
     into_lists = await lists_repo.lists_with_parts_of(session, into_id)
-    await meals_repo.repoint_ingredient(session, from_id, into_id)
-    await lists_repo.repoint_ingredient(session, from_id, into_id)
-    old_key, new_key = ingredient_key(from_id), ingredient_key(into_id)
+    await meals_repo.repoint_item(session, from_id, into_id)
+    await lists_repo.repoint_item(session, from_id, into_id)
+    old_key, new_key = item_key(from_id), item_key(into_id)
     sources = {state.list_id: state for state in await lists_repo.states_with_key(session, old_key)}
     changed = from_lists | set(sources)
     targets = {
@@ -260,32 +266,32 @@ async def _move_recurring_items(
     """The recurring items of `from_id` become items of `into_id`. In a set that has both, the
     one bought more recently stays, on a tie the one of `into_id` (D-42)."""
     into = {
-        OwnerKey(item.couple_id, item.user_id): item
-        for item in await recurring_repo.with_ingredient(session, into_id)
+        OwnerKey(recurring.couple_id, recurring.user_id): recurring
+        for recurring in await recurring_repo.with_item(session, into_id)
     }
     moving = []
-    for item in await recurring_repo.with_ingredient(session, from_id):
-        other = into.get(OwnerKey(item.couple_id, item.user_id))
-        if other is None or await _one_stays(session, other, item) is item:
-            moving.append(item)
-    await session.flush()  # a set holds an ingredient once: the item that goes, goes first
-    for item in moving:
-        item.ingredient_id, item.updated_at = into_id, now
+    for recurring in await recurring_repo.with_item(session, from_id):
+        other = into.get(OwnerKey(recurring.couple_id, recurring.user_id))
+        if other is None or await _one_stays(session, other, recurring) is recurring:
+            moving.append(recurring)
+    await session.flush()  # a set holds an item once: the item that goes, goes first
+    for recurring in moving:
+        recurring.item_id, recurring.updated_at = into_id, now
 
 
-def _copy_for(item: RecurringItem, user_id: str, *, now: datetime) -> RecurringItem:
+def _copy_for(recurring: RecurringItem, user_id: str, *, now: datetime) -> RecurringItem:
     """A copy of a couple's recurring item in the set of one of them."""
     return RecurringItem(
         user_id=user_id,
-        ingredient_id=item.ingredient_id,
-        interval_days=item.interval_days,
-        interval_manual=item.interval_manual,
-        last_purchased_on=item.last_purchased_on,
-        last_amount=item.last_amount,
-        last_unit=item.last_unit,
-        measured_intervals=list(item.measured_intervals),
-        last_list_id=item.last_list_id,
-        created_at=item.created_at,
+        item_id=recurring.item_id,
+        interval_days=recurring.interval_days,
+        interval_manual=recurring.interval_manual,
+        last_purchased_on=recurring.last_purchased_on,
+        last_amount=recurring.last_amount,
+        last_unit=recurring.last_unit,
+        measured_intervals=list(recurring.measured_intervals),
+        last_list_id=recurring.last_list_id,
+        created_at=recurring.created_at,
         updated_at=now,
     )
 

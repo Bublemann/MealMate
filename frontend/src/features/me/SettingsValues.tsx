@@ -14,6 +14,12 @@ export function ProfileValue() {
   return useCurrentUser().display_name;
 }
 
+/** Übrige Gerichte: whether they carry over, "An" or "Aus" (LIST-17). */
+export function LeftoversValue() {
+  const { t } = useTranslation();
+  return t(useCurrentUser().carry_over_leftovers ? 'me.leftovers.on' : 'me.leftovers.off');
+}
+
 /** Paar: "1 Anfrage" while requests wait (D-51), else the partner, marked when deactivated. */
 export function CoupleValue() {
   const { t } = useTranslation();

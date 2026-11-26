@@ -8,7 +8,7 @@
 | List (M5a) | owner · partner (CPL-04) · all if *lists public* | owner · partner if shared |
 | Shopping (M5b) | shop again: whoever sees the done list | start, ops, reopen: list editors |
 | Meal on a list (M5a) | details if its meal is visible, else "Private meal" (VIS-06) | n/a |
-| Ingredient (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
+| Item (M3) | everyone | everyone; merge and delete: admin (ING-01, ING-05) |
 | Due item (LIST-16) | list editors, on drafts | hide: list editors, on drafts; holds for all |
 | Recurring item (LIST-16) | own set; the couple's set while in a couple | same (either partner) |
 | Notice (D-51) | the user it is for | dismiss: same |
@@ -18,7 +18,7 @@
 A list's partner sees it while the couple exists; everyone but the owner (and the partner of a
 shared list) sees it read-only. Only the owner deletes a list and switches sharing (LIST-13).
 
-Ingredients are a shared household wiki, so they need no per-object check; the
+Items are a shared household wiki, so they need no per-object check; the
 admin-only actions go through `require_admin` (via the `CurrentAdmin` dependency).
 
 A meal, list, recurring item or notice the viewer may not see answers exactly like one that
@@ -76,17 +76,17 @@ async def owner_key(session: AsyncSession, user_id: str) -> OwnerKey:
 
 
 async def require_recurring_item(
-    session: AsyncSession, principal: Principal, item_id: str
+    session: AsyncSession, principal: Principal, recurring_id: str
 ) -> RecurringItem:
     """The recurring item, if it is in the principal's current set (LIST-16): for every method
     404 `common.not_found` otherwise, exactly as for an item that does not exist."""
-    item = await recurring_repo.get(session, item_id)
-    if item is None:
+    recurring = await recurring_repo.get(session, recurring_id)
+    if recurring is None:
         raise not_found()
-    owner = OwnerKey(couple_id=item.couple_id, user_id=item.user_id)
+    owner = OwnerKey(couple_id=recurring.couple_id, user_id=recurring.user_id)
     if owner != await owner_key(session, principal.user_id):
         raise not_found()
-    return item
+    return recurring
 
 
 async def require_own_notice(session: AsyncSession, principal: Principal, notice_id: str) -> Notice:

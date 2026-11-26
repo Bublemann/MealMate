@@ -1,5 +1,5 @@
-"""The own account: profile, language, privacy, saved filters, password, sessions (ACC-09,
-ACC-10, ACC-13, VIS-02, MEAL-10, UI-02, I18N-01)."""
+"""The own account: profile, language, privacy, saved filters, the carry-over setting,
+password, sessions (ACC-09, ACC-10, ACC-13, VIS-02, MEAL-10, UI-02, I18N-01, LIST-17)."""
 
 from datetime import datetime
 
@@ -21,7 +21,8 @@ from app.services.principal import Principal
 from app.services.users import user_ref
 
 
-async def _user(session: AsyncSession, principal: Principal) -> User:
+async def current_user(session: AsyncSession, principal: Principal) -> User:
+    """The principal's own user row, which authentication has just loaded."""
     user = await users_repo.get(session, principal.user_id)
     if user is None:  # pragma: no cover -- authentication has just loaded this user
         raise ApiError(ErrorCode.SESSION_REVOKED, status_code=401)
@@ -30,7 +31,7 @@ async def _user(session: AsyncSession, principal: Principal) -> User:
 
 async def get_me(session: AsyncSession, principal: Principal) -> Me:
     async with session.begin():
-        return Me.model_validate(await _user(session, principal))
+        return Me.model_validate(await current_user(session, principal))
 
 
 def _dedupe(ids: list[str]) -> list[str]:
@@ -53,7 +54,7 @@ async def update_me(
     if update.display_name is not None and (problem := display_name_problem(update.display_name)):
         raise validation_error([FieldProblem(("body", "display_name"), problem)])
     async with session.begin():
-        user = await _user(session, principal)
+        user = await current_user(session, principal)
         if update.display_name is not None:
             display_name = clean_display_name(update.display_name)
             await accounts.check_display_name_free(session, display_name, except_user_id=user.id)
@@ -71,6 +72,8 @@ async def update_me(
             user.lists_public = update.lists_public
         if update.filter_hidden is not None:
             user.filter_hidden = _filter_hidden(update.filter_hidden)
+        if update.carry_over_leftovers is not None:
+            user.carry_over_leftovers = update.carry_over_leftovers
         user.updated_at = now
         await session.flush()
         return Me.model_validate(user)
@@ -90,7 +93,7 @@ async def change_password(
     """Change the password and log out all *other* devices (ACC-09). Guesses at the current
     password count towards the login throttle of the user and the client (ACC-11)."""
     async with session.begin():
-        user = await _user(session, principal)
+        user = await current_user(session, principal)
         old_hash, username = user.password_hash, user.username
     attempt = start_attempt(throttle, username=username, client_ip=client_ip)
     if not await verify_password(current_password, old_hash, rounds=config.bcrypt_rounds):
@@ -104,7 +107,7 @@ async def change_password(
 
     session.expire_all()
     async with session.begin():
-        user = await _user(session, principal)
+        user = await current_user(session, principal)
         if user.password_hash != old_hash:
             # Changed or reset meanwhile; the current password we checked is no longer it.
             raise ApiError(ErrorCode.PASSWORD_INCORRECT, status_code=403)
@@ -150,7 +153,7 @@ async def revoke_session(
 
 async def security_info(session: AsyncSession, principal: Principal) -> SecurityInfo:
     async with session.begin():
-        user = await _user(session, principal)
+        user = await current_user(session, principal)
         reset_by = None
         if user.password_reset_by is not None:
             admin = await users_repo.get(session, user.password_reset_by)

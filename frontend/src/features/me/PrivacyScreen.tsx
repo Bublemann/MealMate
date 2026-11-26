@@ -1,14 +1,7 @@
-import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { useCurrentUser } from '@/features/auth/context';
-import { testIds, type TestId } from '@/testIds';
-import { useUpdateMe } from './api';
+import { testIds } from '@/testIds';
 import { SettingsPage } from './SettingsPage';
-
-type PrivacyField = 'meals_public' | 'lists_public';
+import { SettingSwitch } from './SettingSwitch';
 
 /**
  * Settings → Privatsphäre: the two switches (VIS-02); the partner always sees everything
@@ -20,59 +13,18 @@ export function PrivacyScreen() {
   return (
     <SettingsPage title={t('me.privacy.title')} testId={testIds.screenPrivacy}>
       <p className="text-muted-foreground">{t('me.privacy.text')}</p>
-      <PrivacySwitch
+      <SettingSwitch
         field="meals_public"
         label={t('me.privacy.mealsPublic')}
         hint={t('me.privacy.mealsPublicHint')}
         testId={testIds.mealsPublicSwitch}
       />
-      <PrivacySwitch
+      <SettingSwitch
         field="lists_public"
         label={t('me.privacy.listsPublic')}
         hint={t('me.privacy.listsPublicHint')}
         testId={testIds.listsPublicSwitch}
       />
     </SettingsPage>
-  );
-}
-
-interface PrivacySwitchProps {
-  field: PrivacyField;
-  label: string;
-  hint: string;
-  testId: TestId;
-}
-
-function PrivacySwitch({ field, label, hint, testId }: PrivacySwitchProps) {
-  const user = useCurrentUser();
-  const update = useUpdateMe();
-  const id = useId();
-  const hintId = `${id}-hint`;
-  // Show the requested state while it is being saved.
-  const pending = update.isPending ? update.variables[field] : undefined;
-  const checked = typeof pending === 'boolean' ? pending : user[field];
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={id} className="min-h-7">
-            {label}
-          </Label>
-          <p id={hintId} className="text-sm text-muted-foreground">
-            {hint}
-          </p>
-        </div>
-        <Switch
-          id={id}
-          data-testid={testId}
-          aria-describedby={hintId}
-          checked={checked}
-          disabled={update.isPending}
-          onCheckedChange={(value) => update.mutate({ [field]: value })}
-        />
-      </div>
-      <ErrorAlert error={update.error} />
-    </div>
   );
 }

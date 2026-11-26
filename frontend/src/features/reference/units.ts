@@ -1,8 +1,8 @@
-import type { BaseUnit } from '@/features/ingredients/api';
+import type { BaseUnit } from '@/features/items/api';
 import { useUnits, type Unit, type UnitInfo } from './api';
 
 /**
- * The units an ingredient counted in `baseUnit` takes (REF-02), in display order. Which units fit
+ * The units an item counted in `baseUnit` takes (REF-02), in display order. Which units fit
  * which base unit comes from the server (`/api/units`), which also refuses the others.
  */
 export function fittingUnits(units: readonly UnitInfo[], baseUnit: BaseUnit): Unit[] {
@@ -10,7 +10,7 @@ export function fittingUnits(units: readonly UnitInfo[], baseUnit: BaseUnit): Un
 }
 
 /**
- * Whether an amount fits its ingredient (REF-02): an amount without a unit counts as pieces, and
+ * Whether an amount fits its item (REF-02): an amount without a unit counts as pieces, and
  * a row without an amount fits every base unit.
  */
 export function unitFits(
@@ -23,8 +23,8 @@ export function unitFits(
 }
 
 /**
- * The unit an amount keeps when another ingredient is chosen for it: the same one while it fits
- * the new ingredient, none once it no longer does (MEAL-02, LIST-06).
+ * The unit an amount keeps when another item is chosen for it: the same one while it fits
+ * the new item, none once it no longer does (MEAL-02, LIST-06).
  */
 export function keptUnit(
   units: readonly UnitInfo[],
@@ -41,7 +41,7 @@ export interface UnitOption {
 }
 
 /**
- * The unit choices of an amount of an ingredient counted in `baseUnit` (REF-02): the units that
+ * The unit choices of an amount of an item counted in `baseUnit` (REF-02): the units that
  * fit, then an older unit that doesn't (D-33), disabled, so it stays shown until the user picks one
  * that fits. `fits` follows the amount and unit as entered, so the mark of a unit that doesn't fit
  * comes and goes with the user's edits; the server judges what is stored the same way (`unit_fits`)
