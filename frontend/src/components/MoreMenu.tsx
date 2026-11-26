@@ -41,6 +41,10 @@ interface MoreMenuProps {
   children: ReactNode;
   /** The destructive item ("Löschen"), if the user may delete: red, after a separator, last. */
   danger?: ReactNode;
+  /** For a row's menu (a leftover meal's ⋮, LIST-17): its button's name, test ID and icon. */
+  label?: string;
+  testId?: TestId;
+  icon?: ReactNode;
 }
 
 /**
@@ -50,7 +54,7 @@ interface MoreMenuProps {
  * menu has closed and given the focus back to ⋯; the dialog puts it there again when it closes
  * (`useMoreMenuFocus`).
  */
-export function MoreMenu({ trigger, children, danger }: MoreMenuProps) {
+export function MoreMenu({ trigger, children, danger, label, testId, icon }: MoreMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const pending = useRef<(() => void) | null>(null);
@@ -69,11 +73,11 @@ export function MoreMenu({ trigger, children, danger }: MoreMenuProps) {
           ref={trigger}
           variant="ghost"
           size="icon"
-          data-testid={testIds.moreActions}
-          aria-label={t('common.moreActions')}
-          className="-mr-[0.25em] text-primary"
+          data-testid={testId ?? testIds.moreActions}
+          aria-label={label ?? t('common.moreActions')}
+          className="-mr-[0.25em] shrink-0 text-primary"
         >
-          <Ellipsis aria-hidden="true" className="size-[1.5em]" />
+          {icon ?? <Ellipsis aria-hidden="true" className="size-[1.5em]" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

@@ -528,10 +528,16 @@ async def update_list(
         )
 
 
-async def delete_list(session: AsyncSession, principal: Principal, list_id: str) -> None:
-    """Delete a list in any state (the owner, LIST-13); its content goes with it."""
+async def delete_list(
+    session: AsyncSession, principal: Principal, list_id: str, *, now: datetime
+) -> None:
+    """Delete a list in any state (the owner, LIST-13); its content goes with it, and so do the
+    leftovers of its meals on other lists, which change (LIST-17)."""
     async with session.begin():
         shopping_list, _ = await access.require_list_owner(session, principal, list_id)
+        meal_ids = [row.id for row in (await lists_repo.meals_for(session, [list_id]))[list_id]]
+        showing = await lists_repo.lists_with_leftovers_of(session, meal_ids)
+        await lists_repo.bump(session, showing - {list_id}, now)
         await session.delete(shopping_list)
 
 
@@ -793,10 +799,13 @@ async def remove_meal(
     now: datetime,
     zone: ZoneInfo,
 ) -> ListDetail:
-    """Take a meal off the list, also one that is no longer available (LIST-15)."""
+    """Take a meal off the list, also one that is no longer available (LIST-15); its leftovers
+    on other lists go with it, and those lists change (LIST-17)."""
     async with session.begin():
         shopping_list, rights = await _editable(session, principal, list_id)
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
+        showing = await lists_repo.lists_with_leftovers_of(session, [list_meal.id])
+        await lists_repo.bump(session, showing - {shopping_list.id}, now)
         await session.delete(list_meal)
         await touch(session, shopping_list, now)
         return await list_detail(
@@ -819,8 +828,10 @@ async def set_meal_eaten(
     only (CPL-03), and only once it is done (409 `list.not_done` in a draft or while shopping).
     It is the one change a done list takes; its lines stay as they are.
 
-    A leftover is marked on any list, and marks its source meal (LIST-17). That changes every
-    list that shows the source: its own and those with a leftover of it, so all are bumped."""
+    A leftover is marked on any list, and marks its source meal (LIST-17), which needs edit
+    rights on the source's list too (403 otherwise, e.g. once the couple ended). That changes
+    every list that shows the source: its own and those with a leftover of it, so all are
+    bumped."""
     async with session.begin():
         shopping_list, rights = await access.require_list_edit(session, principal, list_id)
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
@@ -829,12 +840,16 @@ async def set_meal_eaten(
             target = list_meal
         else:
             target = await _source_of(session, list_meal)
+            try:
+                await access.require_list_edit(session, principal, target.list_id)
+            except ApiError as refused:
+                raise ApiError(ErrorCode.FORBIDDEN, status_code=403) from refused
         if target.eaten != body.eaten:
             target.eaten = body.eaten
             target.updated_at = now
             showing = {
                 target.list_id,
-                *await lists_repo.lists_with_leftovers_of(session, target.id),
+                *await lists_repo.lists_with_leftovers_of(session, [target.id]),
             }
             await lists_repo.bump(session, showing - {shopping_list.id}, now)
             await touch(session, shopping_list, now)
@@ -845,8 +860,14 @@ async def set_meal_eaten(
 
 async def _source_of(session: AsyncSession, leftover: ListMeal) -> ListMeal:
     """A leftover's source meal (it goes with its source, so it always has one)."""
-    source_id = str(leftover.leftover_of_id)
-    return (await lists_repo.meals_by_ids(session, [source_id]))[source_id]
+    source = (
+        None
+        if leftover.leftover_of_id is None
+        else await session.get(ListMeal, leftover.leftover_of_id)
+    )
+    if source is None:  # pragma: no cover -- a leftover goes with its source (foreign key)
+        raise RuntimeError("a leftover's source meal is missing")
+    return source
 
 
 async def shop_leftover(

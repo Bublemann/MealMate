@@ -4,16 +4,12 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { MoreMenu, MoreMenuItem } from '@/components/MoreMenu';
 import { SwipeRow } from '@/components/SwipeRow';
+import { useMoreMenuFocus } from '@/components/useMoreMenuFocus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { TapCheckbox } from '@/components/ui/tap-checkbox';
 import { useConnected } from '@/features/sync/context';
 import { cn } from '@/lib/utils';
@@ -124,8 +120,8 @@ export function ListMeals({
                       // The promise settles for every tap; `mutate`'s own callbacks only for
                       // the latest, which would leave an earlier box as it was tapped.
                       onChange: (eaten, settled) => {
-                        const label = mealLabel(t, entry);
-                        if (entry.leftover && leavesList && eaten) setUndo({ id: entry.id, label });
+                        if (entry.leftover && leavesList && eaten)
+                          setUndo({ id: entry.id, label: mealLabel(t, entry) });
                         void sendEaten(entry.id, eaten, settled).then((ok) => {
                           if (!ok)
                             setUndo((current) => (current?.id === entry.id ? null : current));
@@ -317,7 +313,7 @@ function MealEntry({
               label={label}
               // Not once the meal is gone or can't be seen (VIS-06, LIST-15).
               canShop={visible && entry.meal_id !== null}
-              disabled={offline}
+              offline={offline}
               onShop={onShop}
               onRemove={onRemove}
             />
@@ -363,41 +359,43 @@ function EatenBox({ label, eaten, disabled, onChange }: EatenBoxProps) {
 interface LeftoverMenuProps {
   label: string;
   canShop: boolean;
-  disabled: boolean;
+  /** Without a connection: the items are disabled, the button stays enabled (D-39). */
+  offline: boolean;
   onShop: () => void;
   onRemove: () => void;
 }
 
-/** A leftover's ⋮ menu (LIST-17): "Doch einkaufen" and "Entfernen". */
-function LeftoverMenu({ label, canShop, disabled, onShop, onRemove }: LeftoverMenuProps) {
+/** A leftover's ⋮ menu (LIST-17): "Doch einkaufen" and, red and last, "Entfernen". */
+function LeftoverMenu({ label, canShop, offline, onShop, onRemove }: LeftoverMenuProps) {
   const { t } = useTranslation();
+  const { trigger } = useMoreMenuFocus();
 
   return (
-    // Not modal, like the screens' ⋯ menu: the page keeps its place.
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          data-testid={testIds.leftoverMenu}
-          aria-label={t('lists.meals.actions', { name: label })}
-          disabled={disabled}
-          className="shrink-0 text-primary"
+    <MoreMenu
+      trigger={trigger}
+      label={t('lists.meals.actions', { name: label })}
+      testId={testIds.leftoverMenu}
+      icon={<EllipsisVertical aria-hidden="true" />}
+      danger={
+        <MoreMenuItem
+          testId={testIds.removeLeftover}
+          icon={<Trash2 aria-hidden="true" />}
+          disabled={offline}
+          onSelect={onRemove}
         >
-          <EllipsisVertical aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem data-testid={testIds.shopLeftover} disabled={!canShop} onSelect={onShop}>
-          <ShoppingCart aria-hidden="true" />
-          <span className="min-w-0 flex-1">{t('lists.meals.shopAfterAll')}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem data-testid={testIds.removeLeftover} onSelect={onRemove}>
-          <Trash2 aria-hidden="true" />
-          <span className="min-w-0 flex-1">{t('lists.meals.removeAction')}</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {t('lists.meals.removeAction')}
+        </MoreMenuItem>
+      }
+    >
+      <MoreMenuItem
+        testId={testIds.shopLeftover}
+        icon={<ShoppingCart aria-hidden="true" />}
+        disabled={offline || !canShop}
+        onSelect={onShop}
+      >
+        {t('lists.meals.shopAfterAll')}
+      </MoreMenuItem>
+    </MoreMenu>
   );
 }
 

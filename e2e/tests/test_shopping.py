@@ -276,7 +276,8 @@ def test_leftovers_come_along_into_a_new_draft(
     with page.expect_response(
         lambda response: response.request.method == "PUT" and response.url.endswith("/eaten")
     ) as saved:
-        row.get_by_role("checkbox", name=text("lists.meals.eaten", name=chili["name"])).check()
+        # A click, not check(): the box leaves with its row, so it can't be seen ticked.
+        row.get_by_role("checkbox", name=text("lists.meals.eaten", name=chili["name"])).click()
     assert saved.value.ok
     expect(row).to_have_count(0)
     toast = page.get_by_test_id(TEST_IDS["leftoverToast"])

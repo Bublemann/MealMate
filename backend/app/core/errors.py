@@ -98,7 +98,8 @@ class ErrorCode(StrEnum):
     LIST_MEAL_LEFTOVER = "list_meal.leftover"
     # 409: "Doch einkaufen" on a meal that isn't a leftover (LIST-17).
     LIST_MEAL_NOT_LEFTOVER = "list_meal.not_leftover"
-    # 409: "Doch einkaufen" on a leftover whose meal was deleted or can't be seen any more.
+    # 409: "Doch einkaufen" on a leftover whose meal was deleted or can't be seen any more
+    # (LIST-17, VIS-06).
     LIST_MEAL_UNAVAILABLE = "list_meal.unavailable"
     # 409, only as an op result: the client's extra item id is already used on another list.
     EXTRA_ID_TAKEN = "extra.id_taken"

@@ -9,7 +9,15 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
 
-from tests.accounts import Account, FakeClock, error, login, make_couple, make_user
+from tests.accounts import (
+    Account,
+    FakeClock,
+    error,
+    login,
+    make_couple,
+    make_user,
+    set_privacy,
+)
 from tests.catalog import category_ids, create_item
 from tests.lists import added, applied, create_list, detail, lines, op, start_shopping
 from tests.meals import create_meal
@@ -264,10 +272,17 @@ async def test_ticking_a_leftover_marks_its_source_eaten_everywhere(
     assert meal_rows(response.json()) == [("Brot", True, False), ("Chili", True, False)]
     assert meal_rows(await detail(api, anna, one["id"]))[1] == ("Chili", True, False)
 
-    # Ticking on the done list removes it from every draft too.
+    # Ticking on the done list removes it from every draft too, and changes them.
+    before = {
+        draft["id"]: (await detail(api, anna, draft["id"]))["version"] for draft in (one, two)
+    }
     await eat(api, anna, after_done, "Brot")
     for draft in (one, two):
-        assert meal_rows(await detail(api, anna, draft["id"])) == [("Chili", True, False)]
+        now = await detail(api, anna, draft["id"])
+        assert (meal_rows(now), now["version"]) == (
+            [("Chili", True, False)],
+            before[draft["id"]] + 1,
+        )
 
 
 async def test_normal_meals_of_drafts_still_cant_be_eaten(
@@ -400,3 +415,74 @@ async def test_a_copy_has_a_meal_on_the_list_twice_once(
         ("Brot", False, 3)
     ]
     assert body["left_out"] == 0
+
+
+async def test_ticking_a_leftover_while_shopping_marks_its_source(
+    api: AsyncClient, anna: Account, meals: dict[str, Any]
+) -> None:
+    done = await done_list(api, anna, [meals["Brot"]])
+    draft = await create_list(api, anna)
+    shopping = await start_shopping(api, anna, draft["id"])
+
+    response = await set_eaten(api, anna, draft["id"], shopping["meals"][0]["id"], eaten=True)
+
+    assert response.status_code == 200, response.text
+    assert meal_rows(response.json()) == []
+    assert meal_rows(await detail(api, anna, done["id"])) == [("Brot", False, True)]
+
+
+async def test_a_leftover_needs_edit_rights_on_its_source(
+    api: AsyncClient, anna: Account, ben: Account, meals: dict[str, Any]
+) -> None:
+    """Once the couple ended, ben can't mark anna's list eaten through the leftover on his
+    draft (CPL-03, CPL-05)."""
+    await make_couple(api, anna, ben)
+    done = await done_list(api, anna, [meals["Brot"]])
+    draft = await create_list(api, ben)
+    assert (await api.delete("/api/couple", headers=anna.headers)).status_code == 204
+
+    response = await set_eaten(api, ben, draft["id"], draft["meals"][0]["id"], eaten=True)
+
+    assert (response.status_code, error(response)) == (403, "common.forbidden")
+    assert meal_rows(await detail(api, anna, done["id"])) == [("Brot", False, False)]
+
+
+async def test_a_leftover_of_a_meal_one_can_no_longer_see_cant_be_shopped_for(
+    app: FastAPI, api: AsyncClient, anna: Account, ben: Account, meals: dict[str, Any]
+) -> None:
+    """A leftover of a meal the viewer may not see is private (VIS-06); it stays a leftover."""
+    carl = await make_user(app, api, "carl")
+    curry = await create_meal(api, carl, "Curry", ingredients=[])
+    await make_couple(api, anna, ben)
+    await done_list(api, anna, [curry])
+    await set_privacy(api, carl, meals_public=False)
+    draft = await create_list(api, ben)
+    [entry] = draft["meals"]
+    assert (entry["private"], entry["name"], entry["leftover"]) == (True, None, True)
+
+    response = await shop(api, ben, draft["id"], entry["id"])
+
+    assert (response.status_code, error(response)) == (409, "list_meal.unavailable")
+
+
+async def test_leftovers_go_with_their_source_and_their_lists_change(
+    api: AsyncClient, anna: Account, clock: FakeClock, meals: dict[str, Any]
+) -> None:
+    done = await done_list(api, anna, [meals["Brot"], meals["Chili"]])
+    draft = await create_list(api, anna)
+    clock.advance(minutes=1)
+    await login(api, anna)
+    # The source list reopened, one of its meals removed: its leftover goes, the draft changes.
+    reopened = (await api.post(f"/api/lists/{done['id']}/reopen", headers=anna.headers)).json()
+    response = await api.delete(
+        f"/api/lists/{done['id']}/meals/{by_name(reopened, 'Brot')['id']}", headers=anna.headers
+    )
+    assert response.status_code == 200, response.text
+    after = await detail(api, anna, draft["id"])
+    assert (meal_rows(after), after["version"]) == ([("Chili", True, False)], draft["version"] + 1)
+
+    response = await api.delete(f"/api/lists/{done['id']}", headers=anna.headers)
+
+    assert response.status_code == 204, response.text
+    gone = await detail(api, anna, draft["id"])
+    assert (meal_rows(gone), gone["version"]) == ([], after["version"] + 1)

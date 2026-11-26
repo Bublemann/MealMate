@@ -152,9 +152,11 @@ async def update_list(
 
 
 @router.delete("/{list_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-async def delete_list(list_id: str, principal: CurrentUser, session: WriteSession) -> None:
+async def delete_list(
+    list_id: str, principal: CurrentUser, session: WriteSession, now: Now
+) -> None:
     """Delete your list, whatever its state."""
-    await lists.delete_list(session, principal, list_id)
+    await lists.delete_list(session, principal, list_id, now=now)
 
 
 @router.post("/{list_id}/copy", status_code=status.HTTP_201_CREATED)

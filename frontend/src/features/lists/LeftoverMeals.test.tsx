@@ -1,9 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { errorResponse, goOffline, heldRoute, mockApi, requestsTo } from '@/test/api';
 import { doneList, LIST_ID, LIST_ROUTES, listDetail, listMeal, shoppingList } from '@/test/lists';
 import { renderApp } from '@/test/render';
 import { testIds } from '@/testIds';
+import { UNDO_TOAST_MS } from './ListMeals';
 
 const BASE = `/api/lists/${LIST_ID}`;
 
@@ -85,6 +86,35 @@ describe('leftover meals in a draft (LIST-17)', () => {
     expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
   });
 
+  it('closes the undo toast by itself, or when it is closed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = renderList({
+      [`PUT ${BASE}/meals/lm-chili/eaten`]: listDetail({ version: 4, meals: [PANCAKES] }),
+    });
+    await user.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
+    expect(await screen.findByTestId(testIds.leftoverToast)).toBeVisible();
+
+    act(() => {
+      vi.advanceTimersByTime(UNDO_TOAST_MS);
+    });
+
+    expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('closes the undo toast with its close button', async () => {
+    const { user, fetchMock } = renderList({
+      [`PUT ${BASE}/meals/lm-chili/eaten`]: listDetail({ version: 4, meals: [PANCAKES] }),
+    });
+    await user.click(await screen.findByRole('checkbox', { name: 'Chili eaten' }));
+    const toast = await screen.findByTestId(testIds.leftoverToast);
+
+    await user.click(within(toast).getByRole('button', { name: 'Close' }));
+
+    expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
+    expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-chili/eaten`)).toHaveLength(1);
+  });
+
   it('says when ticking fails and shows the leftover again', async () => {
     const { user } = renderList({
       [`PUT ${BASE}/meals/lm-chili/eaten`]: errorResponse(403, 'common.forbidden'),
@@ -151,13 +181,17 @@ describe('leftover meals in a draft (LIST-17)', () => {
   });
 
   it('needs a connection', async () => {
-    const { fetchMock } = renderList();
+    const { fetchMock, user } = renderList();
     const box = await screen.findByRole('checkbox', { name: 'Chili eaten' });
 
     goOffline(fetchMock);
 
     await waitFor(() => expect(box).toBeDisabled());
-    expect(screen.getByRole('button', { name: 'Actions: Chili' })).toBeDisabled();
+    // The ⋮ button stays enabled; its items need a connection (D-39).
+    await user.click(screen.getByRole('button', { name: 'Actions: Chili' }));
+    const menu = await screen.findByRole('menu');
+    for (const item of within(menu).getAllByRole('menuitem'))
+      expect(item).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('keeps leftovers while shopping, with their box', async () => {
@@ -171,13 +205,32 @@ describe('leftover meals in a draft (LIST-17)', () => {
   });
 
   it('shows leftovers on a done list, ticked once eaten, without a menu', async () => {
-    renderList({
-      [`GET ${BASE}`]: doneList({ meals: [{ ...CHILI, eaten: true }, PANCAKES] }),
+    const done = doneList({ meals: [{ ...CHILI, eaten: true }, PANCAKES] });
+    const { user, fetchMock } = renderList({
+      [`GET ${BASE}`]: done,
+      [`PUT ${BASE}/meals/lm-chili/eaten`]: async (request: Request) =>
+        doneList({
+          version: 10,
+          meals: [
+            { ...CHILI, eaten: ((await request.json()) as { eaten: boolean }).eaten },
+            PANCAKES,
+          ],
+        }),
     });
 
-    expect(await screen.findByRole('checkbox', { name: 'Chili eaten' })).toBeChecked();
+    const box = await screen.findByRole('checkbox', { name: 'Chili eaten' });
+    expect(box).toBeChecked();
     expect(within(chiliRow()).getByText('left over')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Actions: Chili' })).not.toBeInTheDocument();
+    // Unticked there, it stays on the done list, without a toast.
+    await user.click(box);
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-chili/eaten`)).toHaveLength(1),
+    );
+    expect(chiliRow()).toBeVisible();
+    await user.click(box);
+    expect(chiliRow()).toBeVisible();
+    expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Meals/ })).toHaveTextContent('Meals 1 of 2 eaten');
   });
 });
