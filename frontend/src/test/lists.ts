@@ -24,6 +24,7 @@ export function listMeal(
     servings: 4,
     meal_servings: 2,
     detached: null,
+    eaten: false,
     ...overrides,
   };
 }

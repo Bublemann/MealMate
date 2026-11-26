@@ -9,8 +9,8 @@ shopping mode from `services.shopping`. Every change bumps the list's `version` 
 
 The states (LIST-10): meals, servings and extra items change in a draft and while shopping
 (LIST-12: a meal added while shopping is frozen at once, a linked extra item snapshotted); a
-done list is read-only (409 `list.done`) until it is reopened. Lines are hidden and restored
-only in a draft (409 `list.not_draft`).
+done list is read-only (409 `list.done`) until it is reopened, except that its meals are marked
+eaten (SHOP-07). Lines are hidden and restored only in a draft (409 `list.not_draft`).
 """
 
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
@@ -68,6 +68,7 @@ from app.schemas.lists import (
     ListDetail,
     ListFeedPage,
     ListMealAdd,
+    ListMealEaten,
     ListMealEntry,
     ListMealUpdate,
     ListSummary,
@@ -147,6 +148,7 @@ def _meal_entry(
             servings=list_meal.servings,
             meal_servings=meal_servings,
             detached=detached,
+            eaten=list_meal.eaten,
         )
     owner_id = list_meal.meal_owner_id_snapshot
     return ListMealEntry(
@@ -163,6 +165,7 @@ def _meal_entry(
         servings=list_meal.servings,
         meal_servings=meal_servings,
         detached=detached,
+        eaten=list_meal.eaten,
     )
 
 
@@ -730,6 +733,33 @@ async def remove_meal(
         list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
         await session.delete(list_meal)
         await touch(session, shopping_list, now)
+        return await list_detail(
+            session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
+        )
+
+
+async def set_meal_eaten(
+    session: AsyncSession,
+    media: MediaStore,
+    principal: Principal,
+    list_id: str,
+    list_meal_id: str,
+    body: ListMealEaten,
+    *,
+    now: datetime,
+    zone: ZoneInfo,
+) -> ListDetail:
+    """Mark a meal on a done list eaten, or clear that (SHOP-07, D-55): editors of the list
+    only (CPL-03), and only once it is done (409 `list.not_done` in a draft or while shopping).
+    It is the one change a done list takes; its lines stay as they are."""
+    async with session.begin():
+        shopping_list, rights = await access.require_list_edit(session, principal, list_id)
+        _require_done(shopping_list)
+        list_meal = await _list_meal_of(session, shopping_list.id, list_meal_id)
+        if list_meal.eaten != body.eaten:
+            list_meal.eaten = body.eaten
+            list_meal.updated_at = now
+            await touch(session, shopping_list, now)
         return await list_detail(
             session, media, principal.user_id, shopping_list, rights, now=now, zone=zone
         )

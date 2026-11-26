@@ -157,7 +157,7 @@ async def test_a_supply_takes_no_nutrients_and_keeps_its_kind(
     clock: FakeClock,
 ) -> None:
     """A supply has no nutrients, so a refresh brings none, and Open Food Facts never sets the
-    kind (D-55)."""
+    kind (D-56)."""
     product = await saved_oats(api, anna, edited=[], kind="supply", nutrients=None)
     newer = oats(product_name_de="Zarte Haferflocken", last_modified_t=modified(30))
     route(off_api, OATS).respond(json=newer)
@@ -179,7 +179,7 @@ async def test_switching_to_supply_drops_the_pending_nutrients(
     clock: FakeClock,
 ) -> None:
     """A supply has no nutrients, so newer Open Food Facts values for them no longer apply; the
-    other pending values stay (D-55)."""
+    other pending values stay (D-56)."""
     product = await saved_oats(api, anna, edited=["name", "nutrients.kcal"], name="Meine Flocken")
     newer = oats(
         nutriments={**oats()["product"]["nutriments"], "energy-kcal_100g": 158},

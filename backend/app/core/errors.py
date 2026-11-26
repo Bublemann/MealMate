@@ -76,7 +76,7 @@ class ErrorCode(StrEnum):
     # The request goes through when it accepts that.
     ITEM_UNIT_MISMATCH = "item.unit_mismatch"
     # 409: switching an item to supply, or merging it into a supply, while meals use it as an
-    # ingredient (D-55); `params.meals` counts those meals and `params.names` names the ones the
+    # ingredient (D-56); `params.meals` counts those meals and `params.names` names the ones the
     # user may see, in dictionary order.
     ITEM_USED_IN_MEALS = "item.used_in_meals"
     # 503: too many Open Food Facts lookups or searches right now (BAR-08); retry or enter the
@@ -119,7 +119,7 @@ class FieldErrorCode(StrEnum):
     SAME_AS_USERNAME = "same_as_username"
     # An amount whose unit doesn't fit its item's base unit (REF-02).
     UNIT_MISMATCH = "unit_mismatch"
-    # A supply as an ingredient in a meal (D-55).
+    # A supply as an ingredient in a meal (D-56).
     SUPPLY = "supply"
 
 

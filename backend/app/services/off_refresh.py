@@ -26,7 +26,7 @@ so the next refresh tries again (BAR-07). Found, field by field (BAR-06):
   an item without a version, this very value (the ignored entries kept in `pending_update`, see
   `services.off_fields`);
 - nutrients only while Open Food Facts gives them per what the item's are per: 100 g,
-  or 100 ml for an ml item (`NUTRITION_BASIS`), and never for a supply, which has none (D-55);
+  or 100 ml for an ml item (`NUTRITION_BASIS`), and never for a supply, which has none (D-56);
 - the kind, category, base unit, piece weight and barcode are never touched.
 """
 

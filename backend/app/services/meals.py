@@ -197,7 +197,7 @@ async def _check_references(
     problems: list[FieldProblem],
     kept: Collection[RowKey] = (),
 ) -> None:
-    """Refuse (422) unknown cuisines and items, supplies (`supply`, D-55), and rows whose unit
+    """Refuse (422) unknown cuisines and items, supplies (`supply`, D-56), and rows whose unit
     doesn't fit their item's base unit (REF-02, MEAL-02), together with the other `problems`. A
     row that doesn't fit is kept when the meal already has it with the same item, amount and unit
     (`kept`): it was entered before the rule, or left by a base-unit change or a merge (D-33)."""

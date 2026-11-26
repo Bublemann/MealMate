@@ -26,7 +26,7 @@ interface MealScanProps {
 /**
  * The meal form's "Scan barcode" (BAR-01, MEAL-03). A barcode one of our items has adds its
  * row at once (BAR-02): our own items answer that without waiting for Open Food Facts, unless it
- * is a supply, which can't be an ingredient (D-55). Any other barcode opens "New item", which
+ * is a supply, which can't be an ingredient (D-56). Any other barcode opens "New item", which
  * looks it up as after a scan with its own scan icon (BAR-03); its "Save", or taking an item
  * there, adds the row.
  */

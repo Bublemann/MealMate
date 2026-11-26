@@ -504,7 +504,7 @@ describe('MealFormScreen, scanning (BAR-01..03, MEAL-03)', () => {
     expect(within(form).getByLabelText('Name')).toHaveValue('Kakao');
   });
 
-  it('says a scanned supply can’t be an ingredient, and adds no row (D-55)', async () => {
+  it('says a scanned supply can’t be an ingredient, and adds no row (D-56)', async () => {
     const { user } = renderForm('/meals/new', {
       [LOOKUP]: lookupResult({
         found_in: 'db',

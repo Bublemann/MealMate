@@ -94,6 +94,7 @@ class ListMealEntry(BaseModel):
     keeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is
     the one it had). `meal_servings` is what the meal's rows are written for; the rows are
     scaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.
+    `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
     """
 
     id: str
@@ -105,6 +106,7 @@ class ListMealEntry(BaseModel):
     servings: int
     meal_servings: int
     detached: DetachedReason | None
+    eaten: bool
 
 
 class LineSource(BaseModel):
@@ -296,6 +298,12 @@ class ListMealAdd(BaseModel):
 
 class ListMealUpdate(BaseModel):
     servings: ServingsInput
+
+
+class ListMealEaten(BaseModel):
+    """Mark a meal on a done list eaten, or clear that (SHOP-07)."""
+
+    eaten: bool
 
 
 class ExtraItemCreate(BaseModel):

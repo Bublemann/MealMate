@@ -1,4 +1,4 @@
-"""Supplies: an item is food or a supply (ING-02, D-55). A supply has no nutrition values and no
+"""Supplies: an item is food or a supply (ING-02, D-56). A supply has no nutrition values and no
 piece weight and is never an ingredient in a meal; it can be an extra item or a recurring item.
 Open Food Facts never sets the kind."""
 

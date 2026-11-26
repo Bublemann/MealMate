@@ -1610,7 +1610,7 @@
         "type": "object"
       },
       "Item": {
-        "description": "An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n`kind` food or supply (D-55): a supply's nutrients and piece weight are always null, and it\nis never an ingredient in a meal.\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06).\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
+        "description": "An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,\nnever 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count\nwith `piece_weight_g` (NUT-05), which is null for the other base units (D-32).\n`kind` food or supply (D-56): a supply's nutrients and piece weight are always null, and it\nis never an ingredient in a meal.\n\n`source` off: taken from Open Food Facts by its `barcode` and refreshed from there\n(BAR-05); `user_edited_fields` names the fields a user changed (`name`, `nutrients.kcal`,\n...), which a refresh never overwrites (BAR-04), and `pending_update` holds newer Open Food\nFacts values for them (BAR-06).\n`created_by` / `updated_by` are null for a deleted user (ING-06).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1810,7 +1810,7 @@
         "type": "object"
       },
       "ItemCreate": {
-        "description": "A new item (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out\nor null; D-55). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`\notherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes\nneither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).\nOpen Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\nitem has is 409 `item.barcode_taken`.\n\nWith `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its\n`barcode` (422 `required` without). Names need not be unique: the \"similar item exists\"\nhint (`GET /api/items/similar`) is only a hint.",
+        "description": "A new item (ING-02), in one request also when it was scanned.\n\n`category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out\nor null; D-56). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`\notherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes\nneither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).\nOpen Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a\nvalid check digit (spaces are ignored; 422 `invalid_format` otherwise) and stored as EAN-13\n(UPC-A with a leading 0, UPC-E expanded first), an EAN-8 as it is; a barcode another\nitem has is 409 `item.barcode_taken`.\n\nWith `off`, the item is from Open Food Facts (`source` off, refreshed later) and needs its\n`barcode` (422 `required` without). Names need not be unique: the \"similar item exists\"\nhint (`GET /api/items/similar`) is only a hint.",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -1922,7 +1922,7 @@
         "type": "object"
       },
       "ItemMerge": {
-        "description": "Merge the item into `into_id` (ING-05). A merge across base units that would leave\namounts of the item not fitting the base unit of `into_id` is refused (409\n`item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it\nisn't). A merge into a supply is refused while meals use the item (409\n`item.used_in_meals`, D-55).",
+        "description": "Merge the item into `into_id` (ING-05). A merge across base units that would leave\namounts of the item not fitting the base unit of `into_id` is refused (409\n`item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it\nisn't). A merge into a supply is refused while meals use the item (409\n`item.used_in_meals`, D-56).",
         "properties": {
           "accept_unit_mismatch": {
             "anyOf": [
@@ -2066,7 +2066,7 @@
         "type": "object"
       },
       "ItemSummary": {
-        "description": "A search result, list entry or meal row's item. It is shown as `name` with the\n`brand` in brackets when there is one (\"Milch (Weihenstephan)\"); `barcode` is set for\nscanned items. A `kind` supply is never an ingredient in a meal (D-55).",
+        "description": "A search result, list entry or meal row's item. It is shown as `name` with the\n`brand` in brackets when there is one (\"Milch (Weihenstephan)\"); `barcode` is set for\nscanned items. A `kind` supply is never an ingredient in a meal (D-56).",
         "properties": {
           "barcode": {
             "anyOf": [
@@ -2142,7 +2142,7 @@
         "type": "object"
       },
       "ItemUpdate": {
-        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and the\nnutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`item.barcode_taken`); clearing or changing the barcode of an item from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an item that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `item.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.\n\n`kind` (D-55): an item that is (or becomes) a supply takes neither a piece weight nor a\nnutrient value (422 `invalid`). Switching to supply clears both, and is refused while any\nmeal uses the item (409 `item.used_in_meals`).",
+        "description": "Only the fields that are sent change (ING-01); an explicit null clears an optional one\nand is refused for the name, category and base unit (422 `invalid`). `nutrients` changes\nonly the nutrients it contains (null clears one).\n\nOn an item from Open Food Facts, every Open Food Facts field sent (`name`, `brand` and the\nnutrients) becomes user-edited (BAR-04). A new barcode must be free (409\n`item.barcode_taken`); clearing or changing the barcode of an item from Open\nFood Facts makes it manual: a refresh by the new barcode would overwrite its values with\nanother product's. The base unit may change freely; the values are not converted.\nChanging it to or from `piece` clears the piece weight, unless the change to `piece` sends\none. A piece weight is only taken for an item that is (or becomes) counted in pieces\n(422 `invalid` otherwise, D-32). A base-unit change that would leave amounts in meals or on\ndrafts not fitting is refused (409 `item.unit_mismatch`, D-33) unless\n`accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as\nthey are and flagged.\n\n`kind` (D-56): an item that is (or becomes) a supply takes neither a piece weight nor a\nnutrient value (422 `invalid`). Switching to supply clears both, and is refused while any\nmeal uses the item (409 `item.used_in_meals`).",
         "properties": {
           "accept_unit_mismatch": {
             "anyOf": [
@@ -2940,8 +2940,22 @@
         "title": "ListMealAdd",
         "type": "object"
       },
+      "ListMealEaten": {
+        "description": "Mark a meal on a done list eaten, or clear that (SHOP-07).",
+        "properties": {
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eaten"
+        ],
+        "title": "ListMealEaten",
+        "type": "object"
+      },
       "ListMealEntry": {
-        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.",
+        "description": "A meal on a list with its servings (LIST-04).\n\nA meal the viewer may not see is `private`: only its servings are shown, as \"Private meal\n(N servings)\" (VIS-06). `detached` says why a meal is no longer available (LIST-15); it\nkeeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is\nthe one it had). `meal_servings` is what the meal's rows are written for; the rows are\nscaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.\n`eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.",
         "properties": {
           "detached": {
             "anyOf": [
@@ -2957,6 +2971,10 @@
               }
             ],
             "title": "Detached"
+          },
+          "eaten": {
+            "title": "Eaten",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -3027,7 +3045,8 @@
           "thumb_url",
           "servings",
           "meal_servings",
-          "detached"
+          "detached",
+          "eaten"
         ],
         "title": "ListMealEntry",
         "type": "object"
@@ -6758,7 +6777,7 @@
     },
     "/api/items": {
       "get": {
-        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all\nitems in that order (at most 1000). `category_id`\nis repeatable: an item matches if it is in any of the given categories. With `kind`, only\nfood or only supplies (the meal form's search asks for food, D-55).",
+        "description": "Search name and brand ignoring case, umlauts and accents (`q`): an exact name first,\nthen names starting with `q`, then the rest, each in dictionary order by name and brand\n(Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all\nitems in that order (at most 1000). `category_id`\nis repeatable: an item matches if it is in any of the given categories. With `kind`, only\nfood or only supplies (the meal form's search asks for food, D-56).",
         "operationId": "list_items",
         "parameters": [
           {
@@ -8267,6 +8286,73 @@
           }
         ],
         "summary": "Update List Meal",
+        "tags": [
+          "lists"
+        ]
+      }
+    },
+    "/api/lists/{list_id}/meals/{list_meal_id}/eaten": {
+      "put": {
+        "description": "Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change\na done list takes. 409 `list.not_done` in a draft or while shopping.",
+        "operationId": "set_list_meal_eaten",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "list_id",
+            "required": true,
+            "schema": {
+              "title": "List Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "list_meal_id",
+            "required": true,
+            "schema": {
+              "title": "List Meal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListMealEaten"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error envelope; `code` names the error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set List Meal Eaten",
         "tags": [
           "lists"
         ]

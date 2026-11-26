@@ -1,4 +1,4 @@
-"""item kind: an item is food or a supply (ING-02, D-55)
+"""item kind: an item is food or a supply (ING-02, D-56)
 
 `items.kind` says whether an item is food (`food`) or a supply (`supply`, toilet paper or
 candles): a supply has no nutrition values and no piece weight and is never an ingredient in a
@@ -6,8 +6,8 @@ meal. Every existing item becomes food, so nothing changes until a user switches
 value changes. The downgrade drops the column, so supplies become food again, without
 nutrition values, as they were saved before.
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-11-26 00:00:00+00:00
 """
 
@@ -16,8 +16,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0021"
-down_revision: str | None = "0020"
+revision: str = "0022"
+down_revision: str | None = "0021"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

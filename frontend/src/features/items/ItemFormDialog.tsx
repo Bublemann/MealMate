@@ -124,7 +124,7 @@ interface ItemFormDialogProps {
   onCloseAutoFocus?: (event: Event) => void;
   /**
    * For a meal's ingredients (MEAL-02): no choice of kind, a new item is food, and no supply is
-   * offered to use instead (D-55).
+   * offered to use instead (D-56).
    */
   foodOnly?: boolean;
 }
@@ -190,7 +190,7 @@ interface ItemFormProps {
   onClose: () => void;
   /** The name field, e.g. for the dialog to put the cursor there. */
   nameRef?: Ref<HTMLInputElement>;
-  /** Only food, for a meal's ingredients (D-55). */
+  /** Only food, for a meal's ingredients (D-56). */
   foodOnly?: boolean;
 }
 
@@ -218,7 +218,7 @@ interface Proposed {
 
 /**
  * One form for every item, new or existing, typed by hand, searched or scanned (ING-04,
- * D-35, D-36). Top to bottom: "Lebensmittel" or "Gebrauchsartikel" (D-55; not for a meal's
+ * D-35, D-36). Top to bottom: "Lebensmittel" or "Gebrauchsartikel" (D-56; not for a meal's
  * ingredients, which are food); the Open Food Facts attribution while its values are shown; the
  * name with a magnifier (the Open Food Facts search, BAR-11; not when editing) and a scan icon;
  * the barcode with the scan's notice; the similar-items hint; brand; category; base unit (g, ml
@@ -275,7 +275,7 @@ function ItemForm({
   const selectedCategory = values.categoryId ?? defaultCategory?.id ?? '';
   const serverFields = fieldErrorMessagesByPath(t, mutation.error);
   const barcodeTaken = isApiError(mutation.error) && mutation.error.code === 'item.barcode_taken';
-  // A refused switch to supply names the meals in its own alert (D-55).
+  // A refused switch to supply names the meals in its own alert (D-56).
   const inMeals = usedInMeals(mutation.error);
   // A refused base-unit change asks in its own dialog instead.
   const showAlert =
@@ -284,7 +284,7 @@ function ItemForm({
     unitMismatch(mutation.error) === null &&
     needsErrorAlert(serverFields, SHOWN_FIELDS);
   const supply = values.kind === 'supply';
-  // A meal's ingredient is never a supply (D-55): the hints, the scan's notice and the search
+  // A meal's ingredient is never a supply (D-56): the hints, the scan's notice and the search
   // don't offer one to use.
   const takes = (match: ItemSummary) => !foodOnly || match.kind === 'food';
   const pick = onPickExisting && pickExisting;
@@ -391,7 +391,7 @@ function ItemForm({
     // input) bubble up through the React tree; only this form's own submit saves.
     if (event.target !== event.currentTarget) return;
     const problems = new Set<string>();
-    // Only pieces of food have a weight (ING-02, D-55): its field shows, and is sent, only for
+    // Only pieces of food have a weight (ING-02, D-56): its field shows, and is sent, only for
     // Stück. Leaving Stück, or switching to supply, clears it on the server.
     const inPieces = values.baseUnit === 'piece' && !supply;
     let pieceWeight: number | null = null;
@@ -400,7 +400,7 @@ function ItemForm({
       if (parsed.ok) pieceWeight = parsed.value;
       else problems.add('piece_weight_g');
     }
-    // A supply has no nutrition (D-55): its hidden fields are neither checked nor sent.
+    // A supply has no nutrition (D-56): its hidden fields are neither checked nor sent.
     const nutrients: Partial<Record<NutrientKey, number | null>> = {};
     for (const key of supply ? [] : NUTRIENT_KEYS) {
       const parsed = parseOptionalAmount(values.nutrients[key]);
@@ -745,7 +745,7 @@ interface KindChoiceProps {
 }
 
 /**
- * "Lebensmittel" or "Gebrauchsartikel" at the top of the form (D-55): two segments, food chosen
+ * "Lebensmittel" or "Gebrauchsartikel" at the top of the form (D-56): two segments, food chosen
  * for a new item. A supply's form has no nutrition and no piece weight.
  */
 function KindChoice({ kind, onChange }: KindChoiceProps) {
@@ -777,7 +777,7 @@ function KindChoice({ kind, onChange }: KindChoiceProps) {
 }
 
 /**
- * Why an item can't become a supply (D-55): "Äpfel wird in 3 Gerichten verwendet (Apfelkuchen,
+ * Why an item can't become a supply (D-56): "Äpfel wird in 3 Gerichten verwendet (Apfelkuchen,
  * Müsli und 1 weiteres) …". Meals the user may not see are only counted.
  */
 function UsedInMealsAlert({ name, refused }: { name: string; refused: UsedInMeals }) {
@@ -834,7 +834,7 @@ interface ScanNoticeProps {
   onRetry: (barcode: string) => void;
   /** Given in the picker: "use" takes the item the barcode belongs to. */
   onPickExisting?: (item: ItemSummary) => void;
-  /** Whether the picker may take an item: not a supply for a meal (D-55). */
+  /** Whether the picker may take an item: not a supply for a meal (D-56). */
   takes: (item: ItemSummary) => boolean;
   /** Called before "open" leaves to the item the barcode belongs to. */
   onNavigate: () => void;
@@ -889,7 +889,7 @@ function ScanNotice({ state, onRetry, onPickExisting, takes, onNavigate }: ScanN
       const owner = state.item;
       const label = itemLabel(owner.name, owner.brand);
       if (!takes(toSummary(owner))) {
-        // A meal's ingredient can't be a supply (D-55): nothing to use or open here.
+        // A meal's ingredient can't be a supply (D-56): nothing to use or open here.
         text = t('items.kind.notForMeals', { name: label });
         break;
       }
@@ -946,7 +946,7 @@ interface SimilarHintProps {
   /** A scanned barcode no item has, while it is in the field (BAR-03). */
   attachBarcode: string | null;
   onPickExisting?: (item: ItemSummary) => void;
-  /** Whether the picker may take an item: not a supply for a meal (D-55). */
+  /** Whether the picker may take an item: not a supply for a meal (D-56). */
   takes: (item: ItemSummary) => boolean;
   onNavigate: () => void;
 }
@@ -973,7 +973,7 @@ function SimilarHint({
   // Editing without renaming needs no hint.
   const query = item && debounced === item.name ? '' : debounced;
   const similar = useSimilarItems(query);
-  // A supply is no hint for a meal's ingredient, which can't be one (D-55).
+  // A supply is no hint for a meal's ingredient, which can't be one (D-56).
   const matches = query
     ? (similar.data ?? []).filter((match) => match.id !== item?.id && takes(match))
     : [];

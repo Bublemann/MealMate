@@ -42,7 +42,7 @@ for _key in NUTRIENT_KEYS:
 class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     """A shared item, editable by everyone like a wiki (ING-01, ING-02): typed by hand
     ("Zwiebeln"), with a brand ("Eier", "REWE"), or scanned and taken from Open Food Facts with
-    its barcode. Its `kind` is food or a supply (D-55), which has no nutrients and no piece
+    its barcode. Its `kind` is food or a supply (D-56), which has no nutrients and no piece
     weight and is never an ingredient in a meal.
 
     The nutrient columns are the item's own values per 100 g, or per 100 ml for base unit
@@ -78,7 +78,7 @@ class Item(IdMixin, TimestampMixin, NutrientColumns, Base):
     category_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="RESTRICT"), index=True
     )
-    # Food, or a supply: no nutrients, no piece weight and never in a meal (D-55).
+    # Food, or a supply: no nutrients, no piece weight and never in a meal (D-56).
     kind: Mapped[str] = mapped_column(String(10), default="food")
     base_unit: Mapped[str] = mapped_column(String(5), default="g")
     # Only for `piece` (D-32); migration 0014 cleared it on g and ml items and dropped

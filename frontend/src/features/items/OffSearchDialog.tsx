@@ -47,7 +47,7 @@ interface OffSearchDialogProps {
   onPickExisting?: (item: ItemSummary) => void;
   /**
    * Whether the picker may take an item that is already in MealMate (default: any). A supply
-   * can't be a meal's ingredient (D-55), so its product can't be chosen there.
+   * can't be a meal's ingredient (D-56), so its product can't be chosen there.
    */
   takes?: (item: ItemSummary) => boolean;
   /** Called before following a link to an item that is already in MealMate. */
@@ -253,7 +253,7 @@ interface ResultEntryProps {
   onChoose: () => void;
   /** An item that is already in MealMate is a link to it (outside the picker). */
   linkExisting: boolean;
-  /** The item that is already in MealMate can't be taken here (a supply for a meal, D-55). */
+  /** The item that is already in MealMate can't be taken here (a supply for a meal, D-56). */
   unavailable: boolean;
   onNavigate: () => void;
 }

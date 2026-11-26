@@ -23,7 +23,7 @@ describe('errorMessage', () => {
     expect(errorMessage(t, new Error('boom'))).toBe(generic);
   });
 
-  it('reads list params from the envelope and leaves them to their own UI (D-55)', () => {
+  it('reads list params from the envelope and leaves them to their own UI (D-56)', () => {
     const error = ApiError.fromResponse(409, {
       code: 'item.used_in_meals',
       params: { meals: 2, names: ['Chili sin Carne', 'Tacos'] },

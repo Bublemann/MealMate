@@ -15,7 +15,7 @@ export type TextField = (typeof TEXT_FIELDS)[number];
  * turned into something else, and a field counts as changed only when its text changed.
  */
 export interface FormValues {
-  /** Food or a supply (D-55); Open Food Facts never sets it. */
+  /** Food or a supply (D-56); Open Food Facts never sets it. */
   kind: ItemKind;
   name: string;
   brand: string;

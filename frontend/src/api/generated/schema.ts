@@ -703,7 +703,7 @@ export interface paths {
          *     (Ä sorts as A); `exact` marks the exact names, whatever their brand. Without `q`, all
          *     items in that order (at most 1000). `category_id`
          *     is repeatable: an item matches if it is in any of the given categories. With `kind`, only
-         *     food or only supplies (the meal form's search asks for food, D-55).
+         *     food or only supplies (the meal form's search asks for food, D-56).
          */
         get: operations["list_items"];
         put?: never;
@@ -1137,6 +1137,27 @@ export interface paths {
          * @description Set the servings of a meal on the list.
          */
         patch: operations["update_list_meal"];
+        trace?: never;
+    };
+    "/api/lists/{list_id}/meals/{list_meal_id}/eaten": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set List Meal Eaten
+         * @description Mark a meal on a done list you may edit eaten, or clear that (SHOP-07): the one change
+         *     a done list takes. 409 `list.not_done` in a draft or while shopping.
+         */
+        put: operations["set_list_meal_eaten"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/lists/{list_id}/ops": {
@@ -2340,7 +2361,7 @@ export interface components {
          * @description An item counted in `base_unit`, with its own nutrition (NUT-02; null is unknown,
          *     never 0) per 100 g, or per 100 ml for base unit ml. A `piece` item's pieces count
          *     with `piece_weight_g` (NUT-05), which is null for the other base units (D-32).
-         *     `kind` food or supply (D-55): a supply's nutrients and piece weight are always null, and it
+         *     `kind` food or supply (D-56): a supply's nutrients and piece weight are always null, and it
          *     is never an ingredient in a meal.
          *
          *     `source` off: taken from Open Food Facts by its `barcode` and refreshed from there
@@ -2414,7 +2435,7 @@ export interface components {
          * @description A new item (ING-02), in one request also when it was scanned.
          *
          *     `category_id` defaults to the *Other* category, `base_unit` to g, `kind` to food (left out
-         *     or null; D-55). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
+         *     or null; D-56). `piece_weight_g`: 0 < x ≤ 10000, only for base unit `piece` (422 `invalid`
          *     otherwise, D-32). `nutrients` per 100 g, or per 100 ml for base unit ml. A supply takes
          *     neither a piece weight nor a nutrient value (422 `invalid`; null nutrients are fine).
          *     Open Food Facts never sets the kind. The barcode is EAN-13, EAN-8, UPC-A or UPC-E with a
@@ -2454,7 +2475,7 @@ export interface components {
          *     amounts of the item not fitting the base unit of `into_id` is refused (409
          *     `item.unit_mismatch`, D-33) unless `accept_unit_mismatch` is true (left out or null, it
          *     isn't). A merge into a supply is refused while meals use the item (409
-         *     `item.used_in_meals`, D-55).
+         *     `item.used_in_meals`, D-56).
          */
         ItemMerge: {
             /** Accept Unit Mismatch */
@@ -2514,7 +2535,7 @@ export interface components {
          * ItemSummary
          * @description A search result, list entry or meal row's item. It is shown as `name` with the
          *     `brand` in brackets when there is one ("Milch (Weihenstephan)"); `barcode` is set for
-         *     scanned items. A `kind` supply is never an ingredient in a meal (D-55).
+         *     scanned items. A `kind` supply is never an ingredient in a meal (D-56).
          */
         ItemSummary: {
             /** Barcode */
@@ -2561,7 +2582,7 @@ export interface components {
          *     `accept_unit_mismatch` is true (left out or null, it isn't); those amounts are then kept as
          *     they are and flagged.
          *
-         *     `kind` (D-55): an item that is (or becomes) a supply takes neither a piece weight nor a
+         *     `kind` (D-56): an item that is (or becomes) a supply takes neither a piece weight nor a
          *     nutrient value (422 `invalid`). Switching to supply clears both, and is refused while any
          *     meal uses the item (409 `item.used_in_meals`).
          */
@@ -2879,6 +2900,14 @@ export interface components {
             servings?: number | null;
         };
         /**
+         * ListMealEaten
+         * @description Mark a meal on a done list eaten, or clear that (SHOP-07).
+         */
+        ListMealEaten: {
+            /** Eaten */
+            eaten: boolean;
+        };
+        /**
          * ListMealEntry
          * @description A meal on a list with its servings (LIST-04).
          *
@@ -2887,10 +2916,13 @@ export interface components {
          *     keeps contributing its frozen rows until it is removed, and has no `meal_id` (its `name` is
          *     the one it had). `meal_servings` is what the meal's rows are written for; the rows are
          *     scaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.
+         *     `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
          */
         ListMealEntry: {
             /** Detached */
             detached: ("deleted" | "unavailable") | null;
+            /** Eaten */
+            eaten: boolean;
             /** Id */
             id: string;
             /** Meal Id */
@@ -5729,6 +5761,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ListMealUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDetail"];
+                };
+            };
+            /** @description Error envelope; `code` names the error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_list_meal_eaten: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+                list_meal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListMealEaten"];
             };
         };
         responses: {
