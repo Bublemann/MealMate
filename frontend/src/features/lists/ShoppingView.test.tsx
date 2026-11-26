@@ -1344,7 +1344,7 @@ describe('eaten meals on a done list (SHOP-07)', () => {
     const box = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
     expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 0 of 3 eaten');
     expect(box).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Private meal eaten' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Private meal (3 servings) eaten' })).toBeEnabled();
     expect(screen.getByRole('checkbox', { name: 'Alter Eintopf eaten' })).toBeEnabled();
 
     await user.click(box);
@@ -1400,7 +1400,7 @@ describe('eaten meals on a done list (SHOP-07)', () => {
   });
 
   it('only shows what was eaten on a list I may not edit', async () => {
-    const { user, fetchMock } = renderList({
+    renderList({
       [`GET ${BASE}`]: doneList({
         owner: BEN,
         is_owner: false,
@@ -1413,10 +1413,6 @@ describe('eaten meals on a done list (SHOP-07)', () => {
     expect(box).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: 'Alter Eintopf eaten' })).toBeDisabled();
     expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 2 eaten');
-
-    await user.click(box);
-
-    expect(requestsTo(fetchMock, `PUT ${BASE}/meals/lm-pancakes/eaten`)).toHaveLength(0);
   });
 
   it('needs a connection', async () => {
@@ -1441,10 +1437,38 @@ describe('eaten meals on a done list (SHOP-07)', () => {
     await waitFor(() => expect(box).not.toBeChecked());
   });
 
-  it('has no boxes on drafts and while shopping', async () => {
-    renderList();
-    await screen.findByTestId(testIds.shoppingLines);
+  it('shows each box as the list has it again once its change failed, also after ticking another', async () => {
+    const pancakes = heldRoute();
+    const { user } = renderList({
+      [`GET ${BASE}`]: doneList(),
+      [`PUT ${BASE}/meals/lm-pancakes/eaten`]: pancakes.route,
+      [`PUT ${BASE}/meals/lm-detached/eaten`]: doneList({
+        version: 10,
+        meals: [listMeal(), PRIVATE_MEAL, { ...DETACHED_MEAL, eaten: true }],
+      }),
+    });
+    const first = await screen.findByRole('checkbox', { name: 'Pfannkuchen eaten' });
+    const second = screen.getByRole('checkbox', { name: 'Alter Eintopf eaten' });
 
+    await user.click(first);
+    await user.click(second);
+    await pancakes.answer(errorResponse(409, 'list.not_done'));
+
+    await waitFor(() => expect(first).not.toBeChecked());
+    await waitFor(() =>
+      expect(within(mealsSection()).getByRole('heading')).toHaveTextContent('Meals 1 of 3 eaten'),
+    );
+    expect(second).toBeChecked();
+  });
+
+  it('has no boxes on drafts and while shopping', async () => {
+    const { unmount } = renderList();
+    await screen.findByTestId(testIds.shoppingLines);
+    expect(screen.queryByRole('checkbox', { name: /eaten$/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderList({ [`GET ${BASE}`]: listDetail() });
+    expect(await screen.findByRole('heading', { name: 'Meals' })).toBeVisible();
     expect(screen.queryByRole('checkbox', { name: /eaten$/ })).not.toBeInTheDocument();
   });
 });

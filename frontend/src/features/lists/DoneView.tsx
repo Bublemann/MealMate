@@ -19,9 +19,8 @@ interface DoneViewProps {
 /**
  * A finished list, read-only (LIST-10) except for ticking its meals eaten (SHOP-07): the note when
  * it was bought, then its meals and lines; checked lines count as bought, the others are greyed
- * (SHOP-05). "Shop again" and "Reopen"
- * (SHOP-06) are in the ⋯ menu (`ListMenu`). A list finished here but not sent yet shows as done
- * already.
+ * (SHOP-05). "Shop again" and "Reopen" (SHOP-06) are in the ⋯ menu (`ListMenu`). A list finished
+ * here but not sent yet shows as done already.
  */
 export function DoneView({ list, categories }: DoneViewProps) {
   const { t } = useTranslation();

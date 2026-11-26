@@ -1,4 +1,4 @@
-import { Check, CookingPot, Trash2 } from 'lucide-react';
+import { CookingPot, Trash2 } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -6,6 +6,7 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { SwipeRow } from '@/components/SwipeRow';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TapCheckbox } from '@/components/ui/tap-checkbox';
 import { useConnected } from '@/features/sync/context';
 import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
@@ -78,8 +79,13 @@ export function ListMeals({
                 eatenBoxes
                   ? {
                       disabled: !list.can_edit || offline,
+                      // The promise settles for every tap; `mutate`'s own callbacks only for
+                      // the latest, which would leave an earlier box as it was tapped.
                       onChange: (eaten, settled) =>
-                        setEaten.mutate({ listMealId: entry.id, eaten }, { onSettled: settled }),
+                        void setEaten
+                          .mutateAsync({ listMealId: entry.id, eaten })
+                          .catch(() => undefined)
+                          .finally(settled),
                     }
                   : undefined
               }
@@ -109,11 +115,13 @@ export function ListMeals({
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <h2 id={headingId} className="text-xl font-semibold">
         {t('lists.meals.title')}
-        {eatenBoxes && list.meals.length > 0 && ' '}
         {eatenBoxes && list.meals.length > 0 && (
-          <span className="ml-2 text-base font-normal text-muted-foreground">
-            {t('lists.meals.eatenCount', { eaten: eatenCount, count: list.meals.length })}
-          </span>
+          <>
+            {/* The space keeps the words apart in the heading's accessible name. */}{' '}
+            <span className="ml-1 text-base font-normal text-muted-foreground">
+              {t('lists.meals.eatenCount', { eaten: eatenCount, count: list.meals.length })}
+            </span>
+          </>
         )}
       </h2>
       {content}
@@ -158,7 +166,7 @@ function MealEntry({ entry, editable, offline, onServings, onRemove, eatenBox }:
         <div className="group flex items-center gap-3 px-3 py-2">
           {eatenBox && (
             <EatenBox
-              label={t('lists.meals.eaten', { name })}
+              label={t('lists.meals.eaten', { name: label })}
               eaten={entry.eaten}
               disabled={eatenBox.disabled}
               onChange={eatenBox.onChange}
@@ -249,25 +257,15 @@ function EatenBox({ label, eaten, disabled, onChange }: EatenBoxProps) {
   const checked = tapped ?? eaten;
 
   return (
-    <span className="relative flex size-(--tap-target) shrink-0 items-center justify-center">
-      <input
-        type="checkbox"
-        aria-label={label}
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => {
-          const value = event.target.checked;
-          setTapped(value);
-          onChange(value, () => setTapped((current) => (current === value ? null : current)));
-        }}
-        className="peer absolute inset-0 size-full cursor-pointer appearance-none rounded-md opacity-0 disabled:cursor-default"
-      />
-      <span
-        aria-hidden="true"
-        className="flex size-8 items-center justify-center rounded-md border-2 border-input bg-background text-primary-foreground peer-checked:border-primary peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring peer-disabled:opacity-60"
-      >
-        {checked && <Check className="size-6" strokeWidth={3} />}
-      </span>
-    </span>
+    <TapCheckbox
+      aria-label={label}
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => {
+        const value = event.target.checked;
+        setTapped(value);
+        onChange(value, () => setTapped((current) => (current === value ? null : current)));
+      }}
+    />
   );
 }

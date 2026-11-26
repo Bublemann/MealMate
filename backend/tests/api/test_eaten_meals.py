@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
 
-from tests.accounts import Account, FakeClock, error, login, make_couple, make_user
+from tests.accounts import Account, FakeClock, error, login, make_couple, make_user, set_privacy
 from tests.catalog import category_ids, create_item
 from tests.lists import added, applied, create_list, detail, op, start_shopping
 from tests.meals import create_meal
@@ -87,8 +87,10 @@ async def test_marking_meals_eaten(
     assert body["lines"] == done["lines"]
     assert eaten(await detail(api, anna, list_id)) == [("Brot", True), ("Pizza", False)]
     # Again changes nothing.
-    again = (await set_eaten(api, anna, list_id, brot, eaten=True)).json()
-    assert again["version"] == body["version"]
+    response = await set_eaten(api, anna, list_id, brot, eaten=True)
+    assert response.status_code == 200
+    again = response.json()
+    assert (eaten(again), again["version"]) == (eaten(body), body["version"])
 
     response = await set_eaten(api, anna, list_id, brot, eaten=False)
 
@@ -145,6 +147,7 @@ async def test_eaten_stays_when_a_list_is_reopened(
 
     reopened = await api.post(f"/api/lists/{done['id']}/reopen", headers=anna.headers)
 
+    assert reopened.status_code == 200, reopened.text
     assert eaten(reopened.json()) == [("Brot", True), ("Pizza", False)]
     # Shopping again copies the meals as they are, not eaten.
     again = await api.post(f"/api/lists/{done['id']}/shop-again", headers=anna.headers)
@@ -152,3 +155,28 @@ async def test_eaten_stays_when_a_list_is_reopened(
     await applied(api, anna, done["id"], op("list.finish"))
     again = await api.post(f"/api/lists/{done['id']}/shop-again", headers=anna.headers)
     assert eaten(again.json()["list"]) == [("Brot", False), ("Pizza", False)]
+
+
+async def test_private_and_detached_meals_can_be_eaten(
+    api: AsyncClient, anna: Account, ben: Account, carl: Account, meals: list[Any]
+) -> None:
+    """Whoever edits the list ticks every meal on it, also one they can't see the details of
+    (VIS-06) and one that is no longer available (LIST-15)."""
+    await make_couple(api, anna, ben)
+    curry = await create_meal(api, carl, "Curry", ingredients=[])
+    done = await list_with(api, anna, [meals[0], curry])
+    await api.delete(f"/api/meals/{meals[0]['id']}", headers=anna.headers)
+    await start_shopping(api, anna, done["id"])
+    # Frozen, carl's meal stays on the list when he makes his meals private.
+    await set_privacy(api, carl, meals_public=False)
+    done = await applied(api, anna, done["id"], op("list.finish"))
+    detached, private = done["meals"]
+    assert (detached["detached"], private["private"]) == ("deleted", True)
+
+    for entry in (detached, private):
+        response = await set_eaten(api, ben, done["id"], entry["id"], eaten=True)
+        assert response.status_code == 200, response.text
+    assert [entry["eaten"] for entry in (await detail(api, anna, done["id"]))["meals"]] == [
+        True,
+        True,
+    ]

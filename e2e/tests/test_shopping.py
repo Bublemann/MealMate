@@ -199,7 +199,11 @@ def test_shop_again_and_reopen(page: Page, api: Api, invite_user: Callable[..., 
 
     # The curry was eaten: ticked, it is struck through and counted, also after a reload (SHOP-07).
     eaten = page.get_by_role("checkbox", name=text("lists.meals.eaten", name=curry["name"]))
-    eaten.check()
+    with page.expect_response(
+        lambda response: response.request.method == "PUT" and response.url.endswith("/eaten")
+    ) as saved:
+        eaten.check()
+    assert saved.value.ok
     count = text("lists.meals.eatenCount", eaten="1", count="1")
     heading = page.get_by_role("heading", name=f"{text('lists.meals.title')} {count}")
     expect(heading).to_be_visible()
