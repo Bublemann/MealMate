@@ -5,6 +5,7 @@ import { fieldErrorCodes } from '@/api/errors';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Button } from '@/components/ui/button';
 import { toSummary, type ItemSummary } from '@/features/items/api';
+import { itemLabel } from '@/features/items/label';
 import { ItemFormDialog } from '@/features/items/ItemFormDialog';
 import { useBarcodeLookup } from '@/features/scanner/api';
 import { testIds } from '@/testIds';
@@ -23,8 +24,8 @@ interface MealScanProps {
 
 /**
  * The meal form's "Scan barcode" (BAR-01, MEAL-03). A barcode one of our items has adds its
- * row at once (BAR-02): our own items answer that without waiting for Open Food Facts. Any
- * other barcode opens "New item", which looks it up as after a scan with its own scan icon
+ * row at once (BAR-02): our own items answer that without waiting for Open Food Facts, unless it
+ * is a supply, which can't be an ingredient (D-54). Any other barcode opens "New item", which looks it up as after a scan with its own scan icon
  * (BAR-03); its "Save", or taking an item there, adds the row.
  */
 export function MealScan({ onItem }: MealScanProps) {
@@ -33,6 +34,8 @@ export function MealScan({ onItem }: MealScanProps) {
   const [scanning, setScanning] = useState(false);
   // The barcode no item has, while "New item" is open for it.
   const [unknown, setUnknown] = useState<string | null>(null);
+  // The supply the last scan found, which is no ingredient.
+  const [supply, setSupply] = useState<string | null>(null);
   const barcode = lookup.variables?.barcode ?? '';
   const invalid = fieldErrorCodes(lookup.error).barcode !== undefined;
 
@@ -41,7 +44,9 @@ export function MealScan({ onItem }: MealScanProps) {
       { barcode: code, ownOnly: true },
       {
         onSuccess: (result) => {
-          if (result.found_in === 'db' && result.item) {
+          if (result.found_in === 'db' && result.item?.kind === 'supply') {
+            setSupply(itemLabel(result.item.name, result.item.brand));
+          } else if (result.found_in === 'db' && result.item) {
             onItem(toSummary(result.item));
           } else {
             setUnknown(result.barcode);
@@ -61,6 +66,7 @@ export function MealScan({ onItem }: MealScanProps) {
         onClick={() => {
           // A new scan replaces a lookup still running and its message.
           lookup.reset();
+          setSupply(null);
           setScanning(true);
         }}
       >
@@ -76,6 +82,12 @@ export function MealScan({ onItem }: MealScanProps) {
           <p className="flex items-start gap-1.5 font-medium text-destructive">
             <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             {t('scanner.invalidBarcode', { barcode })}
+          </p>
+        )}
+        {supply !== null && (
+          <p className="flex items-start gap-1.5 font-medium text-destructive">
+            <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            {t('items.kind.notForMeals', { name: supply })}
           </p>
         )}
       </div>
@@ -102,6 +114,7 @@ export function MealScan({ onItem }: MealScanProps) {
         initialScan={unknown ?? undefined}
         onSaved={(item) => onItem(toSummary(item))}
         onPickExisting={onItem}
+        foodOnly
       />
     </>
   );

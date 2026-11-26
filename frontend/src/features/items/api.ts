@@ -19,6 +19,8 @@ export type ItemCreate = components['schemas']['ItemCreate'];
 export type ItemUpdate = components['schemas']['ItemUpdate'];
 export type ItemMerge = components['schemas']['ItemMerge'];
 export type BaseUnit = Item['base_unit'];
+/** Food, or a supply: no nutrients, no piece weight, never in a meal (D-54). */
+export type ItemKind = Item['kind'];
 export type NutrientValues = components['schemas']['NutrientValues'];
 export type PendingUpdateField = components['schemas']['PendingUpdateField'];
 export type OffProposal = components['schemas']['ProductProposal'];
@@ -35,8 +37,10 @@ export type EditedField = Item['user_edited_fields'][number];
 export const OFF_TIMEOUT_MS = 25_000;
 
 export const ITEMS_KEY = ['items'] as const;
-const listKey = (query: string, categoryIds: readonly string[]) =>
-  [...ITEMS_KEY, 'list', query, categoryIds] as const;
+const listKey = (query: string, categoryIds: readonly string[], kind: ItemKind | undefined) =>
+  kind === undefined
+    ? ([...ITEMS_KEY, 'list', query, categoryIds] as const)
+    : ([...ITEMS_KEY, 'list', query, categoryIds, kind] as const);
 const detailKey = (id: string) => [...ITEMS_KEY, 'detail', id] as const;
 
 /** Lists and similarity hints show names, categories and counts, which may have changed. */
@@ -55,18 +59,19 @@ function invalidateCategoryCounts(queryClient: QueryClient) {
 
 /** A summary as the lists show it, from a full item (e.g. one just created). */
 export function toSummary(item: Item): ItemSummary {
-  const { id, name, brand, barcode, source, category_id, base_unit } = item;
-  return { id, name, brand, barcode, source, category_id, base_unit };
+  const { id, name, brand, barcode, source, kind, category_id, base_unit } = item;
+  return { id, name, brand, barcode, source, kind, category_id, base_unit };
 }
 
 /**
  * Items matching `query` (ignoring case, umlauts and accents: ING-03), or all of them when
- * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories.
+ * it is empty, sorted by the server; with `categoryIds`, only those in any of these categories,
+ * with `kind` only food or only supplies (D-54).
  */
-export function itemsQuery(query: string, categoryIds: readonly string[] = []) {
+export function itemsQuery(query: string, categoryIds: readonly string[] = [], kind?: ItemKind) {
   const q = query.trim();
   return queryOptions({
-    queryKey: listKey(q, categoryIds),
+    queryKey: listKey(q, categoryIds, kind),
     queryFn: ({ signal }) =>
       unwrap(
         api.GET('/api/items', {
@@ -75,6 +80,7 @@ export function itemsQuery(query: string, categoryIds: readonly string[] = []) {
             query: {
               q: q || undefined,
               category_id: categoryIds.length > 0 ? [...categoryIds] : undefined,
+              kind,
             },
           },
           signal,
@@ -86,10 +92,14 @@ export function itemsQuery(query: string, categoryIds: readonly string[] = []) {
 /** `itemsQuery` on screen: the previous result stays while the next one loads. */
 export function useItems(
   query: string,
-  { enabled = true, categoryIds = [] }: { enabled?: boolean; categoryIds?: readonly string[] } = {},
+  {
+    enabled = true,
+    categoryIds = [],
+    kind,
+  }: { enabled?: boolean; categoryIds?: readonly string[]; kind?: ItemKind } = {},
 ) {
   return useQuery({
-    ...itemsQuery(query, categoryIds),
+    ...itemsQuery(query, categoryIds, kind),
     placeholderData: keepPreviousData,
     enabled,
   });
@@ -173,6 +183,22 @@ export function unitMismatch(error: unknown): UnitMismatch | null {
     return typeof value === 'number' ? value : 0;
   };
   return { meals: count('meals'), lists: count('lists'), amounts: count('amounts') };
+}
+
+/** The meals a switch to supply was refused for (D-54): how many, and those the user may see. */
+export interface UsedInMeals {
+  meals: number;
+  names: string[];
+}
+
+/** The meals of a switch to supply (or a merge into one) refused while meals use it, else null. */
+export function usedInMeals(error: unknown): UsedInMeals | null {
+  if (!isApiError(error) || error.code !== 'item.used_in_meals') return null;
+  const { meals, names } = error.params;
+  return {
+    meals: typeof meals === 'number' ? meals : 0,
+    names: Array.isArray(names) ? names : [],
+  };
 }
 
 /**

@@ -82,7 +82,12 @@ export function IngredientRows({ rows, onChange, fieldError }: IngredientRowsPro
           }
         }}
       >
-        <ItemPicker key={pickerKey} label={t('meals.field.addIngredient')} onSelect={onPick} />
+        <ItemPicker
+          key={pickerKey}
+          label={t('meals.field.addIngredient')}
+          onSelect={onPick}
+          kind="food"
+        />
         <MealScan onItem={onPick} />
       </div>
     </fieldset>

@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { unitLabel } from '@/features/reference/labels';
 import { useLanguage } from '@/i18n';
+import { cn } from '@/lib/utils';
 import { testIds } from '@/testIds';
 import { useOffSearch, type ItemSummary, type OffProposal, type OffSearchResult } from './api';
 import { itemLabel } from './label';
@@ -43,6 +44,11 @@ interface OffSearchDialogProps {
    * otherwise it links to it.
    */
   onPickExisting?: (item: ItemSummary) => void;
+  /**
+   * Whether the picker may take an item that is already in MealMate (default: any). A supply
+   * can't be a meal's ingredient (D-54), so its product can't be chosen there.
+   */
+  takes?: (item: ItemSummary) => boolean;
   /** Called before following a link to an item that is already in MealMate. */
   onNavigate: () => void;
 }
@@ -87,6 +93,7 @@ export function OffSearchDialog({
   initialQuery,
   onChoose,
   onPickExisting,
+  takes = () => true,
   onNavigate,
 }: OffSearchDialogProps) {
   const { t } = useTranslation();
@@ -208,6 +215,9 @@ export function OffSearchDialog({
                     } else onChoose(result.proposal);
                   }}
                   linkExisting={!onPickExisting}
+                  unavailable={
+                    !!onPickExisting && result.in_mealmate && !!result.item && !takes(result.item)
+                  }
                   onNavigate={() => {
                     onOpenChange(false);
                     onNavigate();
@@ -240,6 +250,8 @@ interface ResultEntryProps {
   onChoose: () => void;
   /** An item that is already in MealMate is a link to it (outside the picker). */
   linkExisting: boolean;
+  /** The item that is already in MealMate can't be taken here (a supply for a meal, D-54). */
+  unavailable: boolean;
   onNavigate: () => void;
 }
 
@@ -250,7 +262,13 @@ const ENTRY_CLASS =
  * One product: name, brand, package size and calories, as text only (BAR-10). A product that is
  * already in MealMate picks (or opens) that item instead of filling the form again.
  */
-function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntryProps) {
+function ResultEntry({
+  result,
+  onChoose,
+  linkExisting,
+  unavailable,
+  onNavigate,
+}: ResultEntryProps) {
   const { t } = useTranslation();
   const language = useLanguage();
   const { proposal } = result;
@@ -274,6 +292,11 @@ function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntry
         <span className="text-sm text-muted-foreground">{details.join(' · ')}</span>
       )}
       {existing && <Badge variant="secondary">{t('items.offSearch.inMealMate')}</Badge>}
+      {unavailable && existing && (
+        <span className="text-sm text-muted-foreground">
+          {t('items.kind.notForMeals', { name: itemLabel(existing.name, existing.brand) })}
+        </span>
+      )}
     </>
   );
 
@@ -293,8 +316,9 @@ function ResultEntry({ result, onChoose, linkExisting, onNavigate }: ResultEntry
     <button
       type="button"
       data-testid={testIds.offSearchResult}
+      disabled={unavailable}
       onClick={onChoose}
-      className={ENTRY_CLASS}
+      className={cn(ENTRY_CLASS, 'disabled:cursor-not-allowed disabled:opacity-60')}
     >
       {content}
     </button>

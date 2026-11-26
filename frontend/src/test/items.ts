@@ -119,6 +119,7 @@ export function summary(
     brand: null,
     barcode: null,
     source: 'manual',
+    kind: 'food',
     base_unit: 'g',
     ...overrides,
   };
@@ -138,6 +139,7 @@ export const APPLES: Schemas['Item'] = {
   name: 'Äpfel',
   brand: null,
   barcode: null,
+  kind: 'food',
   category_id: 'cat-fruit_vegetables',
   base_unit: 'g',
   piece_weight_g: null,
@@ -163,6 +165,7 @@ export function itemDetail(overrides: Partial<Schemas['Item']> = {}): Schemas['I
     name: 'New',
     brand: null,
     barcode: null,
+    kind: 'food',
     category_id: 'cat-other',
     base_unit: 'g',
     piece_weight_g: null,

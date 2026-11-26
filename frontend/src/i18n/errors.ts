@@ -1,12 +1,24 @@
 import type { TFunction } from 'i18next';
-import { errorKey, fieldErrorCodes, isApiError } from '@/api/errors';
-import i18n from '.';
+import { errorKey, fieldErrorCodes, isApiError, type ErrorParams } from '@/api/errors';
+import i18n, { DEFAULT_LANGUAGE, isLanguage } from '.';
+import { formatList } from './format';
 
 /** The translated message for any error; codes this app version doesn't know get the generic one. */
 export function errorMessage(t: TFunction, error: unknown): string {
   const key = errorKey(error);
   if (!i18n.exists(key)) return t('error.common.internal');
-  return t(key, isApiError(error) ? error.params : {});
+  return t(key, isApiError(error) ? textParams(error.params) : {});
+}
+
+/** The params as the translations take them: a list of names becomes "A, B und C". */
+function textParams(params: ErrorParams): Record<string, string | number | boolean> {
+  const language = isLanguage(i18n.resolvedLanguage) ? i18n.resolvedLanguage : DEFAULT_LANGUAGE;
+  return Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? formatList(value, language) : value,
+    ]),
+  );
 }
 
 /** Translated field errors by field name, e.g. `{username: "Already taken"}`. */

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useCategories } from '@/features/reference/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { testIds } from '@/testIds';
-import { toSummary, useItems, type ItemSummary } from './api';
+import { toSummary, useItems, type ItemKind, type ItemSummary } from './api';
 import { ItemCategoryUnit } from './ItemCategoryUnit';
 import { ItemFormDialog } from './ItemFormDialog';
 import { ItemName } from './ItemName';
@@ -24,6 +24,11 @@ interface ItemPickerProps {
   label?: string;
   /** Offers "Create “…”" for the typed name (default true). */
   allowCreate?: boolean;
+  /**
+   * Only items of this kind: a meal's ingredients are food (D-54), so supplies are neither found
+   * nor offered, and an item created here is food.
+   */
+  kind?: ItemKind;
 }
 
 /**
@@ -36,6 +41,7 @@ export function ItemPicker({
   excludeIds = [],
   label,
   allowCreate = true,
+  kind,
 }: ItemPickerProps) {
   const { t } = useTranslation();
   const inputId = useId();
@@ -45,7 +51,7 @@ export function ItemPicker({
   const typed = query.trim();
   const debounced = useDebouncedValue(typed);
   const searching = debounced !== '';
-  const results = useItems(debounced, { enabled: searching });
+  const results = useItems(debounced, { enabled: searching, kind });
   const categories = useCategories();
   // Only the answer for the text in the field: an earlier text's results, kept while the debounce
   // runs or the search loads, would vanish under the finger when the answer lands (MEAL-03).
@@ -138,6 +144,7 @@ export function ItemPicker({
           initialName={typed}
           onSaved={(item) => onSelect(toSummary(item))}
           onPickExisting={onSelect}
+          foodOnly={kind === 'food'}
         />
       )}
     </div>

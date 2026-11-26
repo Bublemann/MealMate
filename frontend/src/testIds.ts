@@ -66,6 +66,7 @@ export const testIds = {
   itemForm: 'item-form',
   itemFormScan: 'item-form-scan',
   itemFormFooter: 'item-form-footer',
+  itemUsedInMeals: 'item-used-in-meals',
   itemScanNotice: 'item-scan-notice',
   itemScanOpen: 'item-scan-open',
   itemScanTake: 'item-scan-take',

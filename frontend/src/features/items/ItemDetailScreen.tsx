@@ -19,7 +19,8 @@ import { OffAttribution } from './OffAttribution';
 import { PendingUpdateHint } from './PendingUpdateHint';
 
 /**
- * One item: its details (brand, barcode, package, source, use), nutrition, newer values
+ * One item: its details (kind, brand, barcode, package, source, use), nutrition (none for a
+ * supply, D-54), newer values
  * from Open Food Facts (BAR-06), and who created and changed it; editing and the admin actions
  * are in the ⋯ menu (`ItemMenu`), their errors below the title.
  */
@@ -50,7 +51,7 @@ function ItemDetail({ id }: { id: string }) {
             <PendingUpdateHint item={item.data} fields={item.data.pending_update.fields} />
           )}
           <PropertiesCard item={item.data} />
-          <NutritionCard item={item.data} />
+          {item.data.kind === 'food' && <NutritionCard item={item.data} />}
         </>
       )}
     </Screen>
@@ -65,6 +66,7 @@ function PropertiesCard({ item }: { item: Item }) {
   const notSet = <span className="text-muted-foreground">{t('items.detail.notSet')}</span>;
 
   const rows = [
+    { label: t('items.detail.kind'), value: t(`items.kind.${item.kind}`) },
     { label: t('items.detail.brand'), value: item.brand ?? notSet },
     {
       label: t('items.detail.category'),
@@ -74,8 +76,9 @@ function PropertiesCard({ item }: { item: Item }) {
       label: t('items.detail.baseUnit'),
       value: t(`items.baseUnit.${item.base_unit}`),
     },
-    // Only pieces have a weight (ING-02): they count towards the nutrition through it.
-    ...(item.base_unit === 'piece'
+    // Only pieces of food have a weight (ING-02, D-54): they count towards the nutrition
+    // through it.
+    ...(item.base_unit === 'piece' && item.kind === 'food'
       ? [
           {
             label: t('items.detail.pieceWeight'),
