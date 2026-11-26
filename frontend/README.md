@@ -337,7 +337,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   (`IntersectionObserver`; tests stub it). The server applies the saved user filter and state
   filter. Until its first page arrives the feed is the local copy (`showsLocalCopy`), which they
   don't narrow. Online, `ListFeed` shows the spinner instead of that copy for up to 3 s
-  (`COPY_STANDS_IN_AFTER_MS`, D-56); offline it shows the copy at once.
+  (`COPY_STANDS_IN_AFTER_MS`, D-56); offline it shows the copy at once. The feed query is never
+  garbage-collected (`gcTime: Infinity`), so the copy that stood in stays on coming back.
   Icons with an accessible name mark a shared list, a read-only one (lock), one being shopped and
   a done one.
 - **Tab memory** (UI-01): a tab's search text and its cuisine, tag and category choices live in

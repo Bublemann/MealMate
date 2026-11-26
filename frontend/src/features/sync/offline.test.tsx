@@ -327,6 +327,47 @@ describe('lists from the local copy (SYNC-09)', () => {
     expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
   });
 
+  it('keeps the copy on coming back to the tab after a long time away', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': NEVER, 'GET /api/lists/sync': NEVER });
+    const { router } = renderApp('/lists');
+    await feedTakesTooLong();
+    expect(await screen.findByTestId(testIds.listCard)).toBeVisible();
+
+    await act(() => router.navigate('/meals'));
+    // Longer than an unused query stays in the cache by default.
+    await wait(6 * 60_000);
+    await act(() => router.navigate('/lists'));
+
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+    expect(screen.queryByTestId(testIds.loadingState)).not.toBeInTheDocument();
+  });
+
+  it('keeps the spinner when the feed fails within the 3 s, then shows the copy', async () => {
+    fakeTimers();
+    await storeCopy(shoppingList());
+    const feed = heldRoute();
+    mockApi({ ...LIST_ROUTES, 'GET /api/lists': feed.route, 'GET /api/lists/sync': NEVER });
+    renderApp('/lists');
+    expect(await screen.findByTestId(testIds.loadingState)).toBeInTheDocument();
+
+    await feed.answer(errorResponse(503, 'common.service_unavailable'));
+
+    // One spinner, not the error first and then the copy.
+    await wait(COPY_STANDS_IN_AFTER_MS / 2);
+    expect(screen.getByTestId(testIds.loadingState)).toBeInTheDocument();
+    expect(
+      screen.queryByText('MealMate is unavailable right now. Please try again later.'),
+    ).not.toBeInTheDocument();
+    await wait(COPY_STANDS_IN_AFTER_MS / 2);
+    expect(await screen.findByTestId(testIds.listCard)).toHaveTextContent(
+      'Wochenende (26/09/2026)',
+    );
+  });
+
   it('shows the copy whatever the saved filters say until the feed answers (UI-02)', async () => {
     fakeTimers();
     await storeCopy(shoppingList());

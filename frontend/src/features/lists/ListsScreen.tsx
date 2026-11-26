@@ -138,7 +138,8 @@ export const COPY_STANDS_IN_AFTER_MS = 3_000;
 /**
  * The feed queries in which the local copy has stood in. Kept by the query, not the screen, so it
  * lasts while the user leaves the tab and comes back, and goes with the query when the cache is
- * cleared at the end of a session.
+ * cleared at the end of a session. Never unmarked: once the first page is there, the query never
+ * holds the copy again.
  */
 const copyStoodIn = new WeakSet<object>();
 
@@ -187,6 +188,8 @@ function ListFeed({ filters }: { filters: FeedFilters }) {
   const filtersApply = connected && !showsLocalCopy(feed);
 
   if (!lists) {
+    // A quick failure waits too, so the copy follows the spinner without an error in between.
+    if (waits) return <LoadingState />;
     if (feed.error) return <LoadError error={feed.error} />;
     // Offline before the copy was ever complete: the server's lists need a connection.
     if (!connected && feed.data) {
