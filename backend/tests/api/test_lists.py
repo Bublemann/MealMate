@@ -635,6 +635,7 @@ async def test_add_meals(
         "meal_servings": 2,
         "detached": None,
         "eaten": False,
+        "leftover": False,
     }
     # The same thumbnail as the meal's; the signature depends on the time.
     thumb = photo.json()["photo"]["thumb_url"]
@@ -760,6 +761,7 @@ async def test_private_meals_on_a_visible_list(
         "meal_servings": 2,
         "detached": None,
         "eaten": False,
+        "leftover": False,
     }
     assert (visible["name"], visible["private"]) == ("Brot", False)
     [flour_line] = seen["lines"]

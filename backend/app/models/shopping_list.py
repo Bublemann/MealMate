@@ -66,6 +66,12 @@ class ListMeal(IdMixin, TimestampMixin, Base):
     `added_by` and `last_added_at` say who added it last and when, also when it was added again
     (LIST-04): the "recently used" meals (MEAL-09). `eaten` is set and cleared on done lists only
     (SHOP-07, D-55), an on/off flag with no history; it stays when the list is reopened.
+
+    A leftover meal (LIST-17, D-57) has `leftover_of_id`: the meal on a done list it comes from,
+    never itself a leftover, whose `eaten` it shows; it is on a draft only while that one isn't
+    eaten, and goes with it. It is frozen when it is made, without rows, so it adds no lines and
+    is never frozen again; its snapshots are its source's. A meal is on a list at most once as a
+    normal meal, and may be there as a leftover too.
     """
 
     __tablename__ = "list_meals"
@@ -82,7 +88,7 @@ class ListMeal(IdMixin, TimestampMixin, Base):
             "list_id",
             "meal_id",
             unique=True,
-            sqlite_where=text("meal_id IS NOT NULL"),
+            sqlite_where=text("meal_id IS NOT NULL AND leftover_of_id IS NULL"),
         ),
     )
 
@@ -106,6 +112,9 @@ class ListMeal(IdMixin, TimestampMixin, Base):
     detached_reason: Mapped[str | None] = mapped_column(String(12))
     position: Mapped[int] = mapped_column(Integer)
     eaten: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    leftover_of_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("list_meals.id", ondelete="CASCADE"), index=True
+    )
 
 
 class ListMealIngredient(IdMixin, TimestampMixin, Base):

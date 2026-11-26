@@ -116,6 +116,7 @@ def test_export_openapi_describes_every_operation(tmp_path: Path) -> None:
         "add_list_meal",
         "update_list_meal",
         "set_list_meal_eaten",
+        "shop_leftover_meal",
         "remove_list_meal",
         "add_extra_item",
         "update_extra_item",

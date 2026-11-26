@@ -111,8 +111,54 @@ async def get_meal(session: AsyncSession, list_id: str, list_meal_id: str) -> Li
 
 
 async def meal_on_list(session: AsyncSession, list_id: str, meal_id: str) -> ListMeal | None:
+    """The meal's normal list meal on the list (not a leftover of it)."""
     result = await session.execute(
-        select(ListMeal).where(ListMeal.list_id == list_id, ListMeal.meal_id == meal_id)
+        select(ListMeal).where(
+            ListMeal.list_id == list_id,
+            ListMeal.meal_id == meal_id,
+            ListMeal.leftover_of_id.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def meals_by_ids(session: AsyncSession, list_meal_ids: Iterable[str]) -> dict[str, ListMeal]:
+    """List meals by id, on any list."""
+    ids = set(list_meal_ids)
+    if not ids:
+        return {}
+    result = await session.execute(select(ListMeal).where(ListMeal.id.in_(ids)))
+    return {row.id: row for row in result.scalars()}
+
+
+async def lists_with_leftovers_of(session: AsyncSession, list_meal_id: str) -> set[str]:
+    """The lists that have a leftover of the list meal."""
+    result = await session.execute(
+        select(ListMeal.list_id).where(ListMeal.leftover_of_id == list_meal_id)
+    )
+    return set(result.scalars())
+
+
+async def last_finished(
+    session: AsyncSession, user_id: str, partner_id: str | None
+) -> ShoppingList | None:
+    """The done list finished last of the user's own and those their partner shares with them
+    (ties: the one created last)."""
+    condition = ShoppingList.owner_id == user_id
+    if partner_id is not None:
+        condition = or_(
+            condition,
+            (ShoppingList.owner_id == partner_id) & ShoppingList.shared_with_partner.is_(True),
+        )
+    result = await session.execute(
+        select(ShoppingList)
+        .where(condition, ShoppingList.status == "done")
+        .order_by(
+            ShoppingList.finished_at.desc(),
+            ShoppingList.created_at.desc(),
+            ShoppingList.id.desc(),
+        )
+        .limit(1)
     )
     return result.scalar_one_or_none()
 

@@ -95,6 +95,9 @@ class ListMealEntry(BaseModel):
     the one it had). `meal_servings` is what the meal's rows are written for; the rows are
     scaled by `servings ÷ meal_servings`. `thumb_url` is a signed URL of the photo's thumbnail.
     `eaten`: marked eaten on a done list (SHOP-07); false on every meal that never was.
+    A `leftover` (LIST-17) is a meal still at home from the last done list: it adds no lines,
+    its servings are what was bought and can't change, and `eaten` is its source meal's; on a
+    draft or while shopping it is shown only while that is not eaten.
     """
 
     id: str
@@ -107,6 +110,7 @@ class ListMealEntry(BaseModel):
     meal_servings: int
     detached: DetachedReason | None
     eaten: bool
+    leftover: bool
 
 
 class LineSource(BaseModel):
@@ -301,7 +305,8 @@ class ListMealUpdate(BaseModel):
 
 
 class ListMealEaten(BaseModel):
-    """Mark a meal on a done list eaten, or clear that (SHOP-07)."""
+    """Mark a meal on a done list eaten, or clear that (SHOP-07); for a leftover, on any list,
+    its source meal (LIST-17)."""
 
     eaten: bool
 
