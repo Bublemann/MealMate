@@ -49,7 +49,8 @@ interface MoreMenuProps {
 
 /**
  * A detail screen's ⋯ button and its pull-down menu (D-39), for the right of the strip
- * (`Screen`'s `action`). The button is always enabled; items that need a connection are disabled
+ * (`Screen`'s `action`), or a row's ⋮ (a leftover meal, LIST-17, with its own `label`, `testId`
+ * and `icon`). The button is always enabled; items that need a connection are disabled
  * offline, not hidden (SYNC-03). An item that opens a dialog (`dialog`) opens it only once the
  * menu has closed and given the focus back to ⋯; the dialog puts it there again when it closes
  * (`useMoreMenuFocus`).
@@ -75,7 +76,8 @@ export function MoreMenu({ trigger, children, danger, label, testId, icon }: Mor
           size="icon"
           data-testid={testId ?? testIds.moreActions}
           aria-label={label ?? t('common.moreActions')}
-          className="-mr-[0.25em] shrink-0 text-primary"
+          // At a screen's strip the ⋯ lines up with the edge; a row's button keeps its place.
+          className={testId ? 'shrink-0 text-primary' : '-mr-[0.25em] text-primary'}
         >
           {icon ?? <Ellipsis aria-hidden="true" className="size-[1.5em]" />}
         </Button>

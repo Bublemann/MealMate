@@ -190,8 +190,8 @@ describe('leftover meals in a draft (LIST-17)', () => {
     // The ⋮ button stays enabled; its items need a connection (D-39).
     await user.click(screen.getByRole('button', { name: 'Actions: Chili' }));
     const menu = await screen.findByRole('menu');
-    for (const item of within(menu).getAllByRole('menuitem'))
-      expect(item).toHaveAttribute('aria-disabled', 'true');
+    for (const id of [testIds.shopLeftover, testIds.removeLeftover])
+      expect(within(menu).getByTestId(id)).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('keeps leftovers while shopping, with their box', async () => {
