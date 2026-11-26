@@ -150,7 +150,7 @@ The state of a meal on a done list that someone has marked as eaten. Until then 
 _Avoid_: cooked, consumed, used up
 
 **Leftover meal**:
-A meal from the most recent done list, not yet eaten, that a new draft carries over without putting its ingredients on the list again. It leaves the draft once it is marked as eaten.
+A meal from the most recent done list, not yet eaten, that a new draft carries over without putting its ingredients on the list again, unless the user turned the carry-over off. It leaves the draft once it is marked as eaten.
 _Avoid_: carried-over meal, remaining meal, old meal
 
 **Recurring item**:

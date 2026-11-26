@@ -87,6 +87,18 @@ describe('auth session start-up', () => {
     expect(session.accessToken()).toBeNull();
   });
 
+  it('gives a profile cached by an older app the carry-over setting, on (LIST-17)', async () => {
+    mockApi({ 'POST /api/auth/refresh': () => Promise.reject(new TypeError('Failed to fetch')) });
+    const older: Partial<typeof TEST_USER> = { ...TEST_USER };
+    delete older.carry_over_leftovers;
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(older));
+
+    const session = createAuthSession();
+    await session.start();
+
+    expect(session.getState()).toMatchObject({ status: 'authenticated', user: TEST_USER });
+  });
+
   it('shows the cached profile at once, while the start-up refresh runs (SYNC-09)', async () => {
     let answer: (() => void) | undefined;
     mockApi({

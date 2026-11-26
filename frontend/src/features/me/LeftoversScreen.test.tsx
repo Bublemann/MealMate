@@ -20,29 +20,35 @@ describe('LeftoversScreen', () => {
     expect(carryOver).toBe(screen.getByTestId(testIds.carryOverSwitch));
     expect(carryOver).toBeChecked();
     expect(carryOver).toHaveAccessibleDescription(
-      "New lists bring along the meals of your last done list that haven't been eaten yet.",
+      "New lists bring along the meals of the last done list that haven't been eaten yet.",
     );
 
     await user.click(carryOver);
 
     await waitFor(() => expect(carryOver).not.toBeChecked());
     await waitFor(() => expect(carryOver).toBeEnabled());
+    expect(carryOver).not.toBeChecked();
     const [off] = requestsTo(fetchMock, 'PATCH /api/me');
     await expect(off?.json()).resolves.toEqual({ carry_over_leftovers: false });
 
     await user.click(carryOver);
-    await waitFor(() => expect(carryOver).toBeChecked());
+    await waitFor(() => expect(carryOver).toBeEnabled());
+    expect(carryOver).toBeChecked();
     await expect(requestsTo(fetchMock, 'PATCH /api/me')[1]?.json()).resolves.toEqual({
       carry_over_leftovers: true,
     });
   });
 
-  it('shows the setting saved on another device', async () => {
+  it('shows the setting saved on another device, loaded as the Settings tab opens', async () => {
     mockApi({ 'GET /api/me': { ...TEST_USER, carry_over_leftovers: false } });
-    renderApp('/me/leftovers');
+    const { user } = renderApp('/me');
+
+    const row = screen.getByRole('link', { name: /^Leftover meals/ });
+    await waitFor(() => expect(row).toHaveAccessibleName('Leftover meals Off'));
+    await user.click(row);
 
     const carryOver = await screen.findByRole('switch', { name: 'Carry over leftover meals' });
-    await waitFor(() => expect(carryOver).not.toBeChecked());
+    expect(carryOver).not.toBeChecked();
   });
 
   it('shows a failed change and keeps the old state', async () => {

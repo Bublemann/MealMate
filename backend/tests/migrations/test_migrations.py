@@ -285,8 +285,7 @@ def demo_settings(data_dir: Path) -> Settings:
 
 
 def seed_accounts(data_dir: Path) -> dict[str, str]:
-    """The M2 part of seed-demo, which works at revision 0002 (with the carry-over setting
-    standing in while it writes the users)."""
+    """The M2 part of seed-demo, which works at revision 0002."""
 
     async def run() -> dict[str, str]:
         database = Database.open(data_dir)

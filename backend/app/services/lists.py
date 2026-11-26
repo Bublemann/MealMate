@@ -65,7 +65,6 @@ from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
-from app.repositories import users as users_repo
 from app.schemas.items import base_unit_name
 from app.schemas.lists import (
     ExtraItem,
@@ -87,6 +86,7 @@ from app.services import (
     access,
     aggregation,
     detach,
+    me,
     recurring,
     reference,
     shopping,
@@ -473,8 +473,7 @@ async def create_list(
     turned the carry-over off (LIST-17, D-59)."""
     async with session.begin():
         shopping_list, rights = await _new_list(session, principal, body.name, now=now)
-        user = await users_repo.get(session, principal.user_id)
-        if user is not None and user.carry_over_leftovers:
+        if (await me.current_user(session, principal)).carry_over_leftovers:
             await _add_leftovers(
                 session, principal, shopping_list, rights.viewer_partner_id, now=now
             )

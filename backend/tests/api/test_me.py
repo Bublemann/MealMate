@@ -75,6 +75,7 @@ async def test_the_carry_over_setting_is_on_by_default_and_per_user(
     response = await api.patch(
         "/api/me", json={"carry_over_leftovers": False}, headers=anna.headers
     )
+    assert response.status_code == 200, response.text
     assert response.json()["carry_over_leftovers"] is False
     # Null or left out, it stays; it is anna's alone.
     for body in ({"carry_over_leftovers": None}, {"language": "en"}):

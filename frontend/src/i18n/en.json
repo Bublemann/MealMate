@@ -50,7 +50,7 @@
   "me.privacy.listsPublicHint": "Everyone can see your shopping lists (read-only) and copy them.",
   "me.leftovers.title": "Leftover meals",
   "me.leftovers.carryOver": "Carry over leftover meals",
-  "me.leftovers.carryOverHint": "New lists bring along the meals of your last done list that haven't been eaten yet.",
+  "me.leftovers.carryOverHint": "New lists bring along the meals of the last done list that haven't been eaten yet.",
   "me.leftovers.on": "On",
   "me.leftovers.off": "Off",
   "me.security.title": "Security",

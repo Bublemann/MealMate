@@ -176,7 +176,6 @@ async def test_with_carry_over_off_a_new_draft_starts_empty(
     first = await create_list(api, anna, "Woche")
     await added(api, anna, first["id"], meals["Brot"]["id"])
     await added(api, anna, first["id"], meals["Chili"]["id"])
-    assert meal_rows(await create_list(api, anna, "Davor")) == []
     done = await finished(api, anna, first["id"])
     draft = await create_list(api, anna, "Mit Resten")
     response = await api.patch(

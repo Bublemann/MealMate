@@ -7,7 +7,7 @@ import type { TestId } from '@/testIds';
 import { useUpdateMe } from './api';
 
 /** The own settings that are switches, saved on the server (VIS-02, LIST-17). */
-export type SwitchSetting = 'meals_public' | 'lists_public' | 'carry_over_leftovers';
+type SwitchSetting = 'meals_public' | 'lists_public' | 'carry_over_leftovers';
 
 interface SettingSwitchProps {
   field: SwitchSetting;
