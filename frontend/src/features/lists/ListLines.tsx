@@ -315,8 +315,8 @@ function SourcesDialog({
                         pending={removeItem.isPending && removeItem.variables === source.extra_id}
                         disabled={removeItem.isPending || offline}
                         onClick={() => source.extra_id && removeItem.mutate(source.extra_id)}
+                        icon={<Trash2 aria-hidden="true" />}
                       >
-                        <Trash2 aria-hidden="true" />
                         {t('lists.item.remove')}
                       </Button>
                     </div>

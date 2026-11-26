@@ -115,7 +115,7 @@ function NewTile({ label, onClick, disabled = false, pending = false, testId }: 
       disabled={disabled}
       pending={pending}
       icon={<Plus aria-hidden="true" />}
-      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em] [&_svg]:size-[1.25em]"
+      className="min-w-0 flex-[1_1_12em] shrink justify-start gap-[0.75em] rounded-xl px-[1em] py-[0.875em] text-left text-[1em] [&_svg:not([class*='size-'])]:size-[1.25em]"
     >
       <span className="min-w-0 leading-[1.25] wrap-anywhere">{label}</span>
     </Button>

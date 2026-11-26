@@ -116,7 +116,7 @@ function LogoutRow() {
           data-testid={testIds.logoutButton}
           pending={logout.isPending}
           onClick={() => void onLogout()}
-          className={`w-full rounded-none px-4 py-3 text-destructive hover:text-destructive ${SETTINGS_ROW_FOCUS}`}
+          className={`w-full rounded-none px-4 py-3 text-destructive hover:text-destructive focus-visible:ring-offset-0 ${SETTINGS_ROW_FOCUS}`}
         >
           {t('me.logout')}
         </Button>
