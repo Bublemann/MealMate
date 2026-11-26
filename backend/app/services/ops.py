@@ -167,7 +167,7 @@ async def _update_extra(batch: _Batch, op: ExtraUpdateOp) -> Outcome:
     _require_not_done(batch.shopping_list)
     payload = op.payload
     extra = await _extra_of(batch, payload.extra_id)
-    if extra.ingredient_id is not None:
+    if extra.item_id is not None:
         raise OpRejectedError(ErrorCode.VALIDATION)
     amount_text = (
         payload.amount_text if "amount_text" in payload.model_fields_set else extra.amount_text

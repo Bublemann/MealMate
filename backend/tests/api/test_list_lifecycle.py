@@ -86,7 +86,7 @@ async def test_deleting_a_meal_detaches_it(
     assert body["lines"] == before["lines"]
     assert body["version"] == before["version"] + 1
     assert lines(await detail(api, anna, own["id"])) == {"Mehl": ([(300, "g")], False)}
-    frozen = await scalars(app, select(ListMealIngredient.ingredient_name_snapshot))
+    frozen = await scalars(app, select(ListMealIngredient.item_name_snapshot))
     assert frozen == ["Mehl", "Mehl"]
     # The list owner can remove it.
     entry_id = body["meals"][0]["id"]
@@ -391,7 +391,7 @@ async def test_merging_ingredients(
         (one_checked["id"], new_key): (True, False),
     }
     frozen_rows = await scalars(app, select(ListMealIngredient))
-    assert [(row.ingredient_id, row.ingredient_name_snapshot) for row in frozen_rows] == [
+    assert [(row.item_id, row.item_name_snapshot) for row in frozen_rows] == [
         (tomatoes["id"], "Paradeiser")
     ]
 

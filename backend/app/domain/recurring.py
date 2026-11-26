@@ -1,6 +1,6 @@
 """Dates and intervals of recurring items (LIST-16, D-42, MNT-02).
 
-A recurring item is an ingredient a user, or a couple together, buys again and again. These
+A recurring item is an item a user, or a couple together, buys again and again. These
 rules take an item's stored values and "today" and say when it is due and how its interval
 reads; the services load and store, nothing here does I/O.
 
@@ -129,9 +129,9 @@ def add_measured(measured: Sequence[int], *, previous: date, purchased_on: date)
 
 
 def preferred_stays(preferred: date, other: date) -> bool:
-    """When one set would hold two items of one ingredient, the one bought more recently stays,
+    """When one set would hold two items of one item, the one bought more recently stays,
     with all its values; on a tie the preferred one: the requester's when a couple forms, the
-    surviving ingredient's on a merge (D-42). Takes the two last purchase dates."""
+    surviving item's on a merge (D-42). Takes the two last purchase dates."""
     return preferred >= other
 
 
@@ -156,7 +156,7 @@ class LastPurchase:
 
 @dataclass(frozen=True)
 class Purchase:
-    """A checked line of the item's ingredient on a finished list (LIST-16): its day, its list,
+    """A checked line of the item's item on a finished list (LIST-16): its day, its list,
     and its amount and unit when the line shows exactly one amount."""
 
     on: date

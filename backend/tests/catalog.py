@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.db.session import Database
-from app.models import Ingredient
+from app.models import Item
 from tests.accounts import Account
 
 # Valid barcodes (GS1 check digits): EAN-13, EAN-13, UPC-A, EAN-8, UPC-E.
@@ -76,9 +76,7 @@ async def set_stored(app: FastAPI, ingredient_id: str, **values: Any) -> None:
     (until migration 0014 cleared it, D-34)."""
     database: Database = app.state.database
     async with database.write_sessions() as session, session.begin():
-        await session.execute(
-            update(Ingredient).where(Ingredient.id == ingredient_id).values(**values)
-        )
+        await session.execute(update(Item).where(Item.id == ingredient_id).values(**values))
 
 
 def summary(ingredient: Any) -> dict[str, Any]:

@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models import AdminEvent, Ingredient
+from app.models import AdminEvent, Item
 from app.services import hooks
 from tests.accounts import Account, FakeClock, error, fields, make_user, scalars
 from tests.catalog import (
@@ -270,13 +270,13 @@ async def test_what_a_g_or_ml_ingredient_has_from_before_stays_hidden(
     assert (body["name"], body["piece_weight_g"]) == ("Apfel", None)
     response = await patch(api, anna, apples["id"], name="Äpfel", piece_weight_g=150)
     assert fields(response) == {("body", "piece_weight_g"): "invalid"}
-    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
+    assert await scalars(app, select(Item.piece_weight_g)) == [180]
 
     # Counted in millilitres, it still has it; counted in pieces, it has the piece weight sent
     # along, or none: the hidden one would surprise (ING-02).
     await patch(api, anna, apples["id"], base_unit="ml")
     await patch(api, anna, apples["id"], base_unit="g")
-    assert await scalars(app, select(Ingredient.piece_weight_g)) == [180]
+    assert await scalars(app, select(Item.piece_weight_g)) == [180]
     body = (await patch(api, anna, apples["id"], base_unit="piece")).json()
     assert (body["base_unit"], body["piece_weight_g"]) == ("piece", None)
     await patch(api, anna, apples["id"], base_unit="g")
@@ -338,7 +338,7 @@ async def test_a_barcode_belongs_to_one_ingredient(
     assert response.status_code == 409
     assert error(response) == "ingredient.barcode_taken"
     assert response.json()["params"] == {"ingredient_id": owner["id"]}
-    assert await scalars(app, select(Ingredient.name)) == ["Nudeln"]
+    assert await scalars(app, select(Item.name)) == ["Nudeln"]
 
 
 async def test_change_or_clear_the_barcode(api: AsyncClient, anna: Account) -> None:
@@ -410,7 +410,7 @@ async def test_linking_never_replaces_a_barcode(
     assert fields(invalid) == {("body", "barcode"): "invalid_format"}
     missing = await link(api, anna, "unknown", EAN_13_B)
     assert missing.status_code == 404
-    assert await scalars(app, select(Ingredient.barcode).order_by(Ingredient.name)) == [
+    assert await scalars(app, select(Item.barcode).order_by(Item.name)) == [
         EAN_13,
         None,
     ]
@@ -623,7 +623,7 @@ async def test_clearing_or_changing_the_barcode_makes_it_manual(
     )
     database = app.state.database
     async with database.write_sessions() as session, session.begin():
-        row = await session.get(Ingredient, oats["id"])
+        row = await session.get(Item, oats["id"])
         assert row is not None
         row.ignored_off_modified_at = row.off_last_modified_at
         row.pending_update = {"brand": {"current": "Kölln", "proposed": "Kölln Flocken"}}
@@ -638,7 +638,7 @@ async def test_clearing_or_changing_the_barcode_makes_it_manual(
         "Kölln",
         370,
     )
-    assert await scalars(app, select(Ingredient.ignored_off_modified_at)) == [None]
+    assert await scalars(app, select(Item.ignored_off_modified_at)) == [None]
     # Editing a manual ingredient marks nothing.
     assert (await patch(api, anna, oats["id"], name="Hafer")).json()["user_edited_fields"] == []
 
@@ -1241,7 +1241,7 @@ async def test_deleted_creator(
 
     assert body["created_by"] is None
     assert body["updated_by"] == ref(ben)
-    assert await scalars(app, select(Ingredient.name)) == ["Äpfel"]
+    assert await scalars(app, select(Item.name)) == ["Äpfel"]
 
 
 async def test_usage(api: AsyncClient, anna: Account, ben: Account) -> None:
@@ -1282,12 +1282,10 @@ async def test_merge(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    async def on_ingredients_merged(
-        _session: object, from_id: str, into_id: str, **_: object
-    ) -> None:
+    async def on_items_merged(_session: object, from_id: str, into_id: str, **_: object) -> None:
         calls.append((from_id, into_id))
 
-    monkeypatch.setattr(hooks, "on_ingredients_merged", on_ingredients_merged)
+    monkeypatch.setattr(hooks, "on_items_merged", on_items_merged)
     duplicate = await create_ingredient(api, anna, "Paradeiser", nutrients={"kcal": 20})
     tomatoes = await create_ingredient(api, anna, "Tomaten", piece_weight_g=100, base_unit="piece")
     clock.advance(minutes=10)
@@ -1302,7 +1300,7 @@ async def test_merge(
     assert (body["created_by"], body["updated_by"]) == (ref(anna), ref(admin))
     assert body["updated_at"] == "2026-09-27T12:10:00Z"
     assert calls == [(duplicate["id"], tomatoes["id"])]
-    assert await scalars(app, select(Ingredient.name)) == ["Tomaten"]
+    assert await scalars(app, select(Item.name)) == ["Tomaten"]
     missing = await api.get(f"/api/ingredients/{duplicate['id']}", headers=anna.headers)
     assert missing.status_code == 404
     assert await events(api, admin) == [
@@ -1335,7 +1333,7 @@ async def test_merge_drops_the_barcode_when_the_target_has_one(
     body = (await merge(api, admin, first["id"], second["id"])).json()
 
     assert body["barcode"] == EAN_8
-    assert await scalars(app, select(Ingredient.barcode)) == [EAN_8]
+    assert await scalars(app, select(Item.barcode)) == [EAN_8]
 
 
 async def test_invalid_merges(api: AsyncClient, anna: Account, admin: Account) -> None:
@@ -1360,7 +1358,7 @@ async def test_delete(app: FastAPI, api: AsyncClient, anna: Account, admin: Acco
     response = await api.delete(f"/api/admin/ingredients/{apples['id']}", headers=admin.headers)
 
     assert response.status_code == 204
-    assert await scalars(app, select(Ingredient.id)) == []
+    assert await scalars(app, select(Item.id)) == []
     assert await events(api, admin) == [("ingredient.delete", {"name": "Äpfel"})]
     again = await api.delete(f"/api/admin/ingredients/{apples['id']}", headers=admin.headers)
     assert again.status_code == 404
@@ -1378,7 +1376,7 @@ async def test_ingredients_in_use_are_not_deleted(
     assert response.status_code == 409
     assert error(response) == "ingredient.in_use"
     assert response.json()["params"] == {"meals": 2, "lists": 0}
-    assert len(await scalars(app, select(Ingredient.id))) == 1
+    assert len(await scalars(app, select(Item.id))) == 1
     assert await scalars(app, select(AdminEvent.id)) == []
 
 
@@ -1450,13 +1448,13 @@ async def test_a_merge_across_base_units_names_the_amounts_that_wont_fit(
     assert response.status_code == 409
     assert error(response) == "ingredient.unit_mismatch"
     assert response.json()["params"] == {"meals": 2, "lists": 1, "amounts": 4}
-    assert sorted(await scalars(app, select(Ingredient.name))) == ["Ei", "Eier"]
+    assert sorted(await scalars(app, select(Item.name))) == ["Ei", "Eier"]
     assert await events(api, admin) == []
 
     response = await merge(api, admin, duplicate["id"], eggs["id"], accept_unit_mismatch=True)
 
     assert response.status_code == 200, response.text
-    assert await scalars(app, select(Ingredient.name)) == ["Eier"]
+    assert await scalars(app, select(Item.name)) == ["Eier"]
     assert await meal_amounts(api, anna, old["id"]) == [(100, "ml", False)]
     assert await meal_amounts(api, anna, omelette["id"]) == [
         (120, "g", False),
@@ -1503,4 +1501,4 @@ async def test_only_admins_merge_and_delete(
     )
     assert response.status_code == 403
     assert error(response) == "common.forbidden"
-    assert len(await scalars(app, select(Ingredient.id))) == 2
+    assert len(await scalars(app, select(Item.id))) == 2

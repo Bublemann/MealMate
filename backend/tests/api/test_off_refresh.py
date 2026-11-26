@@ -19,7 +19,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.core.ratelimit import SlidingWindow
 from app.db.session import Database
-from app.models import Ingredient as IngredientRow
+from app.models import Item as ItemRow
 from app.schemas.ingredients import Ingredient
 from app.services import off_refresh
 from app.services.off_refresh import OffRefresher, Outcome
@@ -89,7 +89,7 @@ def the_refresher(app: FastAPI) -> OffRefresher:
 
 
 async def refresh(app: FastAPI, clock: FakeClock, ingredient_id: str, **options: Any) -> Outcome:
-    return await off_refresh.refresh_ingredient(
+    return await off_refresh.refresh_item(
         database(app),
         the_refresher(app).off,
         ingredient_id,
@@ -320,7 +320,7 @@ async def test_pack_marks_from_before_d38_count_again(
         {"field": "quantity_text", "current": "500 g", "proposed": "1 kg"}
     ]
     async with database(app).read_sessions() as session:
-        row = await session.get(IngredientRow, product["id"])
+        row = await session.get(ItemRow, product["id"])
         assert row is not None
         assert row.user_edited_fields == marks
     # Applied, the pack size is Open Food Facts' again, whichever field was marked.
@@ -480,7 +480,7 @@ async def test_a_product_changed_during_the_request_is_skipped(
 
     def barcode_changes(_request: httpx.Request) -> httpx.Response:
         with closing(sqlite3.connect(database(app).path)) as connection, connection:
-            connection.execute("UPDATE ingredients SET barcode = ?", (MILK,))
+            connection.execute("UPDATE items SET barcode = ?", (MILK,))
         return httpx.Response(200, json=oats(brands="Other"))
 
     route(off_api, OATS).mock(side_effect=barcode_changes)
@@ -532,7 +532,7 @@ async def test_the_name_language_is_the_creators(
 
     # A deleted creator: German.
     async with database(app).write_sessions() as session, session.begin():
-        await session.execute(update(IngredientRow).values(created_by=None))
+        await session.execute(update(ItemRow).values(created_by=None))
     await refresh(app, clock, product["id"])
     assert (await get(api, ben, product["id"]))["name"] == "Haferflocken"
 
@@ -785,7 +785,7 @@ async def test_background_failures_are_logged(
     async def broken(*_args: Any, **_kwargs: Any) -> Outcome:
         raise RuntimeError("bug")
 
-    monkeypatch.setattr(off_refresh, "refresh_ingredient", broken)
+    monkeypatch.setattr(off_refresh, "refresh_item", broken)
     product = await saved_oats(api, anna, edited=[])
     await later(api, clock, anna, days=31)
 
@@ -895,7 +895,7 @@ async def test_refresh_stale_oldest_first(
     never = await saved_milk(api, anna, "2000000000039")
     async with database(app).write_sessions() as session, session.begin():
         await session.execute(
-            update(IngredientRow).where(IngredientRow.id == never["id"]).values(fetched_at=None)
+            update(ItemRow).where(ItemRow.id == never["id"]).values(fetched_at=None)
         )
     route(off_api, OATS).respond(json=oats(brands="Neu"))
     route(off_api, MILK).respond(503)
@@ -933,10 +933,10 @@ async def test_the_job_goes_on_after_an_error(
     route(off_api, MILK).respond(json=product_response(MILK, brands="Neu"))
     apply_refresh = off_refresh.apply_refresh
 
-    def locked(row: IngredientRow, found: Any, **options: Any) -> Outcome:
+    def locked(row: ItemRow, found: Any, **options: Any) -> Outcome:
         if row.barcode == OATS:
             raise OperationalError(
-                "UPDATE ingredients SET brand=?",
+                "UPDATE items SET brand=?",
                 ("Geheimrezept",),
                 sqlite3.OperationalError("database is locked"),
             )
@@ -993,7 +993,7 @@ async def test_the_job_refreshes_at_most_max_ingredients(
         database(app),
         the_refresher(app).off,
         max_age=timedelta(days=30),
-        max_ingredients=1,
+        max_items=1,
         clock=clock,
     )
 

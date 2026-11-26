@@ -23,7 +23,7 @@ from app.schemas.reference import (
     CategoryRename,
     CategoryUsage,
 )
-from app.services import admin, codes, ingredients, reference, system
+from app.services import admin, codes, items, reference, system
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], responses=ERROR_RESPONSES)
 
@@ -161,7 +161,7 @@ async def admin_merge_ingredient(
     (ING-05). Returns the ingredient merged into. 409 `ingredient.unit_mismatch` with the
     number of its amounts that won't fit `into_id`'s base unit, unless `accept_unit_mismatch`
     is true (D-33)."""
-    return await ingredients.merge(session, principal, ingredient_id, body, now=now)
+    return await items.merge(session, principal, ingredient_id, body, now=now)
 
 
 @router.delete(
@@ -173,7 +173,7 @@ async def admin_delete_ingredient(
     ingredient_id: str, principal: CurrentAdmin, session: WriteSession, now: Now
 ) -> None:
     """Delete an ingredient that nothing refers to (409 `ingredient.in_use` otherwise)."""
-    await ingredients.delete(session, principal, ingredient_id, now=now)
+    await items.delete(session, principal, ingredient_id, now=now)
 
 
 @router.get("/system")

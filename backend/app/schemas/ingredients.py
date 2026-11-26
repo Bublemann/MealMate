@@ -21,7 +21,7 @@ from pydantic_core import PydanticCustomError
 from app.domain.catalog import (
     BARCODE_INPUT_MAX_LENGTH,
     BRAND_MAX_LENGTH,
-    INGREDIENT_NAME_MAX_LENGTH,
+    ITEM_NAME_MAX_LENGTH,
     OFF_FIELDS,
     PIECE_WEIGHT_MAX_G,
     QUANTITY_TEXT_MAX_LENGTH,
@@ -73,7 +73,7 @@ def not_null[T](value: T | None) -> T:
 IdInput = Annotated[str, StringConstraints(min_length=1, max_length=36)]
 IngredientNameInput = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=INGREDIENT_NAME_MAX_LENGTH),
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=ITEM_NAME_MAX_LENGTH),
     AfterValidator(check_name),
 ]
 PieceWeightInput = Annotated[float, Field(gt=0, le=PIECE_WEIGHT_MAX_G, allow_inf_nan=False)]

@@ -44,10 +44,11 @@ class Meal(IdMixin, TimestampMixin, Base):
 
 
 class MealIngredient(IdMixin, TimestampMixin, Base):
-    """One ingredient row of a meal, at `position` 0..n-1 (MEAL-02).
+    """One ingredient of a meal: a row with an item and its amount, at `position` 0..n-1
+    (MEAL-02).
 
-    An amount without a unit is stored as pieces; a unit needs an amount. The same ingredient
-    may appear in several rows. Ingredients referenced here cannot be deleted (ING-05).
+    An amount without a unit is stored as pieces; a unit needs an amount. The same item may
+    appear in several rows. Items referenced here cannot be deleted (ING-05).
     """
 
     __tablename__ = "meal_ingredients"
@@ -62,8 +63,8 @@ class MealIngredient(IdMixin, TimestampMixin, Base):
         String(36), ForeignKey("meals.id", ondelete="CASCADE"), index=True
     )
     position: Mapped[int] = mapped_column(Integer)
-    ingredient_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("ingredients.id", ondelete="RESTRICT"), index=True
+    item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("items.id", ondelete="RESTRICT"), index=True
     )
     amount: Mapped[float | None] = mapped_column(Float)
     unit: Mapped[str | None] = mapped_column(String(10))

@@ -1,4 +1,4 @@
-"""Input rules for ingredients, categories, cuisines and tags (ING-02, REF-01, REF-03, REF-04,
+"""Input rules for items, categories, cuisines and tags (ING-02, REF-01, REF-03, REF-04,
 BAR-10).
 
 Names are stored as typed (trimmed) and compared through `normalize()` (`*_norm` columns).
@@ -14,7 +14,7 @@ from app.domain.nutrients import NUTRIENT_KEYS
 from app.domain.text import normalize
 from app.domain.units import UNIT_FACTOR, UNIT_KIND, BaseUnit, Unit, UnitKind
 
-INGREDIENT_NAME_MAX_LENGTH = 60
+ITEM_NAME_MAX_LENGTH = 60
 CATEGORY_NAME_MAX_LENGTH = 40
 CUISINE_NAME_MAX_LENGTH = 40
 TAG_NAME_MAX_LENGTH = 30
@@ -29,9 +29,9 @@ PACK_QUANTITY_MAX = 100_000.0
 # Normalised names can be longer than typed ones ("ß" → "ss", compatibility forms).
 NAME_NORM_FACTOR = 4
 
-# The fields of an ingredient that Open Food Facts provides and refreshes (BAR-04..06), other
+# The fields of an item that Open Food Facts provides and refreshes (BAR-04..06), other
 # than the nutrients: the name, the brand and the pack size's text (`quantity_text`, D-47). Each
-# one a user changes on an ingredient from Open Food Facts is recorded as user-edited, nutrients
+# one a user changes on an item from Open Food Facts is recorded as user-edited, nutrients
 # as `nutrients.<key>`. The barcode, category, base unit and piece weight are the user's alone: a
 # refresh never touches them.
 OFF_DATA_FIELDS: tuple[str, ...] = ("name", "brand", "quantity_text")
@@ -101,7 +101,7 @@ def clean_text(text: str, max_length: int) -> str | None:
 
 def cut_at_word(text: str, max_length: int) -> str:
     """`text` shortened to at most `max_length` characters at the last word boundary, so that a
-    long Open Food Facts name becomes a readable ingredient name ("Bio Vollmilch 3,8 % Fett
+    long Open Food Facts name becomes a readable item name ("Bio Vollmilch 3,8 % Fett
     frisch" rather than "Bio Vollmilch 3,8 % Fe"). Where that would lose more than half, such as
     before one overlong word, it is cut hard instead."""
     if len(text) <= max_length:

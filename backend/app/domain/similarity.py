@@ -1,4 +1,4 @@
-"""The "similar ingredient already exists" hint (ING-03).
+"""The "similar item already exists" hint (ING-03).
 
 Works on normalised names with umlaut spellings folded (`fold_umlauts`), so case, umlauts,
 their spelling ("ae") and accents never make a difference: "Apfel" is similar to "Äpfel".

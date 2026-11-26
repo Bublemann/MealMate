@@ -13,9 +13,9 @@ service keeps the traffic small:
   slow or unreachable 503 `off.unavailable`.
 
 Each product becomes a proposal exactly like a scanned one (`services.barcodes.proposal`);
-products without a valid barcode are left out, as an ingredient from Open Food Facts is
-refreshed by its barcode. Products whose barcode an ingredient already has are flagged
-`in_mealmate`, so the user can pick that ingredient instead.
+products without a valid barcode are left out, as an item from Open Food Facts is
+refreshed by its barcode. Products whose barcode an item already has are flagged
+`in_mealmate`, so the user can pick that item instead.
 """
 
 import time
@@ -28,9 +28,9 @@ from app.core.errors import ApiError, ErrorCode
 from app.core.ratelimit import Clock
 from app.domain.text import normalize
 from app.integrations.off import LOOKUP_MAX_WAIT_SECONDS, SEARCH_PAGE_SIZE, OffClient, OffProduct
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.schemas.ingredients import OffSearchPage, OffSearchResult
-from app.services import barcodes, ingredients
+from app.services import barcodes, items
 from app.services.principal import Principal
 
 QUERY_MIN_LENGTH = 2
@@ -122,12 +122,12 @@ async def search(
         if product.code is not None:
             by_barcode.setdefault(product.code, product)  # the first of duplicates wins
     async with session.begin():
-        known = await ingredients_repo.by_barcodes(session, by_barcode)
+        known = await items_repo.by_barcodes(session, by_barcode)
     results = [
         OffSearchResult(
             proposal=barcodes.proposal(product, barcode, language),
             in_mealmate=barcode in known,
-            ingredient=ingredients.summary(known[barcode]) if barcode in known else None,
+            ingredient=items.summary(known[barcode]) if barcode in known else None,
         )
         for barcode, product in by_barcode.items()
     ]

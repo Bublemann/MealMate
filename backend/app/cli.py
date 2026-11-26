@@ -40,7 +40,7 @@ from app.repositories import users as users_repo
 from app.services import accounts, codes, jobs, off_refresh
 from app.services.context import AuthConfig
 from app.services.demo import (
-    DEMO_INGREDIENTS,
+    DEMO_ITEMS,
     DEMO_LISTS,
     DEMO_MEALS,
     DEMO_RECURRING,
@@ -206,7 +206,7 @@ def reset_link(
 @main.command("seed-demo")
 def seed_demo_command() -> None:
     """Fill an empty installation with demo users (admin, anna + ben as a couple, carl with
-    private meals), an open invite, ingredients (some with brand and barcode), meals with photos,
+    private meals), an open invite, items (some with brand and barcode), meals with photos,
     lists and the couple's recurring items.
     Refuses to run if any user exists."""
     settings = _load_settings()
@@ -225,8 +225,8 @@ def seed_demo_command() -> None:
     typer.echo("Demo users: admin (admin), anna + ben (a couple), carl")
     typer.echo(f"Demo password (all users): {seed.password}")
     typer.echo(f"Open invite: {seed.invite_url}")
-    scanned = sum(1 for item in DEMO_INGREDIENTS if item.barcode is not None)
-    typer.echo(f"Demo ingredients: {len(DEMO_INGREDIENTS)} ({scanned} with a barcode)")
+    scanned = sum(1 for item in DEMO_ITEMS if item.barcode is not None)
+    typer.echo(f"Demo ingredients: {len(DEMO_ITEMS)} ({scanned} with a barcode)")
     typer.echo(f"Demo meals: {len(DEMO_MEALS)}")
     typer.echo(f"Demo lists: {len(DEMO_LISTS)}")
     typer.echo(f"Demo recurring items: {len(DEMO_RECURRING)} (anna + ben)")
@@ -295,21 +295,21 @@ def jobs_cleanup() -> None:
 
 @jobs_app.command("off-refresh")
 def jobs_off_refresh() -> None:
-    """Refresh the ingredients from Open Food Facts fetched longer than
+    """Refresh the items from Open Food Facts fetched longer than
     MEALMATE_OFF_REFRESH_DAYS ago, oldest first, at most MEALMATE_OFF_RATE_JOB_PER_MINUTE per
-    minute and an hour's worth per run (BAR-05, BAR-08). An ingredient that fails is logged and
+    minute and an hour's worth per run (BAR-05, BAR-08). An item that fails is logged and
     counted; the others go on."""
     settings = _load_settings()
     _require_current_database(settings)
     off = OffClient.from_settings(settings, job=True)
     max_age = timedelta(days=settings.off_refresh_days)
-    max_ingredients = off_refresh.JOB_MAX_MINUTES * settings.off_rate_job_per_minute
+    max_items = off_refresh.JOB_MAX_MINUTES * settings.off_rate_job_per_minute
 
     async def run() -> Counter[off_refresh.Outcome]:
         database = Database.open(settings.data_dir)
         try:
             return await off_refresh.refresh_stale(
-                database, off, max_age=max_age, max_ingredients=max_ingredients
+                database, off, max_age=max_age, max_items=max_items
             )
         finally:
             await off.aclose()

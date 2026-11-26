@@ -3,7 +3,7 @@ import json
 import re
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
@@ -12,7 +12,9 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, Engine, event
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.schema import CreateTable
@@ -40,7 +42,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0018"
+HEAD = "0019"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -65,11 +67,12 @@ LIST_TABLES = {
 TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
-# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table.
+# one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
-HEAD_TABLES = TABLES_0016 | {"walking_order_entries"}
+TABLES_0018 = TABLES_0016 | {"walking_order_entries"}
+HEAD_TABLES = TABLES_0018 - {"ingredients"} | {"items"}
 
 
 @pytest.fixture
@@ -158,7 +161,11 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0017")
     assert tables(database_path) == TABLES_0016
     command.upgrade(config, "0018")
+    assert tables(database_path) == TABLES_0018
+    command.upgrade(config, "0019")
     assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0018")
+    assert tables(database_path) == TABLES_0018
     command.downgrade(config, "0017")
     assert tables(database_path) == TABLES_0016
     command.downgrade(config, "0016")
@@ -1220,6 +1227,36 @@ def no_own_walking_orders_yet(path: Path) -> Iterator[None]:
             connection.execute("DROP TABLE walking_order_entries")
 
 
+@contextmanager
+def items_renamed_meanwhile(path: Path) -> Iterator[None]:
+    """The app of today reads items, which 0019 renamed from ingredients. For an old database,
+    0019 rebuilds the tables it has under the new names while the app reads, and back again
+    before the upgrade."""
+    revision = ScriptDirectory.from_config(alembic_config(path)).get_revision("0019")
+    assert revision is not None
+    module = revision.module
+    old = [table for table in (module.OLD_TABLE, *module.REFERRING_TABLES) if table in tables(path)]
+
+    def rebuild(names: list[str], renames: Mapping[str, str]) -> None:
+        engine = create_migration_engine(path)
+        try:
+            with (
+                engine.begin() as connection,
+                Operations.context(MigrationContext.configure(connection)),
+            ):
+                for table in names:
+                    module._rebuild(table, renames)
+        finally:
+            engine.dispose()
+
+    rebuild(old, module.RENAMES)
+    try:
+        yield
+    finally:
+        back = {new: old for old, new in module.RENAMES.items()}
+        rebuild([module.RENAMES.get(table, table) for table in old], back)
+
+
 def _flagged_rows(seen: dict[str, dict[str, Any]]) -> list[tuple[object, ...]]:
     return sorted(
         (meal["name"], row["ingredient"]["name"], row["amount"], row["unit"])
@@ -1244,7 +1281,7 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
     settings = demo_settings(data_dir)
-    with no_own_walking_orders_yet(path):
+    with no_own_walking_orders_yet(path), items_renamed_meanwhile(path):
         before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
 
     upgrade_database(data_dir)
@@ -1315,9 +1352,17 @@ def inserts(path: Path) -> list[str]:
     return [line for line in dump_without(path) if line.startswith("INSERT INTO")]
 
 
+def renamed_to_items(connection: sqlite3.Connection) -> bool:
+    """Whether the database is at 0019 or later, where ingredients are items."""
+    found = connection.execute("SELECT 1 FROM sqlite_master WHERE name = 'items'").fetchall()
+    return bool(found)
+
+
 def ingredient_id(connection: sqlite3.Connection, name: str) -> str:
+    table = "items" if renamed_to_items(connection) else "ingredients"
     row_id: str = connection.execute(
-        "SELECT id FROM ingredients WHERE name = ?", (name,)
+        f"SELECT id FROM {table} WHERE name = ?",  # noqa: S608
+        (name,),
     ).fetchone()[0]
     return row_id
 
@@ -1342,7 +1387,11 @@ def recurring_item(
         "recurring_items",
         couple_id=couple_id,
         user_id=None if user is None else user_id(connection, user),
-        ingredient_id=ingredient_id(connection, name),
+        **{
+            "item_id" if renamed_to_items(connection) else "ingredient_id": ingredient_id(
+                connection, name
+            )
+        },
         interval_days=28,
         interval_manual=False,
         last_purchased_on="2026-09-27",
@@ -1704,6 +1753,167 @@ def test_a_walking_order_has_one_owner_and_each_category_once(
             walking_order_entry(connection, "cheese", **earlier)
         with pytest.raises(sqlite3.IntegrityError, match=message):
             walking_order_entry(connection, "cheese", **owner)
+
+
+# --- 0019 -----------------------------------------------------------------------------------
+
+# What 0019 renames: the table of what one buys, and per table the columns that point at it.
+RENAMED_COLUMNS = {
+    "meal_ingredients": {"ingredient_id": "item_id"},
+    "list_meal_ingredients": {
+        "ingredient_id": "item_id",
+        "ingredient_name_snapshot": "item_name_snapshot",
+        "ingredient_brand_snapshot": "item_brand_snapshot",
+    },
+    "list_extra_items": {"ingredient_id": "item_id"},
+    "list_hidden_due_items": {"ingredient_id": "item_id"},
+    "recurring_items": {"ingredient_id": "item_id"},
+}
+
+
+def demo_at_0018_with_every_reference(path: Path) -> Config:
+    """The demo at 0018 with a row in every table that points at an ingredient: meal rows,
+    frozen rows on the list being shopped and on done lists, linked extra items (with and
+    without a snapshot), a recurring item and a hidden due item."""
+    config = alembic_config(path)
+    load_demo_0013(path)
+    command.upgrade(config, "0018")
+    with closing(sqlite3.connect(path)) as connection, connection:
+        recurring_item(connection, "Kaffee", couple_id=DEMO_COUPLE_ID)
+        hidden_due_item(connection, "Kaffee", "anna")
+    return config
+
+
+def all_rows(path: Path, table: str) -> list[dict[str, object]]:
+    """The table's rows, in the order of their values (not every table has an `id`)."""
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"')]  # noqa: S608
+    return sorted(rows, key=lambda row: repr(sorted(row.items())))
+
+
+def renamed_rows(path: Path, table: str) -> list[dict[str, object]]:
+    """The table's rows at 0018, with the columns named as 0019 names them."""
+    columns = RENAMED_COLUMNS.get(table, {})
+    renamed = [
+        {columns.get(column, column): value for column, value in row.items()}
+        for row in all_rows(path, table)
+    ]
+    return sorted(renamed, key=lambda row: repr(sorted(row.items())))
+
+
+def other_rows(path: Path) -> list[str]:
+    """The rows of the tables 0019 leaves as they are, as SQL."""
+    renamed = (*RENAMED_COLUMNS, "ingredients", "items", "alembic_version")
+    skipped = tuple(f'INSERT INTO "{table}"' for table in renamed)
+    return [line for line in inserts(path) if not line.startswith(skipped)]
+
+
+def schema_names(path: Path) -> set[str]:
+    """Every table, column, constraint and index name in the database's schema."""
+    names: set[str] = set()
+    for (sql,) in query(path, "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL"):
+        names.update(re.findall(r"\w+", str(sql)))
+    return names
+
+
+def test_0019_renames_ingredients_to_items_and_keeps_every_row(tmp_path: Path) -> None:
+    """seed-demo data at 0018 → 0019: `ingredients` becomes `items`, and each column that
+    points at one is named for it. Every row stays as it was, the frozen copies on the list
+    being shopped and on done lists included, and so does every reference; the meal rows keep
+    their tables, and no other table changes."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    ingredients = rows_of(path, "ingredients")
+    referring = {table: renamed_rows(path, table) for table in RENAMED_COLUMNS}
+    counts, references, rest = row_counts(path), non_null_foreign_keys(path), other_rows(path)
+    frozen = query(
+        path,
+        "SELECT s.status, count(*) FROM list_meal_ingredients r"
+        " JOIN list_meals m ON m.id = r.list_meal_id JOIN shopping_lists s ON s.id = m.list_id"
+        " WHERE s.status != 'draft' GROUP BY s.status ORDER BY s.status",
+    )
+    assert frozen == [("done", 10), ("shopping", 15)]
+    assert all(referring.values())
+
+    command.upgrade(config, "0019")
+
+    assert tables(path) == HEAD_TABLES
+    assert rows_of(path, "items") == ingredients
+    assert {table: all_rows(path, table) for table in RENAMED_COLUMNS} == referring
+    counts["items"] = counts.pop("ingredients")
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == {
+        key.replace("ingredients.", "items.").replace(".ingredient_id", ".item_id"): count
+        for key, count in references.items()
+    }
+    assert other_rows(path) == rest
+    # Only the meal rows' tables, and their constraints and indexes, still say ingredient.
+    names = schema_names(path)
+    assert {name for name in names if "ingredient" in name.replace("meal_ingredients", "")} == set()
+    assert_clean(path)
+
+
+def constraint_and_index_names(path: Path, table: str) -> set[str]:
+    with closing(sqlite3.connect(path)) as connection:
+        [sql] = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()
+        indexes = connection.execute(
+            "SELECT name FROM sqlite_master"
+            " WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL",
+            (table,),
+        ).fetchall()
+    return set(re.findall(r"CONSTRAINT (\w+)", str(sql))) | {name for (name,) in indexes}
+
+
+@pytest.mark.parametrize("table", ["items", *RENAMED_COLUMNS])
+def test_0019_names_the_constraints_as_the_models_do(tmp_path: Path, table: str) -> None:
+    """Autogenerate doesn't compare check constraints or every constraint name, so this does:
+    after 0019 each renamed table has the constraint and index names of its model."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "0019")
+    model = Base.metadata.tables[table]
+    ddl = str(CreateTable(model).compile(dialect=sqlite.dialect()))
+    expected = set(re.findall(r"CONSTRAINT (\w+)", ddl)) | {
+        str(index.name) for index in model.indexes
+    }
+    assert constraint_and_index_names(path, table) == expected
+
+
+def test_0019_keeps_the_constraints_working(tmp_path: Path) -> None:
+    """After 0019 an extra item still needs an item or a text, and an item used anywhere can't
+    be deleted (ING-05)."""
+    path = tmp_path / "data" / "mealmate.db"
+    command.upgrade(demo_at_0018_with_every_reference(path), "0019")
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY constraint failed"):
+            connection.execute("DELETE FROM items WHERE name = 'Zwiebeln'")
+    with closing(sqlite3.connect(path)) as connection:
+        list_id = connection.execute("SELECT id FROM shopping_lists LIMIT 1").fetchone()[0]
+        with pytest.raises(
+            sqlite3.IntegrityError,
+            match="CHECK constraint failed: ck_list_extra_items_item_or_text",
+        ):
+            insert(connection, "list_extra_items", list_id=list_id)
+
+
+def test_the_0019_downgrade_restores_the_ingredients(tmp_path: Path) -> None:
+    """Down to 0018 the database is as it was before 0019, schema and rows (QA-02), and up
+    again it is as it was at 0019."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    at_0018 = sorted(dump_without(path))
+    command.upgrade(config, "0019")
+    at_0019 = sorted(dump_without(path, "alembic_version"))
+
+    command.downgrade(config, "0018")
+
+    assert sorted(dump_without(path)) == at_0018
+    assert_clean(path)
+    command.upgrade(config, "0019")
+    assert sorted(dump_without(path, "alembic_version")) == at_0019
 
 
 # --- 0007, rule by rule ----------------------------------------------------------------------
@@ -2128,11 +2338,11 @@ def test_full_demo_data_with_lists(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     upgrade_database(data_dir)
     seed_demo(data_dir, monkeypatch)
     references = non_null_foreign_keys(path)
-    assert references["ingredients.created_by"] == len(demo.DEMO_INGREDIENTS)
+    assert references["items.created_by"] == len(demo.DEMO_ITEMS)
     assert references["meals.cuisine_id"] == len(demo.DEMO_MEALS)
     assert references["meals.copied_from_meal_id"] == 1
     assert references["list_meals.meal_id"] > 0
-    assert references["list_extra_items.ingredient_id"] > 0
+    assert references["list_extra_items.item_id"] > 0
     assert references["recurring_items.couple_id"] == len(demo.DEMO_RECURRING)
     assert_clean(path)
 

@@ -3,8 +3,8 @@ used" meals of the list builder (MEAL-01..10, VIS-01/02/04/05, NUT-03..05, CPL-0
 
 Who may see or change a meal is decided by `services.access` (`require_meal_view`,
 `require_meal_owner`); signed photo URLs are only put into responses after that check (VIS-05).
-Nutrition is computed on every read from the live ingredient attributes and values (NUT-06).
-A row's unit must fit its ingredient's base unit (REF-02, MEAL-02); rows from before that rule,
+Nutrition is computed on every read from the live item attributes and values (NUT-06).
+A row's unit must fit its item's base unit (REF-02, MEAL-02); rows from before that rule,
 or left by a base-unit change or a merge, are kept and flagged (`unit_fits`, D-33).
 Related rows are loaded in batches, so a list or detail takes a fixed number of queries.
 
@@ -28,7 +28,7 @@ from app.media.store import MediaStore
 from app.models import Meal as MealRow
 from app.models import MealIngredient
 from app.models import Tag as TagRow
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
@@ -48,7 +48,7 @@ from app.schemas.meals import (
 from app.schemas.nutrition import NutrientValues
 from app.schemas.reference import Tag
 from app.services import access, hooks
-from app.services.ingredients import summary as ingredient_summary
+from app.services.items import summary as item_summary
 from app.services.principal import Principal
 from app.services.reference import cuisine
 from app.services.users import hidden_by, user_refs
@@ -67,17 +67,16 @@ async def _nutrition_and_rows(
     session: AsyncSession, meal: MealRow
 ) -> tuple[MealNutrition, list[MealIngredientRow]]:
     rows = (await meals_repo.rows_for(session, [meal.id]))[meal.id]
-    ingredient_ids = {row.ingredient_id for row in rows}
-    ingredients = await ingredients_repo.by_ids(session, ingredient_ids)
+    items = await items_repo.by_ids(session, {row.item_id for row in rows})
     nutrition = meal_nutrition(
         [
             NutritionRow(
-                ingredient_id=row.ingredient_id,
-                ingredient_name=ingredients[row.ingredient_id].name,
+                item_id=row.item_id,
+                item_name=items[row.item_id].name,
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
-                attrs=ingredients[row.ingredient_id].attrs(),
-                values=ingredients[row.ingredient_id].nutrients(),
+                attrs=items[row.item_id].attrs(),
+                values=items[row.item_id].nutrients(),
             )
             for row in rows
         ],
@@ -91,23 +90,23 @@ async def _nutrition_and_rows(
             estimate=nutrition.estimate,
             missing=[
                 MealNutritionMissing(
-                    ingredient_id=item.ingredient_id,
-                    ingredient_name=item.ingredient_name,
-                    ingredient_brand=ingredients[item.ingredient_id].brand,
-                    reason=item.reason,
-                    nutrient=item.nutrient,
+                    ingredient_id=missing.item_id,
+                    ingredient_name=missing.item_name,
+                    ingredient_brand=items[missing.item_id].brand,
+                    reason=missing.reason,
+                    nutrient=missing.nutrient,
                 )
-                for item in nutrition.missing
+                for missing in nutrition.missing
             ],
         ),
         [
             MealIngredientRow(
                 id=row.id,
                 position=row.position,
-                ingredient=ingredient_summary(ingredients[row.ingredient_id]),
+                ingredient=item_summary(items[row.item_id]),
                 amount=row.amount,
                 unit=None if row.unit is None else Unit(row.unit),
-                unit_fits=fits(row.amount, row.unit, ingredients[row.ingredient_id].base_unit),
+                unit_fits=fits(row.amount, row.unit, items[row.item_id].base_unit),
                 note=row.note,
             )
             for row in rows
@@ -167,7 +166,7 @@ async def _meal(
     )
 
 
-# A row as it is stored: ingredient id, amount, unit (an amount without a unit is in pieces).
+# A row as it is stored: item id, amount, unit (an amount without a unit is in pieces).
 type RowKey = tuple[str, float | None, str | None]
 
 
@@ -197,22 +196,20 @@ async def _check_references(
     problems: list[FieldProblem],
     kept: Collection[RowKey] = (),
 ) -> None:
-    """Refuse (422) unknown cuisines and ingredients, and rows whose unit doesn't fit their
-    ingredient's base unit (REF-02, MEAL-02), together with the other `problems`. A row that
-    doesn't fit is kept when the meal already has it with the same ingredient, amount and unit
+    """Refuse (422) unknown cuisines and items, and rows whose unit doesn't fit their item's
+    base unit (REF-02, MEAL-02), together with the other `problems`. A row that doesn't fit
+    is kept when the meal already has it with the same item, amount and unit
     (`kept`): it was entered before the rule, or left by a base-unit change or a merge (D-33)."""
     found: list[FieldProblem] = []
     if cuisine_id is not None and await reference_repo.get_cuisine(session, cuisine_id) is None:
         found.append(FieldProblem(("body", "cuisine_id"), FieldErrorCode.INVALID))
     if rows:
-        known = await ingredients_repo.by_ids(session, (row.ingredient_id for row in rows))
+        known = await items_repo.by_ids(session, (row.ingredient_id for row in rows))
         for index, row in enumerate(rows):
-            ingredient = known.get(row.ingredient_id)
-            if ingredient is None:
+            item = known.get(row.ingredient_id)
+            if item is None:
                 found.append(_row_field(index, "ingredient_id", FieldErrorCode.INVALID))
-            elif (
-                not fits(row.amount, row.unit, ingredient.base_unit) and _input_key(row) not in kept
-            ):
+            elif not fits(row.amount, row.unit, item.base_unit) and _input_key(row) not in kept:
                 found.append(_row_field(index, "unit", FieldErrorCode.UNIT_MISMATCH))
     if found or problems:
         raise validation_error([*found, *problems])
@@ -245,13 +242,13 @@ async def _set_rows(
 ) -> None:
     """Replace the meal's rows, reusing the existing ones by position (their ids stay). An
     amount without a unit counts as pieces."""
-    for position, item in enumerate(rows):
-        unit = counted_unit(item.amount, item.unit)
+    for position, row_input in enumerate(rows):
+        unit = counted_unit(row_input.amount, row_input.unit)
         values = {
-            "ingredient_id": item.ingredient_id,
-            "amount": item.amount,
+            "item_id": row_input.ingredient_id,
+            "amount": row_input.amount,
             "unit": None if unit is None else unit.value,
-            "note": item.note,
+            "note": row_input.note,
         }
         if position >= len(existing):
             session.add(
@@ -423,7 +420,7 @@ async def update_meal(
             cuisine_id=body.cuisine_id,
             rows=body.ingredients,
             problems=problems,
-            kept={(row.ingredient_id, row.amount, row.unit) for row in existing},
+            kept={(row.item_id, row.amount, row.unit) for row in existing},
         )
         if body.name is not None:
             meal.name, meal.name_norm = body.name, normalize(body.name)
@@ -495,7 +492,7 @@ async def copy_meal(
             MealIngredient(
                 meal_id=meal.id,
                 position=row.position,
-                ingredient_id=row.ingredient_id,
+                item_id=row.item_id,
                 amount=row.amount,
                 unit=row.unit,
                 note=row.note,

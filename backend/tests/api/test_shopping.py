@@ -197,7 +197,7 @@ async def test_start_shopping(
     rows = await scalars(app, select(ListMealIngredient).order_by(ListMealIngredient.position))
     assert [
         (
-            item.ingredient_name_snapshot,
+            item.item_name_snapshot,
             item.base_unit_snapshot,
             item.piece_weight_g_snapshot,
             item.density_snapshot,
@@ -343,7 +343,7 @@ async def frozen_before_d32(app: FastAPI, ingredient_id: str, **attrs: Any) -> N
     async with database.write_sessions() as session, session.begin():
         await session.execute(
             update(ListMealIngredient)
-            .where(ListMealIngredient.ingredient_id == ingredient_id)
+            .where(ListMealIngredient.item_id == ingredient_id)
             .values(
                 base_unit_snapshot=attrs["base_unit"],
                 piece_weight_g_snapshot=attrs["piece_weight_g"],
@@ -351,7 +351,7 @@ async def frozen_before_d32(app: FastAPI, ingredient_id: str, **attrs: Any) -> N
             )
         )
         extras = await session.scalars(
-            select(ListExtraItem).where(ListExtraItem.ingredient_id == ingredient_id)
+            select(ListExtraItem).where(ListExtraItem.item_id == ingredient_id)
         )
         for extra in extras:
             extra.attrs_snapshot = {**(extra.attrs_snapshot or {}), **attrs}
@@ -385,7 +385,7 @@ async def test_lists_frozen_before_d32_keep_their_conversions(
         for ingredient_id, amount in ((onions["id"], 300), (oil["id"], 46)):
             await session.execute(
                 update(ListExtraItem)
-                .where(ListExtraItem.ingredient_id == ingredient_id)
+                .where(ListExtraItem.item_id == ingredient_id)
                 .values(amount=amount, unit="g")
             )
 

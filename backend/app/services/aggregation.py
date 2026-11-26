@@ -6,20 +6,20 @@ and sort them and tell whether a checked line needs more; no amounts are calcula
 the frontend (AGG-01).
 
 1. A live list meal (`frozen_at` null) contributes the meal's current rows with the live
-   ingredient attributes (`Ingredient.attrs()`: no density, a piece weight only for pieces,
+   item attributes (`Item.attrs()`: no density, a piece weight only for pieces,
    D-32); a frozen or detached one its `list_meal_ingredients` with the attributes captured
-   then, which before D-32 included a density and a g or ml ingredient's piece weight (LIST-11).
+   then, which before D-32 included a density and a g or ml item's piece weight (LIST-11).
    Each row is scaled by `servings ÷ meal servings` (LIST-04).
-2. A linked extra item contributes to its ingredient's line with its `attrs_snapshot` once it
+2. A linked extra item contributes to its item's line with its `attrs_snapshot` once it
    has one (taken when shopping starts or when it is added while shopping), else with the live
    attributes. A free-text item is a line of its own, `x:<id>`, without amounts: its
    `amount_text` is shown as it is.
-3. In a draft, an ingredient line shows the live ingredient's name, brand and category; a line
+3. In a draft, an item line shows the live item's name, brand and category; a line
    that only detached meals make keeps the category they were frozen with, a deleted one
    included (REF-01, LIST-15). Once shopping started, a line shows the name, brand and category
    of the first of its parts with a snapshot (frozen rows in the order of the meals, then extra
-   items), so ingredient edits no longer change the list (LIST-11).
-   Two brands of the same thing are two ingredients and so two lines. A free-text line shows
+   items), so item edits no longer change the list (LIST-11).
+   Two brands of the same thing are two items and so two lines. A free-text line shows
    its text and category. Lines are sorted by category order, then normalised name and brand,
    then key (AGG-05), and carry their hidden state (LIST-07). The category order is the
    viewer's walking order (REF-01, D-48): the admins' or their couple's own. A deleted category
@@ -52,14 +52,14 @@ from app.domain.aggregation import (
     needs_more,
     text_changed,
 )
-from app.domain.lists import INGREDIENT_KEY_PREFIX, TEXT_KEY_PREFIX, ingredient_key, text_key
+from app.domain.lists import ITEM_KEY_PREFIX, TEXT_KEY_PREFIX, item_key, text_key
 from app.domain.reference import OTHER_CATEGORY
 from app.domain.text import normalize
-from app.domain.units import BaseUnit, IngredientAttrs, Unit
+from app.domain.units import BaseUnit, ItemAttrs, Unit
 from app.domain.walking_order import WalkingOrder
 from app.models import (
     Category,
-    Ingredient,
+    Item,
     ListExtraItem,
     ListLineState,
     ListMeal,
@@ -68,7 +68,7 @@ from app.models import (
     MealIngredient,
     ShoppingList,
 )
-from app.repositories import ingredients as ingredients_repo
+from app.repositories import items as items_repo
 from app.repositories import lists as lists_repo
 from app.repositories import meals as meals_repo
 from app.repositories import reference as reference_repo
@@ -82,7 +82,7 @@ class ListContent:
 
     `meals`, `extras` (not deleted) and `states` are per list id; `linked_meals` per meal id
     (the meals list meals still link to, frozen or not); `meal_rows` per meal id (live list
-    meals only); `frozen_rows` per list meal id; `ingredients` only those whose live data is
+    meals only); `frozen_rows` per list meal id; `items` only those whose live data is
     used (see `load`).
     """
 
@@ -91,7 +91,7 @@ class ListContent:
     meal_rows: dict[str, list[MealIngredient]]
     frozen_rows: dict[str, list[ListMealIngredient]]
     extras: dict[str, list[ListExtraItem]]
-    ingredients: dict[str, Ingredient]
+    items: dict[str, Item]
     categories: dict[str, Category]
     states: dict[str, dict[str, ListLineState]]
 
@@ -116,7 +116,7 @@ def is_live(list_meal: ListMeal) -> bool:
 async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListContent:
     """The content of the given lists, in eight queries whatever their size.
 
-    Ingredients are loaded only where their live data is shown: for live meals, linked extra
+    Items are loaded only where their live data is shown: for live meals, linked extra
     items without a snapshot, and the frozen rows of drafts (a detached meal's line shows the
     live name there); a list that is shopped or done needs none of them (LIST-11).
     """
@@ -134,23 +134,23 @@ async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListCont
         session, (list_meal.id for list_meal in list_meals if not is_live(list_meal))
     )
     extras = await lists_repo.extras_for(session, ids)
-    ingredient_ids = {
-        *(row.ingredient_id for rows in meal_rows.values() for row in rows),
+    item_ids = {
+        *(row.item_id for rows in meal_rows.values() for row in rows),
         *(
-            row.ingredient_id
+            row.item_id
             for list_meal in list_meals
             if list_meal.list_id in drafts
             for row in frozen_rows.get(list_meal.id, [])
         ),
         *(
-            extra.ingredient_id
+            extra.item_id
             for group in extras.values()
             for extra in group
             if extra.attrs_snapshot is None
         ),
     }
-    ingredients = await ingredients_repo.by_ids(
-        session, (ingredient_id for ingredient_id in ingredient_ids if ingredient_id is not None)
+    items = await items_repo.by_ids(
+        session, (item_id for item_id in item_ids if item_id is not None)
     )
     categories = {row.id: row for row in await reference_repo.categories_in_order(session)}
     states = await lists_repo.states_for(session, ids)
@@ -160,55 +160,55 @@ async def load(session: AsyncSession, lists: Iterable[ShoppingList]) -> ListCont
         meal_rows=meal_rows,
         frozen_rows=frozen_rows,
         extras=extras,
-        ingredients=ingredients,
+        items=items,
         categories=categories,
         states=states,
     )
 
 
-def _snapshot_attrs(row: ListMealIngredient) -> IngredientAttrs:
-    return IngredientAttrs(
+def _snapshot_attrs(row: ListMealIngredient) -> ItemAttrs:
+    return ItemAttrs(
         base_unit=BaseUnit(row.base_unit_snapshot),
         piece_weight_g=row.piece_weight_g_snapshot,
         density_g_per_ml=row.density_snapshot,
     )
 
 
-def attrs_snapshot(ingredient: Ingredient) -> dict[str, Any]:
-    """What a linked extra item keeps of its ingredient once shopping started (LIST-11):
+def attrs_snapshot(item: Item) -> dict[str, Any]:
+    """What a linked extra item keeps of its item once shopping started (LIST-11):
     `{name, brand, base_unit, piece_weight_g, category_id}`, with the live attributes (D-32).
     Snapshots taken before D-32 also hold a `density_g_per_ml`."""
-    attrs = ingredient.attrs()
+    attrs = item.attrs()
     return {
-        "name": ingredient.name,
-        "brand": ingredient.brand,
+        "name": item.name,
+        "brand": item.brand,
         "base_unit": attrs.base_unit.value,
         "piece_weight_g": attrs.piece_weight_g,
-        "category_id": ingredient.category_id,
+        "category_id": item.category_id,
     }
 
 
-def extra_attrs(content: ListContent, extra: ListExtraItem) -> IngredientAttrs:
+def extra_attrs(content: ListContent, extra: ListExtraItem) -> ItemAttrs:
     """A linked extra item's attributes: its snapshot once it has one, else the live ones."""
     if (snapshot := extra.attrs_snapshot) is not None:
-        return IngredientAttrs(
+        return ItemAttrs(
             base_unit=BaseUnit(snapshot["base_unit"]),
             piece_weight_g=snapshot["piece_weight_g"],
             density_g_per_ml=snapshot.get("density_g_per_ml"),
         )
-    return content.ingredients[str(extra.ingredient_id)].attrs()
+    return content.items[str(extra.item_id)].attrs()
 
 
 def _part(
-    ingredient_id: str,
+    item_id: str,
     amount: float | None,
     unit: str | None,
-    attrs: IngredientAttrs,
+    attrs: ItemAttrs,
     source: SourceRef,
     factor: float = 1.0,
 ) -> Part:
     return Part(
-        line_key=ingredient_key(ingredient_id),
+        line_key=item_key(item_id),
         amount=None if amount is None else amount * factor,
         unit=None if unit is None else Unit(unit),
         attrs=attrs,
@@ -222,10 +222,10 @@ def _meal_parts(content: ListContent, list_meal: ListMeal) -> list[Part]:
         factor = list_meal.servings / meal.servings
         return [
             _part(
-                row.ingredient_id,
+                row.item_id,
                 row.amount,
                 row.unit,
-                content.ingredients[row.ingredient_id].attrs(),
+                content.items[row.item_id].attrs(),
                 source,
                 factor,
             )
@@ -233,17 +233,17 @@ def _meal_parts(content: ListContent, list_meal: ListMeal) -> list[Part]:
         ]
     factor = list_meal.servings / list_meal.meal_servings_snapshot
     return [
-        _part(row.ingredient_id, row.amount, row.unit, _snapshot_attrs(row), source, factor)
+        _part(row.item_id, row.amount, row.unit, _snapshot_attrs(row), source, factor)
         for row in content.frozen_rows.get(list_meal.id, [])
     ]
 
 
 def _extra_part(content: ListContent, extra: ListExtraItem) -> Part:
     source = SourceRef("extra", extra.id)
-    if extra.ingredient_id is None:
+    if extra.item_id is None:
         return Part(line_key=text_key(extra.id), amount=None, unit=None, attrs=None, source=source)
     attrs = extra_attrs(content, extra)
-    return _part(extra.ingredient_id, extra.amount, extra.unit, attrs, source)
+    return _part(extra.item_id, extra.amount, extra.unit, attrs, source)
 
 
 def parts(content: ListContent, shopping_list: ShoppingList) -> list[Part]:
@@ -278,7 +278,7 @@ def meal_name(content: ListContent, list_meal: ListMeal) -> str:
 
 @dataclass(frozen=True)
 class _Label:
-    """What a line shows: a name, a brand (ingredients only) and a category."""
+    """What a line shows: a name, a brand (items only) and a category."""
 
     name: str
     brand: str | None
@@ -286,42 +286,42 @@ class _Label:
 
 
 def _snapshot_labels(content: ListContent, shopping_list: ShoppingList) -> dict[str, _Label]:
-    """The name, brand and category id of each ingredient line from the first of its parts
+    """The name, brand and category id of each item line from the first of its parts
     with a snapshot: frozen rows in the order of the meals, then linked extra items (LIST-11).
     Snapshots taken before brands existed have none."""
     labels: dict[str, _Label] = {}
     for list_meal in content.meals.get(shopping_list.id, []):
         for row in content.frozen_rows.get(list_meal.id, []):
             labels.setdefault(
-                ingredient_key(row.ingredient_id),
+                item_key(row.item_id),
                 _Label(
-                    row.ingredient_name_snapshot,
-                    row.ingredient_brand_snapshot,
+                    row.item_name_snapshot,
+                    row.item_brand_snapshot,
                     row.category_id_snapshot,
                 ),
             )
     for extra in content.extras.get(shopping_list.id, []):
-        if extra.ingredient_id is not None and (snapshot := extra.attrs_snapshot) is not None:
+        if extra.item_id is not None and (snapshot := extra.attrs_snapshot) is not None:
             labels.setdefault(
-                ingredient_key(extra.ingredient_id),
+                item_key(extra.item_id),
                 _Label(snapshot["name"], snapshot.get("brand"), snapshot["category_id"]),
             )
     return labels
 
 
 def _live_keys(content: ListContent, shopping_list: ShoppingList) -> set[str]:
-    """The ingredient lines with a part that follows the live ingredient: a row of a live meal,
+    """The item lines with a part that follows the live item: a row of a live meal,
     or a linked extra item without a snapshot."""
     keys = {
-        ingredient_key(row.ingredient_id)
+        item_key(row.item_id)
         for list_meal in content.meals.get(shopping_list.id, [])
         if (meal := content.live_meal(list_meal)) is not None
         for row in content.meal_rows.get(meal.id, [])
     }
     keys.update(
-        ingredient_key(extra.ingredient_id)
+        item_key(extra.item_id)
         for extra in content.extras.get(shopping_list.id, [])
-        if extra.ingredient_id is not None and extra.attrs_snapshot is None
+        if extra.item_id is not None and extra.attrs_snapshot is None
     )
     return keys
 
@@ -428,15 +428,15 @@ def lines(
 
     def describe(line_key: str) -> _Label:
         """The name, brand and category id of a line."""
-        if line_key.startswith(INGREDIENT_KEY_PREFIX):
+        if line_key.startswith(ITEM_KEY_PREFIX):
             frozen = labels.get(line_key)
             if frozen is not None and not draft:
                 return frozen
-            ingredient = content.ingredients[line_key.removeprefix(INGREDIENT_KEY_PREFIX)]
+            item = content.items[line_key.removeprefix(ITEM_KEY_PREFIX)]
             # Only detached meals make this draft line: it keeps their category (REF-01).
             if frozen is not None and line_key not in live_keys:
-                return _Label(ingredient.name, ingredient.brand, frozen.category_id)
-            return _Label(ingredient.name, ingredient.brand, ingredient.category_id)
+                return _Label(item.name, item.brand, frozen.category_id)
+            return _Label(item.name, item.brand, item.category_id)
         extra = extras[line_key.removeprefix(TEXT_KEY_PREFIX)]
         return _Label(extra.text or "", None, extra.category_id or other_category_id)
 
@@ -481,23 +481,21 @@ def lines(
     result = []
     for line in aggregate(parts(content, shopping_list), sort_key):
         label = describe(line.line_key)
-        is_ingredient = line.line_key.startswith(INGREDIENT_KEY_PREFIX)
-        text_extra = None if is_ingredient else extras[line.line_key.removeprefix(TEXT_KEY_PREFIX)]
+        is_item = line.line_key.startswith(ITEM_KEY_PREFIX)
+        text_extra = None if is_item else extras[line.line_key.removeprefix(TEXT_KEY_PREFIX)]
         check = _check_state(shopping_list, states.get(line.line_key), line, text_extra, refs)
         result.append(
             ListLine(
                 key=line.line_key,
-                kind="ingredient" if is_ingredient else "text",
-                ingredient_id=(
-                    line.line_key.removeprefix(INGREDIENT_KEY_PREFIX) if is_ingredient else None
-                ),
+                kind="ingredient" if is_item else "text",
+                ingredient_id=(line.line_key.removeprefix(ITEM_KEY_PREFIX) if is_item else None),
                 name=label.name,
                 brand=label.brand,
                 category_id=label.category_id,
                 amounts=[
                     DisplayAmountOut(value=item.value, unit=item.unit) for item in line.display
                 ],
-                has_unspecified=is_ingredient and line.totals.has_unspecified,
+                has_unspecified=is_item and line.totals.has_unspecified,
                 amount_text=None if text_extra is None else text_extra.amount_text,
                 hidden=line.line_key in hidden,
                 sources=[source(ref) for ref in line.sources],

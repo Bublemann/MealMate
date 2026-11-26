@@ -205,7 +205,7 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     assert query(database, "SELECT kind, used_at FROM one_time_codes") == [("invite", None)]
     assert "Demo ingredients: 32 (5 with a barcode)" in result.output
 
-    ingredients = query(database, "SELECT name, brand, barcode, source FROM ingredients")
+    ingredients = query(database, "SELECT name, brand, barcode, source FROM items")
     assert len(ingredients) == 32
     # The same thing in two brands: two ingredients of the same name.
     assert sorted(
@@ -218,13 +218,12 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
         "Olivenöl",
     }
     assert {source for *_, source in ingredients} == {"manual"}  # never refreshed in development
-    assert query(database, "SELECT kcal FROM ingredients WHERE name = 'Milch'") == [(64,)]
-    categories = query(database, "SELECT count(DISTINCT category_id) FROM ingredients")
+    assert query(database, "SELECT kcal FROM items WHERE name = 'Milch'") == [(64,)]
+    categories = query(database, "SELECT count(DISTINCT category_id) FROM items")
     assert categories == [(16,)]
     creators = query(
         database,
-        "SELECT DISTINCT u.username FROM ingredients i JOIN users u ON u.id = i.created_by "
-        "ORDER BY 1",
+        "SELECT DISTINCT u.username FROM items i JOIN users u ON u.id = i.created_by ORDER BY 1",
     )
     assert creators == [("anna",), ("ben",), ("carl",)]
     barcodes = [code for _, _, code, _ in ingredients if code is not None]
@@ -313,7 +312,7 @@ def test_seed_demo(database: Path, data_dir: Path) -> None:
     recurring = query(
         database,
         "SELECT i.name, r.couple_id IS NOT NULL FROM recurring_items r "
-        "JOIN ingredients i ON i.id = r.ingredient_id ORDER BY 1",
+        "JOIN items i ON i.id = r.item_id ORDER BY 1",
     )
     assert recurring == [("Klopapier", 1), ("Zahnpasta", 1)]
 
@@ -330,13 +329,13 @@ def test_seed_demo_leaves_nothing_behind_when_it_fails(
     with monkeypatch.context() as patched:
         # A scanned ingredient twice: its barcode is unique, so the catalog fails after the
         # accounts.
-        scanned = next(item for item in demo.DEMO_INGREDIENTS if item.barcode is not None)
-        patched.setattr(demo, "DEMO_INGREDIENTS", (*demo.DEMO_INGREDIENTS, scanned))
+        scanned = next(item for item in demo.DEMO_ITEMS if item.barcode is not None)
+        patched.setattr(demo, "DEMO_ITEMS", (*demo.DEMO_ITEMS, scanned))
         result = runner.invoke(main, ["seed-demo"])
     assert result.exit_code == 1
     assert isinstance(result.exception, IntegrityError)
     tables = ("users", "couples", "couple_members", "one_time_codes", "admin_events")
-    catalog = ("ingredients", "tags", "meals", "meal_ingredients", "shopping_lists")
+    catalog = ("items", "tags", "meals", "meal_ingredients", "shopping_lists")
     for table in (*tables, *catalog):
         assert query(database, f"SELECT count(*) FROM {table}") == [(0,)], table  # noqa: S608
 
@@ -385,11 +384,11 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("MEALMATE_VERSION", "2.0.0")
     assert runner.invoke(main, ["seed-demo"]).exit_code == 0
     [(found,), (down,), (broken,), *_] = query(
-        database, "SELECT barcode FROM ingredients WHERE barcode IS NOT NULL ORDER BY barcode"
+        database, "SELECT barcode FROM items WHERE barcode IS NOT NULL ORDER BY barcode"
     )
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
-            "UPDATE ingredients SET source = 'off', fetched_at = NULL, user_edited_fields = '[]'"
+            "UPDATE items SET source = 'off', fetched_at = NULL, user_edited_fields = '[]'"
             " WHERE barcode IN (?, ?, ?)",
             (found, down, broken),
         )
@@ -399,7 +398,7 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
     apply_refresh = off_refresh.apply_refresh
 
     async def spy(database: Any, off: OffClient, **options: Any) -> Any:
-        jobs.append((off.rate_limit.limit, options["max_ingredients"]))
+        jobs.append((off.rate_limit.limit, options["max_items"]))
         clients.append(off)
         outcomes = await refresh_stale(database, off, **options)
         assert off.is_open
@@ -433,6 +432,6 @@ def test_jobs_off_refresh(database: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert request.calls.last.request.headers["user-agent"] == (
         "MealMate/2.0.0 (https://github.com/Bublemann/MealMate)"
     )
-    assert query(database, "SELECT brand FROM ingredients WHERE barcode = ?", found) == [("Neu",)]
-    [(fetched_at,)] = query(database, "SELECT fetched_at FROM ingredients WHERE barcode = ?", down)
+    assert query(database, "SELECT brand FROM items WHERE barcode = ?", found) == [("Neu",)]
+    [(fetched_at,)] = query(database, "SELECT fetched_at FROM items WHERE barcode = ?", down)
     assert fetched_at is None

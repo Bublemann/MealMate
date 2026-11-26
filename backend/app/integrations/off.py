@@ -53,7 +53,7 @@ place under the rate limit, but only one it gets within the time the lookup was 
 refreshes never retry: they try again later anyway.
 
 Everything in a response is untrusted (BAR-10, SEC-13): `OffProduct` keeps only what it can
-validate. Texts lose control and bidi characters and are cut to the ingredient field lengths (a
+validate. Texts lose control and bidi characters and are cut to the item field lengths (a
 name at a word boundary),
 nutrients must be finite and plausible (`app.domain.nutrients.plausible`), everything else that
 does not fit becomes unknown.
@@ -79,7 +79,7 @@ from app.core.ratelimit import SlidingWindow
 from app.domain.barcodes import normalize_barcode
 from app.domain.catalog import (
     BRAND_MAX_LENGTH,
-    INGREDIENT_NAME_MAX_LENGTH,
+    ITEM_NAME_MAX_LENGTH,
     QUANTITY_TEXT_MAX_LENGTH,
     clean_text,
     cut_at_word,
@@ -150,9 +150,9 @@ def _text(value: object, max_length: int) -> str | None:
 
 
 def _name(value: object) -> str | None:
-    """A name cut at a word boundary to the length of an ingredient name."""
+    """A name cut at a word boundary to the length of an item name."""
     text = _text(value, _RAW_NAME_MAX_LENGTH)
-    return None if text is None else cut_at_word(text, INGREDIENT_NAME_MAX_LENGTH)
+    return None if text is None else cut_at_word(text, ITEM_NAME_MAX_LENGTH)
 
 
 def _code(value: object) -> str | None:
@@ -288,7 +288,7 @@ class OffProduct(BaseModel):
         return self.last_modified_t
 
     def fields(self, language: str) -> dict[str, str | float | None]:
-        """The product's values by ingredient field (`name`, ..., `nutrients.kcal`, ...), with
+        """The product's values by item field (`name`, ..., `nutrients.kcal`, ...), with
         the name in `language`; nutrients only when the basis is known."""
         values: dict[str, str | float | None] = {
             "name": self.name(language),

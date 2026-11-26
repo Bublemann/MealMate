@@ -21,29 +21,29 @@ from app.domain.aggregation import (
     text_changed,
     totals,
 )
-from app.domain.units import BASE_KIND, BaseUnit, IngredientAttrs, Unit, UnitKind
+from app.domain.units import BASE_KIND, BaseUnit, ItemAttrs, Unit, UnitKind
 
 MASS, VOLUME, COUNT = UnitKind.MASS, UnitKind.VOLUME, UnitKind.COUNT
-PLAIN = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
-ONION = IngredientAttrs(BaseUnit.G, piece_weight_g=150, density_g_per_ml=None)
-OIL = IngredientAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=0.92)
-MILK = IngredientAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=1.03)
-APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=180, density_g_per_ml=None)
-APPLES_ML = IngredientAttrs(BaseUnit.ML, piece_weight_g=180, density_g_per_ml=1.0)
-HEAVY_APPLES = IngredientAttrs(BaseUnit.G, piece_weight_g=200, density_g_per_ml=None)
-HONEY = IngredientAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=1.4)
-EGGS = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
-APPLE_PIECES = IngredientAttrs(BaseUnit.PIECE, piece_weight_g=180, density_g_per_ml=None)
+PLAIN = ItemAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=None)
+ONION = ItemAttrs(BaseUnit.G, piece_weight_g=150, density_g_per_ml=None)
+OIL = ItemAttrs(BaseUnit.ML, piece_weight_g=None, density_g_per_ml=0.92)
+MILK = ItemAttrs(BaseUnit.ML, piece_weight_g=1030, density_g_per_ml=1.03)
+APPLES = ItemAttrs(BaseUnit.G, piece_weight_g=180, density_g_per_ml=None)
+APPLES_ML = ItemAttrs(BaseUnit.ML, piece_weight_g=180, density_g_per_ml=1.0)
+HEAVY_APPLES = ItemAttrs(BaseUnit.G, piece_weight_g=200, density_g_per_ml=None)
+HONEY = ItemAttrs(BaseUnit.G, piece_weight_g=None, density_g_per_ml=1.4)
+EGGS = ItemAttrs(BaseUnit.PIECE, piece_weight_g=60, density_g_per_ml=None)
+APPLE_PIECES = ItemAttrs(BaseUnit.PIECE, piece_weight_g=180, density_g_per_ml=None)
 # Live ingredients carry no density, and a piece weight only when counted in pieces (D-32).
-LIVE_ONION = IngredientAttrs.live(BaseUnit.G, piece_weight_g=150)
-LIVE_MILK = IngredientAttrs.live(BaseUnit.ML, piece_weight_g=1030)
+LIVE_ONION = ItemAttrs.live(BaseUnit.G, piece_weight_g=150)
+LIVE_MILK = ItemAttrs.live(BaseUnit.ML, piece_weight_g=1030)
 MEAL = SourceRef("meal", "m1")
 
 
 def part(
     amount: float | None,
     unit: Unit | None,
-    attrs: IngredientAttrs | None = PLAIN,
+    attrs: ItemAttrs | None = PLAIN,
     key: str = "i:1",
     source: SourceRef = MEAL,
 ) -> Part:
@@ -351,9 +351,7 @@ def test_needs_more(before: LineTotals, after: LineTotals, expected: NeedsMore) 
     assert result.new_unspecified is expected.new_unspecified
 
 
-def apples(
-    *amounts: tuple[float | None, Unit | None], attrs: IngredientAttrs = APPLES
-) -> LineTotals:
+def apples(*amounts: tuple[float | None, Unit | None], attrs: ItemAttrs = APPLES) -> LineTotals:
     return totals([part(amount, unit, attrs) for amount, unit in amounts])
 
 
@@ -562,7 +560,7 @@ def test_text_changed(
 # --- properties (plan § 5.6) -------------------------------------------------------------------
 
 attrs_strategy = st.none() | st.builds(
-    IngredientAttrs,
+    ItemAttrs,
     base_unit=st.sampled_from(BaseUnit),
     piece_weight_g=st.none() | st.floats(1, 1000),
     density_g_per_ml=st.none() | st.floats(0.1, 5),
