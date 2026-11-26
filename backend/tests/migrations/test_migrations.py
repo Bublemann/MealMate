@@ -40,7 +40,7 @@ from app.services.context import AuthConfig
 from tests.accounts import Account, login, password_hash
 from tests.support import TEST_SECRET_KEY, serve
 
-HEAD = "0023"
+HEAD = "0024"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ACCOUNT_TABLES = {
     "alembic_version",
@@ -66,7 +66,7 @@ TABLES_0006 = MEAL_TABLES | LIST_TABLES | {"processed_ops"}
 # 0007 merges the products into the ingredients; 0008 and 0009 only add columns, 0010 widens
 # one, 0011 changes only values, 0012 makes one optional, 0013 adds one and a row, 0014 drops
 # one. 0015 and 0016 add tables; 0017 drops a column; 0018 adds a table; 0019 renames one;
-# 0020 drops columns; 0021, 0022 and 0023 add one each.
+# 0020 drops columns; 0021, 0022, 0023 and 0024 add one each.
 TABLES_0014 = TABLES_0006 - {"products"}
 TABLES_0015 = TABLES_0014 | {"recurring_items", "notices"}
 TABLES_0016 = TABLES_0015 | {"list_hidden_due_items"}
@@ -170,6 +170,10 @@ def test_each_revision_steps_down_and_up(config: Config, database_path: Path) ->
     command.upgrade(config, "0022")
     assert tables(database_path) == HEAD_TABLES
     command.upgrade(config, "0023")
+    assert tables(database_path) == HEAD_TABLES
+    command.upgrade(config, "0024")
+    assert tables(database_path) == HEAD_TABLES
+    command.downgrade(config, "0023")
     assert tables(database_path) == HEAD_TABLES
     command.downgrade(config, "0022")
     assert tables(database_path) == HEAD_TABLES
@@ -293,7 +297,8 @@ def seed_accounts(data_dir: Path) -> dict[str, str]:
         finally:
             await database.dispose()
 
-    return asyncio.run(run())
+    with no_carry_over_setting_yet(data_dir / "mealmate.db"):
+        return asyncio.run(run())
 
 
 def seed_demo(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1257,6 +1262,18 @@ def no_eaten_meals_yet(path: Path) -> Iterator[None]:
         execute(path, "ALTER TABLE list_meals DROP COLUMN eaten")
 
 
+@contextmanager
+def no_carry_over_setting_yet(path: Path) -> Iterator[None]:
+    """The app of today reads and writes whether a user's new drafts bring leftovers (LIST-17),
+    a column 0024 adds, on for everyone. It stands in, on, while the app runs, and goes again
+    before the upgrade adds it."""
+    execute(path, "ALTER TABLE users ADD COLUMN carry_over_leftovers BOOLEAN NOT NULL DEFAULT 1")
+    try:
+        yield
+    finally:
+        execute(path, "ALTER TABLE users DROP COLUMN carry_over_leftovers")
+
+
 def rename_items(path: Path, *, back: bool = False) -> None:
     """Rename what 0019 renames, the tables and columns only (or `back`), in the tables the
     database has."""
@@ -1309,7 +1326,12 @@ def test_0014_through_the_api(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("UPDATE users SET password_hash = ?", (password_hash(),))
     settings = demo_settings(data_dir)
-    with no_own_walking_orders_yet(path), items_renamed_meanwhile(path), no_eaten_meals_yet(path):
+    with (
+        no_own_walking_orders_yet(path),
+        items_renamed_meanwhile(path),
+        no_eaten_meals_yet(path),
+        no_carry_over_setting_yet(path),
+    ):
         before = asyncio.run(_what_the_demo_users_see(settings, drafts=False))
 
     upgrade_database(data_dir)
@@ -2273,6 +2295,68 @@ def test_the_0023_downgrade_deletes_the_leftovers(tmp_path: Path) -> None:
     assert (list_meals_shape(path), rows_of(path, "list_meals")) == (shape, list_meals)
     assert unique_meal_index(path) == index
     assert dump_without_list_meals(path) == rest
+    assert_clean(path)
+
+
+CARRY_OVER_COLUMN = ("carry_over_leftovers", "BOOLEAN", 1, "1", 0)
+
+
+def users_shape(path: Path) -> set[tuple[object, ...]]:
+    return set(
+        query(
+            path,
+            "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('users')",
+        )
+    )
+
+
+def dump_without_users(path: Path) -> list[str]:
+    """The database as SQL, without the users' table and rows, in order."""
+    schema = ('CREATE TABLE "users"', "CREATE TABLE users")
+    return sorted(
+        line
+        for line in dump_without(path, "users", "alembic_version")
+        if not line.startswith(schema)
+    )
+
+
+def test_0024_turns_the_carry_over_on_for_everyone_and_changes_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """seed-demo data at 0023 → 0024 (LIST-17, D-59): every user has the carry-over on, so new
+    drafts bring leftovers as before; no other row, value or column changes (`updated_at`
+    included: this is nobody's edit)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0023")
+    counts, references = row_counts(path), non_null_foreign_keys(path)
+    shape, users, rest = users_shape(path), rows_of(path, "users"), dump_without_users(path)
+    assert users
+
+    command.upgrade(config, "0024")
+
+    assert users_shape(path) == shape | {CARRY_OVER_COLUMN}
+    assert rows_of(path, "users") == [row | {"carry_over_leftovers": 1} for row in users]
+    assert row_counts(path) == counts
+    assert non_null_foreign_keys(path) == references
+    assert dump_without_users(path) == rest
+    assert_clean(path)
+
+
+def test_the_0024_downgrade_drops_the_carry_over_setting(tmp_path: Path) -> None:
+    """Down to 0023 the setting goes, a switch turned off included, and the database is as it
+    was at 0023 (QA-02)."""
+    path = tmp_path / "data" / "mealmate.db"
+    config = demo_at_0018_with_every_reference(path)
+    command.upgrade(config, "0023")
+    shape, users, rest = users_shape(path), rows_of(path, "users"), dump_without_users(path)
+    command.upgrade(config, "0024")
+    execute(path, "UPDATE users SET carry_over_leftovers = 0")
+
+    command.downgrade(config, "0023")
+
+    assert (users_shape(path), rows_of(path, "users")) == (shape, users)
+    assert dump_without_users(path) == rest
     assert_clean(path)
 
 

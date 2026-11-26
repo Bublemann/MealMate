@@ -179,6 +179,49 @@ async def test_the_partners_shared_done_list_counts_but_not_an_unshared_one(
     ]
 
 
+async def test_with_carry_over_off_a_new_draft_starts_empty(
+    api: AsyncClient, anna: Account, ben: Account, meals: dict[str, Any]
+) -> None:
+    await make_couple(api, anna, ben)
+    first = await create_list(api, anna, "Woche")
+    await added(api, anna, first["id"], meals["Brot"]["id"])
+    await added(api, anna, first["id"], meals["Chili"]["id"])
+    done = await finished(api, anna, first["id"])
+    draft = await create_list(api, anna, "Mit Resten")
+    response = await api.patch(
+        "/api/me", json={"carry_over_leftovers": False}, headers=anna.headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["carry_over_leftovers"] is False
+
+    # Off: anna's new drafts start empty ...
+    assert meal_rows(await create_list(api, anna, "Leer")) == []
+    # ... her partner's setting is his own ...
+    me = (await api.get("/api/me", headers=ben.headers)).json()
+    assert me["carry_over_leftovers"] is True
+    assert meal_rows(await create_list(api, ben)) == [
+        ("Brot", True, False),
+        ("Chili", True, False),
+    ]
+    # ... and the leftovers that exist and the eaten checkboxes still work.
+    assert meal_rows(await detail(api, anna, draft["id"])) == [
+        ("Brot", True, False),
+        ("Chili", True, False),
+    ]
+    await eat(api, anna, draft, "Brot")
+    await eat(api, anna, done, "Chili")
+    assert meal_rows(await detail(api, anna, draft["id"])) == []
+    assert meal_rows(await detail(api, anna, done["id"])) == [
+        ("Brot", False, True),
+        ("Chili", False, True),
+    ]
+    # On again, new drafts bring the uneaten ones again.
+    response = await set_eaten(api, anna, done["id"], by_name(done, "Chili")["id"], eaten=False)
+    assert response.status_code == 200, response.text
+    await api.patch("/api/me", json={"carry_over_leftovers": True}, headers=anna.headers)
+    assert meal_rows(await create_list(api, anna)) == [("Chili", True, False)]
+
+
 async def test_leftovers_carry_over_again_until_they_are_eaten(
     api: AsyncClient, anna: Account, clock: FakeClock, meals: dict[str, Any]
 ) -> None:

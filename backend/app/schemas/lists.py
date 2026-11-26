@@ -457,7 +457,7 @@ class ListFinishOp(_OpBase):
 
 
 class LeftoverEatenOp(_OpBase):
-    """Ticking a leftover, which also works offline in a draft (SYNC-03, D-59): sets `eaten`
+    """Ticking a leftover, which also works offline in a draft (SYNC-03, D-60): sets `eaten`
     on its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The
     flag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't
     count. Rejected with `common.not_found` when the list has no leftover of that meal (any

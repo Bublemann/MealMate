@@ -2660,7 +2660,7 @@ export interface components {
         };
         /**
          * LeftoverEatenOp
-         * @description Ticking a leftover, which also works offline in a draft (SYNC-03, D-59): sets `eaten`
+         * @description Ticking a leftover, which also works offline in a draft (SYNC-03, D-60): sets `eaten`
          *     on its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The
          *     flag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't
          *     count. Rejected with `common.not_found` when the list has no leftover of that meal (any
@@ -3099,6 +3099,8 @@ export interface components {
         };
         /** Me */
         Me: {
+            /** Carry Over Leftovers */
+            carry_over_leftovers: boolean;
             /**
              * Created At
              * Format: date-time
@@ -3128,9 +3130,12 @@ export interface components {
         };
         /**
          * MeUpdate
-         * @description Only the fields that are sent change (ACC-13, VIS-02, I18N-01).
+         * @description Only the fields that are sent change (ACC-13, VIS-02, I18N-01, LIST-17). Left out or
+         *     null, a field stays as it is.
          */
         MeUpdate: {
+            /** Carry Over Leftovers */
+            carry_over_leftovers?: boolean | null;
             /** Display Name */
             display_name?: string | null;
             filter_hidden?: components["schemas"]["FilterHidden"] | null;

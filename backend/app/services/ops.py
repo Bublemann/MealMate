@@ -1,5 +1,5 @@
 """The ops of shopping mode (plan § 5.8, SYNC-05/06, SHOP-02/04): check-off, free-text extra
-items and finishing, and ticking a leftover meal (LIST-17, D-59), which a draft takes too. The
+items and finishing, and ticking a leftover meal (LIST-17, D-60), which a draft takes too. The
 online UI sends them like an offline client (M6) will, so both take one code path.
 
 A request's ops run in order in one write transaction (`BEGIN IMMEDIATE`), so parallel requests
@@ -214,7 +214,7 @@ def _finish(batch: _Batch, op: ListFinishOp) -> Outcome:
 
 async def _leftover_eaten(batch: _Batch, op: LeftoverEatenOp) -> Outcome:
     """Tick a leftover of the list, or untick it: sets its source meal's flag (LIST-17), on
-    any list status. The flag has no dates (D-55), so the last change to arrive wins (D-59)."""
+    any list status. The flag has no dates (D-55), so the last change to arrive wins (D-60)."""
     leftover = await lists_repo.leftover_on_list(
         batch.session, batch.shopping_list.id, op.payload.leftover_of
     )

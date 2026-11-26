@@ -244,7 +244,7 @@ def test_offline_start_is_inactive_and_finishing_works(
 def test_offline_leftover_tick(
     context: BrowserContext, api: Api, invite_user: Callable[..., Account], browser_name: str
 ) -> None:
-    """LIST-17, SYNC-03, D-59: a leftover ticked in a draft without signal leaves it at once, is
+    """LIST-17, SYNC-03, D-60: a leftover ticked in a draft without signal leaves it at once, is
     sent once the signal is back, and is then eaten on the done list and gone from every
     draft."""
     tag = unique("e2e")

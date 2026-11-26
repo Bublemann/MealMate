@@ -2333,7 +2333,7 @@
         "type": "object"
       },
       "LeftoverEatenOp": {
-        "description": "Ticking a leftover, which also works offline in a draft (SYNC-03, D-59): sets `eaten`\non its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The\nflag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't\ncount. Rejected with `common.not_found` when the list has no leftover of that meal (any\nmore), and `common.forbidden` without edit rights on the source's list.",
+        "description": "Ticking a leftover, which also works offline in a draft (SYNC-03, D-60): sets `eaten`\non its source meal like `PUT …/meals/{list_meal_id}/eaten` does, on any list status. The\nflag has no dates (D-55), so the change that reaches the server last wins; `at` doesn't\ncount. Rejected with `common.not_found` when the list has no leftover of that meal (any\nmore), and `common.forbidden` without edit rights on the source's list.",
         "properties": {
           "at": {
             "format": "date-time",
@@ -3326,6 +3326,10 @@
       },
       "Me": {
         "properties": {
+          "carry_over_leftovers": {
+            "title": "Carry Over Leftovers",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -3380,14 +3384,26 @@
           "meals_public",
           "lists_public",
           "filter_hidden",
+          "carry_over_leftovers",
           "created_at"
         ],
         "title": "Me",
         "type": "object"
       },
       "MeUpdate": {
-        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01).",
+        "description": "Only the fields that are sent change (ACC-13, VIS-02, I18N-01, LIST-17). Left out or\nnull, a field stays as it is.",
         "properties": {
+          "carry_over_leftovers": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carry Over Leftovers"
+          },
           "display_name": {
             "anyOf": [
               {

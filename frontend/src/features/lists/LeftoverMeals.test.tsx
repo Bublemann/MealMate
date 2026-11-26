@@ -310,7 +310,7 @@ describe('leftover meals in a draft (LIST-17)', () => {
     expect(screen.queryByTestId(testIds.leftoverToast)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Meals/ })).toHaveTextContent('Meals 1 of 2 eaten');
 
-    // Done lists aren't in the local copy: their boxes need a connection (D-59).
+    // Done lists aren't in the local copy: their boxes need a connection (D-60).
     goOffline(fetchMock);
     await waitFor(() => expect(box).toBeDisabled());
   });

@@ -560,7 +560,7 @@ export const shoppingOps = {
   finish: ({ opId, at }: OpStamp): Op => ({ type: 'list.finish', payload: {}, op_id: opId, at }),
   /**
    * LIST-17: tick a leftover of a draft or a list being shopped, or untick it (the undo), by its
-   * source meal (`leftover_of`); it leaves every local draft at once and works offline (D-59).
+   * source meal (`leftover_of`); it leaves every local draft at once and works offline (D-60).
    */
   eatLeftover: (sourceId: string, eaten: boolean, { opId, at }: OpStamp): Op => ({
     type: 'leftover.eaten',

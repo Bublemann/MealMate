@@ -56,17 +56,20 @@ class Me(BaseModel):
     meals_public: bool
     lists_public: bool
     filter_hidden: FilterHidden
+    carry_over_leftovers: bool
     created_at: datetime
 
 
 class MeUpdate(BaseModel):
-    """Only the fields that are sent change (ACC-13, VIS-02, I18N-01)."""
+    """Only the fields that are sent change (ACC-13, VIS-02, I18N-01, LIST-17). Left out or
+    null, a field stays as it is."""
 
     display_name: DisplayNameInput | None = None
     language: Language | None = None
     meals_public: bool | None = None
     lists_public: bool | None = None
     filter_hidden: FilterHidden | None = None
+    carry_over_leftovers: bool | None = None
 
 
 class PasswordChange(BaseModel):

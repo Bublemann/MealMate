@@ -12,6 +12,7 @@ import { MealDetailScreen } from '@/features/meals/MealDetailScreen';
 import { MealFormScreen } from '@/features/meals/MealFormScreen';
 import { MealsScreen } from '@/features/meals/MealsScreen';
 import { AboutScreen } from '@/features/me/AboutScreen';
+import { LeftoversScreen } from '@/features/me/LeftoversScreen';
 import { PrivacyScreen } from '@/features/me/PrivacyScreen';
 import { ProfileScreen } from '@/features/me/ProfileScreen';
 import { SecurityScreen } from '@/features/me/SecurityScreen';
@@ -68,6 +69,7 @@ export const routes: RouteObject[] = [
           { path: 'me/couple', element: <CoupleScreen /> },
           { path: 'me/security', element: <SecurityScreen /> },
           { path: 'me/recurring', element: <RecurringScreen /> },
+          { path: 'me/leftovers', element: <LeftoversScreen /> },
           { path: 'me/walking-order', element: <WalkingOrderScreen /> },
           { path: 'me/about', element: <AboutScreen /> },
           {

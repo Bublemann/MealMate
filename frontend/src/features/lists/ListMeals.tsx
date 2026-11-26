@@ -93,7 +93,7 @@ export function ListMeals({
       .finally(settled);
   }
 
-  /** A leftover of a draft or a list being shopped: queued, online or offline (D-59). */
+  /** A leftover of a draft or a list being shopped: queued, online or offline (D-60). */
   function queueEaten(sourceId: string, eaten: boolean) {
     setEatenError(null);
     return queue(shoppingOps.eatLeftover(sourceId, eaten, stampOp()));

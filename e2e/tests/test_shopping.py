@@ -273,7 +273,7 @@ def test_leftovers_come_along_into_a_new_draft(
     expect(page.get_by_text(beans["name"])).to_have_count(0)
 
     # Ticked, it leaves the draft, and the toast offers to undo it.
-    # Through the outbox, like a check-off (D-59).
+    # Through the outbox, like a check-off (D-60).
     with page.expect_response(
         lambda response: response.request.method == "POST" and response.url.endswith("/ops")
     ) as saved:
