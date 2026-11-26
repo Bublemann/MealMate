@@ -241,8 +241,8 @@ These keep the frontend restylable and the tests stable (MNT-04). Reviews check 
   name, "fällig seit 3 Tagen · zuletzt 02.10.", ＋ ("Klopapier hinzufügen") opens the item
   field's `AmountDialog` with the last amount (when the server gives one, i.e. it fits), and ✕
   ("Klopapier ausblenden") hides it on that list for everyone, without asking
-  (`useHideDueItem`). Both take the row out at once; adding a linked item does that for its
-  item. While one of the field's pop-ups is open the rows stay as they are. The focus goes
+  (`useHideDueItem`). Both take the row out at once; adding a linked extra item does that for
+  the item it links to. While one of the field's pop-ups is open the rows stay as they are. The focus goes
   back to the ＋ the amount pop-up was opened from; when a row leaves with the focus on its ＋
   or ✕, the same button of the row in its place (or above) takes it, and the item field once
   the box is gone. A failed ✕ says why until the due items change or the next action. The box comes with the list, so polling
@@ -526,7 +526,7 @@ amount from the text.
 ## Barcode scanner
 
 The scan icon in "Neuer Artikel" and in the edit pop-up, and "Barcode scannen" in the meal form's
-ingredient picker, open the scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
+item picker, open the scanner over the pop-up or the form (BAR-01..03). There is no scan page: `/scan` redirects to the
 Items tab (D-37), and the barcode field has no scan button of its own. The scanner is a
 lazy-loaded chunk with the decoder, so the initial JavaScript stays small (PERF-03), and the camera
 starts only on a tap. It hands the barcode back; the lookup and what follows belong to the pop-up

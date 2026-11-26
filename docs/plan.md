@@ -975,7 +975,7 @@ The size is relative (S < M < L < XL).
 ### M7 — Barcode scanning and Open Food Facts (M)
 *BAR, SEC-13*
 - **Backend:** OFF v3 client (O-4) with validation, rate limit, lookup proposal, save and link (basis check), refresh job + background refresh, pending-update apply/ignore, attribution data.
-- **Frontend:** scanner route (lazy, self-hosted wasm, torch toggle if available, manual input fallback), "Which ingredient is this?" flow, pending-update hint, attribution.
+- **Frontend:** scanner route (lazy, self-hosted wasm, torch toggle if available, manual input fallback), "Which item is this?" flow, pending-update hint, attribution.
 - **Tests:** OFF contract tests on recorded fixtures (a weekly non-blocking CI job checks one real known barcode); E2E journey 3; Vitest decoding of sample EAN images; a real-device check of the iOS 26 camera-rotation issue (O-6).
 
 ### M8 — Operations (L)
